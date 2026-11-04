@@ -89,6 +89,10 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Você só pode demolir construções que criou.';
         } else if (body.error === 'city_not_found') {
           error = 'Essa construção não existe mais.';
+        } else if (body.error === 'road_not_owned') {
+          error = 'Você só pode demolir estradas que construiu.';
+        } else if (body.error === 'road_not_found') {
+          error = 'Essa estrada não existe mais.';
         }
       }
     } catch (parseError) {
@@ -337,6 +341,24 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
+  const demolishRoad = async (road: RoadTile) => {
+    setDemolitionMessage('');
+    try {
+      await cityRequest<{ x: number; y: number }>(
+        `/api/roads/${road.x}/${road.y}`,
+        { method: 'DELETE' },
+      );
+      setRoads((current) =>
+        current.filter((tile) => tile.x !== road.x || tile.y !== road.y),
+      );
+      setDemolitionMessage('Estrada de terra demolida.');
+    } catch (error) {
+      setDemolitionMessage(
+        error instanceof Error ? error.message : 'Não foi possível demolir essa estrada.',
+      );
+    }
+  };
+
   return (
     <main className="realm-shell">
       <header className="topbar">
@@ -383,6 +405,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           onInvalidCityPlacement={handleInvalidCityPlacement}
           onRoadPlace={(path) => void handleRoadPlace(path)}
           onInvalidRoadPlacement={handleInvalidRoadPlacement}
+          onRoadDemolish={(road) => void demolishRoad(road)}
           onCityDemolish={(city) => void demolishCity(city)}
         />
         <div className="map-vignette" />
@@ -473,7 +496,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         )}
         {isDemolitionMode && (
           <div className="placement-banner demolition-banner" role="status">
-            {demolitionMessage || 'Clique numa construção para demoli-la. Você só pode demolir construções que criou.'}
+            {demolitionMessage || 'Clique numa construção ou estrada para demolir. Você só pode demolir o que construiu; estradas são removidas sem confirmação.'}
             <button
               type="button"
               onClick={() => {

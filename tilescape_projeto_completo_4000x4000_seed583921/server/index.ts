@@ -584,6 +584,71 @@ async function start() {
         response.status(503).json({ error: 'road_creation_unavailable' });
       });
   });
+  app.delete('/api/roads/:x/:y', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const { x, y } = request.params;
+    if (!/^(0|[1-9]\d*)$/.test(x) || !/^(0|[1-9]\d*)$/.test(y)) {
+      response.status(400).json({ error: 'invalid_road' });
+      return;
+    }
+
+    const tileX = Number(x);
+    const tileY = Number(y);
+    if (
+      !Number.isSafeInteger(tileX) ||
+      !Number.isSafeInteger(tileY) ||
+      tileX >= MAP.width ||
+      tileY >= MAP.height
+    ) {
+      response.status(400).json({ error: 'invalid_road' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void pool.connect().then(async (client) => {
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const { rows } = await client.query<{ tile_x: number; tile_y: number }>(
+          `DELETE FROM road_tiles
+           WHERE tile_x = $1 AND tile_y = $2 AND created_by = $3
+           RETURNING tile_x, tile_y`,
+          [tileX, tileY, userId],
+        );
+        if (!rows[0]) {
+          const existing = await client.query(
+            `SELECT 1 FROM road_tiles WHERE tile_x = $1 AND tile_y = $2`,
+            [tileX, tileY],
+          );
+          await client.query('COMMIT');
+          response
+            .status(existing.rowCount ? 403 : 404)
+            .json({ error: existing.rowCount ? 'road_not_owned' : 'road_not_found' });
+          return;
+        }
+
+        await client.query('COMMIT');
+        response.json({ x: rows[0].tile_x, y: rows[0].tile_y });
+        void publishCities().catch((error: unknown) => {
+          console.error('A estrada foi demolida, mas a atualização do mundo falhou:', error);
+        });
+      } catch (error) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter a demolição da estrada:', rollbackError);
+        });
+        console.error('Não foi possível demolir a estrada:', error);
+        response.status(503).json({ error: 'road_demolition_unavailable' });
+      } finally {
+        client.release();
+      }
+    }).catch((error: unknown) => {
+      console.error('Não foi possível iniciar a demolição da estrada:', error);
+      response.status(503).json({ error: 'road_demolition_unavailable' });
+    });
+  });
   app.patch('/api/cities/:id', requireAuth, requireMasterAuth, (request, response) => {
     const name =
       typeof request.body?.name === 'string' ? request.body.name.trim() : '';

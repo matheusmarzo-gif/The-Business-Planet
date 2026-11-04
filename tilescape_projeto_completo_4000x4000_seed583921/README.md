@@ -162,12 +162,14 @@ zoom. População, bem-estar e economia começam em zero.
 Use **Demolir** na barra inferior e clique em uma construção para removê-la.
 O servidor só permite que o jogador que criou a construção a demola; ao
 demolir uma Assembleia, sua cidade e área municipal também são removidas.
+Clique em um tile de estrada no modo **Demolir** para removê-lo imediatamente,
+sem confirmação; somente quem construiu aquele tile pode demoli-lo.
 Na Prefeitura, selecione **Estrada de Terra** e clique e arraste para desenhar
 um traçado de até 600 tiles. As peças retas e curvas se ajustam aos trechos
 vizinhos; estradas só são aceitas em terra dentro de uma área municipal e não
 podem passar sobre a Assembleia. Apenas a conta master pode construí-las; os
-traçados são salvos e sincronizados com o mundo. Ainda não há demolição
-individual de estradas: elas são removidas quando sua Assembleia é demolida.
+traçados são salvos e sincronizados com o mundo. Cada tile pode ser demolido
+individualmente e sua remoção é sincronizada com os demais jogadores.
 
 ## Sobre o jogo
 

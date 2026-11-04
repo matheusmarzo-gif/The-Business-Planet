@@ -163,8 +163,10 @@ reimplemente as fórmulas separadamente no React e no servidor.
 - Os tiles são persistidos individualmente em `road_tiles`; a chave primária
   garante um único tile de estrada em cada coordenada. Cada tile aponta para a
   cidade proprietária, e a remoção da cidade remove suas estradas por cascata.
-- A API registra `created_by`, mas ainda não há ferramenta de demolição
-  individual de estradas.
+- No modo Demolir, clicar em um tile de estrada remove somente aquele tile,
+  sem confirmação. O servidor só permite a exclusão ao jogador indicado em
+  `created_by`, usa o lock transacional do mundo e publica o novo snapshot de
+  cidades e estradas. A demolição de Assembleias continua pedindo confirmação.
 
 As regras, o caminho ortogonal e o mapeamento de imagens estão em
 `src/types/road.ts`. Não altere a ordenação dos assets sem atualizar esse
@@ -183,6 +185,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `PATCH /api/cities/:id` | Master | Altera o nome de uma cidade. |
 | `DELETE /api/cities/:id` | Criador da cidade | Demole a Assembleia e remove as estradas da área. |
 | `POST /api/roads` | Master | Valida e grava um caminho de estrada de até 600 tiles. |
+| `DELETE /api/roads/:x/:y` | Criador do tile | Demole um tile de estrada sem confirmação; publica o novo estado. |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |
 
 Falhas de validação são respostas HTTP explícitas; indisponibilidade de banco,

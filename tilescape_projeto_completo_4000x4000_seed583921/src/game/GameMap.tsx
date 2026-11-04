@@ -77,6 +77,7 @@ interface GameMapProps {
   onInvalidCityPlacement: (reason: CityPlacementError) => void;
   onRoadPlace: (path: RoadPosition[]) => void;
   onInvalidRoadPlacement: (reason: RoadPlacementError) => void;
+  onRoadDemolish: (road: RoadTile) => void;
   onCityDemolish: (city: CityAssembly) => void;
 }
 
@@ -97,6 +98,7 @@ export function GameMap({
   onInvalidCityPlacement,
   onRoadPlace,
   onInvalidRoadPlacement,
+  onRoadDemolish,
   onCityDemolish,
 }: GameMapProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -505,6 +507,14 @@ export function GameMap({
           if (reason) onInvalidCityPlacement(reason);
           else onCityPlace(center);
         } else {
+          const road = demolitionMode
+            ? roads.find((candidate) => candidate.x === tile.x && candidate.y === tile.y)
+            : undefined;
+          if (road) {
+            onRoadDemolish(road);
+            dragRef.current = null;
+            return;
+          }
           const city = cities.find(
             (candidate) =>
               Math.abs(candidate.centerX - tile.x) <= 1 &&

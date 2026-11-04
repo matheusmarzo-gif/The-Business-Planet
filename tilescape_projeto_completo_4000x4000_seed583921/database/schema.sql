@@ -31,6 +31,25 @@ CREATE TABLE IF NOT EXISTS city_zones (
 
 CREATE INDEX IF NOT EXISTS city_zones_city_id_idx ON city_zones (city_id);
 
+CREATE TABLE IF NOT EXISTS residential_buildings (
+  id UUID PRIMARY KEY,
+  building_type TEXT NOT NULL CHECK (building_type IN ('house_poor1', 'house_poor2')),
+  tile_x INTEGER NOT NULL CHECK (tile_x BETWEEN 0 AND 3999),
+  tile_y INTEGER NOT NULL CHECK (tile_y BETWEEN 0 AND 3999),
+  city_id UUID NOT NULL REFERENCES city_assemblies (id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('under_construction', 'completed')),
+  created_by TEXT NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+  completed_at TIMESTAMPTZ,
+  CHECK (
+    (status = 'under_construction' AND completed_at IS NULL) OR
+    (status = 'completed' AND completed_at IS NOT NULL)
+  )
+);
+
+CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
+  ON residential_buildings (city_id);
+
 CREATE TABLE IF NOT EXISTS road_tiles (
   tile_x INTEGER NOT NULL CHECK (tile_x BETWEEN 0 AND 3999),
   tile_y INTEGER NOT NULL CHECK (tile_y BETWEEN 0 AND 3999),

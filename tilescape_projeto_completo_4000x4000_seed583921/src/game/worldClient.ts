@@ -2,6 +2,7 @@ import { getAccessToken } from '../auth/authClient';
 import type { CityAssembly } from '../types/city';
 import type { CityZone } from '../types/city';
 import type { RoadTile } from '../types/road';
+import type { ResidentialBuilding } from '../types/residence';
 
 export interface WorldSnapshot {
   worldTime: string;
@@ -54,11 +55,27 @@ function isRoadTile(value: unknown): value is RoadTile {
   );
 }
 
+function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
+  if (typeof value !== 'object' || value === null) return false;
+  const building = value as Record<string, unknown>;
+  return (
+    typeof building.id === 'string' &&
+    (building.type === 'house_poor1' || building.type === 'house_poor2') &&
+    Number.isInteger(building.x) &&
+    Number.isInteger(building.y) &&
+    typeof building.cityId === 'string' &&
+    (building.status === 'under_construction' || building.status === 'completed') &&
+    typeof building.startedAt === 'string' &&
+    (building.completedAt === null || typeof building.completedAt === 'string')
+  );
+}
+
 export function connectToWorld(
   onSnapshot: (snapshot: WorldSnapshot) => void,
   onConnectionChange: (connected: boolean) => void,
   onCitiesChange: (cities: CityAssembly[]) => void,
   onRoadsChange: (roads: RoadTile[]) => void,
+  onResidentialBuildingsChange: (buildings: ResidentialBuilding[]) => void,
 ): () => void {
   let socket: WebSocket | null = null;
   let reconnectTimer: number | undefined;
@@ -108,7 +125,9 @@ export function connectToWorld(
           message.cities.every(isCityAssembly) &&
           'roads' in message &&
           Array.isArray(message.roads) &&
-          message.roads.every(isRoadTile)
+          message.roads.every(isRoadTile) &&
+          (!('buildings' in message) ||
+            (Array.isArray(message.buildings) && message.buildings.every(isResidentialBuilding)))
         ) {
           onCitiesChange(
             message.cities.map((city) => ({
@@ -117,6 +136,11 @@ export function connectToWorld(
             })),
           );
           onRoadsChange(message.roads);
+          onResidentialBuildingsChange(
+            'buildings' in message && Array.isArray(message.buildings)
+              ? message.buildings
+              : [],
+          );
           return;
         }
         const snapshot = message as WorldSnapshot;

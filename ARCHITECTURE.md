@@ -13,11 +13,12 @@ em tempo real. O servidor Node.js/Express fornece a API e o WebSocket; Neon
 PostgreSQL guarda o estado persistente; Redis coordena presença e distribui
 atualizações entre instâncias.
 
-O mapa base é determinístico: não é persistido tile a tile. Cidades e estradas
-são sobrepostas ao terreno gerado. Atualmente, a construção disponível na
-Prefeitura é a Assembleia, que cria uma área municipal; Estrada de Terra é a
-primeira infraestrutura rodoviária. A conta master pode dividir cada área
-municipal em regiões urbanas e rurais persistentes. O jogo também possui um
+O mapa base é determinístico: não é persistido tile a tile. Cidades, estradas
+e residências são sobrepostas ao terreno gerado. Atualmente, a Prefeitura
+oferece a Assembleia e a Estrada de Terra. A conta master pode dividir cada
+área municipal em regiões urbanas e rurais persistentes. Duas residências
+podem ser colocadas em áreas urbanas ao lado de estradas; elas ficam em
+construção até a master concluí-las instantaneamente. O jogo também possui um
 catálogo estático de produtos com atributos padrão; estoques, produção e
 deterioração ainda não estão implementados. População, bem-estar e economia
 são dados da cidade, mas ainda não existe simulação econômica ou de crescimento
@@ -34,10 +35,11 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/main.tsx` | Monta o React, envolve o jogo com autenticação e carrega o CSS. |
 | `src/auth/` | Neon Auth, recuperação de senha, confirmação de e-mail e restauração de sessão. |
 | `src/GameApp.tsx` | Tela ativa do mundo, interface, estado de interação e chamadas da API. |
-| `src/game/GameMap.tsx` | Renderização PixiJS, câmera, seleção de tiles, prévias e interação com cidades/estradas. |
+| `src/game/GameMap.tsx` | Renderização PixiJS, câmera, seleção de tiles, prévias e interação com cidades, estradas e residências. |
 | `src/game/worldClient.ts` | Autentica o WebSocket, valida mensagens recebidas e atualiza o estado compartilhado. |
 | `src/types/city.ts` | Tipos, dimensões e regras geométricas de cidades/Assembleias. |
 | `src/types/road.ts` | Tipos, limites, validação, interpolação e escolha das peças de estrada. |
+| `src/types/residence.ts` | Catálogo, atributos e validação compartilhada das residências. |
 | `src/types/product.ts` | Catálogo estático dos produtos, unidades, peso, volume e validade padrão. |
 | `src/components/ProductCatalog.tsx` | Interface pesquisável para consultar as fichas de produtos. |
 | `src/components/CityZoneEditor.tsx` | Editor master das regiões urbanas e rurais de uma cidade. |
@@ -154,11 +156,12 @@ das cidades legíveis em tamanho fixo na tela.
   Comerciais e Residências mapeiam à área urbana; Fazendas, Recursos e
   Indústrias mapeiam à rural. Prefeitura e Estrada de Terra não usam zonas.
   Este mapeamento é uma regra compartilhada preparada para posicionamento
-  futuro; a colocação dos edifícios dessas categorias não está habilitada.
+  futuro para as demais categorias; duas residências estão habilitadas conforme
+  as regras abaixo.
 - Qualquer jogador pode consultar cidades autenticado; os dados demográficos e
   econômicos são atualmente inicializados em zero.
-- Demolir uma Assembleia usa a propriedade `created_by`. A chave estrangeira
-  das estradas remove as estradas municipais quando a respectiva cidade é
+- Demolir uma Assembleia usa a propriedade `created_by`. Chaves estrangeiras
+  removem estradas e residências municipais quando a respectiva cidade é
   apagada.
 
 As dimensões e validações compartilhadas estão em `src/types/city.ts`; não
@@ -170,7 +173,8 @@ reimplemente as fórmulas separadamente no React e no servidor.
 - O jogador clica e arrasta; os pontos entre eventos do mouse são interpolados
   como caminho ortogonal para que o traço não deixe buracos diagonais.
 - Cada tile precisa ser terra, estar dentro de uma área municipal e não cruzar
-  o footprint de uma Assembleia. O servidor revalida o trajeto inteiro.
+  o footprint de uma Assembleia ou residência. O servidor revalida o trajeto
+  inteiro sob lock transacional.
 - O limite atual é de 600 tiles por solicitação.
 - As imagens `public/buildings/roads/grass_dirt1.png` a `grass_dirt11.png`
   representam retas horizontal/vertical (1/2), curvas (3/4/5/6), cruzamento
@@ -211,6 +215,29 @@ As regras, o caminho ortogonal e o mapeamento de imagens estão em
 `src/types/road.ts`. Não altere a ordenação dos assets sem atualizar esse
 mapeamento e verificar todas as curvas.
 
+## Residências
+
+- `src/types/residence.ts` define `house_poor1` (2 × 2 tiles, capacidade 4,
+  apreço local 50, custo de 100 madeiras e 30 pedras, 18.000 Work Points) e
+  `house_poor2` (3 × 3, capacidade 32, apreço local 40, custo de 300 madeiras
+  e 450 pedras, 67.500 Work Points).
+- O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
+  área ocupada deve ficar dentro da cidade e de uma zona urbana, em terra, sem
+  sobrepor Assembleia, estrada ou residência, e deve encostar ortogonalmente
+  em pelo menos uma estrada. Cliente e servidor compartilham a regra; o
+  servidor revalida sob o lock transacional do mundo.
+- Até existir estoque, jogadores comuns recebem `insufficient_materials`; a
+  conta master pode iniciar a obra sem materiais. A obra é persistida com
+  status `under_construction` e usa `public/buildings/em_construcao.png`.
+- Não há progresso por Work Points nem conclusão automática. A conta master
+  pode dar duplo clique na obra para concluí-la instantaneamente; a rota
+  verifica a autorização e recusa uma obra já concluída.
+- Estradas também consultam os footprints residenciais para impedir que um
+  traçado posterior cubra uma casa. Demolição de estradas continua possível
+  sem confirmação, inclusive junto de residências.
+- Capacidade, apreço local, custos e Work Points são metadados; população,
+  estoque, consumo e produção ainda não são simulados.
+
 ## API HTTP
 
 As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
@@ -227,6 +254,8 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/roads` | Master | Valida e grava um caminho de estrada de até 600 tiles. |
 | `DELETE /api/roads/:x/:y` | Criador do tile | Demole um tile de estrada sem confirmação; publica o novo estado. |
 | `DELETE /api/roads` | Autenticado | Demole os tiles próprios de um caminho de até 600 tiles e publica o novo estado. |
+| `POST /api/residential-buildings` | Master enquanto estoque não existe | Valida e inicia uma residência em construção. |
+| `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |
 
 Falhas de validação são respostas HTTP explícitas; indisponibilidade de banco,
@@ -241,6 +270,9 @@ de sucesso.
 - `city_assemblies` guarda nomes, centros, métricas e autorias.
 - `city_zones` guarda os retângulos municipais, com cascata ao excluir a cidade.
 - `road_tiles` guarda uma linha por tile, referência à cidade e autoria.
+- `residential_buildings` guarda tipo, footprint, cidade, status, autoria e
+  horários de início/conclusão; excluir a cidade remove suas residências por
+  cascata.
 - A tabela `neon_auth."user"` é gerenciada pelo Neon Auth, não pelo esquema do
   jogo.
 
@@ -255,15 +287,16 @@ Redis exerce três funções:
    jogadores online.
 2. Uma chave curta com `SET NX` e expiração elege a instância que avança o
    relógio, evitando que cada processo de servidor o incremente em duplicidade.
-3. Canais Pub/Sub distribuem snapshots e atualizações de cidades/estradas entre
-   processos; cada processo retransmite as mensagens a seus próprios sockets.
+3. Canais Pub/Sub distribuem snapshots e atualizações de cidades, estradas e
+   residências entre processos; cada processo retransmite as mensagens a seus
+   próprios sockets.
 
 O WebSocket `/ws` exige JWT. Ao conectar, o servidor envia o snapshot e o
-estado atual de cidades e estradas. Atualizações compartilham um envelope
-`{ type: "cities", cities, roads }`; snapshots contêm hora do jogo, hora do
-servidor, velocidade, mapa e jogadores online. `src/game/worldClient.ts`
-reconecta com atraso exponencial limitado e valida o formato básico das
-mensagens antes de atualizar o React.
+estado atual de cidades, estradas e residências. Atualizações compartilham um
+envelope `{ type: "cities", cities, roads, buildings }`; snapshots contêm hora
+do jogo, hora do servidor, velocidade, mapa e jogadores online.
+`src/game/worldClient.ts` reconecta com atraso exponencial limitado e valida o
+formato básico das mensagens antes de atualizar o React.
 
 ## Variáveis de ambiente
 
@@ -292,19 +325,22 @@ npm.cmd run lint
 npm.cmd run build
 ```
 
-`lint` executa o TypeScript do cliente e do servidor. `npm test` executa os
-testes focados das regras geométricas de zonas. Para operações de
-banco/sincronização, verifique
-também que a API retorna erros apropriados e que os clientes recebem o estado
-persistido atualizado.
+`lint` executa o TypeScript do cliente e do servidor. `npm test` executa os testes focados das regras geométricas de zonas, estradas
+e residências. Para operações de banco/sincronização, verifique também que a
+API retorna erros apropriados e que os clientes recebem o estado persistido
+atualizado.
 
 ## Limites e próximos passos já conhecidos
 
 - Não há ainda produção de bens, comércio, evolução de população, bem-estar ou
   economia.
-- As categorias Construções Artesanais, Comerciais, Fazendas, Residências,
-  Recursos e Indústrias aparecem na interface, mas ainda não habilitam
-  posicionamento ou catálogo de edifícios.
+- As categorias Construções Artesanais, Comerciais, Fazendas, Recursos e
+  Indústrias aparecem na interface, mas ainda não habilitam posicionamento ou
+  catálogo de edifícios. Residências contém somente as duas opções descritas
+  acima.
+- Não há estoque nem sistema de Work Points; por isso, somente a conta master
+  consegue iniciar residências, e toda obra iniciada permanece em construção
+  até a conclusão manual instantânea da master.
 - O estado de cada cidade/estrada é consultado e enviado integralmente na
   sincronização atual; crescimento grande do mundo pode exigir paginação ou
   atualizações incrementais.

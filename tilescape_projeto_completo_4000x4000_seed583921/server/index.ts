@@ -27,6 +27,14 @@ import {
   type RoadPosition,
   type RoadTile,
 } from '../src/types/road.js';
+import {
+  getResidenceDefinition,
+  getResidencePlacementError,
+  RESIDENCES,
+  type ResidentialBuilding,
+  type ResidenceType,
+  type ResidencePlacementError,
+} from '../src/types/residence.js';
 import { DEFAULT_TILE_LIST } from '../src/utils/tileAssets.js';
 import { createMapGenerator } from '../src/utils/mapGenerator.js';
 import { WORLD_CONFIG } from '../src/utils/worldConfig.js';
@@ -80,6 +88,29 @@ interface CityAssembly {
 }
 
 type CityZoneInput = CityZoneBounds & { type: CityZoneType };
+type ResidentialBuildingRow = {
+  id: string;
+  building_type: ResidenceType;
+  tile_x: number;
+  tile_y: number;
+  city_id: string;
+  status: ResidentialBuilding['status'];
+  started_at: Date;
+  completed_at: Date | null;
+};
+
+function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuilding {
+  return {
+    id: row.id,
+    type: row.building_type,
+    x: row.tile_x,
+    y: row.tile_y,
+    cityId: row.city_id,
+    status: row.status,
+    startedAt: row.started_at.toISOString(),
+    completedAt: row.completed_at?.toISOString() ?? null,
+  };
+}
 
 const authenticatedUserIds = new WeakMap<express.Request, string>();
 
@@ -180,9 +211,25 @@ async function getRoadTiles(): Promise<RoadTile[]> {
   }));
 }
 
+async function getResidentialBuildings(): Promise<ResidentialBuilding[]> {
+  const { rows } = await pool.query<ResidentialBuildingRow>(
+    `SELECT id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at
+     FROM residential_buildings
+     ORDER BY started_at, id`,
+  );
+  return rows.map(mapResidentialBuilding);
+}
+
 async function publishCities() {
-  const [cities, roads] = await Promise.all([getCities(), getRoadTiles()]);
-  await redis.publish(CITIES_CHANNEL, JSON.stringify({ type: 'cities', cities, roads }));
+  const [cities, roads, buildings] = await Promise.all([
+    getCities(),
+    getRoadTiles(),
+    getResidentialBuildings(),
+  ]);
+  await redis.publish(
+    CITIES_CHANNEL,
+    JSON.stringify({ type: 'cities', cities, roads, buildings }),
+  );
 }
 
 async function advanceClock() {
@@ -413,12 +460,18 @@ async function createRoadPath(
       centerX: city.center_x,
       centerY: city.center_y,
     }));
+    const { rows: residentialRows } = await client.query<ResidentialBuildingRow>(
+      `SELECT id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at
+       FROM residential_buildings`,
+    );
+    const residentialBuildings = residentialRows.map(mapResidentialBuilding);
 
     for (const position of path) {
       const placementError = getRoadPlacementError(
         position,
         cities,
         (x, y) => landTileIds.has(mapGenerator.getTileAt(x, y).tileId),
+        residentialBuildings,
       );
       if (placementError) {
         await client.query('ROLLBACK');
@@ -604,6 +657,147 @@ async function replaceCityZones(
   }
 }
 
+async function createResidentialBuilding(
+  type: ResidenceType,
+  position: RoadPosition,
+  userId: string,
+): Promise<{ building: ResidentialBuilding | null; error: ResidencePlacementError | 'insufficient_materials' | null }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+
+    const { rows: cityRows } = await client.query<{
+      id: string;
+      name: string;
+      center_x: number;
+      center_y: number;
+      population: number;
+      wellbeing: number;
+      economy: number;
+      zones: CityZone[];
+    }>(
+      `SELECT city.id, city.name, city.center_x, city.center_y,
+              city.population, city.wellbeing, city.economy,
+              COALESCE(
+                json_agg(json_build_object(
+                  'id', zone.id,
+                  'cityId', zone.city_id,
+                  'type', zone.zone_type,
+                  'minX', zone.min_x,
+                  'minY', zone.min_y,
+                  'maxX', zone.max_x,
+                  'maxY', zone.max_y
+                ) ORDER BY zone.min_y, zone.min_x)
+                  FILTER (WHERE zone.id IS NOT NULL),
+                '[]'::json
+              ) AS zones
+       FROM city_assemblies AS city
+       LEFT JOIN city_zones AS zone ON zone.city_id = city.id
+       GROUP BY city.id`,
+    );
+    const cities: CityAssembly[] = cityRows.map((city) => ({
+      id: city.id,
+      name: city.name,
+      centerX: city.center_x,
+      centerY: city.center_y,
+      population: city.population,
+      wellbeing: city.wellbeing,
+      economy: city.economy,
+      zones: city.zones,
+    }));
+    const { rows: buildingRows } = await client.query<ResidentialBuildingRow>(
+      `SELECT id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at
+       FROM residential_buildings`,
+    );
+    const buildings = buildingRows.map(mapResidentialBuilding);
+    const { rows: roadRows } = await client.query<{ tile_x: number; tile_y: number }>(
+      'SELECT tile_x, tile_y FROM road_tiles',
+    );
+    const roads = roadRows.map((road) => ({ x: road.tile_x, y: road.tile_y }));
+    const placementError = getResidencePlacementError(
+      type,
+      position,
+      cities,
+      buildings,
+      roads,
+      (x, y) => landTileIds.has(mapGenerator.getTileAt(x, y).tileId),
+      WORLD_CONFIG,
+    );
+    if (placementError) {
+      await client.query('ROLLBACK');
+      return { building: null, error: placementError };
+    }
+
+    const definition = RESIDENCES[type];
+    const city = cities.find(
+      (candidate) =>
+        position.x >= candidate.centerX - MUNICIPAL_AREA_RADIUS &&
+        position.y >= candidate.centerY - MUNICIPAL_AREA_RADIUS &&
+        position.x + definition.width - 1 <= candidate.centerX + MUNICIPAL_AREA_RADIUS &&
+        position.y + definition.height - 1 <= candidate.centerY + MUNICIPAL_AREA_RADIUS,
+    );
+    if (!city) {
+      await client.query('ROLLBACK');
+      return { building: null, error: 'outside_municipality' };
+    }
+
+    const { rows } = await client.query<ResidentialBuildingRow>(
+      `INSERT INTO residential_buildings
+         (id, building_type, tile_x, tile_y, city_id, status, created_by)
+       VALUES ($1, $2, $3, $4, $5, 'under_construction', $6)
+       RETURNING id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at`,
+      [randomUUID(), type, position.x, position.y, city.id, userId],
+    );
+    await client.query('COMMIT');
+    return { building: mapResidentialBuilding(rows[0]), error: null };
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter o início da construção residencial:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function completeResidentialBuilding(
+  id: string,
+): Promise<{ building: ResidentialBuilding | null; error: 'building_not_found' | 'building_already_complete' | null }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const { rows } = await client.query<ResidentialBuildingRow>(
+      `UPDATE residential_buildings
+       SET status = 'completed', completed_at = clock_timestamp()
+       WHERE id = $1 AND status = 'under_construction'
+       RETURNING id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at`,
+      [id],
+    );
+    if (!rows[0]) {
+      const existing = await client.query(
+        'SELECT 1 FROM residential_buildings WHERE id = $1',
+        [id],
+      );
+      await client.query('COMMIT');
+      return {
+        building: null,
+        error: existing.rowCount ? 'building_already_complete' : 'building_not_found',
+      };
+    }
+    await client.query('COMMIT');
+    return { building: mapResidentialBuilding(rows[0]), error: null };
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter a conclusão da residência:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 function rejectWebSocketUpgrade(socket: Duplex, status: 401 | 404 | 503) {
   if (socket.destroyed) return;
   const statusText = status === 401 ? 'Unauthorized' : status === 404 ? 'Not Found' : 'Service Unavailable';
@@ -662,6 +856,85 @@ async function start() {
         response.status(503).json({ error: 'cities_unavailable' });
       });
   });
+  app.post('/api/residential-buildings', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    const definition = getResidenceDefinition(request.body?.type);
+    const x = request.body?.x;
+    const y = request.body?.y;
+    if (
+      !definition ||
+      typeof x !== 'number' ||
+      !Number.isInteger(x) ||
+      typeof y !== 'number' ||
+      !Number.isInteger(y)
+    ) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+
+    void isMasterUser(userId)
+      .then((isMaster) => {
+        if (!isMaster) {
+          response.status(409).json({ error: 'insufficient_materials' });
+          return;
+        }
+        return createResidentialBuilding(definition.type, { x, y }, userId)
+          .then(({ building, error }) => {
+            if (!building) {
+              response.status(409).json({ error });
+              return;
+            }
+            response.status(201).json(building);
+            void publishCities().catch((publishError: unknown) => {
+              console.error('A residência foi iniciada, mas a atualização do mundo falhou:', publishError);
+            });
+          })
+          .catch((error: unknown) => {
+            console.error('Não foi possível iniciar a construção residencial:', error);
+            response.status(503).json({ error: 'residence_creation_unavailable' });
+          });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível verificar os materiais disponíveis:', error);
+        response.status(503).json({ error: 'authorization_unavailable' });
+      });
+  });
+  app.post(
+    '/api/residential-buildings/:id/complete',
+    requireAuth,
+    requireMasterAuth,
+    (request, response) => {
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          request.params.id,
+        )
+      ) {
+        response.status(400).json({ error: 'invalid_residence' });
+        return;
+      }
+
+      void completeResidentialBuilding(request.params.id)
+        .then(({ building, error }) => {
+          if (!building) {
+            response.status(error === 'building_not_found' ? 404 : 409).json({ error });
+            return;
+          }
+          response.json(building);
+          void publishCities().catch((publishError: unknown) => {
+            console.error('A residência foi concluída, mas a atualização do mundo falhou:', publishError);
+          });
+        })
+        .catch((error: unknown) => {
+          console.error('Não foi possível concluir a residência:', error);
+          response.status(503).json({ error: 'residence_completion_unavailable' });
+        });
+    },
+  );
   app.post('/api/cities', requireAuth, requireMasterAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);
     const city = parseCityInput(request.body);
@@ -1013,8 +1286,12 @@ async function start() {
     void registerPresence()
       .then(async () => {
         websocket.send(JSON.stringify(await getSnapshot()));
-            const [cities, roads] = await Promise.all([getCities(), getRoadTiles()]);
-            websocket.send(JSON.stringify({ type: 'cities', cities, roads }));
+            const [cities, roads, buildings] = await Promise.all([
+              getCities(),
+              getRoadTiles(),
+              getResidentialBuildings(),
+            ]);
+            websocket.send(JSON.stringify({ type: 'cities', cities, roads, buildings }));
         await publishSnapshot();
         presenceTimer = setInterval(() => {
           void registerPresence().catch((error: unknown) => {

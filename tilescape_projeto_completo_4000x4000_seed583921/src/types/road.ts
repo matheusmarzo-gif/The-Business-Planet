@@ -1,5 +1,7 @@
 import type { CityAssembly } from './city.js';
 import { MUNICIPAL_AREA_RADIUS } from './city.js';
+import { RESIDENCES } from './residence.js';
+import type { ResidentialBuilding } from './residence.js';
 
 export const MAX_ROAD_PATH_TILES = 600;
 
@@ -24,6 +26,7 @@ export function getRoadPlacementError(
   position: RoadPosition,
   cities: Pick<CityAssembly, 'id' | 'centerX' | 'centerY'>[],
   isLandAt: (x: number, y: number) => boolean,
+  residentialBuildings: Pick<ResidentialBuilding, 'type' | 'x' | 'y'>[] = [],
 ): RoadPlacementError | null {
   if (
     !cities.some(
@@ -43,6 +46,20 @@ export function getRoadPlacementError(
         Math.abs(city.centerX - position.x) < 2 &&
         Math.abs(city.centerY - position.y) < 2,
     )
+  ) {
+    return 'building_overlap';
+  }
+
+  if (
+    residentialBuildings.some((building) => {
+      const residence = RESIDENCES[building.type];
+      return (
+        position.x >= building.x &&
+        position.x < building.x + residence.width &&
+        position.y >= building.y &&
+        position.y < building.y + residence.height
+      );
+    })
   ) {
     return 'building_overlap';
   }

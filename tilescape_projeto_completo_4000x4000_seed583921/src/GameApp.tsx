@@ -28,6 +28,12 @@ import {
   getRequiredCityZone,
   MAX_CITY_ZONES,
 } from './types/city';
+import {
+  RESIDENCES,
+  ResidentialBuilding,
+  ResidencePlacementError,
+  ResidenceType,
+} from './types/residence';
 import type { RoadPlacementError, RoadPosition, RoadTile } from './types/road';
 import { TileInfo } from './types/map';
 import { createMapGenerator } from './utils/mapGenerator';
@@ -82,7 +88,9 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
       if (typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string') {
         errorCode = body.error;
         if (body.error === 'map_bounds') {
-          error = 'A área municipal precisa caber inteira dentro do mapa.';
+          error = path.startsWith('/api/residential-buildings')
+            ? 'A residência precisa caber inteira dentro do mapa.'
+            : 'A área municipal precisa caber inteira dentro do mapa.';
         } else if (body.error === 'water') {
           error = 'A construção só pode ser colocada em terra.';
         } else if (body.error === 'building_overlap') {
@@ -90,7 +98,9 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'municipal_area_overlap') {
           error = 'A área municipal sobrepõe outra cidade.';
         } else if (body.error === 'outside_municipality') {
-          error = 'A estrada só pode ser construída dentro de uma área municipal.';
+          error = path.startsWith('/api/residential-buildings')
+            ? 'A residência precisa ficar dentro da área municipal.'
+            : 'A estrada só pode ser construída dentro de uma área municipal.';
         } else if (body.error === 'path_too_long') {
           error = 'O trajeto pode ter no máximo 600 tiles. Faça estradas menores.';
         } else if (body.error === 'invalid_road') {
@@ -111,6 +121,22 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Você só pode demolir estradas que construiu.';
         } else if (body.error === 'road_not_found') {
           error = 'Essa estrada não existe mais.';
+        } else if (body.error === 'outside_urban_zone') {
+          error = 'A residência precisa ficar dentro de uma área urbana.';
+        } else if (body.error === 'residence_outside_municipality') {
+          error = 'A residência precisa ficar dentro da área municipal.';
+        } else if (body.error === 'not_adjacent_to_road') {
+          error = 'A residência precisa ficar ao lado de uma estrada.';
+        } else if (body.error === 'road_overlap') {
+          error = 'A residência não pode ocupar o espaço de uma estrada.';
+        } else if (body.error === 'invalid_residence') {
+          error = 'A residência ou o local escolhido é inválido.';
+        } else if (body.error === 'insufficient_materials') {
+          error = 'Você não possui materiais suficientes para iniciar essa construção.';
+        } else if (body.error === 'building_already_complete') {
+          error = 'Essa construção já foi concluída.';
+        } else if (body.error === 'building_not_found') {
+          error = 'Essa construção não existe mais.';
         }
       }
     } catch (parseError) {
@@ -144,6 +170,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isOnline, setIsOnline] = useState(false);
   const [cities, setCities] = useState<CityAssembly[]>([]);
   const [roads, setRoads] = useState<RoadTile[]>([]);
+  const [residentialBuildings, setResidentialBuildings] = useState<ResidentialBuilding[]>([]);
+  const [pendingResidentialBuildings, setPendingResidentialBuildings] = useState<ResidentialBuilding[]>([]);
   const [pendingCities, setPendingCities] = useState<CityAssembly[]>([]);
   const [pendingRoads, setPendingRoads] = useState<RoadTile[]>([]);
   const [pendingRoadDemolitionKeys, setPendingRoadDemolitionKeys] = useState<string[]>([]);
@@ -162,6 +190,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [zoneEditorError, setZoneEditorError] = useState('');
   const [isSavingZones, setIsSavingZones] = useState(false);
   const [isPlacingCity, setIsPlacingCity] = useState(false);
+  const [residencePlacementType, setResidencePlacementType] = useState<ResidenceType | null>(null);
+  const [residencePlacementMessage, setResidencePlacementMessage] = useState('');
+  const [constructionMessage, setConstructionMessage] = useState('');
   const [cityPlacementMessage, setCityPlacementMessage] = useState('');
   const [isPlacingRoads, setIsPlacingRoads] = useState(false);
   const [roadPlacementMessage, setRoadPlacementMessage] = useState('');
@@ -186,7 +217,13 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   }, []);
 
   useEffect(() => {
-    return connectToWorld(setSnapshot, setIsOnline, setCities, setRoads);
+    return connectToWorld(
+      setSnapshot,
+      setIsOnline,
+      setCities,
+      setRoads,
+      setResidentialBuildings,
+    );
   }, []);
 
   const visibleCities = useMemo(() => {
@@ -223,6 +260,13 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       (road) => !pendingDemolitions.has(`${road.x},${road.y}`),
     );
   }, [pendingRoadDemolitionKeys, pendingRoads, roads]);
+  const visibleResidentialBuildings = useMemo(() => {
+    const byId = new Map(residentialBuildings.map((building) => [building.id, building]));
+    for (const building of pendingResidentialBuildings) {
+      if (!byId.has(building.id)) byId.set(building.id, building);
+    }
+    return [...byId.values()];
+  }, [pendingResidentialBuildings, residentialBuildings]);
 
   const mapPosition = useMemo(() => selectedTile ?? hoveredTile, [selectedTile, hoveredTile]);
   const zoomBy = (factor: number) =>
@@ -249,6 +293,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
 
   const openNewAssembly = () => {
     closeCityZoneEditor();
+    setResidencePlacementType(null);
     setActiveCategory(null);
     setIsPlacingRoads(false);
     setSelectedCity(null);
@@ -339,6 +384,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   };
 
   const startRoadPlacement = () => {
+    setResidencePlacementType(null);
     setActiveCategory(null);
     setIsPlacingCity(false);
     setRoadPlacementMessage('');
@@ -381,6 +427,93 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       );
       setRoadPlacementMessage(
         error instanceof Error ? error.message : 'Não foi possível construir a estrada.',
+      );
+    }
+  };
+
+  const startResidencePlacement = (type: ResidenceType) => {
+    closeCityZoneEditor();
+    setIsProductCatalogOpen(false);
+    setIsDemolitionMode(false);
+    setIsPlacingCity(false);
+    setIsPlacingRoads(false);
+    setActiveCategory('residencias');
+    setResidencePlacementType(type);
+    setResidencePlacementMessage('');
+    setConstructionMessage('');
+  };
+
+  const handleInvalidResidencePlacement = (reason: ResidencePlacementError) => {
+    const messages: Record<ResidencePlacementError, string> = {
+      invalid_residence: 'A residência ou o local escolhido é inválido.',
+      map_bounds: 'A residência precisa caber inteira dentro do mapa.',
+      outside_municipality: 'A residência precisa ficar dentro da área municipal.',
+      outside_urban_zone: 'A residência precisa ficar inteiramente dentro de uma área urbana.',
+      water: 'A residência só pode ser construída em terra.',
+      building_overlap: 'A residência não pode ocupar o espaço de outra construção.',
+      road_overlap: 'A residência não pode ocupar o espaço de uma estrada.',
+      not_adjacent_to_road: 'A residência precisa ficar ao lado de uma estrada.',
+    };
+    setResidencePlacementMessage(messages[reason]);
+  };
+
+  const handleResidencePlace = async (type: ResidenceType, position: RoadPosition) => {
+    if (!user.isMaster) {
+      setResidencePlacementMessage(
+        'Construção indisponível: ainda não há estoque de materiais implementado para conferir madeira e pedra.',
+      );
+      return;
+    }
+
+    const pending: ResidentialBuilding = {
+      id: `pending-${Date.now()}-${position.x}-${position.y}`,
+      type,
+      x: position.x,
+      y: position.y,
+      cityId: '',
+      status: 'under_construction',
+      startedAt: new Date().toISOString(),
+      completedAt: null,
+    };
+    setPendingResidentialBuildings((current) => [...current, pending]);
+    setResidencePlacementMessage('');
+    setConstructionMessage('');
+    try {
+      const building = await cityRequest<ResidentialBuilding>('/api/residential-buildings', {
+        method: 'POST',
+        body: JSON.stringify({ type, ...position }),
+      });
+      setResidentialBuildings((current) => [
+        ...current.filter((item) => item.id !== building.id),
+        building,
+      ]);
+      setPendingResidentialBuildings((current) =>
+        current.filter((item) => item.id !== pending.id),
+      );
+    } catch (error) {
+      setPendingResidentialBuildings((current) =>
+        current.filter((item) => item.id !== pending.id),
+      );
+      setResidencePlacementMessage(
+        error instanceof Error ? error.message : 'Não foi possível iniciar a construção.',
+      );
+    }
+  };
+
+  const completeResidence = async (buildingId: string) => {
+    if (!user.isMaster) return;
+    try {
+      const building = await cityRequest<ResidentialBuilding>(
+        `/api/residential-buildings/${buildingId}/complete`,
+        { method: 'POST' },
+      );
+      setResidentialBuildings((current) =>
+        current.map((item) => (item.id === building.id ? building : item)),
+      );
+      setConstructionMessage('Residência concluída instantaneamente pela conta Master.');
+    } catch (error) {
+      setConstructionMessage(
+        error instanceof Error ? error.message : 'Não foi possível concluir a residência.',
       );
     }
   };
@@ -590,6 +723,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           zoneOverlay={zoneOverlay}
           zoneEditorCityId={zoneEditorCityId}
           zoneDrawingType={isSavingZones ? null : zoneDrawingType}
+          residentialBuildings={visibleResidentialBuildings}
+          residencePlacementType={residencePlacementType}
+          isMaster={user.isMaster}
           onCameraChange={setCamera}
           onTileHover={setHoveredTile}
           onTileSelect={setSelectedTile}
@@ -601,6 +737,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           onRoadDemolish={(roadsToDemolish) => void demolishRoads(roadsToDemolish)}
           onCityDemolish={(city) => void demolishCity(city)}
           onCityZoneDraw={handleCityZoneDraw}
+          onResidencePlace={(type, position) => void handleResidencePlace(type, position)}
+          onInvalidResidencePlacement={handleInvalidResidencePlacement}
+          onResidenceComplete={(buildingId) => void completeResidence(buildingId)}
         />
         <div className="map-vignette" />
 
@@ -679,6 +818,22 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             }}>Cancelar</button>
           </div>
         )}
+        {residencePlacementType && (
+          <div className="placement-banner" role="status">
+            {residencePlacementMessage ||
+              'Mova o cursor para ver a residência. Verde: local válido; vermelho: local inválido. O tile selecionado será o canto superior esquerdo.'}
+            <button type="button" onClick={() => {
+              setResidencePlacementType(null);
+              setResidencePlacementMessage('');
+            }}>Cancelar</button>
+          </div>
+        )}
+        {constructionMessage && !residencePlacementType && (
+          <div className="placement-banner" role="status">
+            {constructionMessage}
+            <button type="button" onClick={() => setConstructionMessage('')}>Fechar</button>
+          </div>
+        )}
         {isPlacingRoads && (
           <div className="placement-banner" role="status">
             {roadPlacementMessage || 'Clique e arraste sobre terra dentro de uma área municipal para traçar até 600 tiles de estrada.'}
@@ -741,6 +896,41 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                 <span><strong>Estrada de Terra</strong><small>Clique e arraste para traçar · Somente em áreas municipais</small></span>
               </button>
             </>
+          ) : activeCategory === 'residencias' ? (
+            <>
+              {Object.values(RESIDENCES).map((residence) => (
+                <button
+                  className={`construction-card${residencePlacementType === residence.type ? ' active' : ''}`}
+                  key={residence.type}
+                  type="button"
+                  onClick={() => startResidencePlacement(residence.type)}
+                >
+                  <img src={residence.asset} alt="" />
+                  <span>
+                    <strong>{residence.name}</strong>
+                    <small>
+                      {residence.width} × {residence.height} tiles · Capacidade {residence.capacity} pessoas
+                    </small>
+                    <small>
+                      Custo: {residence.cost.wood} madeira · {residence.cost.stone} pedra
+                    </small>
+                    <small>
+                      Apreço local {residence.localAppeal} · {residence.workPoints.toLocaleString('pt-BR')} Work Points
+                    </small>
+                    {residencePlacementType === residence.type && (
+                      <small className="construction-selected-hint">
+                        Clique no mapa para posicionar · Master pode concluir a obra com duplo clique
+                      </small>
+                    )}
+                  </span>
+                </button>
+              ))}
+              {!user.isMaster && (
+                <p className="construction-empty">
+                  O estoque ainda não está disponível. Jogadores comuns não podem iniciar obras até madeira e pedra serem implementadas.
+                </p>
+              )}
+            </>
           ) : (
             <p className="construction-empty">
               As construções desta categoria serão adicionadas em uma próxima etapa.
@@ -760,6 +950,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           setDemolitionMessage('');
           setIsPlacingCity(false);
           setIsPlacingRoads(false);
+          setResidencePlacementType(null);
+          setResidencePlacementMessage('');
           setRoadPlacementMessage('');
           setActiveCategory((current) => (current === category ? null : category));
         }}
@@ -770,6 +962,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           setDemolitionMessage('');
           setIsPlacingCity(false);
           setIsPlacingRoads(false);
+          setResidencePlacementType(null);
+          setResidencePlacementMessage('');
           setRoadPlacementMessage('');
           setIsProductCatalogOpen((current) => !current);
         }}
@@ -779,6 +973,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           setActiveCategory(null);
           setIsPlacingCity(false);
           setIsPlacingRoads(false);
+          setResidencePlacementType(null);
+          setResidencePlacementMessage('');
           setRoadPlacementMessage('');
           setDemolitionMessage('');
           setIsDemolitionMode((current) => !current);

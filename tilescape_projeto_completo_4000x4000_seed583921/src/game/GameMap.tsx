@@ -21,6 +21,14 @@ import {
   RoadPosition,
   RoadTile,
 } from '../types/road';
+import {
+  getResidencePlacementError,
+  RESIDENCES,
+  ResidentialBuilding,
+  ResidencePlacementError,
+  ResidenceType,
+  UNDER_CONSTRUCTION_ASSET,
+} from '../types/residence';
 
 const BASE_TILE_SIZE = 24;
 const ASSEMBLY_ASSET = '/buildings/assembleia.png';
@@ -78,6 +86,9 @@ interface GameMapProps {
   zoneOverlay: CityZoneType | 'all' | null;
   zoneEditorCityId: string | null;
   zoneDrawingType: CityZoneType | null;
+  residentialBuildings: ResidentialBuilding[];
+  residencePlacementType: ResidenceType | null;
+  isMaster: boolean;
   onCitySelect: (city: CityAssembly) => void;
   onCityPlace: (center: { x: number; y: number }) => void;
   onInvalidCityPlacement: (reason: CityPlacementError) => void;
@@ -86,6 +97,9 @@ interface GameMapProps {
   onRoadDemolish: (roads: RoadTile[]) => void;
   onCityDemolish: (city: CityAssembly) => void;
   onCityZoneDraw: (bounds: CityZoneBounds) => void;
+  onResidencePlace: (type: ResidenceType, position: RoadPosition) => void;
+  onInvalidResidencePlacement: (reason: ResidencePlacementError) => void;
+  onResidenceComplete: (buildingId: string) => void;
 }
 
 export function GameMap({
@@ -103,6 +117,9 @@ export function GameMap({
   zoneOverlay,
   zoneEditorCityId,
   zoneDrawingType,
+  residentialBuildings,
+  residencePlacementType,
+  isMaster,
   onCitySelect,
   onCityPlace,
   onInvalidCityPlacement,
@@ -111,6 +128,9 @@ export function GameMap({
   onRoadDemolish,
   onCityDemolish,
   onCityZoneDraw,
+  onResidencePlace,
+  onInvalidResidencePlacement,
+  onResidenceComplete,
 }: GameMapProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -294,9 +314,23 @@ export function GameMap({
         assembly.height = ASSEMBLY_SIZE;
         layer.addChild(assembly);
       }
+      for (const building of residentialBuildings) {
+        const definition = RESIDENCES[building.type];
+        const sprite = new PIXI.Sprite(
+          PIXI.Texture.from(
+            building.status === 'under_construction'
+              ? UNDER_CONSTRUCTION_ASSET
+              : definition.asset,
+          ),
+        );
+        sprite.position.set(building.x, building.y);
+        sprite.width = definition.width;
+        sprite.height = definition.height;
+        layer.addChild(sprite);
+      }
     }
 
-  }, [camera, cities, generator, roads, zoneEditorCityId, zoneOverlay]);
+  }, [camera, cities, generator, roads, residentialBuildings, zoneEditorCityId, zoneOverlay]);
 
   useEffect(() => {
     renderMap();
@@ -351,46 +385,75 @@ export function GameMap({
       previewLayer.addChild(preview);
     }
 
-    if (placementMode && placementPreview) {
-      const valid =
-        getCityPlacementError(
-          placementPreview,
-          cities,
-          (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
-          generator.config,
-          roads,
-        ) === null;
+    if (placementPreview && (placementMode || residencePlacementType)) {
+      const residenceDefinition = residencePlacementType
+        ? RESIDENCES[residencePlacementType]
+        : null;
+      const valid = residencePlacementType
+        ? getResidencePlacementError(
+            residencePlacementType,
+            placementPreview,
+            cities,
+            residentialBuildings,
+            roads,
+            (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+            generator.config,
+          ) === null
+        : getCityPlacementError(
+            placementPreview,
+            cities,
+            (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+            generator.config,
+            roads,
+          ) === null;
       const tint = valid ? 0x55ff88 : 0xff4b55;
       const footprint = new PIXI.Graphics();
       footprint.lineStyle(0.12, tint, 1);
       footprint.beginFill(tint, 0.28);
-      footprint.drawRect(
-        placementPreview.x - Math.floor(ASSEMBLY_SIZE / 2),
-        placementPreview.y - Math.floor(ASSEMBLY_SIZE / 2),
-        ASSEMBLY_SIZE,
-        ASSEMBLY_SIZE,
-      );
+      if (residenceDefinition) {
+        footprint.drawRect(
+          placementPreview.x,
+          placementPreview.y,
+          residenceDefinition.width,
+          residenceDefinition.height,
+        );
+      } else {
+        footprint.drawRect(
+          placementPreview.x - Math.floor(ASSEMBLY_SIZE / 2),
+          placementPreview.y - Math.floor(ASSEMBLY_SIZE / 2),
+          ASSEMBLY_SIZE,
+          ASSEMBLY_SIZE,
+        );
+      }
       footprint.endFill();
       previewLayer.addChild(footprint);
 
-      const preview = new PIXI.Sprite(PIXI.Texture.from(ASSEMBLY_ASSET));
-      preview.position.set(
-        placementPreview.x - Math.floor(ASSEMBLY_SIZE / 2),
-        placementPreview.y - Math.floor(ASSEMBLY_SIZE / 2),
+      const preview = new PIXI.Sprite(
+        PIXI.Texture.from(residenceDefinition?.asset ?? ASSEMBLY_ASSET),
       );
-      preview.width = ASSEMBLY_SIZE;
-      preview.height = ASSEMBLY_SIZE;
+      preview.position.set(
+        residenceDefinition
+          ? placementPreview.x
+          : placementPreview.x - Math.floor(ASSEMBLY_SIZE / 2),
+        residenceDefinition
+          ? placementPreview.y
+          : placementPreview.y - Math.floor(ASSEMBLY_SIZE / 2),
+      );
+      preview.width = residenceDefinition?.width ?? ASSEMBLY_SIZE;
+      preview.height = residenceDefinition?.height ?? ASSEMBLY_SIZE;
       preview.tint = tint;
       preview.alpha = 0.72;
       previewLayer.addChild(preview);
 
-      labelsLayer.addChild(
-        createCityLabel(
-          placementName,
-          camera.x + (placementPreview.x + 0.5) * tilePixels,
-          camera.y + (placementPreview.y - ASSEMBLY_SIZE / 2 - 0.35) * tilePixels,
-        ),
-      );
+      if (!residenceDefinition) {
+        labelsLayer.addChild(
+          createCityLabel(
+            placementName,
+            camera.x + (placementPreview.x + 0.5) * tilePixels,
+            camera.y + (placementPreview.y - ASSEMBLY_SIZE / 2 - 0.35) * tilePixels,
+          ),
+        );
+      }
     }
   }, [
     camera,
@@ -400,6 +463,8 @@ export function GameMap({
     placementMode,
     placementName,
     placementPreview,
+    residencePlacementType,
+    residentialBuildings,
     zoneEditorCityId,
     zoneDrawingType,
     zonePreview,
@@ -441,6 +506,7 @@ export function GameMap({
           position,
           cities,
           (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+          residentialBuildings,
         ) === null;
       const sprite = new PIXI.Sprite(
         PIXI.Texture.from(ROAD_ASSETS[getRoadAssetIndex(position, combinedRoads, roadKeys) - 1]),
@@ -452,9 +518,20 @@ export function GameMap({
       if (!valid) sprite.tint = 0xff4b55;
       previewLayer.addChild(sprite);
     }
-  }, [camera, cities, generator, landTileIds, roadMode, roadPath, roads]);
+  }, [
+    camera,
+    cities,
+    generator,
+    landTileIds,
+    residentialBuildings,
+    roadMode,
+    roadPath,
+    roads,
+  ]);
 
-  const getTile = (event: React.PointerEvent<HTMLDivElement>) => {
+  const getTile = (
+    event: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>,
+  ) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     const currentCamera = cameraRef.current;
     const tilePixels = BASE_TILE_SIZE * currentCamera.zoom;
@@ -549,14 +626,14 @@ export function GameMap({
           ].slice(0, MAX_ROAD_PATH_TILES);
         }
       }
-    } else if (drag && !roadMode) {
+    } else if (drag && !roadMode && !residencePlacementType) {
       const dx = event.clientX - drag.x;
       const dy = event.clientY - drag.y;
       if (Math.abs(dx) + Math.abs(dy) > 3) draggedRef.current = true;
       onCameraChange({ ...cameraRef.current, x: drag.cameraX + dx, y: drag.cameraY + dy });
     }
     onTileHover(tile);
-    if (placementMode) {
+    if (placementMode || residencePlacementType) {
       setPlacementPreview((current) =>
         current?.x === tile?.x && current?.y === tile?.y
           ? current
@@ -609,6 +686,7 @@ export function GameMap({
               position,
               cities,
               (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+              residentialBuildings,
             ),
           );
           if (invalidPosition) {
@@ -616,6 +694,7 @@ export function GameMap({
               invalidPosition,
               cities,
               (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+              residentialBuildings,
             );
             if (reason) onInvalidRoadPlacement(reason);
           } else {
@@ -655,7 +734,20 @@ export function GameMap({
     if (dragRef.current && !draggedRef.current) {
       const tile = getTile(event);
       if (tile) {
-        if (placementMode) {
+        if (residencePlacementType) {
+          const position = { x: tile.x, y: tile.y };
+          const reason = getResidencePlacementError(
+            residencePlacementType,
+            position,
+            cities,
+            residentialBuildings,
+            roads,
+            (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+            generator.config,
+          );
+          if (reason) onInvalidResidencePlacement(reason);
+          else onResidencePlace(residencePlacementType, position);
+        } else if (placementMode) {
           const center = { x: tile.x, y: tile.y };
           const reason = getCityPlacementError(
             center,
@@ -712,14 +804,44 @@ export function GameMap({
     });
   };
 
+  const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (
+      !isMaster ||
+      residencePlacementType ||
+      placementMode ||
+      roadMode ||
+      demolitionMode ||
+      zoneDrawingType
+    ) {
+      return;
+    }
+    const tile = getTile(event);
+    if (!tile) return;
+    const position = { x: tile.x, y: tile.y };
+    const building = residentialBuildings.find((candidate) => {
+      const definition = RESIDENCES[candidate.type];
+      return (
+        candidate.status === 'under_construction' &&
+        position.x >= candidate.x &&
+        position.x < candidate.x + definition.width &&
+        position.y >= candidate.y &&
+        position.y < candidate.y + definition.height
+      );
+    });
+    if (!building) return;
+    event.preventDefault();
+    onResidenceComplete(building.id);
+  };
+
   return (
     <div
       ref={hostRef}
-      className={`game-map${placementMode ? ' placement-mode' : ''}${roadMode ? ' road-mode' : ''}${demolitionMode ? ' demolition-mode' : ''}${zoneDrawingType ? ' zone-mode' : ''}`}
+      className={`game-map${placementMode || residencePlacementType ? ' placement-mode' : ''}${roadMode ? ' road-mode' : ''}${demolitionMode ? ' demolition-mode' : ''}${zoneDrawingType ? ' zone-mode' : ''}`}
       aria-label="Mapa interativo do mundo"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onDoubleClick={handleDoubleClick}
       onPointerLeave={() => {
         onTileHover(null);
         setPlacementPreview(null);

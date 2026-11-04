@@ -167,7 +167,8 @@ a edição; jogadores também veem somente a região relevante quando selecionam
 uma categoria: Construções Artesanais, Comerciais e Residências usam áreas
 urbanas; Fazendas, Recursos e Indústrias usam áreas rurais. A definição das
 zonas é persistida e sincronizada em tempo real. O posicionamento de edifícios
-dessas categorias ainda não está habilitado.
+das demais categorias ainda não está habilitado. Residências são descritas
+abaixo.
 Depois de confirmar o local, a Assembleia aparece imediatamente enquanto o
 servidor salva; se a operação falhar, ela é removida e a mensagem de erro é
 exibida.
@@ -187,6 +188,25 @@ de quatro vias também se ajustam às conexões vizinhas. O traçado aparece
 imediatamente enquanto o servidor salva e some com uma mensagem caso a
 operação seja rejeitada. Cada tile pode ser demolido individualmente e sua
 remoção é sincronizada com os demais jogadores.
+
+### Residências
+
+Na categoria **Residências**, selecione uma das duas casas para ver no cursor
+uma prévia verde/vermelha. A casa precisa caber inteira em uma área urbana da
+cidade, ficar em terra, não ocupar outra construção ou estrada e estar ao lado
+de uma estrada. Clique para iniciar a obra:
+
+| Residência | Tamanho | Capacidade | Apreço local | Custo | Trabalho necessário |
+| --- | --- | --- | --- | --- | --- |
+| Simples 1 | 2 × 2 tiles | 4 pessoas | 50 | 100 madeiras, 30 pedras | 18.000 Work Points |
+| Simples 2 | 3 × 3 tiles | 32 pessoas | 40 | 300 madeiras, 450 pedras | 67.500 Work Points |
+
+O estoque e o sistema de Work Points ainda não estão implementados. Por isso,
+jogadores comuns recebem uma mensagem de indisponibilidade por falta de estoque;
+a conta Master pode iniciar a construção sem materiais. A obra aparece com o
+ícone **Em construção** e não avança automaticamente. A conta Master pode
+concluí-la instantaneamente com duplo clique no ícone da obra. Capacidade,
+apreço e custo são dados informativos; ainda não alteram população ou estoque.
 
 Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.

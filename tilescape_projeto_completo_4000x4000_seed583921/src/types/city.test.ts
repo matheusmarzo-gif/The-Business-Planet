@@ -6,6 +6,12 @@ import {
   isFootprintInCityZone,
   type CityZone,
 } from './city';
+import {
+  getResidencePlacementError,
+  RESIDENCES,
+  type ResidentialBuilding,
+} from './residence';
+import { getRoadPlacementError } from './road';
 
 const city = { centerX: 1000, centerY: 1000 };
 
@@ -27,6 +33,119 @@ describe('municipal zones', () => {
       ),
       'zone_outside_municipality',
     );
+  });
+
+  describe('residential building placement', () => {
+    const residentialCity = {
+      id: 'city',
+      name: 'Test',
+      centerX: 100,
+      centerY: 100,
+      population: 0,
+      wellbeing: 0,
+      economy: 0,
+      zones: [{ id: 'zone', cityId: 'city', type: 'urban' as const, minX: 0, minY: 0, maxX: 300, maxY: 300 }],
+    };
+    const allLand = () => true;
+    const map = { width: 4000, height: 4000 };
+
+    it('requires an urban lot, empty footprint, land, and orthogonally adjacent road', () => {
+      const type = 'house_poor1';
+      const position = { x: 20, y: 20 };
+      assert.equal(
+        getResidencePlacementError(type, position, [residentialCity], [], [{ x: 19, y: 20 }], allLand, map),
+        null,
+      );
+      assert.equal(
+        getResidencePlacementError(type, position, [residentialCity], [], [{ x: 19, y: 19 }], allLand, map),
+        'not_adjacent_to_road',
+      );
+      assert.equal(
+        getResidencePlacementError(
+          type,
+          position,
+          [{ ...residentialCity, zones: [] }],
+          [],
+          [{ x: 19, y: 20 }],
+          allLand,
+          map,
+        ),
+        'outside_urban_zone',
+      );
+      assert.equal(
+        getResidencePlacementError(type, position, [residentialCity], [], [{ x: 20, y: 20 }], allLand, map),
+        'road_overlap',
+      );
+      assert.equal(
+        getResidencePlacementError(type, position, [residentialCity], [], [{ x: 19, y: 20 }], () => false, map),
+        'water',
+      );
+    });
+
+    it('prevents roads from being built over residential footprints', () => {
+      const house: ResidentialBuilding = {
+        id: 'house',
+        type: 'house_poor2',
+        x: 20,
+        y: 20,
+        cityId: 'city',
+        status: 'under_construction',
+        startedAt: '2026-01-01T00:00:00.000Z',
+        completedAt: null,
+      };
+
+      assert.equal(
+        getRoadPlacementError(
+          { x: 22, y: 22 },
+          [{ id: 'city', centerX: 100, centerY: 100 }],
+          () => true,
+          [house],
+        ),
+        'building_overlap',
+      );
+      assert.equal(
+        getRoadPlacementError(
+          { x: 23, y: 22 },
+          [{ id: 'city', centerX: 100, centerY: 100 }],
+          () => true,
+          [house],
+        ),
+        null,
+      );
+    });
+
+    it('checks footprint collisions across both residence sizes', () => {
+      const first: ResidentialBuilding = {
+        id: 'house',
+        type: 'house_poor1',
+        x: 20,
+        y: 20,
+        cityId: 'city',
+        status: 'under_construction',
+        startedAt: '2026-01-01T00:00:00.000Z',
+        completedAt: null,
+      };
+      assert.equal(
+        getResidencePlacementError(
+          'house_poor2',
+          { x: 21, y: 20 },
+          [residentialCity],
+          [first],
+          [{ x: 20, y: 19 }],
+          allLand,
+          map,
+        ),
+        'building_overlap',
+      );
+      assert.deepEqual(
+        [RESIDENCES.house_poor1.width, RESIDENCES.house_poor1.height, RESIDENCES.house_poor1.capacity],
+        [2, 2, 4],
+      );
+      assert.deepEqual(
+        [RESIDENCES.house_poor2.width, RESIDENCES.house_poor2.height, RESIDENCES.house_poor2.capacity],
+        [3, 3, 32],
+      );
+    });
   });
 
   it('rejects shared tiles between zones but allows adjacent rectangles', () => {

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import CityAssemblyModal from './components/CityAssemblyModal';
 import ConstructionBar, { ConstructionCategory } from './components/ConstructionBar';
+import ProductCatalog from './components/ProductCatalog';
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
 import { connectToWorld, WorldSnapshot } from './game/worldClient';
@@ -130,6 +131,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [pendingRoads, setPendingRoads] = useState<RoadTile[]>([]);
   const [pendingRoadDemolitionKeys, setPendingRoadDemolitionKeys] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState<ConstructionCategory | null>(null);
+  const [isProductCatalogOpen, setIsProductCatalogOpen] = useState(false);
   const [isDemolitionMode, setIsDemolitionMode] = useState(false);
   const [demolitionMessage, setDemolitionMessage] = useState('');
   const [isCityModalOpen, setIsCityModalOpen] = useState(false);
@@ -609,8 +611,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       <ConstructionBar
         activeCategory={activeCategory}
         demolitionMode={isDemolitionMode}
+        productCatalogOpen={isProductCatalogOpen}
         isMaster={user.isMaster}
         onSelect={(category) => {
+          setIsProductCatalogOpen(false);
           setIsDemolitionMode(false);
           setDemolitionMessage('');
           setIsPlacingCity(false);
@@ -618,7 +622,17 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           setRoadPlacementMessage('');
           setActiveCategory((current) => (current === category ? null : category));
         }}
+        onToggleProductCatalog={() => {
+          setActiveCategory(null);
+          setIsDemolitionMode(false);
+          setDemolitionMessage('');
+          setIsPlacingCity(false);
+          setIsPlacingRoads(false);
+          setRoadPlacementMessage('');
+          setIsProductCatalogOpen((current) => !current);
+        }}
         onToggleDemolition={() => {
+          setIsProductCatalogOpen(false);
           setActiveCategory(null);
           setIsPlacingCity(false);
           setIsPlacingRoads(false);
@@ -627,6 +641,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           setIsDemolitionMode((current) => !current);
         }}
       />
+      {isProductCatalogOpen && (
+        <ProductCatalog onClose={() => setIsProductCatalogOpen(false)} />
+      )}
       {isCityModalOpen && (
         <CityAssemblyModal
           city={isCreatingCity ? null : selectedCity}

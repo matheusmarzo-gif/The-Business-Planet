@@ -179,6 +179,13 @@ imediatamente enquanto o servidor salva e some com uma mensagem caso a
 operação seja rejeitada. Cada tile pode ser demolido individualmente e sua
 remoção é sincronizada com os demais jogadores.
 
+Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
+com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.
+Validades informadas em anos são convertidas para dias considerando 365 dias
+por ano; produtos sem deterioração aparecem com validade infinita. Por enquanto,
+o catálogo é informativo: estoques e perda diária às 6h ainda não estão
+habilitados. Produtos cujos atributos ainda não foram definidos não aparecem.
+
 ## Sobre o jogo
 
 O mapa parte do projeto procedural

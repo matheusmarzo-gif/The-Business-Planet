@@ -3,6 +3,7 @@ import {
   Hammer,
   House,
   Landmark,
+  PackageOpen,
   Trash2,
   Wheat,
 } from 'lucide-react';
@@ -17,8 +18,10 @@ export type ConstructionCategory =
 interface ConstructionBarProps {
   activeCategory: ConstructionCategory | null;
   demolitionMode: boolean;
+  productCatalogOpen: boolean;
   isMaster: boolean;
   onSelect: (category: ConstructionCategory) => void;
+  onToggleProductCatalog: () => void;
   onToggleDemolition: () => void;
 }
 
@@ -33,8 +36,10 @@ const categories = [
 export default function ConstructionBar({
   activeCategory,
   demolitionMode,
+  productCatalogOpen,
   isMaster,
   onSelect,
+  onToggleProductCatalog,
   onToggleDemolition,
 }: ConstructionBarProps) {
   return (
@@ -54,6 +59,16 @@ export default function ConstructionBar({
             <span>{label}</span>
           </button>
         ))}
+      <button
+        className={`construction-tab${productCatalogOpen ? ' active' : ''}`}
+        type="button"
+        aria-label="Catálogo de produtos"
+        aria-pressed={productCatalogOpen}
+        onClick={onToggleProductCatalog}
+      >
+        <PackageOpen size={20} strokeWidth={1.8} />
+        <span>Produtos</span>
+      </button>
       <button
         className={`construction-tab demolition-tab${demolitionMode ? ' active' : ''}`}
         type="button"

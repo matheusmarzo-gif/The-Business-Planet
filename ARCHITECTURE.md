@@ -16,9 +16,10 @@ atualizações entre instâncias.
 O mapa base é determinístico: não é persistido tile a tile. Cidades e estradas
 são sobrepostas ao terreno gerado. Atualmente, a construção disponível na
 Prefeitura é a Assembleia, que cria uma área municipal; Estrada de Terra é a
-primeira infraestrutura rodoviária. População, bem-estar e economia são dados
-da cidade, mas ainda não existe simulação econômica ou de crescimento que os
-altere.
+primeira infraestrutura rodoviária. O jogo também possui um catálogo estático
+de produtos com atributos padrão; estoques, produção e deterioração ainda não
+estão implementados. População, bem-estar e economia são dados da cidade, mas
+ainda não existe simulação econômica ou de crescimento que os altere.
 
 ## Estrutura do repositório
 
@@ -35,6 +36,8 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/game/worldClient.ts` | Autentica o WebSocket, valida mensagens recebidas e atualiza o estado compartilhado. |
 | `src/types/city.ts` | Tipos, dimensões e regras geométricas de cidades/Assembleias. |
 | `src/types/road.ts` | Tipos, limites, validação, interpolação e escolha das peças de estrada. |
+| `src/types/product.ts` | Catálogo estático dos produtos, unidades, peso, volume e validade padrão. |
+| `src/components/ProductCatalog.tsx` | Interface pesquisável para consultar as fichas de produtos. |
 | `src/types/map.ts` | Tipos de configuração do mundo, terrenos, tiles e informações de mapa. |
 | `src/utils/worldConfig.ts` | Configuração única do mapa usada pelo cliente e pelo servidor. |
 | `src/utils/mapGenerator.ts`, `src/utils/perlin.ts` | Geração procedural determinística do terreno. |
@@ -174,6 +177,21 @@ reimplemente as fórmulas separadamente no React e no servidor.
   cidades e estradas. Pré-visualiza a remoção localmente enquanto aguarda a API;
   em caso de falha, os tiles reaparecem. A demolição de Assembleias continua
   pedindo confirmação.
+
+## Produtos
+
+- `src/types/product.ts` define os 32 produtos atualmente habilitados, com
+  unidade de medida (unidade ou litro), peso em kg, espaço em m³ e validade
+  padrão em dias. Validades em anos usam 365 dias por ano; `null` representa
+  validade infinita.
+- A barra inferior abre o catálogo pesquisável; cada ficha mostra os atributos
+  e usa o ícone correspondente em `public/products/`.
+- A lista contém os produtos especificados pelo usuário. Ícones adicionais sem
+  atributos não são tratados como produtos.
+- Esta etapa é somente o catálogo: não há estoque persistido nem deterioração
+  diária às 06h. A validade está disponível como dado de produto para essa
+  implementação futura; variações de validade por método de fabricação ainda
+  não são modeladas.
 
 As regras, o caminho ortogonal e o mapeamento de imagens estão em
 `src/types/road.ts`. Não altere a ordenação dos assets sem atualizar esse

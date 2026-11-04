@@ -221,6 +221,11 @@ mapeamento e verificar todas as curvas.
   apreço local 50, custo de 100 madeiras e 30 pedras, 18.000 Work Points) e
   `house_poor2` (3 × 3, capacidade 32, apreço local 40, custo de 300 madeiras
   e 450 pedras, 67.500 Work Points).
+- `shop_rice` (categoria Comerciais, área urbana, `kind: 'shop'`) também usa o
+  catálogo e a tabela `residential_buildings`: 2 × 2, até 4 funcionários,
+  estoque máximo de 20 de Arroz, 100 madeiras e 20 pedras, 9.000 Work Points.
+  Exige zona urbana e estrada adjacente; sem moradores nem aluguel. Sprite:
+  `public/buildings/commerce/loja_arroz.png`.
 - `farm_rice` (categoria Fazendas, área rural) usa o mesmo catálogo e a mesma
   tabela `residential_buildings`: 4 × 4, até 30 funcionários, estoque máximo de
   300 de Arroz, custo de 200 madeiras e 20 pedras, 12.000 Work Points. Exige

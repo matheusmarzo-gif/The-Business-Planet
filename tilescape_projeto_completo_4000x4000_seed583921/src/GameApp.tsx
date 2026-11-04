@@ -535,7 +535,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setIsDemolitionMode(false);
     setIsPlacingCity(false);
     setIsPlacingRoads(false);
-    setActiveCategory(RESIDENCES[type].kind === 'farm' ? 'fazendas' : 'residencias');
+    setActiveCategory(
+      { farm: 'fazendas', shop: 'comerciais', residence: 'residencias' }[RESIDENCES[type].kind] as ConstructionCategory,
+    );
     setResidencePlacementType(type);
     setResidencePlacementMessage('');
     setConstructionMessage('');
@@ -1008,10 +1010,14 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                 <span><strong>Estrada de Terra</strong><small>Clique e arraste para traçar · Somente em áreas municipais</small></span>
               </button>
             </>
-          ) : activeCategory === 'residencias' || activeCategory === 'fazendas' ? (
+          ) : activeCategory === 'residencias' || activeCategory === 'fazendas' || activeCategory === 'comerciais' ? (
             <>
               {Object.values(RESIDENCES)
-                .filter((residence) => residence.kind === (activeCategory === 'fazendas' ? 'farm' : 'residence'))
+                .filter(
+                  (residence) =>
+                    residence.kind ===
+                    (activeCategory === 'fazendas' ? 'farm' : activeCategory === 'comerciais' ? 'shop' : 'residence'),
+                )
                 .map((residence) => (
                 <button
                   className={`construction-card${residencePlacementType === residence.type ? ' active' : ''}`}
@@ -1024,7 +1030,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                     <strong>{residence.name}</strong>
                     <small>
                       {residence.width} × {residence.height} tiles ·{' '}
-                      {residence.kind === 'farm'
+                      {residence.kind !== 'residence'
                         ? `Até ${residence.maxWorkers} funcionários · Estoque máx. ${residence.stockCapacity} ${residence.stockProduct}`
                         : `Capacidade ${residence.capacity} pessoas`}
                     </small>

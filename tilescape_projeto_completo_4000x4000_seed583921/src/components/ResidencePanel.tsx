@@ -52,7 +52,8 @@ export default function ResidencePanel({
     onSaveRent(Number(rent));
   };
 
-  const isFarm = definition.kind === 'farm';
+  const isResidence = definition.kind === 'residence';
+  const isFarm = !isResidence;
   const rows: [string, string][] =
     building.status === 'under_construction'
       ? [
@@ -82,7 +83,15 @@ export default function ResidencePanel({
   return (
     <aside className="realm-panel">
       <div className="panel-title">
-        <div className="eyebrow">{building.status === 'completed' ? (isFarm ? 'FAZENDA' : 'RESIDÊNCIA') : 'EM CONSTRUÇÃO'}</div>
+        <div className="eyebrow">
+          {building.status === 'under_construction'
+            ? 'EM CONSTRUÇÃO'
+            : definition.kind === 'farm'
+              ? 'FAZENDA'
+              : definition.kind === 'shop'
+                ? 'COMÉRCIO'
+                : 'RESIDÊNCIA'}
+        </div>
         <h1>{definition.name}</h1>
         <button type="button" className="panel-close" aria-label="Fechar painel" onClick={onClose}>
           ×

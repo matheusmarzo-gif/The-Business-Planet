@@ -69,7 +69,7 @@ ALTER TABLE world_state
 ALTER TABLE residential_buildings
   DROP CONSTRAINT IF EXISTS residential_buildings_building_type_check,
   ADD CONSTRAINT residential_buildings_building_type_check
-    CHECK (building_type IN ('house_poor1', 'house_poor2', 'farm_rice'));
+    CHECK (building_type IN ('house_poor1', 'house_poor2', 'farm_rice', 'shop_rice'));
 
 CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
   ON residential_buildings (city_id);

@@ -2,8 +2,8 @@ import type { CityAssembly } from './city.js';
 import { ASSEMBLY_SIZE, isFootprintInCityZone, MUNICIPAL_AREA_RADIUS } from './city.js';
 import type { RoadTile } from './road.js';
 
-export type ResidenceType = 'house_poor1' | 'house_poor2' | 'farm_rice';
-export type BuildingKind = 'residence' | 'farm';
+export type ResidenceType = 'house_poor1' | 'house_poor2' | 'farm_rice' | 'shop_rice';
+export type BuildingKind = 'residence' | 'farm' | 'shop';
 export type ResidentialBuildingStatus = 'under_construction' | 'completed';
 
 export interface ResidenceCost {
@@ -128,6 +128,23 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     stockProduct: 'Arroz',
     stockCapacity: 300,
   },
+  shop_rice: {
+    type: 'shop_rice',
+    kind: 'shop',
+    requiredZone: 'urban',
+    requiresRoad: true,
+    name: 'Loja de Arroz',
+    asset: '/buildings/commerce/loja_arroz.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 100, stone: 20 },
+    workPoints: 9000,
+    maxWorkers: 4,
+    stockProduct: 'Arroz',
+    stockCapacity: 20,
+  },
 };
 
 export const UNDER_CONSTRUCTION_ASSET = '/buildings/em_construcao.png';
@@ -159,7 +176,7 @@ export type ResidencePlacementError =
   | 'not_adjacent_to_road';
 
 export function getResidenceDefinition(type: string): ResidenceDefinition | null {
-  if (type === 'house_poor1' || type === 'house_poor2' || type === 'farm_rice') {
+  if (type === 'house_poor1' || type === 'house_poor2' || type === 'farm_rice' || type === 'shop_rice') {
     return RESIDENCES[type];
   }
   return null;

@@ -60,7 +60,10 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
   const building = value as Record<string, unknown>;
   return (
     typeof building.id === 'string' &&
-    (building.type === 'house_poor1' || building.type === 'house_poor2' || building.type === 'farm_rice') &&
+    (building.type === 'house_poor1' ||
+      building.type === 'house_poor2' ||
+      building.type === 'farm_rice' ||
+      building.type === 'shop_rice') &&
     Number.isInteger(building.x) &&
     Number.isInteger(building.y) &&
     typeof building.cityId === 'string' &&

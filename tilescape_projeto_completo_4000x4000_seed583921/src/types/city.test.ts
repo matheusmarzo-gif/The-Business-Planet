@@ -175,6 +175,20 @@ describe('municipal zones', () => {
       );
     });
 
+    it('places rice shops only in urban zones next to a road, and not for immigrants', () => {
+      const position = { x: 20, y: 20 };
+      const road = [{ x: 19, y: 20 }];
+      assert.equal(getResidencePlacementError('shop_rice', position, [residentialCity], [], road, allLand, map), null);
+      assert.equal(
+        getResidencePlacementError('shop_rice', position, [residentialCity], [], [], allLand, map),
+        'not_adjacent_to_road',
+      );
+      assert.equal(
+        getResidencePlacementError('shop_rice', position, [{ ...residentialCity, zones: [] }], [], road, allLand, map),
+        'outside_urban_zone',
+      );
+    });
+
     it('limits the worker search area to 60 tiles from the building center', () => {
       const farm = { type: 'farm_rice' as const, x: 100, y: 100 };
       assert.equal(isWithinWorkerSearchRadius(farm, { x: 160, y: 102 }), true);

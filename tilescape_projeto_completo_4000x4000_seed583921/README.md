@@ -228,6 +228,15 @@ baratas com vaga (empate: maior apreço). A população da cidade é a soma dos
 ocupantes das suas residências. A cobrança do aluguel ainda não é aplicada, pois
 o jogo não tem dinheiro dos jogadores. Clique em outro ponto do mapa ou em × para fechar.
 
+### Comércio
+
+Na categoria **Comerciais**, a **Loja de Arroz** (2 × 2 tiles, até 4 funcionários,
+estoque máximo de 20 unidades de arroz) custa 100 madeiras e 20 pedras e exige
+9.000 Work Points. Deve ficar inteira em área urbana, ao lado de uma estrada e
+sem sobrepor outras construções. O fluxo (prévia, obra, demolição, painel
+lateral com raio de busca de 60 tiles) é o mesmo das fazendas; venda e estoque
+ainda não estão implementados.
+
 ### Fazendas
 
 Na categoria **Fazendas**, a **Fazenda de arroz** (4 × 4 tiles, até 30 funcionários,

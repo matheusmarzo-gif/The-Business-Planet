@@ -233,7 +233,9 @@ o jogo não tem dinheiro dos jogadores. Clique em outro ponto do mapa ou em × p
 Na categoria **Fazendas**, a **Fazenda de arroz** (4 × 4 tiles, até 30 funcionários,
 estoque máximo de 300 unidades de arroz) custa 200 madeiras e 20 pedras e exige
 12.000 Work Points. Ela só pode ser construída inteiramente em área rural, sem
-sobrepor estradas ou construções; não precisa ficar ao lado de uma estrada. O
+sobrepor estradas ou construções e precisa ficar ao lado de uma estrada. Toda obra
+e a fazenda concluída terão uma área de 60 tiles de raio para procurar
+trabalhadores (exibida no painel; a contratação ainda não está implementada). O
 funcionamento é o mesmo das residências (prévia, obra, demolição e painel
 lateral), mas sem moradores nem aluguel; produção e estoque ainda não existem.
 

@@ -6,6 +6,7 @@ import {
   MIN_RENT,
   MIN_WORK_HOURS,
   RESIDENCE_STATS,
+  WORKER_SEARCH_RADIUS,
   RESIDENCES,
   ResidentialBuilding,
 } from '../types/residence';
@@ -59,11 +60,13 @@ export default function ResidencePanel({
           ['Work Points necessários', number.format(definition.workPoints)],
           ['Empregados atuais', '0'],
           ['Máximo de empregados', number.format(definition.maxWorkers)],
+          ['Raio de busca de trabalhadores', `${WORKER_SEARCH_RADIUS} tiles`],
         ]
       : isFarm
         ? [
             ['Funcionários atuais', '0'],
             ['Máximo de funcionários', number.format(definition.maxWorkers)],
+            ['Raio de busca de trabalhadores', `${WORKER_SEARCH_RADIUS} tiles`],
             [`Estoque de ${definition.stockProduct}`, `0 / ${number.format(definition.stockCapacity ?? 0)}`],
           ]
         : [

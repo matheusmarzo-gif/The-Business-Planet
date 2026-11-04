@@ -15,6 +15,7 @@ import {
   isTileInResidenceFootprint,
   parseRent,
   getResidencePlacementError,
+  isWithinWorkerSearchRadius,
   parseWorkSettings,
   RESIDENCES,
   type ResidentialBuilding,
@@ -152,21 +153,32 @@ describe('municipal zones', () => {
       );
     });
 
-    it('places rice farms only in rural zones without requiring a road', () => {
+    it('places rice farms only in rural zones next to a road', () => {
       const ruralCity = {
         ...residentialCity,
         zones: [{ id: 'rural', cityId: 'city', type: 'rural' as const, minX: 0, minY: 0, maxX: 300, maxY: 300 }],
       };
       const position = { x: 20, y: 20 };
-      assert.equal(getResidencePlacementError('farm_rice', position, [ruralCity], [], [], allLand, map), null);
+      const road = [{ x: 19, y: 20 }];
+      assert.equal(getResidencePlacementError('farm_rice', position, [ruralCity], [], road, allLand, map), null);
       assert.equal(
-        getResidencePlacementError('farm_rice', position, [residentialCity], [], [], allLand, map),
+        getResidencePlacementError('farm_rice', position, [ruralCity], [], [], allLand, map),
+        'not_adjacent_to_road',
+      );
+      assert.equal(
+        getResidencePlacementError('farm_rice', position, [residentialCity], [], road, allLand, map),
         'outside_rural_zone',
       );
       assert.equal(
-        getResidencePlacementError('house_poor1', position, [ruralCity], [], [{ x: 19, y: 20 }], allLand, map),
+        getResidencePlacementError('house_poor1', position, [ruralCity], [], road, allLand, map),
         'outside_urban_zone',
       );
+    });
+
+    it('limits the worker search area to 60 tiles from the building center', () => {
+      const farm = { type: 'farm_rice' as const, x: 100, y: 100 };
+      assert.equal(isWithinWorkerSearchRadius(farm, { x: 160, y: 102 }), true);
+      assert.equal(isWithinWorkerSearchRadius(farm, { x: 170, y: 102 }), false);
     });
 
     it('prevents roads from being built over residential footprints', () => {

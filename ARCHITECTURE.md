@@ -224,9 +224,12 @@ mapeamento e verificar todas as curvas.
 - `farm_rice` (categoria Fazendas, área rural) usa o mesmo catálogo e a mesma
   tabela `residential_buildings`: 4 × 4, até 30 funcionários, estoque máximo de
   300 de Arroz, custo de 200 madeiras e 20 pedras, 12.000 Work Points. Exige
-  zona rural, não exige estrada, não recebe imigrantes e não tem aluguel
-  (`PATCH .../rent` só vale para casas). O CHECK de `building_type` é recriado
-  de forma idempotente no schema. Sprite: `public/buildings/farms/fazenda_arroz.jpg`.
+  zona rural, estrada ortogonalmente adjacente (como as casas), não recebe imigrantes e não tem aluguel
+  (`PATCH .../rent` só vale para casas). Toda obra e a fazenda concluída têm
+  uma área de busca de trabalhadores de 60 tiles de raio a partir do centro
+  (`WORKER_SEARCH_RADIUS`, `isWithinWorkerSearchRadius`); a contratação ainda
+  não existe. O CHECK de `building_type` é recriado
+  de forma idempotente no schema. Sprite: `public/buildings/farms/fazenda_arroz.png`.
 - O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
   área ocupada deve ficar dentro da cidade e de uma zona urbana, em terra, sem
   sobrepor Assembleia, estrada ou residência, e deve encostar ortogonalmente

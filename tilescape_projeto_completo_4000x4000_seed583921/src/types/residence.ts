@@ -38,6 +38,18 @@ export const DEFAULT_RENT = 10;
 export const MIN_RENT = 1;
 export const MAX_RENT = 100000;
 export const RESIDENCE_STATS = { skill: 10, health: 100, happiness: 100 } as const;
+// Raio (em tiles) em que uma obra ou fazenda procura trabalhadores.
+export const WORKER_SEARCH_RADIUS = 60;
+
+export function isWithinWorkerSearchRadius(
+  building: { type: ResidenceType; x: number; y: number },
+  point: { x: number; y: number },
+): boolean {
+  const { width, height } = RESIDENCES[building.type];
+  const dx = point.x + 0.5 - (building.x + width / 2);
+  const dy = point.y + 0.5 - (building.y + height / 2);
+  return dx * dx + dy * dy <= WORKER_SEARCH_RADIUS * WORKER_SEARCH_RADIUS;
+}
 
 export function parseWorkSettings(
   value: unknown,
@@ -103,9 +115,9 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     type: 'farm_rice',
     kind: 'farm',
     requiredZone: 'rural',
-    requiresRoad: false,
+    requiresRoad: true,
     name: 'Fazenda de arroz',
-    asset: '/buildings/farms/fazenda_arroz.jpg',
+    asset: '/buildings/farms/fazenda_arroz.png',
     width: 4,
     height: 4,
     capacity: 0,

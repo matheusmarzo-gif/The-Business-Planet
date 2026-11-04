@@ -16,7 +16,7 @@ interface ResidencePanelProps {
   isOwner: boolean;
   isSaving: boolean;
   error: string;
-  onSave: (settings: { wage: number; workHoursPerDay: number }) => void;
+  onSave: (settings: { wage: number; workHoursPerDay: number; desiredWorkers: number }) => void;
   onSaveRent: (rent: number) => void;
   onOpenWarehouse: () => void;
   onClose: () => void;
@@ -38,16 +38,22 @@ export default function ResidencePanel({
   const [wage, setWage] = useState(String(building.wage));
   const [hours, setHours] = useState(String(building.workHoursPerDay));
   const [rent, setRent] = useState(String(building.rent));
+  const [desired, setDesired] = useState(String(building.desiredWorkers));
 
   useEffect(() => {
     setWage(String(building.wage));
     setHours(String(building.workHoursPerDay));
     setRent(String(building.rent));
-  }, [building.id, building.wage, building.workHoursPerDay, building.rent]);
+    setDesired(String(building.desiredWorkers));
+  }, [building.id, building.wage, building.workHoursPerDay, building.rent, building.desiredWorkers]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    onSave({ wage: Number(wage), workHoursPerDay: Number(hours) });
+    onSave({
+      wage: Number(wage),
+      workHoursPerDay: Number(hours),
+      desiredWorkers: Number(desired),
+    });
   };
   const submitRent = (event: FormEvent) => {
     event.preventDefault();
@@ -56,20 +62,24 @@ export default function ResidencePanel({
 
   const isResidence = definition.kind === 'residence';
   const isFarm = !isResidence;
+  const openJobs = Math.max(0, Math.min(building.desiredWorkers, definition.maxWorkers) - building.employed);
+  const jobRows: [string, string][] = [
+    ['Funcionários atuais', number.format(building.employed)],
+    ['Funcionários desejados', number.format(building.desiredWorkers)],
+    ['Vagas ofertadas', number.format(openJobs)],
+    ['Máximo de funcionários', number.format(definition.maxWorkers)],
+    ['Raio de busca de trabalhadores', `${WORKER_SEARCH_RADIUS} tiles`],
+  ];
   const rows: [string, string][] =
     building.status === 'under_construction'
       ? [
           ['Work Points completados', '0'],
           ['Work Points necessários', number.format(definition.workPoints)],
-          ['Empregados atuais', '0'],
-          ['Máximo de empregados', number.format(definition.maxWorkers)],
-          ['Raio de busca de trabalhadores', `${WORKER_SEARCH_RADIUS} tiles`],
+          ...jobRows,
         ]
       : isFarm
         ? [
-            ['Funcionários atuais', '0'],
-            ['Máximo de funcionários', number.format(definition.maxWorkers)],
-            ['Raio de busca de trabalhadores', `${WORKER_SEARCH_RADIUS} tiles`],
+            ...jobRows,
             definition.kind === 'warehouse'
               ? ['Espaço ocupado', `0 / ${number.format(definition.storageCapacityM3 ?? 0)} m³`]
               : [`Estoque de ${definition.stockProduct}`, `0 / ${number.format(definition.stockCapacity ?? 0)}`],
@@ -80,7 +90,7 @@ export default function ResidencePanel({
             ['Técnica média dos trabalhadores', String(RESIDENCE_STATS.skill)],
             ['Saúde dos trabalhadores', String(RESIDENCE_STATS.health)],
             ['Felicidade dos trabalhadores', String(RESIDENCE_STATS.happiness)],
-            ['Pessoas empregadas', '0'],
+            ['Pessoas empregadas', number.format(building.employed)],
             ['Renda média dos trabalhadores', '0'],
           ];
 
@@ -117,8 +127,20 @@ export default function ResidencePanel({
           Produtos e estoque
         </button>
       )}
-      {building.status === 'under_construction' && (
+      {(building.status === 'under_construction' || isFarm) && (
         <form className="work-settings" onSubmit={submit}>
+          <label>
+            Funcionários desejados (0 a {definition.maxWorkers})
+            <input
+              type="number"
+              min={0}
+              max={definition.maxWorkers}
+              step={1}
+              value={desired}
+              disabled={!isOwner || isSaving}
+              onChange={(event) => setDesired(event.target.value)}
+            />
+          </label>
           <label>
             Salário ofertado (C$ por dia de trabalho)
             <input

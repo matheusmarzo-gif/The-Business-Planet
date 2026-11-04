@@ -21,6 +21,7 @@ import {
   type ResidentialBuilding,
 } from './residence';
 import { getRoadPlacementError } from './road';
+import { allocateWorkers, getHoursFactor, getPayroll, getWorkBenefit } from './employment';
 import { parseWarehouseSetting } from './warehouse';
 
 const city = { centerX: 1000, centerY: 1000 };
@@ -34,17 +35,66 @@ describe('wallet', () => {
 
 describe('work settings', () => {
   it('accepts valid wage and hours and rejects invalid values', () => {
-    assert.deepEqual(parseWorkSettings({ wage: 15, workHoursPerDay: 8 }), {
+    assert.deepEqual(parseWorkSettings({ wage: 15, workHoursPerDay: 8, desiredWorkers: 3 }), {
       wage: 15,
       workHoursPerDay: 8,
+      desiredWorkers: 3,
     });
-    assert.equal(parseWorkSettings({ wage: -1, workHoursPerDay: 8 }), null);
-    assert.equal(parseWorkSettings({ wage: 10, workHoursPerDay: 3 }), null);
-    assert.equal(parseWorkSettings({ wage: 10, workHoursPerDay: 15 }), null);
-    assert.ok(parseWorkSettings({ wage: 10, workHoursPerDay: 4 }));
-    assert.ok(parseWorkSettings({ wage: 10, workHoursPerDay: 14 }));
-    assert.equal(parseWorkSettings({ wage: 1.5, workHoursPerDay: 8 }), null);
+    assert.equal(parseWorkSettings({ wage: 15, workHoursPerDay: 8 }), null);
+    assert.equal(parseWorkSettings({ wage: 15, workHoursPerDay: 8, desiredWorkers: -1 }), null);
+    assert.equal(parseWorkSettings({ wage: -1, workHoursPerDay: 8, desiredWorkers: 0 }), null);
+    assert.equal(parseWorkSettings({ wage: 10, workHoursPerDay: 3, desiredWorkers: 0 }), null);
+    assert.equal(parseWorkSettings({ wage: 10, workHoursPerDay: 15, desiredWorkers: 0 }), null);
+    assert.ok(parseWorkSettings({ wage: 10, workHoursPerDay: 4, desiredWorkers: 0 }));
+    assert.ok(parseWorkSettings({ wage: 10, workHoursPerDay: 14, desiredWorkers: 0 }));
+    assert.equal(parseWorkSettings({ wage: 1.5, workHoursPerDay: 8, desiredWorkers: 0 }), null);
     assert.equal(parseWorkSettings(null), null);
+  });
+
+  it('computes the work benefit and allocates workers from best to worst', () => {
+    assert.equal(getHoursFactor(8), 1);
+    assert.equal(getHoursFactor(14), 0.5);
+    assert.equal(getHoursFactor(2), 0.5);
+    assert.equal(getWorkBenefit(10, 80, 8), 100);
+    const workplace = (id: string, x: number, wage: number, desiredWorkers: number) => ({
+      id,
+      type: 'farm_rice' as const,
+      x,
+      y: 0,
+      wage,
+      workHoursPerDay: 8,
+      desiredWorkers,
+    });
+    const homes = [
+      { id: 'a', type: 'house_poor1' as const, x: 10, y: 0, occupants: 4 },
+      { id: 'b', type: 'house_poor1' as const, x: 12, y: 0, occupants: 4 },
+      { id: 'far', type: 'house_poor1' as const, x: 500, y: 0, occupants: 4 },
+    ];
+    const assignments = allocateWorkers(homes, [
+      workplace('rich', 0, 30, 5),
+      workplace('poor', 4, 10, 10),
+      workplace('closed', 8, 99, 0),
+    ]);
+    // "a" escolhe a melhor (benefício 18,75); com 1 vaga restante o benefício de "rich" cai e "b" vai para "poor".
+    assert.deepEqual(assignments, [
+      { workplaceId: 'rich', residenceId: 'a', count: 4 },
+      { workplaceId: 'poor', residenceId: 'b', count: 4 },
+    ]);
+    const total = (id: string) =>
+      assignments.filter((job) => job.workplaceId === id).reduce((sum, job) => sum + job.count, 0);
+    assert.equal(total('rich'), 4);
+    assert.equal(total('poor'), 4);
+    assert.equal(assignments.some((job) => job.residenceId === 'far'), false);
+    assert.deepEqual(
+      [...getPayroll(
+        [
+          { id: 'rich', ownerId: 'u1', wage: 30 },
+          { id: 'poor', ownerId: 'u1', wage: 10 },
+        ],
+        assignments,
+      )],
+      [['u1', 160]],
+    );
   });
 
   it('requires rent of at least 1', () => {
@@ -237,6 +287,8 @@ describe('municipal zones', () => {
         workHoursPerDay: 8,
         rent: 10,
         occupants: 0,
+        desiredWorkers: 0,
+        employed: 0,
       };
 
       assert.equal(
@@ -273,6 +325,8 @@ describe('municipal zones', () => {
         workHoursPerDay: 8,
         rent: 10,
         occupants: 0,
+        desiredWorkers: 0,
+        employed: 0,
       };
       assert.equal(
         getResidencePlacementError(

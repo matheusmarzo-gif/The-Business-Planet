@@ -282,8 +282,20 @@ mapeamento e verificar todas as curvas.
   local. `world_state.last_immigration_day` evita repetir o dia (recupera até 30
   dias perdidos). A população da cidade é a soma de `occupants` das residências
   (calculada em SQL em `getCities`; `city_assemblies.population` não é mais
-  usada). A cobrança diária do aluguel ainda não existe: depende de um sistema
-  de dinheiro/carteira.
+  usada). A cobrança diária do aluguel ainda não existe.
+- Emprego (`src/types/employment.ts`): obras e construções concluídas que não
+  são residências têm `desired_workers` (0 até `maxWorkers`; padrão 0), `wage` e
+  `work_hours_per_day`. `runDailyEmployment` (mesmo lock `583921303`, chamada em
+  `advanceClock`) às 12:00 do mundo recalcula do zero `job_assignments`
+  (`workplace_id`, `residence_id`, `count`): `allocateWorkers` percorre as
+  residências por id e emprega os moradores nas construções dentro do raio de
+  60 tiles, da maior para a menor `getWorkBenefit = vagas · F_H² · salário / horas`
+  (`F_H = 1 − 0,5·(|H−8|/6)²`), recalculando as vagas a cada preenchimento.
+  À 00:00 o mesmo job debita de cada dono `salário × empregados` em
+  `player_wallets` (o dinheiro some; o saldo pode ficar negativo). Controle
+  de idempotência em `world_state.last_job_allocation_day` e `last_payroll_day`.
+  `employed` em `ResidentialBuilding` é calculado por subquery em
+  `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
 
 ## API HTTP
 
@@ -306,7 +318,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |
-| `PATCH /api/residential-buildings/:id/work-settings` | Criador, obra em andamento | Valida e grava salário diário e carga horária (4–14 h). |
+| `PATCH /api/residential-buildings/:id/work-settings` | Criador; obras e construções não residenciais concluídas | Valida e grava funcionários desejados (0–máximo), salário diário e carga horária (4–14 h); reduz empregados excedentes. |
 | `PATCH /api/residential-buildings/:id/rent` | Criador | Valida e grava o aluguel por pessoa (≥ C$ 1). |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |
 
@@ -322,13 +334,13 @@ de sucesso.
 - `city_assemblies` guarda nomes, centros, métricas e autorias.
 - `city_zones` guarda os retângulos municipais, com cascata ao excluir a cidade.
 - `road_tiles` guarda uma linha por tile, referência à cidade e autoria.
-- `player_wallets` guarda o saldo (`balance`, BIGINT ≥ 0) por `user_id` (`sub`
+- `player_wallets` guarda o saldo (`balance`, BIGINT, pode ficar negativo) por `user_id` (`sub`
   do Neon Auth). A carteira é criada com `STARTING_BALANCE` (`src/types/wallet.ts`)
   na primeira chamada a `GET /api/wallet`; o saldo aparece na barra superior
   como `C$ …` e é reconsultado a cada 30 s. Débitos/créditos futuros (aluguel,
   salários, custos) devem ser feitos no servidor, na mesma transação da ação.
 - `residential_buildings` guarda tipo, footprint, cidade, status, autoria e
-  horários de início/conclusão, `wage`, `work_hours_per_day`, `rent` e
+  horários de início/conclusão, `wage`, `work_hours_per_day`, `desired_workers`, `rent` e
   `occupants` (colunas
   adicionadas com `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, assim como
   `world_state.last_immigration_day`); excluir a cidade

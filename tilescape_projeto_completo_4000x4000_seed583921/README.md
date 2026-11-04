@@ -255,9 +255,22 @@ estoque máximo de 300 unidades de arroz) custa 200 madeiras e 20 pedras e exige
 12.000 Work Points. Ela só pode ser construída inteiramente em área rural, sem
 sobrepor estradas ou construções e precisa ficar ao lado de uma estrada. Toda obra
 e a fazenda concluída terão uma área de 60 tiles de raio para procurar
-trabalhadores (exibida no painel; a contratação ainda não está implementada). O
+trabalhadores (exibida no painel; veja "Empregos e salários"). O
 funcionamento é o mesmo das residências (prévia, obra, demolição e painel
 lateral), mas sem moradores nem aluguel; produção e estoque ainda não existem.
+
+### Empregos e salários
+
+Em obras, fazendas, comércios e indústrias o dono define **funcionários
+desejados** (0 até o máximo da construção; padrão 0), **salário por dia** e
+**carga horária** (4 a 14 h). Todo dia às 12:00 (horário do mundo) os moradores
+são distribuídos: cada construção com vagas tem um *benefício*
+`vagas × F_H² × salário / carga horária`, com `F_H = 1 − 0,5·(|H−8|/6)²`, e as
+residências empregam seus moradores (dentro de 60 tiles) do maior benefício para
+o menor, atualizando as vagas a cada preenchimento. Às 00:00 o dono paga o
+salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). O
+painel mostra funcionários atuais, desejados e vagas; nas residências, as
+pessoas empregadas.
 
 Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.

@@ -74,7 +74,9 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
     Number.isInteger(building.wage) &&
     Number.isInteger(building.workHoursPerDay) &&
     Number.isInteger(building.rent) &&
-    Number.isInteger(building.occupants)
+    Number.isInteger(building.occupants) &&
+    Number.isInteger(building.desiredWorkers) &&
+    Number.isInteger(building.employed)
   );
 }
 

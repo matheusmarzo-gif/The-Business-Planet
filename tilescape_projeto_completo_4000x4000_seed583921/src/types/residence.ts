@@ -54,10 +54,14 @@ export function isWithinWorkerSearchRadius(
 
 export function parseWorkSettings(
   value: unknown,
-): { wage: number; workHoursPerDay: number } | null {
+): { wage: number; workHoursPerDay: number; desiredWorkers: number } | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { wage, workHoursPerDay } = value as Record<string, unknown>;
+  const { wage, workHoursPerDay, desiredWorkers } = value as Record<string, unknown>;
   if (
+    typeof desiredWorkers !== 'number' ||
+    !Number.isInteger(desiredWorkers) ||
+    desiredWorkers < 0 ||
+    desiredWorkers > 100000 ||
     typeof wage !== 'number' ||
     !Number.isInteger(wage) ||
     wage < 0 ||
@@ -69,7 +73,7 @@ export function parseWorkSettings(
   ) {
     return null;
   }
-  return { wage, workHoursPerDay };
+  return { wage, workHoursPerDay, desiredWorkers };
 }
 
 export function parseRent(value: unknown): number | null {
@@ -179,6 +183,9 @@ export interface ResidentialBuilding {
   workHoursPerDay: number;
   rent: number;
   occupants: number;
+  desiredWorkers: number;
+  // Funcionários empregados na construção ou, em residências, moradores empregados.
+  employed: number;
 }
 
 export type ResidencePlacementError =

@@ -38,6 +38,7 @@ import {
   type ResidencePlacementError,
 } from '../src/types/residence.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
+import { allocateWorkers, getPayroll, type JobAssignment } from '../src/types/employment.js';
 import { parseWarehouseSetting } from '../src/types/warehouse.js';
 import {
   allocateImmigrants,
@@ -110,10 +111,13 @@ type ResidentialBuildingRow = {
   work_hours_per_day: number;
   rent: number;
   occupants: number;
+  desired_workers: number;
+  employed: number;
 };
 
-const RESIDENTIAL_COLUMNS =
-  'id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants';
+const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers,
+  (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
+   WHERE j.workplace_id = residential_buildings.id OR j.residence_id = residential_buildings.id) AS employed`;
 
 function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuilding {
   return {
@@ -129,6 +133,8 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     workHoursPerDay: row.work_hours_per_day,
     rent: row.rent,
     occupants: row.occupants,
+    desiredWorkers: row.desired_workers,
+    employed: row.employed,
   };
 }
 
@@ -321,6 +327,99 @@ async function runDailyImmigration(): Promise<boolean> {
   }
 }
 
+// Às 12:00 distribui os trabalhadores e às 00:00 cobra a folha de pagamento dos donos.
+async function runDailyEmployment(): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const { rows: stateRows } = await client.query<{
+      day: string;
+      hour: number;
+      last_alloc: string | null;
+      last_payroll: string | null;
+    }>(
+      `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+              EXTRACT(HOUR FROM world_time AT TIME ZONE 'UTC')::int AS hour,
+              to_char(last_job_allocation_day, 'YYYY-MM-DD') AS last_alloc,
+              to_char(last_payroll_day, 'YYYY-MM-DD') AS last_payroll
+       FROM world_state WHERE id = 1 FOR UPDATE`,
+    );
+    const state = stateRows[0];
+    if (!state) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+
+    let changed = false;
+    if (state.last_payroll === null) {
+      await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
+    } else if (state.last_payroll < state.day) {
+      const { rows: workplaces } = await client.query<{ id: string; created_by: string; wage: number }>(
+        'SELECT id, created_by, wage FROM residential_buildings',
+      );
+      const { rows: assignmentRows } = await client.query<{
+        workplace_id: string;
+        residence_id: string;
+        count: number;
+      }>('SELECT workplace_id, residence_id, count FROM job_assignments');
+      const owed = getPayroll(
+        workplaces.map((row) => ({ id: row.id, ownerId: row.created_by, wage: row.wage })),
+        assignmentRows.map((row) => ({
+          workplaceId: row.workplace_id,
+          residenceId: row.residence_id,
+          count: row.count,
+        })),
+      );
+      for (const [ownerId, amount] of owed) {
+        await client.query(
+          `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::bigint - $2::bigint)
+           ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance - $2::bigint`,
+          [ownerId, amount, STARTING_BALANCE],
+        );
+      }
+      await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
+    }
+
+    if (state.hour >= 12 && (state.last_alloc === null || state.last_alloc < state.day)) {
+      const { rows } = await client.query<ResidentialBuildingRow>(
+        `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings`,
+      );
+      const buildings = rows.map(mapResidentialBuilding);
+      const residences = buildings.filter(
+        (building) =>
+          building.status === 'completed' &&
+          getResidenceDefinition(building.type)?.kind === 'residence' &&
+          building.occupants > 0,
+      );
+      const workplaces = buildings.filter(
+        (building) =>
+          getResidenceDefinition(building.type)?.kind !== 'residence' && building.desiredWorkers > 0,
+      );
+      const assignments: JobAssignment[] = allocateWorkers(residences, workplaces);
+      await client.query('DELETE FROM job_assignments');
+      for (const assignment of assignments) {
+        await client.query(
+          'INSERT INTO job_assignments (workplace_id, residence_id, count) VALUES ($1, $2, $3)',
+          [assignment.workplaceId, assignment.residenceId, assignment.count],
+        );
+      }
+      await client.query('UPDATE world_state SET last_job_allocation_day = $1 WHERE id = 1', [state.day]);
+      changed = true;
+    }
+
+    await client.query('COMMIT');
+    return changed;
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter o emprego diário:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function advanceClock() {
   await pool.query(
     `UPDATE world_state
@@ -331,9 +430,10 @@ async function advanceClock() {
      WHERE id = 1`,
     [TIME_SCALE],
   );
-  if (await runDailyImmigration()) {
+  const employmentChanged = await runDailyEmployment();
+  if ((await runDailyImmigration()) || employmentChanged) {
     await publishCities().catch((error: unknown) => {
-      console.error('A imigração foi aplicada, mas a atualização do mundo falhou:', error);
+      console.error('A atualização diária foi aplicada, mas a atualização do mundo falhou:', error);
     });
   }
   await publishSnapshot();
@@ -1191,18 +1291,37 @@ async function start() {
       return;
     }
 
-    void pool
-      .query<ResidentialBuildingRow>(
-        `UPDATE residential_buildings
-         SET wage = $3, work_hours_per_day = $4
-         WHERE id = $1 AND created_by = $2 AND status = 'under_construction'
-         RETURNING ${RESIDENTIAL_COLUMNS}`,
-        [request.params.id, userId, settings.wage, settings.workHoursPerDay],
-      )
-      .then(async ({ rows }) => {
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        const { rows: typeRows } = await client.query<{ building_type: string }>(
+          'SELECT building_type FROM residential_buildings WHERE id = $1',
+          [request.params.id],
+        );
+        const definition = getResidenceDefinition(typeRows[0]?.building_type ?? '');
+        if (definition && settings.desiredWorkers > definition.maxWorkers) {
+          response.status(400).json({ error: 'invalid_work_settings' });
+          return;
+        }
+        await client.query('BEGIN');
+        const { rows } = await client.query<ResidentialBuildingRow>(
+          `UPDATE residential_buildings
+           SET wage = $3, work_hours_per_day = $4, desired_workers = $5
+           WHERE id = $1 AND created_by = $2
+             AND (status = 'under_construction' OR building_type NOT IN ('house_poor1', 'house_poor2'))
+           RETURNING ${RESIDENTIAL_COLUMNS}`,
+          [
+            request.params.id,
+            userId,
+            settings.wage,
+            settings.workHoursPerDay,
+            settings.desiredWorkers,
+          ],
+        );
         if (!rows[0]) {
-          const { rows: existing } = await pool.query<{ status: string; created_by: string }>(
-            'SELECT status, created_by FROM residential_buildings WHERE id = $1',
+          await client.query('ROLLBACK');
+          const { rows: existing } = await pool.query<{ created_by: string }>(
+            'SELECT created_by FROM residential_buildings WHERE id = $1',
             [request.params.id],
           );
           if (!existing[0]) {
@@ -1210,20 +1329,51 @@ async function start() {
           } else if (existing[0].created_by !== userId) {
             response.status(403).json({ error: 'residence_not_owned' });
           } else {
-            response.status(409).json({ error: 'building_already_complete' });
+            response.status(400).json({ error: 'invalid_work_settings' });
           }
           return;
         }
 
-        response.json(mapResidentialBuilding(rows[0]));
+        // Reduz os empregados quando o novo limite desejado é menor que o atual.
+        const { rows: jobs } = await client.query<{ residence_id: string; count: number }>(
+          'SELECT residence_id, count FROM job_assignments WHERE workplace_id = $1 ORDER BY residence_id',
+          [request.params.id],
+        );
+        let remaining = settings.desiredWorkers;
+        for (const job of jobs) {
+          const kept = Math.min(job.count, remaining);
+          remaining -= kept;
+          if (kept === job.count) continue;
+          if (kept === 0) {
+            await client.query(
+              'DELETE FROM job_assignments WHERE workplace_id = $1 AND residence_id = $2',
+              [request.params.id, job.residence_id],
+            );
+          } else {
+            await client.query(
+              'UPDATE job_assignments SET count = $3 WHERE workplace_id = $1 AND residence_id = $2',
+              [request.params.id, job.residence_id, kept],
+            );
+          }
+        }
+        const { rows: updated } = await client.query<ResidentialBuildingRow>(
+          `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings WHERE id = $1`,
+          [request.params.id],
+        );
+        await client.query('COMMIT');
+
+        response.json(mapResidentialBuilding(updated[0]));
         void publishCities().catch((error: unknown) => {
-          console.error('A obra foi atualizada, mas a atualização do mundo falhou:', error);
+          console.error('A construção foi atualizada, mas a atualização do mundo falhou:', error);
         });
-      })
-      .catch((error: unknown) => {
-        console.error('Não foi possível atualizar a obra:', error);
+      } catch (error: unknown) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        console.error('Não foi possível atualizar a construção:', error);
         response.status(503).json({ error: 'residence_unavailable' });
-      });
+      } finally {
+        client.release();
+      }
+    })();
   });
   app.patch('/api/residential-buildings/:id/rent', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);

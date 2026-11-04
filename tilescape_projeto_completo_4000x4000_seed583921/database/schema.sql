@@ -65,6 +65,16 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS occupants INTEGER NOT NULL DEFAULT 0 CHECK (occupants >= 0);
 ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS last_immigration_day DATE;
+ALTER TABLE world_state
+  ADD COLUMN IF NOT EXISTS last_job_allocation_day DATE;
+ALTER TABLE world_state
+  ADD COLUMN IF NOT EXISTS last_payroll_day DATE;
+
+ALTER TABLE residential_buildings
+  ADD COLUMN IF NOT EXISTS desired_workers INTEGER NOT NULL DEFAULT 0 CHECK (desired_workers >= 0);
+
+-- O caixa dos jogadores pode ficar negativo (folha de pagamento).
+ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_check;
 
 ALTER TABLE residential_buildings
   DROP CONSTRAINT IF EXISTS residential_buildings_building_type_check,
@@ -79,6 +89,15 @@ CREATE TABLE IF NOT EXISTS warehouse_product_settings (
   mode TEXT NOT NULL DEFAULT 'sell' CHECK (mode IN ('sell', 'buy')),
   PRIMARY KEY (building_id, product_id)
 );
+
+CREATE TABLE IF NOT EXISTS job_assignments (
+  workplace_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  residence_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  count INTEGER NOT NULL CHECK (count > 0),
+  PRIMARY KEY (workplace_id, residence_id)
+);
+
+CREATE INDEX IF NOT EXISTS job_assignments_residence_id_idx ON job_assignments (residence_id);
 
 CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
   ON residential_buildings (city_id);

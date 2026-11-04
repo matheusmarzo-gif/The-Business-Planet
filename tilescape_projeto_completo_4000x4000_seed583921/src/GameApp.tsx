@@ -142,7 +142,7 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'insufficient_materials') {
           error = 'Você não possui materiais suficientes para iniciar essa construção.';
         } else if (body.error === 'invalid_work_settings') {
-          error = 'Informe um salário (0 a 100.000) e uma carga horária de 4 a 14 horas.';
+          error = 'Informe funcionários desejados (até o máximo da construção), salário (0 a 100.000) e carga horária de 4 a 14 horas.';
         } else if (body.error === 'invalid_rent') {
           error = 'O aluguel deve ser um número inteiro de C$ 1 a C$ 100.000.';
         } else if (body.error === 'invalid_warehouse_setting') {
@@ -372,7 +372,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
 
   const saveWorkSettings = async (
     buildingId: string,
-    settings: { wage: number; workHoursPerDay: number },
+    settings: { wage: number; workHoursPerDay: number; desiredWorkers: number },
   ) => {
     setIsSavingWorkSettings(true);
     setWorkSettingsError('');
@@ -628,6 +628,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       workHoursPerDay: DEFAULT_WORK_HOURS,
       rent: DEFAULT_RENT,
       occupants: 0,
+      desiredWorkers: 0,
+      employed: 0,
     };
     setPendingResidentialBuildings((current) => [...current, pending]);
     setResidencePlacementMessage('');

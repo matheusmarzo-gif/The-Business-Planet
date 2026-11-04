@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ArrowUpRight,
   Clock3,
   Compass,
   LocateFixed,
@@ -8,14 +7,12 @@ import {
   Minus,
   Plus,
   Radio,
-  Sparkles,
-  Waves,
-  Wind,
 } from 'lucide-react';
 import CityAssemblyModal from './components/CityAssemblyModal';
 import ConstructionBar, { ConstructionCategory } from './components/ConstructionBar';
 import CityZoneEditor from './components/CityZoneEditor';
 import ProductCatalog from './components/ProductCatalog';
+import ResidencePanel from './components/ResidencePanel';
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
 import { connectToWorld, WorldSnapshot } from './game/worldClient';
@@ -29,6 +26,8 @@ import {
   MAX_CITY_ZONES,
 } from './types/city';
 import {
+  DEFAULT_WAGE,
+  DEFAULT_WORK_HOURS,
   RESIDENCES,
   ResidentialBuilding,
   ResidencePlacementError,
@@ -42,7 +41,6 @@ import { WORLD_CONFIG } from './utils/worldConfig';
 
 const SPAWN = { x: 2000, y: 2000 };
 const BASE_TILE_SIZE = 24;
-const getSidePanelWidth = (width: number) => (width > 900 ? 338 : width > 620 ? 300 : 0);
 const generator = createMapGenerator(WORLD_CONFIG, DEFAULT_TILE_LIST);
 const formatter = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',
@@ -137,6 +135,8 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'A residência ou o local escolhido é inválido.';
         } else if (body.error === 'insufficient_materials') {
           error = 'Você não possui materiais suficientes para iniciar essa construção.';
+        } else if (body.error === 'invalid_work_settings') {
+          error = 'Informe um salário (0 a 100.000) e uma carga horária de 1 a 24 horas.';
         } else if (body.error === 'building_already_complete') {
           error = 'Essa construção já foi concluída.';
         } else if (body.error === 'building_not_found') {
@@ -203,7 +203,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [roadPlacementMessage, setRoadPlacementMessage] = useState('');
   const [camera, setCamera] = useState(() => {
     const zoom = 0.14;
-    const mapViewportWidth = Math.max(320, window.innerWidth - getSidePanelWidth(window.innerWidth));
+    const mapViewportWidth = Math.max(320, window.innerWidth);
     return {
       x: mapViewportWidth / 2 - SPAWN.x * BASE_TILE_SIZE * zoom,
       y: window.innerHeight / 2 - SPAWN.y * BASE_TILE_SIZE * zoom,
@@ -213,6 +213,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [hoveredTile, setHoveredTile] = useState<TileInfo | null>(null);
   const [selectedTile, setSelectedTile] = useState<TileInfo | null>(null);
+  const [selectedResidenceId, setSelectedResidenceId] = useState<string | null>(null);
+  const [isResidenceOwner, setIsResidenceOwner] = useState(false);
+  const [isSavingWorkSettings, setIsSavingWorkSettings] = useState(false);
+  const [workSettingsError, setWorkSettingsError] = useState('');
   const gameTime = useWorldClock(snapshot);
 
   useEffect(() => {
@@ -275,11 +279,57 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   }, [pendingResidentialBuildings, pendingResidentialDemolitionIds, residentialBuildings]);
 
   const mapPosition = useMemo(() => selectedTile ?? hoveredTile, [selectedTile, hoveredTile]);
+  const selectedResidence = selectedResidenceId
+    ? visibleResidentialBuildings.find((building) => building.id === selectedResidenceId) ?? null
+    : null;
+  const selectedResidenceKey = selectedResidence && !selectedResidence.id.startsWith('pending-')
+    ? selectedResidence.id
+    : null;
+
+  useEffect(() => {
+    setIsResidenceOwner(false);
+    setWorkSettingsError('');
+    if (!selectedResidenceKey) return;
+    let cancelled = false;
+    cityRequest<{ isOwner: boolean }>(`/api/residential-buildings/${selectedResidenceKey}/ownership`)
+      .then((result) => {
+        if (!cancelled) setIsResidenceOwner(result.isOwner);
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível consultar o dono da construção:', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedResidenceKey]);
+
+  const saveWorkSettings = async (
+    buildingId: string,
+    settings: { wage: number; workHoursPerDay: number },
+  ) => {
+    setIsSavingWorkSettings(true);
+    setWorkSettingsError('');
+    try {
+      const building = await cityRequest<ResidentialBuilding>(
+        `/api/residential-buildings/${buildingId}/work-settings`,
+        { method: 'PATCH', body: JSON.stringify(settings) },
+      );
+      setResidentialBuildings((current) =>
+        current.map((item) => (item.id === building.id ? building : item)),
+      );
+    } catch (error) {
+      setWorkSettingsError(
+        error instanceof Error ? error.message : 'Não foi possível salvar as configurações.',
+      );
+    } finally {
+      setIsSavingWorkSettings(false);
+    }
+  };
   const zoomBy = (factor: number) =>
     setCamera((current) => {
       const zoom = Math.min(6, Math.max(0.004, current.zoom * factor));
       const ratio = zoom / current.zoom;
-      const centerX = (viewport.width - getSidePanelWidth(viewport.width)) / 2;
+      const centerX = viewport.width / 2;
       const centerY = viewport.height / 2;
       return {
         zoom,
@@ -289,7 +339,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     });
   const centerOnSpawn = () => {
     const tilePixels = BASE_TILE_SIZE * camera.zoom;
-    const mapViewportWidth = viewport.width - getSidePanelWidth(viewport.width);
+    const mapViewportWidth = viewport.width;
     setCamera({
       ...camera,
       x: mapViewportWidth / 2 - SPAWN.x * tilePixels,
@@ -480,6 +530,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       status: 'under_construction',
       startedAt: new Date().toISOString(),
       completedAt: null,
+      wage: DEFAULT_WAGE,
+      workHoursPerDay: DEFAULT_WORK_HOURS,
     };
     setPendingResidentialBuildings((current) => [...current, pending]);
     setResidencePlacementMessage('');
@@ -761,7 +813,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           isMaster={user.isMaster}
           onCameraChange={setCamera}
           onTileHover={setHoveredTile}
-          onTileSelect={setSelectedTile}
+          onTileSelect={(tile) => {
+            setSelectedTile(tile);
+            setSelectedResidenceId(null);
+          }}
           onCitySelect={openCityDetails}
           onCityPlace={(center) => void handleCityPlace(center)}
           onInvalidCityPlacement={handleInvalidCityPlacement}
@@ -774,6 +829,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           onResidenceDemolish={(building) => void demolishResidence(building)}
           onInvalidResidencePlacement={handleInvalidResidencePlacement}
           onResidenceComplete={(buildingId) => void completeResidence(buildingId)}
+          onResidenceSelect={(building) => setSelectedResidenceId(building.id)}
         />
         <div className="map-vignette" />
 
@@ -799,43 +855,16 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           <button aria-label="Centralizar no ponto de partida" onClick={centerOnSpawn}><LocateFixed size={17} /></button>
         </div>
 
-        <aside className="realm-panel">
-          <div className="panel-title">
-            <div className="eyebrow">VISÃO GERAL</div>
-            <h1>Um mundo<br /><em>em movimento.</em></h1>
-            <p>Explore as terras que darão origem ao seu reino.</p>
-          </div>
-          <div className="panel-divider" />
-          <div className="landmark">
-            <div className="landmark-icon"><Sparkles size={16} /></div>
-            <div><span>PONTO DE PARTIDA</span><strong>Encruzilhada Antiga</strong><small>O coração destas terras</small></div>
-          </div>
-          <div className="world-stats">
-            <div><Waves size={15} /><span>Oceano</span><strong>33,3%</strong></div>
-            <div><Wind size={15} /><span>Planícies</span><strong>66,7%</strong></div>
-          </div>
-          <div className="panel-divider" />
-          <div className="tile-details">
-            <div className="eyebrow">LOCALIZAÇÃO</div>
-            {mapPosition ? (
-              <>
-                <strong className="terrain-name">{mapPosition.tileDef.namePt}</strong>
-                <span className="coordinates">X {mapPosition.x.toLocaleString('pt-BR')} <b>·</b> Y {mapPosition.y.toLocaleString('pt-BR')}</span>
-                <p>{mapPosition.tileDef.descriptionPt}</p>
-              </>
-            ) : (
-              <>
-                <strong className="terrain-name">Explore o mapa</strong>
-                <span className="coordinates">Arraste para percorrer as terras</span>
-                <p>Selecione um tile para consultar o terreno e as coordenadas.</p>
-              </>
-            )}
-          </div>
-          <div className="panel-footer">
-            <span className="seed-label">SEMENTE DO MUNDO</span>
-            <span className="seed-value">583921 <ArrowUpRight size={13} /></span>
-          </div>
-        </aside>
+        {selectedResidence && (
+          <ResidencePanel
+            building={selectedResidence}
+            isOwner={isResidenceOwner}
+            isSaving={isSavingWorkSettings}
+            error={workSettingsError}
+            onSave={(settings) => void saveWorkSettings(selectedResidence.id, settings)}
+            onClose={() => setSelectedResidenceId(null)}
+          />
+        )}
 
         <div className="map-coordinates">
           <span className="coordinate-cross">⌖</span>

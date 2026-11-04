@@ -238,6 +238,15 @@ mapeamento e verificar todas as curvas.
   permite a remoção ao autor e publica o novo estado.
 - Capacidade, apreço local, custos e Work Points são metadados; população,
   estoque, consumo e produção ainda não são simulados.
+- A antiga barra lateral com dados do mundo foi removida. Fora dos modos de
+  construção/demolição, clicar em uma residência abre `ResidencePanel`
+  (`onResidenceSelect` em `GameMap`); clicar em outro tile a fecha. Concluída:
+  ocupantes 0/capacidade, técnica 10, saúde 100, felicidade 100 (fixos em
+  `RESIDENCE_STATS`), empregados 0, renda média 0. Em construção: Work Points
+  0/necessários, empregados 0/`maxWorkers`, salário (`wage`) e carga horária
+  (`workHoursPerDay`, 1–24 h), editáveis só pelo criador (`created_by`). O
+  cliente consulta `GET .../ownership` porque o dono não é publicado no
+  WebSocket; o servidor revalida a autoria no `PATCH` com `parseWorkSettings`.
 
 ## API HTTP
 
@@ -258,6 +267,8 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/residential-buildings` | Master enquanto estoque não existe | Valida e inicia uma residência em construção. |
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
+| `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |
+| `PATCH /api/residential-buildings/:id/work-settings` | Criador, obra em andamento | Valida e grava salário e carga horária diária. |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |
 
 Falhas de validação são respostas HTTP explícitas; indisponibilidade de banco,
@@ -273,8 +284,9 @@ de sucesso.
 - `city_zones` guarda os retângulos municipais, com cascata ao excluir a cidade.
 - `road_tiles` guarda uma linha por tile, referência à cidade e autoria.
 - `residential_buildings` guarda tipo, footprint, cidade, status, autoria e
-  horários de início/conclusão; excluir a cidade remove suas residências por
-  cascata.
+  horários de início/conclusão, `wage` e `work_hours_per_day` (colunas
+  adicionadas com `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`); excluir a cidade
+  remove suas residências por cascata.
 - A tabela `neon_auth."user"` é gerenciada pelo Neon Auth, não pelo esquema do
   jogo.
 

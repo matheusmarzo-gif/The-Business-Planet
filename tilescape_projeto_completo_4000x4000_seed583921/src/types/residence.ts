@@ -20,6 +20,33 @@ export interface ResidenceDefinition {
   localAppeal: number;
   cost: ResidenceCost;
   workPoints: number;
+  maxWorkers: number;
+}
+
+export const DEFAULT_WAGE = 10;
+export const MAX_WAGE = 100000;
+export const DEFAULT_WORK_HOURS = 8;
+export const MAX_WORK_HOURS = 24;
+export const RESIDENCE_STATS = { skill: 10, health: 100, happiness: 100 } as const;
+
+export function parseWorkSettings(
+  value: unknown,
+): { wage: number; workHoursPerDay: number } | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { wage, workHoursPerDay } = value as Record<string, unknown>;
+  if (
+    typeof wage !== 'number' ||
+    !Number.isInteger(wage) ||
+    wage < 0 ||
+    wage > MAX_WAGE ||
+    typeof workHoursPerDay !== 'number' ||
+    !Number.isInteger(workHoursPerDay) ||
+    workHoursPerDay < 1 ||
+    workHoursPerDay > MAX_WORK_HOURS
+  ) {
+    return null;
+  }
+  return { wage, workHoursPerDay };
 }
 
 export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
@@ -33,6 +60,7 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     localAppeal: 50,
     cost: { wood: 100, stone: 30 },
     workPoints: 18000,
+    maxWorkers: 6,
   },
   house_poor2: {
     type: 'house_poor2',
@@ -44,6 +72,7 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     localAppeal: 40,
     cost: { wood: 300, stone: 450 },
     workPoints: 67500,
+    maxWorkers: 20,
   },
 };
 
@@ -58,6 +87,8 @@ export interface ResidentialBuilding {
   status: ResidentialBuildingStatus;
   startedAt: string;
   completedAt: string | null;
+  wage: number;
+  workHoursPerDay: number;
 }
 
 export type ResidencePlacementError =

@@ -9,12 +9,27 @@ import {
 import {
   isTileInResidenceFootprint,
   getResidencePlacementError,
+  parseWorkSettings,
   RESIDENCES,
   type ResidentialBuilding,
 } from './residence';
 import { getRoadPlacementError } from './road';
 
 const city = { centerX: 1000, centerY: 1000 };
+
+describe('work settings', () => {
+  it('accepts valid wage and hours and rejects invalid values', () => {
+    assert.deepEqual(parseWorkSettings({ wage: 15, workHoursPerDay: 8 }), {
+      wage: 15,
+      workHoursPerDay: 8,
+    });
+    assert.equal(parseWorkSettings({ wage: -1, workHoursPerDay: 8 }), null);
+    assert.equal(parseWorkSettings({ wage: 10, workHoursPerDay: 0 }), null);
+    assert.equal(parseWorkSettings({ wage: 10, workHoursPerDay: 25 }), null);
+    assert.equal(parseWorkSettings({ wage: 1.5, workHoursPerDay: 8 }), null);
+    assert.equal(parseWorkSettings(null), null);
+  });
+});
 
 describe('municipal zones', () => {
   it('accepts rectangles on the municipal boundary and rejects rectangles outside it', () => {
@@ -93,6 +108,8 @@ describe('municipal zones', () => {
         status: 'under_construction',
         startedAt: '2026-01-01T00:00:00.000Z',
         completedAt: null,
+        wage: 10,
+        workHoursPerDay: 8,
       };
 
       assert.equal(
@@ -125,6 +142,8 @@ describe('municipal zones', () => {
         status: 'under_construction',
         startedAt: '2026-01-01T00:00:00.000Z',
         completedAt: null,
+        wage: 10,
+        workHoursPerDay: 8,
       };
       assert.equal(
         getResidencePlacementError(

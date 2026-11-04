@@ -47,6 +47,12 @@ CREATE TABLE IF NOT EXISTS residential_buildings (
   )
 );
 
+ALTER TABLE residential_buildings
+  ADD COLUMN IF NOT EXISTS wage INTEGER NOT NULL DEFAULT 10 CHECK (wage BETWEEN 0 AND 100000);
+ALTER TABLE residential_buildings
+  ADD COLUMN IF NOT EXISTS work_hours_per_day SMALLINT NOT NULL DEFAULT 8
+  CHECK (work_hours_per_day BETWEEN 1 AND 24);
+
 CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
   ON residential_buildings (city_id);
 

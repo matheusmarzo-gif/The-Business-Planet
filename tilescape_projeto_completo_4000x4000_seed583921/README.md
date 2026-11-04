@@ -210,6 +210,13 @@ apreço e custo são dados informativos; ainda não alteram população ou estoq
 Para demolir uma residência, ative **Demolir** e clique em qualquer tile dela.
 Não há confirmação; somente o jogador que iniciou a construção pode removê-la.
 
+A barra lateral com dados do mundo foi removida. Clique em uma residência (fora
+dos modos de construção e demolição) para abrir o painel lateral: residências
+concluídas mostram ocupantes, capacidade, técnica, saúde, felicidade, empregados
+e renda média (valores fixos por enquanto); obras mostram Work Points, empregados
+e permitem ao dono editar o salário ofertado (por hora) e a carga horária por
+dia (1 a 24 h). Clique em outro ponto do mapa ou em × para fechar.
+
 Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.
 Validades informadas em anos são convertidas para dias considerando 365 dias

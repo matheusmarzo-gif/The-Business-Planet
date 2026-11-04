@@ -102,6 +102,7 @@ interface GameMapProps {
   onResidenceDemolish: (building: ResidentialBuilding) => void;
   onInvalidResidencePlacement: (reason: ResidencePlacementError) => void;
   onResidenceComplete: (buildingId: string) => void;
+  onResidenceSelect: (building: ResidentialBuilding) => void;
 }
 
 export function GameMap({
@@ -134,6 +135,7 @@ export function GameMap({
   onResidenceDemolish,
   onInvalidResidencePlacement,
   onResidenceComplete,
+  onResidenceSelect,
 }: GameMapProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -770,6 +772,17 @@ export function GameMap({
             : undefined;
           if (residence) {
             onResidenceDemolish(residence);
+            dragRef.current = null;
+            return;
+          }
+          const selectedResidence = demolitionMode
+            ? undefined
+            : residentialBuildings.find(
+                (building) =>
+                  !building.id.startsWith('pending-') && isTileInResidenceFootprint(building, tile),
+              );
+          if (selectedResidence) {
+            onResidenceSelect(selectedResidence);
             dragRef.current = null;
             return;
           }

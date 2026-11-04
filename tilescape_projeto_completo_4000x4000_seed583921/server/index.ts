@@ -30,6 +30,7 @@ import {
 import {
   getResidenceDefinition,
   getResidencePlacementError,
+  parseWorkSettings,
   RESIDENCES,
   type ResidentialBuilding,
   type ResidenceType,
@@ -97,7 +98,12 @@ type ResidentialBuildingRow = {
   status: ResidentialBuilding['status'];
   started_at: Date;
   completed_at: Date | null;
+  wage: number;
+  work_hours_per_day: number;
 };
+
+const RESIDENTIAL_COLUMNS =
+  'id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day';
 
 function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuilding {
   return {
@@ -109,6 +115,8 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     status: row.status,
     startedAt: row.started_at.toISOString(),
     completedAt: row.completed_at?.toISOString() ?? null,
+    wage: row.wage,
+    workHoursPerDay: row.work_hours_per_day,
   };
 }
 
@@ -213,7 +221,7 @@ async function getRoadTiles(): Promise<RoadTile[]> {
 
 async function getResidentialBuildings(): Promise<ResidentialBuilding[]> {
   const { rows } = await pool.query<ResidentialBuildingRow>(
-    `SELECT id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at
+    `SELECT ${RESIDENTIAL_COLUMNS}
      FROM residential_buildings
      ORDER BY started_at, id`,
   );
@@ -461,7 +469,7 @@ async function createRoadPath(
       centerY: city.center_y,
     }));
     const { rows: residentialRows } = await client.query<ResidentialBuildingRow>(
-      `SELECT id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at
+      `SELECT ${RESIDENTIAL_COLUMNS}
        FROM residential_buildings`,
     );
     const residentialBuildings = residentialRows.map(mapResidentialBuilding);
@@ -707,7 +715,7 @@ async function createResidentialBuilding(
       zones: city.zones,
     }));
     const { rows: buildingRows } = await client.query<ResidentialBuildingRow>(
-      `SELECT id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at
+      `SELECT ${RESIDENTIAL_COLUMNS}
        FROM residential_buildings`,
     );
     const buildings = buildingRows.map(mapResidentialBuilding);
@@ -746,7 +754,7 @@ async function createResidentialBuilding(
       `INSERT INTO residential_buildings
          (id, building_type, tile_x, tile_y, city_id, status, created_by)
        VALUES ($1, $2, $3, $4, $5, 'under_construction', $6)
-       RETURNING id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at`,
+       RETURNING ${RESIDENTIAL_COLUMNS}`,
       [randomUUID(), type, position.x, position.y, city.id, userId],
     );
     await client.query('COMMIT');
@@ -772,7 +780,7 @@ async function completeResidentialBuilding(
       `UPDATE residential_buildings
        SET status = 'completed', completed_at = clock_timestamp()
        WHERE id = $1 AND status = 'under_construction'
-       RETURNING id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at`,
+       RETURNING ${RESIDENTIAL_COLUMNS}`,
       [id],
     );
     if (!rows[0]) {
@@ -935,6 +943,82 @@ async function start() {
         });
     },
   );
+  const residenceIdPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  app.get('/api/residential-buildings/:id/ownership', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void pool
+      .query<{ created_by: string }>(
+        'SELECT created_by FROM residential_buildings WHERE id = $1',
+        [request.params.id],
+      )
+      .then(({ rows }) => {
+        if (!rows[0]) {
+          response.status(404).json({ error: 'residence_not_found' });
+          return;
+        }
+        response.json({ isOwner: rows[0].created_by === userId });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível consultar o dono da construção:', error);
+        response.status(503).json({ error: 'residence_unavailable' });
+      });
+  });
+  app.patch('/api/residential-buildings/:id/work-settings', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const settings = parseWorkSettings(request.body);
+    if (!residenceIdPattern.test(request.params.id) || !settings) {
+      response.status(400).json({ error: 'invalid_work_settings' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void pool
+      .query<ResidentialBuildingRow>(
+        `UPDATE residential_buildings
+         SET wage = $3, work_hours_per_day = $4
+         WHERE id = $1 AND created_by = $2 AND status = 'under_construction'
+         RETURNING ${RESIDENTIAL_COLUMNS}`,
+        [request.params.id, userId, settings.wage, settings.workHoursPerDay],
+      )
+      .then(async ({ rows }) => {
+        if (!rows[0]) {
+          const { rows: existing } = await pool.query<{ status: string; created_by: string }>(
+            'SELECT status, created_by FROM residential_buildings WHERE id = $1',
+            [request.params.id],
+          );
+          if (!existing[0]) {
+            response.status(404).json({ error: 'residence_not_found' });
+          } else if (existing[0].created_by !== userId) {
+            response.status(403).json({ error: 'residence_not_owned' });
+          } else {
+            response.status(409).json({ error: 'building_already_complete' });
+          }
+          return;
+        }
+
+        response.json(mapResidentialBuilding(rows[0]));
+        void publishCities().catch((error: unknown) => {
+          console.error('A obra foi atualizada, mas a atualização do mundo falhou:', error);
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível atualizar a obra:', error);
+        response.status(503).json({ error: 'residence_unavailable' });
+      });
+  });
   app.delete('/api/residential-buildings/:id', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);
     if (

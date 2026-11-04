@@ -155,14 +155,18 @@ reimplemente as fórmulas separadamente no React e no servidor.
 - Cada tile precisa ser terra, estar dentro de uma área municipal e não cruzar
   o footprint de uma Assembleia. O servidor revalida o trajeto inteiro.
 - O limite atual é de 600 tiles por solicitação.
-- As imagens `public/buildings/roads/grass_dirt1.png` a `grass_dirt6.png` são
-  peças de 256 × 256 pixels: 1/2 são retas horizontal/vertical; 3/4/5/6 são
-  curvas sudoeste/sudeste/nordeste/noroeste. `getRoadAssetIndex` seleciona a
-  peça conforme os vizinhos ortogonais. O conjunto não contém peças próprias
-  para junções em T ou cruzamentos de quatro vias.
+- As imagens `public/buildings/roads/grass_dirt1.png` a `grass_dirt11.png`
+  representam retas horizontal/vertical (1/2), curvas (3/4/5/6), cruzamento
+  de quatro vias (7) e junções em T (8/9/10/11, respectivamente, sem ligação
+  norte/sul/leste/oeste). `getRoadAssetIndex` seleciona a peça conforme os
+  vizinhos ortogonais; a URL inclui versão de cache para carregar assets novos.
 - Os tiles são persistidos individualmente em `road_tiles`; a chave primária
   garante um único tile de estrada em cada coordenada. Cada tile aponta para a
   cidade proprietária, e a remoção da cidade remove suas estradas por cascata.
+- Ao construir, a interface apresenta a Assembleia ou os tiles de estrada
+  imediatamente como estado otimista enquanto aguarda a API. A resposta
+  autoritativa substitui essa prévia; em caso de falha, os tiles temporários
+  são removidos e o erro é mostrado ao jogador.
 - No modo Demolir, clicar em um tile de estrada remove somente aquele tile,
   sem confirmação. O servidor só permite a exclusão ao jogador indicado em
   `created_by`, usa o lock transacional do mundo e publica o novo snapshot de

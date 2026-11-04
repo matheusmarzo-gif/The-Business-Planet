@@ -159,6 +159,9 @@ os limites do mapa, e o servidor valida essas regras antes de salvar.
 Clique na Assembleia para consultar os dados da cidade; a conta master também
 pode editar o nome. O rótulo da cidade mantém tamanho legível mesmo ao mudar o
 zoom. População, bem-estar e economia começam em zero.
+Depois de confirmar o local, a Assembleia aparece imediatamente enquanto o
+servidor salva; se a operação falhar, ela é removida e a mensagem de erro é
+exibida.
 Use **Demolir** na barra inferior e clique em uma construção para removê-la.
 O servidor só permite que o jogador que criou a construção a demola; ao
 demolir uma Assembleia, sua cidade e área municipal também são removidas.
@@ -168,8 +171,11 @@ Na Prefeitura, selecione **Estrada de Terra** e clique e arraste para desenhar
 um traçado de até 600 tiles. As peças retas e curvas se ajustam aos trechos
 vizinhos; estradas só são aceitas em terra dentro de uma área municipal e não
 podem passar sobre a Assembleia. Apenas a conta master pode construí-las; os
-traçados são salvos e sincronizados com o mundo. Cada tile pode ser demolido
-individualmente e sua remoção é sincronizada com os demais jogadores.
+traçados são salvos e sincronizados com o mundo. As junções em T e cruzamentos
+de quatro vias também se ajustam às conexões vizinhas. O traçado aparece
+imediatamente enquanto o servidor salva e some com uma mensagem caso a
+operação seja rejeitada. Cada tile pode ser demolido individualmente e sua
+remoção é sincronizada com os demais jogadores.
 
 ## Sobre o jogo
 

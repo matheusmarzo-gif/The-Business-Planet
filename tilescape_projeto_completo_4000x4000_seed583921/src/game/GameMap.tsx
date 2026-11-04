@@ -22,8 +22,8 @@ import {
 const BASE_TILE_SIZE = 24;
 const ASSEMBLY_ASSET = '/buildings/assembleia.png';
 const ROAD_ASSETS = Array.from(
-  { length: 6 },
-  (_, index) => `/buildings/roads/grass_dirt${index + 1}.png`,
+  { length: 11 },
+  (_, index) => `/buildings/roads/grass_dirt${index + 1}.png?v=11`,
 );
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -508,7 +508,12 @@ export function GameMap({
           else onCityPlace(center);
         } else {
           const road = demolitionMode
-            ? roads.find((candidate) => candidate.x === tile.x && candidate.y === tile.y)
+            ? roads.find(
+                (candidate) =>
+                  candidate.x === tile.x &&
+                  candidate.y === tile.y &&
+                  candidate.cityId !== '',
+              )
             : undefined;
           if (road) {
             onRoadDemolish(road);
@@ -518,7 +523,8 @@ export function GameMap({
           const city = cities.find(
             (candidate) =>
               Math.abs(candidate.centerX - tile.x) <= 1 &&
-              Math.abs(candidate.centerY - tile.y) <= 1,
+              Math.abs(candidate.centerY - tile.y) <= 1 &&
+              !candidate.id.startsWith('pending-'),
           );
           if (city) {
             if (demolitionMode) onCityDemolish(city);

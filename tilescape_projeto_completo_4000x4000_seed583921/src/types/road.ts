@@ -61,6 +61,13 @@ export function getRoadAssetIndex(
   const west = roadKeys.has(`${position.x - 1},${position.y}`);
   const connections = [north, east, south, west].filter(Boolean).length;
 
+  if (connections === 4) return 7;
+  if (connections === 3) {
+    if (!north) return 8;
+    if (!south) return 9;
+    if (!east) return 10;
+    return 11;
+  }
   if (connections === 0 || connections === 2 && east && west) return 1;
   if (connections === 2 && north && south || connections === 1 && (north || south)) return 2;
   if (connections === 2 && north && east) return 5;

@@ -126,6 +126,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isOnline, setIsOnline] = useState(false);
   const [cities, setCities] = useState<CityAssembly[]>([]);
   const [roads, setRoads] = useState<RoadTile[]>([]);
+  const [pendingCities, setPendingCities] = useState<CityAssembly[]>([]);
+  const [pendingRoads, setPendingRoads] = useState<RoadTile[]>([]);
   const [activeCategory, setActiveCategory] = useState<ConstructionCategory | null>(null);
   const [isDemolitionMode, setIsDemolitionMode] = useState(false);
   const [demolitionMessage, setDemolitionMessage] = useState('');
@@ -162,6 +164,24 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   useEffect(() => {
     return connectToWorld(setSnapshot, setIsOnline, setCities, setRoads);
   }, []);
+
+  const visibleCities = useMemo(() => {
+    const byPosition = new Map(
+      pendingCities.map((city) => [`${city.centerX},${city.centerY}`, city]),
+    );
+    for (const city of cities) {
+      byPosition.set(`${city.centerX},${city.centerY}`, city);
+    }
+    return [...byPosition.values()];
+  }, [cities, pendingCities]);
+  const visibleRoads = useMemo(() => {
+    const byPosition = new Map(roads.map((road) => [`${road.x},${road.y}`, road]));
+    for (const road of pendingRoads) {
+      const key = `${road.x},${road.y}`;
+      if (!byPosition.has(key)) byPosition.set(key, road);
+    }
+    return [...byPosition.values()];
+  }, [pendingRoads, roads]);
 
   const mapPosition = useMemo(() => selectedTile ?? hoveredTile, [selectedTile, hoveredTile]);
   const zoomBy = (factor: number) =>
@@ -220,6 +240,17 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
 
   const handleCityPlace = async (center: { x: number; y: number }) => {
     if (!user.isMaster) return;
+    const pendingCity: CityAssembly = {
+      id: `pending-${Date.now()}-${center.x}-${center.y}`,
+      name: cityName,
+      centerX: center.x,
+      centerY: center.y,
+      population: 0,
+      wellbeing: 0,
+      economy: 0,
+    };
+    setPendingCities((current) => [...current, pendingCity]);
+    setIsPlacingCity(false);
     setIsCitySaving(true);
     setCityError('');
     try {
@@ -228,17 +259,20 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         body: JSON.stringify({ name: cityName, centerX: center.x, centerY: center.y }),
       });
       setCities((current) => [...current.filter((item) => item.id !== city.id), city]);
+      setPendingCities((current) => current.filter((item) => item.id !== pendingCity.id));
       setSelectedCity(city);
       setCityName(city.name);
       setIsCreatingCity(false);
       setIsPlacingCity(false);
       setIsCityModalOpen(true);
     } catch (error) {
+      setPendingCities((current) => current.filter((item) => item.id !== pendingCity.id));
       if (
         error instanceof CityRequestError &&
         ['map_bounds', 'water', 'building_overlap', 'municipal_area_overlap'].includes(error.code)
       ) {
         setCityPlacementMessage(error.message);
+        setIsPlacingCity(true);
       } else {
         setCityError(error instanceof Error ? error.message : 'Não foi possível criar a assembleia.');
         setIsPlacingCity(false);
@@ -278,14 +312,29 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   };
 
   const handleRoadPlace = async (path: RoadPosition[]) => {
+    const pendingPath = path.map((position) => ({ ...position, cityId: '' }));
+    setPendingRoads((current) => {
+      const positions = new Set(current.map((road) => `${road.x},${road.y}`));
+      return [...current, ...pendingPath.filter((road) => !positions.has(`${road.x},${road.y}`))];
+    });
     try {
       const updatedRoads = await cityRequest<RoadTile[]>('/api/roads', {
         method: 'POST',
         body: JSON.stringify({ path }),
       });
       setRoads(updatedRoads);
+      setPendingRoads((current) =>
+        current.filter(
+          (road) => !path.some((position) => position.x === road.x && position.y === road.y),
+        ),
+      );
       setRoadPlacementMessage('');
     } catch (error) {
+      setPendingRoads((current) =>
+        current.filter(
+          (road) => !path.some((position) => position.x === road.x && position.y === road.y),
+        ),
+      );
       setRoadPlacementMessage(
         error instanceof Error ? error.message : 'Não foi possível construir a estrada.',
       );
@@ -391,8 +440,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         <GameMap
           generator={generator}
           camera={camera}
-          cities={cities}
-          roads={roads}
+          cities={visibleCities}
+          roads={visibleRoads}
           placementMode={isPlacingCity}
           placementName={cityName}
           roadMode={isPlacingRoads}
@@ -524,7 +573,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                 <span><strong>Assembleia</strong><small>Ocupa 3 × 3 tiles · Área municipal 303 × 303</small></span>
               </button>
               <button className="construction-card" type="button" onClick={startRoadPlacement}>
-                <img src="/buildings/roads/grass_dirt1.png" alt="" />
+                <img src="/buildings/roads/grass_dirt1.png?v=11" alt="" />
                 <span><strong>Estrada de Terra</strong><small>Clique e arraste para traçar · Somente em áreas municipais</small></span>
               </button>
             </>

@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useState } from 'react';
-import { authClient, getAccessToken } from './authClient';
+import { authClient, getAccessToken, verifyEmailCode } from './authClient';
 
 interface AuthenticatedUser {
   email: string;
@@ -15,7 +15,13 @@ interface AuthGateProps {
   }) => ReactNode;
 }
 
-type AuthMode = 'sign-in' | 'sign-up' | 'forgot-password' | 'reset-password';
+type AuthMode =
+  | 'sign-in'
+  | 'sign-up'
+  | 'forgot-password'
+  | 'reset-password'
+  | 'verify-email'
+  | 'verify-email-code';
 type AuthStatus = 'loading' | 'signed-out' | 'signed-in' | 'error';
 
 function getErrorMessage(error: unknown): string {
@@ -59,6 +65,7 @@ export default function AuthGate({ children }: AuthGateProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [errorMessage, setErrorMessage] = useState(() =>
     new URLSearchParams(window.location.search).has('error')
       ? 'Este link de redefinição é inválido ou expirou. Solicite um novo.'
@@ -98,6 +105,34 @@ export default function AuthGate({ children }: AuthGateProps) {
     setNotice('');
 
     try {
+      if (mode === 'verify-email') {
+        const { error } = await authClient.sendVerificationEmail({
+          email,
+          callbackURL: `${window.location.origin}/`,
+        });
+        if (error) throw error;
+        setVerificationCode('');
+        setMode('verify-email-code');
+        setNotice('Se este e-mail tiver uma conta pendente, enviaremos um código de confirmação.');
+        return;
+      }
+
+      if (mode === 'verify-email-code') {
+        await verifyEmailCode(email, verificationCode);
+        const session = await authClient.getSession();
+        if (session.error) throw session.error;
+        if (session.data?.user) {
+          const isMaster = await getMasterStatus();
+          setUser({ email: session.data.user.email, name: session.data.user.name, isMaster });
+          setMode('sign-in');
+          setStatus('signed-in');
+        } else {
+          setMode('sign-in');
+          setNotice('E-mail confirmado. Agora você pode entrar com sua senha.');
+        }
+        return;
+      }
+
       if (mode === 'forgot-password') {
         const { error } = await authClient.requestPasswordReset({
           email,
@@ -131,6 +166,12 @@ export default function AuthGate({ children }: AuthGateProps) {
           ? await authClient.signUp.email({ email, password, name })
           : await authClient.signIn.email({ email, password });
       if (result.error) throw result.error;
+      if (mode === 'sign-up' && result.data?.user && !result.data.user.emailVerified) {
+        setMode('verify-email-code');
+        setVerificationCode('');
+        setNotice('Enviamos um código de confirmação para seu e-mail.');
+        return;
+      }
 
       const session = await authClient.getSession();
       if (session.error) throw session.error;
@@ -197,7 +238,11 @@ export default function AuthGate({ children }: AuthGateProps) {
               ? 'Informe seu e-mail cadastrado para receber um link de redefinição.'
               : mode === 'reset-password'
                 ? 'Escolha uma nova senha para sua conta.'
-                : 'Entre para continuar sua jornada pelas terras do reino.'}
+                : mode === 'verify-email'
+                  ? 'Informe o e-mail da conta para receber um código de confirmação.'
+                  : mode === 'verify-email-code'
+                    ? `Digite o código enviado para ${email}.`
+                    : 'Entre para continuar sua jornada pelas terras do reino.'}
         </p>
 
         {status === 'error' && (
@@ -225,6 +270,18 @@ export default function AuthGate({ children }: AuthGateProps) {
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+          ) : mode === 'verify-email-code' ? (
+            <label>
+              Código de confirmação
+              <input
+                autoComplete="one-time-code"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                required
+                value={verificationCode}
+                onChange={(event) => setVerificationCode(event.target.value)}
               />
             </label>
           ) : (
@@ -273,6 +330,10 @@ export default function AuthGate({ children }: AuthGateProps) {
               ? 'Criar conta'
               : mode === 'forgot-password'
                 ? 'Enviar link de redefinição'
+                : mode === 'verify-email'
+                  ? 'Enviar código de confirmação'
+                  : mode === 'verify-email-code'
+                    ? 'Confirmar e-mail'
                 : mode === 'reset-password'
                   ? 'Salvar nova senha'
                   : 'Entrar'}
@@ -285,7 +346,7 @@ export default function AuthGate({ children }: AuthGateProps) {
           disabled={isSubmitting}
           onClick={() => {
           setMode(
-            mode === 'sign-up' || mode === 'forgot-password' || mode === 'reset-password'
+            mode !== 'sign-in'
               ? 'sign-in'
               : 'sign-up',
           );
@@ -293,7 +354,7 @@ export default function AuthGate({ children }: AuthGateProps) {
           setNotice('');
           }}
         >
-          {mode === 'sign-up' || mode === 'forgot-password' || mode === 'reset-password'
+          {mode !== 'sign-in'
           ? 'Voltar para entrar'
           : 'Ainda não tem conta? Criar conta'}
         </button>
@@ -309,6 +370,20 @@ export default function AuthGate({ children }: AuthGateProps) {
           }}
           >
           Esqueci minha senha
+          </button>
+        )}
+        {mode === 'sign-in' && (
+          <button
+            className="auth-mode-toggle"
+            type="button"
+            disabled={isSubmitting}
+            onClick={() => {
+              setMode('verify-email');
+              setErrorMessage('');
+              setNotice('');
+            }}
+          >
+            Reenviar código de confirmação
           </button>
         )}
       </section>

@@ -16,6 +16,9 @@ serviço compatível com Redis, por exemplo o **Key Value** do Render.
 Na tela de entrada, a opção **Esqueci minha senha** envia um link de redefinição
 para o e-mail informado. O link expira após 15 minutos; para concluir a
 redefinição, a autenticação por e-mail deve estar habilitada no Neon Auth.
+Novas contas precisam confirmar o e-mail com o código enviado pelo Neon Auth
+antes de entrar. Para uma conta já cadastrada e ainda não confirmada, use
+**Reenviar código de confirmação** na tela de entrada.
 
 ### 1. Enviar o projeto ao GitHub
 
@@ -95,6 +98,12 @@ O servidor cria a tabela necessária (`world_state`) automaticamente ao iniciar.
    Faça isso para cada domínio de produção ou preview usado para abrir o jogo.
    O `localhost` costuma ser permitido por padrão; se não for, habilite-o com
    `neon.cmd neon-auth domain allow-localhost enable`.
+
+   A branch `production` já está configurada com o domínio
+   `https://the-business-planet.onrender.com` e verificação por código para
+   novos cadastros e contas não confirmadas. O provedor compartilhado do Neon
+   pode ter limites de envio; para produção, configure SMTP próprio em
+   **Neon Console → Settings → Better Auth → Custom SMTP provider**.
 
 Para verificar a conexão com PostgreSQL e Redis, abra
 `https://<endereco-do-servico>/api/health`. A resposta esperada é

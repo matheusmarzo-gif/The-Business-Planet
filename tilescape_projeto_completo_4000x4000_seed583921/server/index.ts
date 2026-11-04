@@ -935,6 +935,50 @@ async function start() {
         });
     },
   );
+  app.delete('/api/residential-buildings/:id', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        request.params.id,
+      )
+    ) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void pool
+      .query<{ id: string }>(
+        `DELETE FROM residential_buildings
+         WHERE id = $1 AND created_by = $2
+         RETURNING id`,
+        [request.params.id, userId],
+      )
+      .then(async ({ rows }) => {
+        if (!rows[0]) {
+          const existing = await pool.query(
+            'SELECT 1 FROM residential_buildings WHERE id = $1',
+            [request.params.id],
+          );
+          response
+            .status(existing.rowCount ? 403 : 404)
+            .json({ error: existing.rowCount ? 'residence_not_owned' : 'residence_not_found' });
+          return;
+        }
+
+        response.json(rows[0]);
+        void publishCities().catch((error: unknown) => {
+          console.error('A residência foi demolida, mas a atualização do mundo falhou:', error);
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível demolir a residência:', error);
+        response.status(503).json({ error: 'residence_demolition_unavailable' });
+      });
+  });
   app.post('/api/cities', requireAuth, requireMasterAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);
     const city = parseCityInput(request.body);

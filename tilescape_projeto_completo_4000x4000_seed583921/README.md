@@ -207,6 +207,8 @@ a conta Master pode iniciar a construção sem materiais. A obra aparece com o
 ícone **Em construção** e não avança automaticamente. A conta Master pode
 concluí-la instantaneamente com duplo clique no ícone da obra. Capacidade,
 apreço e custo são dados informativos; ainda não alteram população ou estoque.
+Para demolir uma residência, ative **Demolir** e clique em qualquer tile dela.
+Não há confirmação; somente o jogador que iniciou a construção pode removê-la.
 
 Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.

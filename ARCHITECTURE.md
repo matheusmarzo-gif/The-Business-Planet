@@ -233,8 +233,9 @@ mapeamento e verificar todas as curvas.
   pode dar duplo clique na obra para concluí-la instantaneamente; a rota
   verifica a autorização e recusa uma obra já concluída.
 - Estradas também consultam os footprints residenciais para impedir que um
-  traçado posterior cubra uma casa. Demolição de estradas continua possível
-  sem confirmação, inclusive junto de residências.
+  traçado posterior cubra uma casa. No modo Demolir, clicar em qualquer tile
+  do footprint de uma residência a remove sem confirmação; o servidor só
+  permite a remoção ao autor e publica o novo estado.
 - Capacidade, apreço local, custos e Work Points são metadados; população,
   estoque, consumo e produção ainda não são simulados.
 
@@ -256,6 +257,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `DELETE /api/roads` | Autenticado | Demole os tiles próprios de um caminho de até 600 tiles e publica o novo estado. |
 | `POST /api/residential-buildings` | Master enquanto estoque não existe | Valida e inicia uma residência em construção. |
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
+| `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |
 
 Falhas de validação são respostas HTTP explícitas; indisponibilidade de banco,

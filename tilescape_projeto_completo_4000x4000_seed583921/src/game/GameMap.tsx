@@ -23,6 +23,7 @@ import {
 } from '../types/road';
 import {
   getResidencePlacementError,
+  isTileInResidenceFootprint,
   RESIDENCES,
   ResidentialBuilding,
   ResidencePlacementError,
@@ -98,6 +99,7 @@ interface GameMapProps {
   onCityDemolish: (city: CityAssembly) => void;
   onCityZoneDraw: (bounds: CityZoneBounds) => void;
   onResidencePlace: (type: ResidenceType, position: RoadPosition) => void;
+  onResidenceDemolish: (building: ResidentialBuilding) => void;
   onInvalidResidencePlacement: (reason: ResidencePlacementError) => void;
   onResidenceComplete: (buildingId: string) => void;
 }
@@ -129,6 +131,7 @@ export function GameMap({
   onCityDemolish,
   onCityZoneDraw,
   onResidencePlace,
+  onResidenceDemolish,
   onInvalidResidencePlacement,
   onResidenceComplete,
 }: GameMapProps) {
@@ -759,6 +762,17 @@ export function GameMap({
           if (reason) onInvalidCityPlacement(reason);
           else onCityPlace(center);
         } else {
+          const residence = demolitionMode
+            ? residentialBuildings.find((building) => {
+              if (building.id.startsWith('pending-')) return false;
+              return isTileInResidenceFootprint(building, tile);
+            })
+            : undefined;
+          if (residence) {
+            onResidenceDemolish(residence);
+            dragRef.current = null;
+            return;
+          }
           const road = demolitionMode
             ? roads.find(
                 (candidate) =>

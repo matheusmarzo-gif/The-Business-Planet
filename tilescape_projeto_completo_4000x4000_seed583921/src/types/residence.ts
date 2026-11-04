@@ -75,6 +75,19 @@ export function getResidenceDefinition(type: string): ResidenceDefinition | null
   return null;
 }
 
+export function isTileInResidenceFootprint(
+  building: Pick<ResidentialBuilding, 'type' | 'x' | 'y'>,
+  position: { x: number; y: number },
+): boolean {
+  const definition = RESIDENCES[building.type];
+  return (
+    position.x >= building.x &&
+    position.x < building.x + definition.width &&
+    position.y >= building.y &&
+    position.y < building.y + definition.height
+  );
+}
+
 export function getResidencePlacementError(
   type: ResidenceType,
   position: { x: number; y: number },

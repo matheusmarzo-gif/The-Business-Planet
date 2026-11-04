@@ -121,6 +121,10 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Você só pode demolir estradas que construiu.';
         } else if (body.error === 'road_not_found') {
           error = 'Essa estrada não existe mais.';
+        } else if (body.error === 'residence_not_owned') {
+          error = 'Você só pode demolir residências que construiu.';
+        } else if (body.error === 'residence_not_found') {
+          error = 'Essa residência não existe mais.';
         } else if (body.error === 'outside_urban_zone') {
           error = 'A residência precisa ficar dentro de uma área urbana.';
         } else if (body.error === 'residence_outside_municipality') {
@@ -172,6 +176,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [roads, setRoads] = useState<RoadTile[]>([]);
   const [residentialBuildings, setResidentialBuildings] = useState<ResidentialBuilding[]>([]);
   const [pendingResidentialBuildings, setPendingResidentialBuildings] = useState<ResidentialBuilding[]>([]);
+  const [pendingResidentialDemolitionIds, setPendingResidentialDemolitionIds] = useState<string[]>([]);
   const [pendingCities, setPendingCities] = useState<CityAssembly[]>([]);
   const [pendingRoads, setPendingRoads] = useState<RoadTile[]>([]);
   const [pendingRoadDemolitionKeys, setPendingRoadDemolitionKeys] = useState<string[]>([]);
@@ -265,8 +270,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     for (const building of pendingResidentialBuildings) {
       if (!byId.has(building.id)) byId.set(building.id, building);
     }
-    return [...byId.values()];
-  }, [pendingResidentialBuildings, residentialBuildings]);
+    const pendingDemolitions = new Set(pendingResidentialDemolitionIds);
+    return [...byId.values()].filter((building) => !pendingDemolitions.has(building.id));
+  }, [pendingResidentialBuildings, pendingResidentialDemolitionIds, residentialBuildings]);
 
   const mapPosition = useMemo(() => selectedTile ?? hoveredTile, [selectedTile, hoveredTile]);
   const zoomBy = (factor: number) =>
@@ -682,6 +688,33 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
+  const demolishResidence = async (building: ResidentialBuilding) => {
+    setPendingResidentialDemolitionIds((current) =>
+      current.includes(building.id) ? current : [...current, building.id],
+    );
+    setDemolitionMessage('');
+    try {
+      await cityRequest<{ id: string }>(
+        `/api/residential-buildings/${building.id}`,
+        { method: 'DELETE' },
+      );
+      setResidentialBuildings((current) =>
+        current.filter((item) => item.id !== building.id),
+      );
+      setPendingResidentialDemolitionIds((current) =>
+        current.filter((id) => id !== building.id),
+      );
+      setDemolitionMessage('Residência demolida.');
+    } catch (error) {
+      setPendingResidentialDemolitionIds((current) =>
+        current.filter((id) => id !== building.id),
+      );
+      setDemolitionMessage(
+        error instanceof Error ? error.message : 'Não foi possível demolir essa residência.',
+      );
+    }
+  };
+
   return (
     <main className="realm-shell">
       <header className="topbar">
@@ -738,6 +771,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           onCityDemolish={(city) => void demolishCity(city)}
           onCityZoneDraw={handleCityZoneDraw}
           onResidencePlace={(type, position) => void handleResidencePlace(type, position)}
+          onResidenceDemolish={(building) => void demolishResidence(building)}
           onInvalidResidencePlacement={handleInvalidResidencePlacement}
           onResidenceComplete={(buildingId) => void completeResidence(buildingId)}
         />

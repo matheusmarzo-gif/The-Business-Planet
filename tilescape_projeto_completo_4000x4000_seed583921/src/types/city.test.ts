@@ -7,6 +7,7 @@ import {
   type CityZone,
 } from './city';
 import {
+  isTileInResidenceFootprint,
   getResidencePlacementError,
   RESIDENCES,
   type ResidentialBuilding,
@@ -145,6 +146,8 @@ describe('municipal zones', () => {
         [RESIDENCES.house_poor2.width, RESIDENCES.house_poor2.height, RESIDENCES.house_poor2.capacity],
         [3, 3, 32],
       );
+      assert.equal(isTileInResidenceFootprint(first, { x: 21, y: 21 }), true);
+      assert.equal(isTileInResidenceFootprint(first, { x: 22, y: 21 }), false);
     });
   });
 

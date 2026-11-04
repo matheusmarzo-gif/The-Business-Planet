@@ -1,0 +1,67 @@
+{
+  "appName": "TileScape 4K",
+  "dimensions": {
+    "width": 4000,
+    "height": 4000,
+    "totalTiles": 16000000
+  },
+  "noiseSettings": {
+    "seed": 583921,
+    "scale": 0.008,
+    "seaLevel": 0.46,
+    "octaves": 4,
+    "persistence": 0.5,
+    "lacunarity": 2,
+    "moistureScale": 0.006,
+    "flowerDensity": 0.5,
+    "preset": "continents"
+  },
+  "biomeStatistics": [
+    {
+      "tileId": "water_deep",
+      "name": "Oceano Profundo",
+      "percentage": 1.67
+    },
+    {
+      "tileId": "water_lily",
+      "name": "Lago de Ninféias",
+      "percentage": 1.67
+    },
+    {
+      "tileId": "water_coastal",
+      "name": "Água Costeira / Baixio",
+      "percentage": 30
+    },
+    {
+      "tileId": "grass_plains",
+      "name": "Planície Verdejante",
+      "percentage": 61.97
+    },
+    {
+      "tileId": "grass_buttercup",
+      "name": "Campo de Flores Amarelas",
+      "percentage": 1.61
+    },
+    {
+      "tileId": "grass_poppy",
+      "name": "Colina de Papoulas",
+      "percentage": 1.83
+    },
+    {
+      "tileId": "grass_daisy",
+      "name": "Clareira de Margaridas",
+      "percentage": 1.25
+    }
+  ],
+  "waypoints": [
+    {
+      "id": "pin_spawn",
+      "name": "Ponto de Partida",
+      "x": 2000,
+      "y": 2000,
+      "color": "#38bdf8",
+      "createdAt": 1793738006279
+    }
+  ],
+  "exportedAt": "2026-11-03T20:33:34.467Z"
+}

@@ -1,0 +1,10 @@
+[
+  {
+    "id": "pin_spawn",
+    "name": "Ponto de Partida",
+    "x": 2000,
+    "y": 2000,
+    "color": "#38bdf8",
+    "createdAt": 1793738006279
+  }
+]

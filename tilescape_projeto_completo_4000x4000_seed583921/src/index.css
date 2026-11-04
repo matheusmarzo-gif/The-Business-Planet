@@ -1,0 +1,132 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+
+:root {
+  font-family: 'DM Sans', sans-serif;
+  color: #f5f0e5;
+  background: #101914;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+  font-weight: 400;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 360px; min-height: 100vh; overflow: hidden; }
+button, a { font: inherit; }
+button { color: inherit; }
+
+.realm-shell { height: 100dvh; min-height: 520px; display: flex; flex-direction: column; background: #101914; }
+.topbar { height: 68px; flex: 0 0 68px; z-index: 3; display: flex; align-items: center; padding: 0 25px; gap: 29px; background: #111a16; border-bottom: 1px solid rgba(208, 190, 145, .14); }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #f5f0e5; min-width: 215px; }
+.brand-mark { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid rgba(202, 169, 105, .52); border-radius: 50%; color: #d7bd81; }
+.brand-copy { display: grid; gap: 2px; }
+.brand-copy strong { font: 800 15px 'Manrope', sans-serif; letter-spacing: .16em; }
+.brand-copy small, .world-kicker, .map-heading span, .time-copy>span, .eyebrow, .landmark span, .seed-label { font-size: 9px; font-weight: 700; letter-spacing: .13em; color: #9c9b88; }
+.brand-copy small { font-size: 7px; letter-spacing: .16em; }
+.world-name { display: grid; gap: 4px; padding-left: 26px; border-left: 1px solid rgba(208, 190, 145, .14); }
+.world-kicker { font-size: 8px; }
+.world-title { font: 600 13px 'Manrope', sans-serif; color: #eee8d8; }
+.world-seed { margin-left: 7px; color: #a4a48f; font: 500 10px 'DM Sans', sans-serif; }
+.topbar-status { margin-left: auto; display: flex; align-items: center; gap: 21px; }
+.connection-pill { display: flex; align-items: center; gap: 7px; color: #a5a18e; font-size: 9px; font-weight: 700; letter-spacing: .1em; }
+.connection-pill.connected { color: #a4c99c; }
+.player-count { display: flex; align-items: center; gap: 7px; color: #eee8d8; font-size: 12px; font-weight: 700; }
+.player-count>span:last-child { color: #999d8b; font-size: 10px; font-weight: 400; }
+.status-dot, .live-dot { width: 6px; height: 6px; border-radius: 50%; background: #829175; }
+.connected .status-dot, .live-dot { background: #9cc78c; box-shadow: 0 0 10px #8fbb7b; }
+.world-stage { position: relative; isolation: isolate; overflow: hidden; flex: 1; background: #142b30; }
+.game-map { position: absolute; inset: 0; z-index: 0; overflow: hidden; cursor: grab; touch-action: none; }
+.game-map:active { cursor: grabbing; }
+.game-map canvas { display: block; width: 100%; height: 100%; }
+.map-vignette { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, rgba(14,24,21,.08) 44%, rgba(12,21,19,.17) 69%, rgba(12,21,19,.33) 100%), linear-gradient(0deg, rgba(12,19,17,.39), transparent 22%, transparent 76%, rgba(12,19,17,.15)); }
+.map-heading, .map-scale, .time-card, .map-tools, .realm-panel, .map-coordinates, .map-hint, .map-credit { z-index: 2; }
+.map-heading { position: absolute; left: 28px; top: 24px; display: flex; align-items: center; gap: 11px; }
+.map-heading-icon { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid rgba(232,222,193,.27); border-radius: 9px; color: #ead9a6; background: rgba(25,34,29,.7); backdrop-filter: blur(12px); }
+.map-heading>div:last-child { display: grid; gap: 3px; }
+.map-heading span { font-size: 8px; color: #d0c8ab; }
+.map-heading strong { font: 600 12px 'Manrope', sans-serif; text-shadow: 0 1px 5px #14251c; }
+.map-scale { position: absolute; left: 29px; top: 74px; display: flex; align-items: center; color: #e2dbc8; font-size: 9px; text-shadow: 0 1px 4px #14251c; }
+.map-scale span { width: 5px; height: 1px; margin-right: 1px; background: #d6c79c; }
+.map-scale span:nth-child(2) { width: 19px; }
+.map-scale span:nth-child(3) { margin-right: 7px; }
+.time-card { position: absolute; top: 22px; right: 359px; min-width: 262px; display: flex; gap: 11px; padding: 12px 14px; border: 1px solid rgba(219,201,158,.2); border-radius: 10px; background: rgba(22,31,26,.86); backdrop-filter: blur(14px); box-shadow: 0 8px 26px rgba(0,0,0,.14); }
+.time-icon { width: 30px; height: 30px; flex: 0 0 30px; display: grid; place-items: center; border-radius: 8px; color: #d9c38b; background: rgba(190,158,92,.12); }
+.time-copy { display: grid; gap: 3px; }
+.time-copy>span { display: flex; align-items: center; gap: 6px; font-size: 8px; color: #b6b29f; }
+.time-copy>span i { width: 5px; height: 5px; border-radius: 50%; background: #747668; }
+.time-copy strong { font: 600 12px 'Manrope', sans-serif; color: #f0e9d8; }
+.time-copy small { color: #9b9b89; font-size: 9px; }
+.time-copy small b { padding: 0 4px; color: #cbb77f; }
+.map-tools { position: absolute; right: 378px; bottom: 56px; display: grid; overflow: hidden; border: 1px solid rgba(219,201,158,.18); border-radius: 9px; background: rgba(22,31,26,.89); backdrop-filter: blur(12px); }
+.map-tools button { width: 38px; height: 37px; display: grid; place-items: center; border: 0; color: #d5cfbd; background: transparent; cursor: pointer; }
+.map-tools button:hover { color: #f2dcaa; background: rgba(255,255,255,.07); }
+.tool-divider { height: 1px; margin: 0 8px; background: rgba(219,201,158,.15); }
+.realm-panel { position: absolute; top: 0; right: 0; bottom: 0; width: 338px; display: flex; flex-direction: column; padding: 36px 26px 20px; border-left: 1px solid rgba(213,194,149,.14); background: rgba(19,28,23,.95); box-shadow: -20px 0 52px rgba(9,17,13,.2); backdrop-filter: blur(18px); }
+.eyebrow { font-size: 8px; color: #b29a66; }
+.panel-title h1 { margin: 13px 0 9px; font: 600 25px/1.18 'Manrope', sans-serif; letter-spacing: -.045em; }
+.panel-title h1 em { color: #d4bd86; font-style: normal; }
+.panel-title p, .tile-details p { max-width: 245px; margin: 0; color: #a6a897; font-size: 11px; line-height: 1.65; }
+.panel-divider { height: 1px; flex: 0 0 1px; margin: 23px 0; background: rgba(219,201,158,.13); }
+.landmark { display: flex; align-items: center; gap: 11px; }
+.landmark-icon { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid rgba(207,178,116,.22); border-radius: 9px; color: #d3b77a; background: rgba(193,162,100,.08); }
+.landmark>div:last-child { display: grid; gap: 3px; }
+.landmark span { font-size: 7px; }
+.landmark strong { font-size: 11px; font-weight: 600; }
+.landmark small { color: #909585; font-size: 9px; }
+.world-stats { display: flex; gap: 14px; margin-top: 21px; }
+.world-stats>div { min-width: 0; flex: 1; display: grid; grid-template-columns: 17px 1fr; align-items: center; gap: 5px; padding: 10px; border: 1px solid rgba(219,201,158,.1); border-radius: 8px; color: #99ad9a; background: rgba(255,255,255,.018); }
+.world-stats span { color: #9da08f; font-size: 9px; }
+.world-stats strong { grid-column: 2; color: #e6dfce; font: 600 12px 'Manrope', sans-serif; }
+.tile-details { display: grid; align-content: start; gap: 9px; min-height: 122px; }
+.terrain-name { color: #eee7d6; font: 600 13px 'Manrope', sans-serif; }
+.coordinates { color: #a9a793; font-size: 10px; font-variant-numeric: tabular-nums; }
+.coordinates b { padding: 0 3px; color: #cbb77f; }
+.tile-details p { font-size: 10px; }
+.panel-footer { margin-top: auto; padding-top: 15px; border-top: 1px solid rgba(219,201,158,.12); display: flex; justify-content: space-between; align-items: center; }
+.seed-label { font-size: 7px; }
+.seed-value { display: flex; align-items: center; gap: 4px; color: #d4c18f; font: 500 10px 'Manrope', sans-serif; }
+.map-coordinates { position: absolute; bottom: 24px; left: 28px; display: flex; align-items: center; gap: 6px; color: #e0d9c5; font: 500 9px 'DM Sans', sans-serif; letter-spacing: .07em; text-shadow: 0 1px 5px #17231b; }
+.coordinate-cross { color: #e2c57f; font-size: 16px; }
+.map-hint { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; color: #ddd6c2; font-size: 8px; font-weight: 600; letter-spacing: .09em; text-shadow: 0 1px 5px #17231b; white-space: nowrap; }
+.map-hint i { width: 3px; height: 3px; margin: 0 3px; border-radius: 50%; background: #d0b779; }
+.mouse-icon { font-size: 14px; }
+.map-credit { position: absolute; right: 25px; bottom: 22px; color: rgba(212,205,185,.46); font-size: 7px; letter-spacing: .14em; }
+
+@media (max-width: 900px) {
+  .topbar { padding: 0 17px; gap: 15px; }
+  .brand { min-width: 0; }
+  .world-name { padding-left: 15px; }
+  .time-card { right: 18px; top: 82px; min-width: 0; }
+  .realm-panel { width: 300px; padding: 28px 20px 18px; }
+  .map-tools { right: 20px; bottom: 53px; }
+  .map-hint { left: 45%; }
+  .map-credit { display: none; }
+}
+@media (max-width: 620px) {
+  .topbar { height: 60px; flex-basis: 60px; padding: 0 12px; gap: 10px; }
+  .brand-mark { width: 32px; height: 32px; }
+  .brand-copy strong { font-size: 13px; }
+  .brand-copy small { font-size: 6px; }
+  .world-name { display: none; }
+  .topbar-status { gap: 11px; }
+  .connection-pill { font-size: 0; }
+  .connection-pill svg { width: 17px; height: 17px; }
+  .player-count { font-size: 11px; }
+  .realm-panel { top: auto; left: 10px; right: 10px; bottom: 55px; width: auto; max-height: 190px; overflow: auto; padding: 15px; border: 1px solid rgba(213,194,149,.2); border-radius: 11px; }
+  .panel-title h1 { margin: 6px 0; font-size: 19px; }
+  .panel-title p { display: none; }
+  .panel-divider { margin: 12px 0; }
+  .world-stats { margin-top: 12px; }
+  .world-stats>div { padding: 7px; }
+  .map-heading { left: 14px; top: 15px; }
+  .time-card { right: 10px; top: 15px; padding: 8px; }
+  .time-icon { display: none; }
+  .time-copy strong { font-size: 10px; }
+  .time-copy small { font-size: 8px; }
+  .map-tools { right: 13px; bottom: 266px; }
+  .map-coordinates { left: 14px; bottom: 19px; }
+  .map-hint { left: auto; right: 14px; bottom: 19px; font-size: 0; }
+  .map-hint i, .map-hint .mouse-icon { display: none; }
+}

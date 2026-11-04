@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerador Procedural de Mapas - 4000x4000</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #090e17;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      user-select: none;
+    }
+    header {
+      background: #0f172a;
+      border-bottom: 1px solid #1e293b;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+    }
+    .brand {
+      font-size: 14px;
+      font-weight: 700;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .meta {
+      font-size: 12px;
+      color: #94a3b8;
+      display: flex;
+      gap: 16px;
+    }
+    #viewport {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: grab;
+      background: #060b13;
+    }
+    #viewport:active { cursor: grabbing; }
+    canvas { display: block; width: 100%; height: 100%; }
+    
+    /* Floating Toolbars */
+    .toolbar {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.92);
+      backdrop-filter: blur(8px);
+      border: 1px solid #334155;
+      padding: 6px 14px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+    }
+    button {
+      background: #1e293b;
+      color: #f1f5f9;
+      border: 1px solid #475569;
+      padding: 5px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    button:hover { background: #334155; border-color: #64748b; }
+    button.primary { background: #38bdf8; color: #020617; border-color: #38bdf8; font-weight: 600; }
+    button.primary:hover { background: #7dd3fc; }
+    
+    .sidebar {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 14px;
+      width: 260px;
+      font-size: 11px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+      z-index: 10;
+    }
+    .sidebar h2 { font-size: 12px; font-weight: 700; color: #f8fafc; margin-bottom: 10px; }
+    .control-group { margin-bottom: 10px; }
+    .control-group label { display: block; color: #94a3b8; margin-bottom: 4px; }
+    .control-group input[type="range"] { width: 100%; accent-color: #38bdf8; }
+    .control-group input[type="number"] { width: 100%; background: #020617; border: 1px solid #334155; color: #fff; padding: 4px 8px; border-radius: 6px; }
+    
+    .minimap-card {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.6);
+      z-index: 10;
+    }
+    #minimap { width: 140px; height: 140px; border-radius: 6px; cursor: crosshair; display: block; }
+    
+    #hud {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-family: monospace;
+      color: #38bdf8;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span>🌐 TileScape 4K</span>
+      <span style="color:#64748b">|</span>
+      <span style="color:#e2e8f0;font-weight:500;">Gerador Procedural Autônomo</span>
+    </div>
+    <div class="meta">
+      <span>Tamanho: <strong>4000x4000 tiles</strong></span>
+      <span>Semente: <strong id="seed-label">583921</strong></span>
+      <span>Ruído: <strong>Perlin fBm 2D</strong></span>
+    </div>
+  </header>
+
+  <div id="viewport">
+    <canvas id="mainCanvas"></canvas>
+
+    <!-- Sidebar Controls -->
+    <div class="sidebar">
+      <h2>Parâmetros Procedurais</h2>
+      <div class="control-group">
+        <label>Semente (Seed):</label>
+        <div style="display:flex;gap:6px;">
+          <input type="number" id="seedInput" value="583921">
+          <button onclick="randomizeSeed()">🎲</button>
+        </div>
+      </div>
+      <div class="control-group">
+        <label>Nível do Mar: <span id="seaVal">46%</span></label>
+        <input type="range" id="seaSlider" min="0.15" max="0.80" step="0.02" value="0.46">
+      </div>
+      <div class="control-group">
+        <label>Escala do Ruído:</label>
+        <input type="range" id="scaleSlider" min="0.002" max="0.03" step="0.001" value="0.008">
+      </div>
+      <button class="primary" style="width:100%;margin-top:6px;" onclick="applyChanges()">Regenerar Terreno</button>
+    </div>
+
+    <!-- Minimap -->
+    <div class="minimap-card">
+      <div style="font-size:10px;color:#94a3b8;margin-bottom:6px;font-weight:600;">VISÃO GERAL</div>
+      <canvas id="minimap" width="140" height="140"></canvas>
+    </div>
+
+    <!-- Floating Nav Toolbar -->
+    <div class="toolbar">
+      <button onclick="zoomOut()">Zoom -</button>
+      <span id="zoomLabel" style="font-family:monospace;font-weight:600;color:#38bdf8;">50%</span>
+      <button onclick="zoomIn()">Zoom +</button>
+      <button onclick="centerMap()">Centralizar</button>
+      <button onclick="toggleGrid()">Grade</button>
+    </div>
+
+    <div id="hud">X: 0 | Y: 0</div>
+  </div>
+
+  <script>
+    // --- 1. Algoritmo de Ruído Perlin e PRNG ---
+    class PerlinNoise {
+      constructor(seed = 1337) {
+        this.p = new Uint8Array(512);
+        this.reseed(seed);
+      }
+      static mulberry32(a) {
+        return function() {
+          let t = (a += 0x6d2b79f5);
+          t = Math.imul(t ^ (t >>> 15), t | 1);
+          t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+      reseed(seed) {
+        const rng = PerlinNoise.mulberry32(seed);
+        const perm = new Uint8Array(256);
+        for (let i = 0; i < 256; i++) perm[i] = i;
+        for (let i = 255; i > 0; i--) {
+          const j = Math.floor(rng() * (i + 1));
+          const tmp = perm[i]; perm[i] = perm[j]; perm[j] = tmp;
+        }
+        for (let i = 0; i < 256; i++) {
+          this.p[i] = perm[i];
+          this.p[256 + i] = perm[i];
+        }
+      }
+      fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+      lerp(t, a, b) { return a + t * (b - a); }
+      grad(hash, x, y) {
+        const h = hash & 7;
+        const u = h < 4 ? x : y;
+        const v = h < 4 ? y : x;
+        return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+      }
+      noise2D(x, y) {
+        const X = Math.floor(x) & 255;
+        const Y = Math.floor(y) & 255;
+        const xf = x - Math.floor(x);
+        const yf = y - Math.floor(y);
+        const u = this.fade(xf);
+        const v = this.fade(yf);
+        const aa = this.p[this.p[X] + Y];
+        const ab = this.p[this.p[X] + Y + 1];
+        const ba = this.p[this.p[X + 1] + Y];
+        const bb = this.p[this.p[X + 1] + Y + 1];
+        const x1 = this.lerp(u, this.grad(aa, xf, yf), this.grad(ba, xf - 1, yf));
+        const x2 = this.lerp(u, this.grad(ab, xf, yf - 1), this.grad(bb, xf - 1, yf - 1));
+        return this.lerp(v, x1, x2);
+      }
+      fbm2D(x, y, octaves = 4, persistence = 0.5, lacunarity = 2.0) {
+        let total = 0, freq = 1, amp = 1, maxAmp = 0;
+        for (let i = 0; i < octaves; i++) {
+          total += this.noise2D(x * freq, y * freq) * amp;
+          maxAmp += amp;
+          amp *= persistence;
+          freq *= lacunarity;
+        }
+        return Math.max(0, Math.min(1, (total / maxAmp + 1) * 0.5));
+      }
+    }
+
+    // --- 2. Dados e Configuração do Mapa ---
+    const config = {
+  "width": 4000,
+  "height": 4000,
+  "seed": 583921,
+  "scale": 0.008,
+  "seaLevel": 0.46,
+  "octaves": 4,
+  "persistence": 0.5,
+  "lacunarity": 2,
+  "moistureScale": 0.006,
+  "flowerDensity": 0.5,
+  "preset": "continents"
+};
+    const tiles = [
+  {
+    "id": "water_deep",
+    "namePt": "Oceano Profundo",
+    "category": "water",
+    "role": "water_deep",
+    "color": "#2774a3",
+    "descriptionPt": "Águas abissais com ondulações concêntricas azuis profundas.",
+    "src": "./tiles/tile_1_water_deep.png"
+  },
+  {
+    "id": "water_lily",
+    "namePt": "Lago de Ninféias",
+    "category": "water",
+    "role": "water_lily",
+    "color": "#3f98bd",
+    "descriptionPt": "Enseada serena com ninfeias amarelas e rochas submersas.",
+    "src": "./tiles/tile_2_water_lily.png"
+  },
+  {
+    "id": "water_coastal",
+    "namePt": "Água Costeira / Baixio",
+    "category": "water",
+    "role": "water_coastal",
+    "color": "#48a9c5",
+    "descriptionPt": "Águas claras costeiras com vegetação rasa e pedras.",
+    "src": "./tiles/tile_3_water_coastal.png"
+  },
+  {
+    "id": "grass_plains",
+    "namePt": "Planície Verdejante",
+    "category": "land",
+    "role": "grass_plains",
+    "color": "#3d8b2d",
+    "descriptionPt": "Grama vibrante e abundante, base das grandes pradarias.",
+    "src": "./tiles/tile_4_grass_plains.png"
+  },
+  {
+    "id": "grass_buttercup",
+    "namePt": "Campo de Flores Amarelas",
+    "category": "land",
+    "role": "grass_flower",
+    "color": "#52a632",
+    "descriptionPt": "Vales ensolarados repletos de botões de ouro cintilantes.",
+    "src": "./tiles/tile_5_grass_buttercup.png"
+  },
+  {
+    "id": "grass_poppy",
+    "namePt": "Colina de Papoulas",
+    "category": "land",
+    "role": "grass_hills",
+    "color": "#286b22",
+    "descriptionPt": "Colinas e arbustos com papoulas vermelhas e pedras.",
+    "src": "./tiles/tile_6_grass_poppy.png"
+  },
+  {
+    "id": "grass_daisy",
+    "namePt": "Clareira de Margaridas",
+    "category": "land",
+    "role": "grass_clearing",
+    "color": "#439e34",
+    "descriptionPt": "Clareira tranquila pontilhada de margaridas brancas.",
+    "src": "./tiles/tile_7_grass_daisy.png"
+  }
+];
+
+    const tileMap = new Map(tiles.map(t => [t.id, t]));
+    const images = new Map();
+
+    // Carregar imagens dos tiles
+    tiles.forEach(t => {
+      const img = new Image();
+      img.src = t.embeddedSrc || t.src;
+      images.set(t.id, img);
+    });
+
+    let elevNoise = new PerlinNoise(config.seed);
+    let moistNoise = new PerlinNoise(config.seed + 1013);
+    let floraNoise = new PerlinNoise(config.seed + 2027);
+
+    // Identificar papéis de tiles
+    const waterTiles = tiles.filter(t => t.category === 'water');
+    const landTiles = tiles.filter(t => t.category === 'land');
+    const deepTile = waterTiles.find(t => t.role === 'water_deep') || waterTiles[0];
+    const coastTile = waterTiles.find(t => t.role === 'water_coastal') || waterTiles[waterTiles.length - 1];
+    const lilyTile = waterTiles.find(t => t.role === 'water_lily') || coastTile;
+    const plainsTile = landTiles.find(t => t.role === 'grass_plains') || landTiles[0];
+    const flowerTile = landTiles.find(t => t.role === 'grass_flower') || plainsTile;
+    const hillsTile = landTiles.find(t => t.role === 'grass_hills') || plainsTile;
+    const clearingTile = landTiles.find(t => t.role === 'grass_clearing') || plainsTile;
+
+    function getTileAt(x, y) {
+      const cx = config.width / 2, cy = config.height / 2;
+      let e = elevNoise.fbm2D(x * config.scale, y * config.scale, config.octaves, config.persistence, config.lacunarity);
+      
+      if (config.preset === 'pangaea') {
+        const d = Math.sqrt(((x - cx) / cx) ** 2 + ((y - cy) / cy) ** 2);
+        e = e * 0.7 + Math.max(0, 1 - d * 1.15) * 0.45;
+      }
+      e = Math.max(0, Math.min(1, e));
+
+      const m = moistNoise.fbm2D(x * config.moistureScale, y * config.moistureScale, 3, 0.5, 2.0);
+      const f = floraNoise.fbm2D(x * config.scale * 2.2, y * config.scale * 2.2, 2, 0.5, 2.0);
+      const sea = config.seaLevel;
+
+      if (e < sea) {
+        if (e < sea * 0.65) return deepTile;
+        if (m > 0.58 && f > 0.55 && e > sea * 0.82) return lilyTile;
+        return coastTile;
+      } else {
+        const h = (e - sea) / Math.max(0.001, 1 - sea);
+        if (h > 0.68 || (m < 0.32 && f > 0.45)) return hillsTile;
+        if (m > 0.52 && f > (1 - config.flowerDensity * 0.65)) return flowerTile;
+        if (f < 0.28 && m >= 0.35 && m <= 0.65) return clearingTile;
+        return plainsTile;
+      }
+    }
+
+    // --- 3. Viewport & Canvas Rendering ---
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const minimapCanvas = document.getElementById('minimap');
+    const mctx = minimapCanvas.getContext('2d');
+
+    const BASE_TILE = 32;
+    let cam = { x: 0, y: 0, zoom: 0.5 };
+    let showGrid = false;
+    let isDragging = false, dragStart = { x: 0, y: 0, cx: 0, cy: 0 };
+
+    function resize() {
+      const w = canvas.parentElement.clientWidth;
+      const h = canvas.parentElement.clientHeight;
+      canvas.width = w * window.devicePixelRatio;
+      canvas.height = h * window.devicePixelRatio;
+      render();
+    }
+    window.addEventListener('resize', resize);
+
+    function render() {
+      const w = canvas.width, h = canvas.height, dpr = window.devicePixelRatio || 1;
+      ctx.fillStyle = '#060b13';
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.translate(cam.x, cam.y);
+
+      const size = BASE_TILE * cam.zoom;
+      const minX = Math.max(0, Math.floor(-cam.x / size));
+      const maxX = Math.min(config.width, Math.ceil((-cam.x + w / dpr) / size));
+      const minY = Math.max(0, Math.floor(-cam.y / size));
+      const maxY = Math.min(config.height, Math.ceil((-cam.y + h / dpr) / size));
+
+      ctx.imageSmoothingEnabled = size < 32;
+
+      for (let ty = minY; ty < maxY; ty++) {
+        const y0 = Math.floor(ty * size);
+        const y1 = Math.ceil((ty + 1) * size);
+        const th = (y1 - y0) + 0.6;
+        for (let tx = minX; tx < maxX; tx++) {
+          const x0 = Math.floor(tx * size);
+          const x1 = Math.ceil((tx + 1) * size);
+          const tw = (x1 - x0) + 0.6;
+
+          const tile = getTileAt(tx, ty);
+          const img = images.get(tile.id);
+          if (img && img.complete && img.naturalWidth > 0 && size >= 10) {
+            ctx.drawImage(img, x0, y0, tw, th);
+          } else {
+            ctx.fillStyle = tile.color;
+            ctx.fillRect(x0, y0, tw, th);
+          }
+        }
+      }
+
+      if (showGrid && size >= 24) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+        ctx.beginPath();
+        for (let tx = minX; tx <= maxX; tx++) {
+          const sx = Math.floor(tx * size);
+          ctx.moveTo(sx, Math.floor(minY * size)); ctx.lineTo(sx, Math.ceil(maxY * size));
+        }
+        for (let ty = minY; ty <= maxY; ty++) {
+          const sy = Math.floor(ty * size);
+          ctx.moveTo(Math.floor(minX * size), sy); ctx.lineTo(Math.ceil(maxX * size), sy);
+        }
+        ctx.stroke();
+      }
+
+      ctx.restore();
+      renderMinimap();
+    }
+
+    function renderMinimap() {
+      const mw = minimapCanvas.width, mh = minimapCanvas.height;
+      const imgData = mctx.createImageData(mw, mh);
+      const stepX = config.width / mw, stepY = config.height / mh;
+      let ptr = 0;
+
+      for (let my = 0; my < mh; my++) {
+        const wy = Math.floor(my * stepY);
+        for (let mx = 0; mx < mw; mx++) {
+          const wx = Math.floor(mx * stepX);
+          const t = getTileAt(wx, wy);
+          const rgb = parseInt(t.color.slice(1), 16);
+          imgData.data[ptr++] = (rgb >> 16) & 255;
+          imgData.data[ptr++] = (rgb >> 8) & 255;
+          imgData.data[ptr++] = rgb & 255;
+          imgData.data[ptr++] = 255;
+        }
+      }
+      mctx.putImageData(imgData, 0, 0);
+
+      // Viewport box
+      const size = BASE_TILE * cam.zoom;
+      const vx = (-cam.x / (config.width * size)) * mw;
+      const vy = (-cam.y / (config.height * size)) * mh;
+      const vw = ((canvas.clientWidth) / (config.width * size)) * mw;
+      const vh = ((canvas.clientHeight) / (config.height * size)) * mh;
+
+      mctx.strokeStyle = '#38bdf8';
+      mctx.lineWidth = 1.5;
+      mctx.strokeRect(vx, vy, vw, vh);
+    }
+
+    // Interações de Mouse e Panning
+    const vp = document.getElementById('viewport');
+    vp.addEventListener('mousedown', e => {
+      isDragging = true;
+      dragStart = { x: e.clientX, y: e.clientY, cx: cam.x, cy: cam.y };
+    });
+    window.addEventListener('mousemove', e => {
+      if (isDragging) {
+        cam.x = dragStart.cx + (e.clientX - dragStart.x);
+        cam.y = dragStart.cy + (e.clientY - dragStart.y);
+        render();
+      }
+      const size = BASE_TILE * cam.zoom;
+      const wx = Math.floor((e.clientX - cam.x) / size);
+      const wy = Math.floor((e.clientY - cam.y) / size);
+      if (wx >= 0 && wx < config.width && wy >= 0 && wy < config.height) {
+        const t = getTileAt(wx, wy);
+        document.getElementById('hud').innerText = 'X: ' + wx + ' | Y: ' + wy + ' · ' + t.namePt;
+      }
+    });
+    window.addEventListener('mouseup', () => isDragging = false);
+
+    vp.addEventListener('wheel', e => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.2 : 0.83;
+      const newZoom = Math.max(0.005, Math.min(5.0, cam.zoom * factor));
+      const mx = e.clientX, my = e.clientY;
+      const wx = (mx - cam.x) / cam.zoom;
+      const wy = (my - cam.y) / cam.zoom;
+      cam.zoom = newZoom;
+      cam.x = mx - wx * newZoom;
+      cam.y = my - wy * newZoom;
+      document.getElementById('zoomLabel').innerText = Math.round(cam.zoom * 100) + '%';
+      render();
+    });
+
+    function zoomIn() { cam.zoom = Math.min(5.0, cam.zoom * 1.3); document.getElementById('zoomLabel').innerText = Math.round(cam.zoom * 100) + '%'; render(); }
+    function zoomOut() { cam.zoom = Math.max(0.005, cam.zoom / 1.3); document.getElementById('zoomLabel').innerText = Math.round(cam.zoom * 100) + '%'; render(); }
+    function centerMap() {
+      const size = BASE_TILE * cam.zoom;
+      cam.x = canvas.clientWidth / 2 - (config.width / 2) * size;
+      cam.y = canvas.clientHeight / 2 - (config.height / 2) * size;
+      render();
+    }
+    function toggleGrid() { showGrid = !showGrid; render(); }
+
+    function randomizeSeed() {
+      const s = Math.floor(Math.random() * 900000) + 100000;
+      document.getElementById('seedInput').value = s;
+      applyChanges();
+    }
+
+    function applyChanges() {
+      config.seed = parseInt(document.getElementById('seedInput').value) || 0;
+      config.seaLevel = parseFloat(document.getElementById('seaSlider').value);
+      config.scale = parseFloat(document.getElementById('scaleSlider').value);
+      document.getElementById('seed-label').innerText = config.seed;
+      document.getElementById('seaVal').innerText = Math.round(config.seaLevel * 100) + '%';
+      elevNoise.reseed(config.seed);
+      moistNoise.reseed(config.seed + 1013);
+      floraNoise.reseed(config.seed + 2027);
+      render();
+    }
+
+    // Inicialização
+    setTimeout(() => {
+      resize();
+      centerMap();
+    }, 100);
+  </script>
+</body>
+</html>

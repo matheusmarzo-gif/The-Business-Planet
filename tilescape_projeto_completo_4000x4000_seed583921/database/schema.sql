@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS world_state (
+  id SMALLINT PRIMARY KEY CHECK (id = 1),
+  world_time TIMESTAMPTZ NOT NULL,
+  last_real_at TIMESTAMPTZ NOT NULL
+);

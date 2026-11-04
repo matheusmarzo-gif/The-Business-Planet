@@ -1,0 +1,65 @@
+[
+  {
+    "id": "water_deep",
+    "name": "Deep Ocean",
+    "namePt": "Oceano Profundo",
+    "category": "water",
+    "role": "water_deep",
+    "color": "#2774a3",
+    "filename": "tiles/tile_1_water_deep.png"
+  },
+  {
+    "id": "water_lily",
+    "name": "Lily Pond",
+    "namePt": "Lago de Ninféias",
+    "category": "water",
+    "role": "water_lily",
+    "color": "#3f98bd",
+    "filename": "tiles/tile_2_water_lily.png"
+  },
+  {
+    "id": "water_coastal",
+    "name": "Coastal Water",
+    "namePt": "Água Costeira / Baixio",
+    "category": "water",
+    "role": "water_coastal",
+    "color": "#48a9c5",
+    "filename": "tiles/tile_3_water_coastal.png"
+  },
+  {
+    "id": "grass_plains",
+    "name": "Lush Plains",
+    "namePt": "Planície Verdejante",
+    "category": "land",
+    "role": "grass_plains",
+    "color": "#3d8b2d",
+    "filename": "tiles/tile_4_grass_plains.png"
+  },
+  {
+    "id": "grass_buttercup",
+    "name": "Buttercup Meadow",
+    "namePt": "Campo de Flores Amarelas",
+    "category": "land",
+    "role": "grass_flower",
+    "color": "#52a632",
+    "filename": "tiles/tile_5_grass_buttercup.png"
+  },
+  {
+    "id": "grass_poppy",
+    "name": "Poppy Shrubland",
+    "namePt": "Colina de Papoulas",
+    "category": "land",
+    "role": "grass_hills",
+    "color": "#286b22",
+    "filename": "tiles/tile_6_grass_poppy.png"
+  },
+  {
+    "id": "grass_daisy",
+    "name": "Daisy Meadow",
+    "namePt": "Clareira de Margaridas",
+    "category": "land",
+    "role": "grass_clearing",
+    "color": "#439e34",
+    "filename": "tiles/tile_7_grass_daisy.png"
+  }
+]

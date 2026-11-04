@@ -36,6 +36,7 @@ import {
 } from './types/residence';
 import type { RoadPlacementError, RoadPosition, RoadTile } from './types/road';
 import { TileInfo } from './types/map';
+import { formatMoney } from './types/wallet';
 import { createMapGenerator } from './utils/mapGenerator';
 import { DEFAULT_TILE_LIST } from './utils/tileAssets';
 import { WORLD_CONFIG } from './utils/worldConfig';
@@ -220,7 +221,24 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isResidenceOwner, setIsResidenceOwner] = useState(false);
   const [isSavingWorkSettings, setIsSavingWorkSettings] = useState(false);
   const [workSettingsError, setWorkSettingsError] = useState('');
+  const [balance, setBalance] = useState<number | null>(null);
   const gameTime = useWorldClock(snapshot);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadBalance = () =>
+      cityRequest<{ balance: number }>('/api/wallet')
+        .then((wallet) => {
+          if (!cancelled && Number.isFinite(wallet.balance)) setBalance(wallet.balance);
+        })
+        .catch((error: unknown) => console.error('Não foi possível carregar o dinheiro:', error));
+    void loadBalance();
+    const timer = window.setInterval(() => void loadBalance(), 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     const resize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
@@ -810,6 +828,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             <Radio size={14} />
             {isOnline ? 'MUNDO AO VIVO' : 'CONECTANDO'}
           </span>
+          <div className="player-money" title="Seu dinheiro">
+            {balance === null ? 'C$ —' : formatMoney(balance)}
+          </div>
           <div className="player-count"><span className="status-dot" />{snapshot?.onlinePlayers ?? '—'} <span>viajantes</span></div>
           {signOutError && <span className="account-error" role="alert">{signOutError}</span>}
           <div className="account-menu">

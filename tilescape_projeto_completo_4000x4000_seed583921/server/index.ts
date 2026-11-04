@@ -37,6 +37,7 @@ import {
   type ResidenceType,
   type ResidencePlacementError,
 } from '../src/types/residence.js';
+import { STARTING_BALANCE } from '../src/types/wallet.js';
 import {
   allocateImmigrants,
   getCityPopulation,
@@ -944,6 +945,31 @@ async function start() {
       .catch((error: unknown) => {
         console.error('Não foi possível consultar a permissão da conta:', error);
         response.status(503).json({ error: 'authorization_unavailable' });
+      });
+  });
+  app.get('/api/wallet', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    // Cria a carteira com o saldo inicial no primeiro acesso, de forma idempotente.
+    void pool
+      .query(
+        `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO NOTHING`,
+        [userId, STARTING_BALANCE],
+      )
+      .then(() =>
+        pool.query<{ balance: string }>(
+          'SELECT balance FROM player_wallets WHERE user_id = $1',
+          [userId],
+        ),
+      )
+      .then(({ rows }) => response.json({ balance: Number(rows[0].balance) }))
+      .catch((error: unknown) => {
+        console.error('Não foi possível consultar a carteira:', error);
+        response.status(503).json({ error: 'wallet_unavailable' });
       });
   });
   app.get('/api/cities', requireAuth, (_request, response) => {

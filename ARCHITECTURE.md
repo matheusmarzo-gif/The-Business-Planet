@@ -270,6 +270,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/health` | Público | Verifica conectividade com PostgreSQL e Redis. |
 | `GET /api/me` | Autenticado | Retorna se o usuário é master. |
 | `GET /api/cities` | Autenticado | Retorna cidades persistidas. |
+| `GET /api/wallet` | Autenticado | Cria a carteira do usuário com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
 | `POST /api/cities` | Master | Valida e cria Assembleia/cidade. |
 | `PATCH /api/cities/:id` | Master | Altera o nome de uma cidade. |
 | `PUT /api/cities/:id/zones` | Master | Valida e substitui as regiões urbanas/rurais da cidade. |
@@ -297,6 +298,11 @@ de sucesso.
 - `city_assemblies` guarda nomes, centros, métricas e autorias.
 - `city_zones` guarda os retângulos municipais, com cascata ao excluir a cidade.
 - `road_tiles` guarda uma linha por tile, referência à cidade e autoria.
+- `player_wallets` guarda o saldo (`balance`, BIGINT ≥ 0) por `user_id` (`sub`
+  do Neon Auth). A carteira é criada com `STARTING_BALANCE` (`src/types/wallet.ts`)
+  na primeira chamada a `GET /api/wallet`; o saldo aparece na barra superior
+  como `C$ …` e é reconsultado a cada 30 s. Débitos/créditos futuros (aluguel,
+  salários, custos) devem ser feitos no servidor, na mesma transação da ação.
 - `residential_buildings` guarda tipo, footprint, cidade, status, autoria e
   horários de início/conclusão, `wage`, `work_hours_per_day`, `rent` e
   `occupants` (colunas

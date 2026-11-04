@@ -6,6 +6,7 @@ import {
   isFootprintInCityZone,
   type CityZone,
 } from './city';
+import { STARTING_BALANCE, formatMoney } from './wallet';
 import {
   allocateImmigrants,
   getCityPopulation,
@@ -21,6 +22,13 @@ import {
 import { getRoadPlacementError } from './road';
 
 const city = { centerX: 1000, centerY: 1000 };
+
+describe('wallet', () => {
+  it('starts with C$ 10.000 and formats money in Brazilian style', () => {
+    assert.equal(STARTING_BALANCE, 10000);
+    assert.equal(formatMoney(STARTING_BALANCE).replace(/\u00a0/g, ' '), 'C$ 10.000');
+  });
+});
 
 describe('work settings', () => {
   it('accepts valid wage and hours and rejects invalid values', () => {

@@ -29,6 +29,7 @@ button { color: inherit; }
 .world-kicker { font-size: 8px; }
 .world-title { font: 600 13px 'Manrope', sans-serif; color: #eee8d8; }
 .world-seed { margin-left: 7px; color: #a4a48f; font: 500 10px 'DM Sans', sans-serif; }
+.player-money { color: #e2c57f; font: 600 13px 'Manrope', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .topbar-status { margin-left: auto; display: flex; align-items: center; gap: 21px; }
 .account-menu { display: flex; align-items: center; gap: 10px; color: #b7b19e; font-size: 10px; }
 .account-menu span { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

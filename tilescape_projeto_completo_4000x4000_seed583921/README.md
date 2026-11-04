@@ -189,6 +189,12 @@ imediatamente enquanto o servidor salva e some com uma mensagem caso a
 operação seja rejeitada. Cada tile pode ser demolido individualmente e sua
 remoção é sincronizada com os demais jogadores.
 
+## Dinheiro
+
+Cada jogador começa com **C$ 10.000**. O saldo aparece na barra superior, ao
+lado do contador de viajantes. A carteira é criada no primeiro acesso após esta
+atualização (inclusive para contas já existentes) e é guardada no servidor.
+
 ### Residências
 
 Na categoria **Residências**, selecione uma das duas casas para ver no cursor

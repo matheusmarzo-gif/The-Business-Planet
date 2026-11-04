@@ -4,6 +4,12 @@ CREATE TABLE IF NOT EXISTS world_state (
   last_real_at TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS player_wallets (
+  user_id TEXT PRIMARY KEY,
+  balance BIGINT NOT NULL CHECK (balance >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+
 CREATE TABLE IF NOT EXISTS city_assemblies (
   id UUID PRIMARY KEY,
   name VARCHAR(80) NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 80),

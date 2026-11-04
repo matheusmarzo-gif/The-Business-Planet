@@ -30,12 +30,18 @@ import {
 import {
   getResidenceDefinition,
   getResidencePlacementError,
+  parseRent,
   parseWorkSettings,
   RESIDENCES,
   type ResidentialBuilding,
   type ResidenceType,
   type ResidencePlacementError,
 } from '../src/types/residence.js';
+import {
+  allocateImmigrants,
+  getCityPopulation,
+  IMMIGRATION_POPULATION_LIMIT,
+} from '../src/types/immigration.js';
 import { DEFAULT_TILE_LIST } from '../src/utils/tileAssets.js';
 import { createMapGenerator } from '../src/utils/mapGenerator.js';
 import { WORLD_CONFIG } from '../src/utils/worldConfig.js';
@@ -100,10 +106,12 @@ type ResidentialBuildingRow = {
   completed_at: Date | null;
   wage: number;
   work_hours_per_day: number;
+  rent: number;
+  occupants: number;
 };
 
 const RESIDENTIAL_COLUMNS =
-  'id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day';
+  'id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants';
 
 function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuilding {
   return {
@@ -117,6 +125,8 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     completedAt: row.completed_at?.toISOString() ?? null,
     wage: row.wage,
     workHoursPerDay: row.work_hours_per_day,
+    rent: row.rent,
+    occupants: row.occupants,
   };
 }
 
@@ -177,7 +187,12 @@ async function getCities(): Promise<CityAssembly[]> {
     zones: CityZone[];
   }>(
     `SELECT city.id, city.name, city.center_x, city.center_y,
-            city.population, city.wellbeing, city.economy,
+            COALESCE((
+              SELECT SUM(home.occupants)::integer
+              FROM residential_buildings AS home
+              WHERE home.city_id = city.id
+            ), 0) AS population,
+            city.wellbeing, city.economy,
             COALESCE(
               json_agg(json_build_object(
                 'id', zone.id,
@@ -240,6 +255,70 @@ async function publishCities() {
   );
 }
 
+async function runDailyImmigration(): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const { rows: stateRows } = await client.query<{ day: string; last_day: string | null }>(
+      `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+              to_char(last_immigration_day, 'YYYY-MM-DD') AS last_day
+       FROM world_state WHERE id = 1 FOR UPDATE`,
+    );
+    const state = stateRows[0];
+    if (!state) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+    const currentDay = Date.parse(`${state.day}T00:00:00Z`);
+    const lastDay = state.last_day ? Date.parse(`${state.last_day}T00:00:00Z`) : currentDay;
+    const missedDays = Math.min(30, Math.round((currentDay - lastDay) / 86_400_000));
+    if (missedDays <= 0) {
+      if (!state.last_day) {
+        await client.query('UPDATE world_state SET last_immigration_day = $1 WHERE id = 1', [state.day]);
+      }
+      await client.query('COMMIT');
+      return false;
+    }
+
+    const { rows } = await client.query<ResidentialBuildingRow>(
+      `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings WHERE status = 'completed'`,
+    );
+    const byCity = new Map<string, ResidentialBuilding[]>();
+    for (const building of rows.map(mapResidentialBuilding)) {
+      byCity.set(building.cityId, [...(byCity.get(building.cityId) ?? []), building]);
+    }
+
+    let changed = false;
+    for (const homes of byCity.values()) {
+      for (let day = 0; day < missedDays; day += 1) {
+        if (getCityPopulation(homes) >= IMMIGRATION_POPULATION_LIMIT) break;
+        const additions = allocateImmigrants(homes);
+        for (const home of homes) {
+          const added = additions.get(home.id);
+          if (!added) continue;
+          home.occupants += added;
+          changed = true;
+          await client.query('UPDATE residential_buildings SET occupants = $2 WHERE id = $1', [
+            home.id,
+            home.occupants,
+          ]);
+        }
+      }
+    }
+    await client.query('UPDATE world_state SET last_immigration_day = $1 WHERE id = 1', [state.day]);
+    await client.query('COMMIT');
+    return changed;
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter a imigração diária:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function advanceClock() {
   await pool.query(
     `UPDATE world_state
@@ -250,6 +329,11 @@ async function advanceClock() {
      WHERE id = 1`,
     [TIME_SCALE],
   );
+  if (await runDailyImmigration()) {
+    await publishCities().catch((error: unknown) => {
+      console.error('A imigração foi aplicada, mas a atualização do mundo falhou:', error);
+    });
+  }
   await publishSnapshot();
 }
 
@@ -609,7 +693,13 @@ async function replaceCityZones(
       wellbeing: number;
       economy: number;
     }>(
-      `SELECT id, name, center_x, center_y, population, wellbeing, economy
+      `SELECT id, name, center_x, center_y,
+              COALESCE((
+                SELECT SUM(home.occupants)::integer
+                FROM residential_buildings AS home
+                WHERE home.city_id = city_assemblies.id
+              ), 0) AS population,
+              wellbeing, economy
        FROM city_assemblies WHERE id = $1 FOR UPDATE`,
       [cityId],
     );
@@ -1016,6 +1106,48 @@ async function start() {
       })
       .catch((error: unknown) => {
         console.error('Não foi possível atualizar a obra:', error);
+        response.status(503).json({ error: 'residence_unavailable' });
+      });
+  });
+  app.patch('/api/residential-buildings/:id/rent', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const rent = parseRent(request.body);
+    if (!residenceIdPattern.test(request.params.id) || rent === null) {
+      response.status(400).json({ error: 'invalid_rent' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void pool
+      .query<ResidentialBuildingRow>(
+        `UPDATE residential_buildings
+         SET rent = $3
+         WHERE id = $1 AND created_by = $2
+         RETURNING ${RESIDENTIAL_COLUMNS}`,
+        [request.params.id, userId, rent],
+      )
+      .then(async ({ rows }) => {
+        if (!rows[0]) {
+          const existing = await pool.query(
+            'SELECT 1 FROM residential_buildings WHERE id = $1',
+            [request.params.id],
+          );
+          response
+            .status(existing.rowCount ? 403 : 404)
+            .json({ error: existing.rowCount ? 'residence_not_owned' : 'residence_not_found' });
+          return;
+        }
+
+        response.json(mapResidentialBuilding(rows[0]));
+        void publishCities().catch((error: unknown) => {
+          console.error('O aluguel foi atualizado, mas a atualização do mundo falhou:', error);
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível atualizar o aluguel:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
   });

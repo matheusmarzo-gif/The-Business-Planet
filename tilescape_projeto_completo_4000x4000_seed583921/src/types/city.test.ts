@@ -7,7 +7,12 @@ import {
   type CityZone,
 } from './city';
 import {
+  allocateImmigrants,
+  getCityPopulation,
+} from './immigration';
+import {
   isTileInResidenceFootprint,
+  parseRent,
   getResidencePlacementError,
   parseWorkSettings,
   RESIDENCES,
@@ -24,10 +29,51 @@ describe('work settings', () => {
       workHoursPerDay: 8,
     });
     assert.equal(parseWorkSettings({ wage: -1, workHoursPerDay: 8 }), null);
-    assert.equal(parseWorkSettings({ wage: 10, workHoursPerDay: 0 }), null);
-    assert.equal(parseWorkSettings({ wage: 10, workHoursPerDay: 25 }), null);
+    assert.equal(parseWorkSettings({ wage: 10, workHoursPerDay: 3 }), null);
+    assert.equal(parseWorkSettings({ wage: 10, workHoursPerDay: 15 }), null);
+    assert.ok(parseWorkSettings({ wage: 10, workHoursPerDay: 4 }));
+    assert.ok(parseWorkSettings({ wage: 10, workHoursPerDay: 14 }));
     assert.equal(parseWorkSettings({ wage: 1.5, workHoursPerDay: 8 }), null);
     assert.equal(parseWorkSettings(null), null);
+  });
+
+  it('requires rent of at least 1', () => {
+    assert.equal(parseRent({ rent: 1 }), 1);
+    assert.equal(parseRent({ rent: 0 }), null);
+    assert.equal(parseRent({ rent: 2.5 }), null);
+  });
+});
+
+describe('immigration', () => {
+  const home = (id: string, type: 'house_poor1' | 'house_poor2', rent: number, occupants = 0) => ({
+    id,
+    type,
+    status: 'completed' as const,
+    rent,
+    occupants,
+  });
+
+  it('fills the cheapest homes first and breaks ties by local appeal', () => {
+    const result = allocateImmigrants([
+      home('expensive', 'house_poor1', 20),
+      home('big-cheap', 'house_poor2', 5),
+      home('small-cheap', 'house_poor1', 5),
+    ]);
+    assert.equal(result.get('small-cheap'), 4);
+    assert.equal(result.get('big-cheap'), 32);
+    assert.equal(result.get('expensive'), 4);
+  });
+
+  it('respects capacity, ignores unfinished homes and counts population', () => {
+    const result = allocateImmigrants(
+      [
+        { ...home('building', 'house_poor1', 1), status: 'under_construction' as const },
+        home('full', 'house_poor1', 1, 4),
+      ],
+      40,
+    );
+    assert.equal(result.size, 0);
+    assert.equal(getCityPopulation([{ occupants: 4 }, { occupants: 7 }]), 11);
   });
 });
 
@@ -110,6 +156,8 @@ describe('municipal zones', () => {
         completedAt: null,
         wage: 10,
         workHoursPerDay: 8,
+        rent: 10,
+        occupants: 0,
       };
 
       assert.equal(
@@ -144,6 +192,8 @@ describe('municipal zones', () => {
         completedAt: null,
         wage: 10,
         workHoursPerDay: 8,
+        rent: 10,
+        occupants: 0,
       };
       assert.equal(
         getResidencePlacementError(

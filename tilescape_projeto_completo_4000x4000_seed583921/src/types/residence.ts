@@ -26,7 +26,11 @@ export interface ResidenceDefinition {
 export const DEFAULT_WAGE = 10;
 export const MAX_WAGE = 100000;
 export const DEFAULT_WORK_HOURS = 8;
-export const MAX_WORK_HOURS = 24;
+export const MIN_WORK_HOURS = 4;
+export const MAX_WORK_HOURS = 14;
+export const DEFAULT_RENT = 10;
+export const MIN_RENT = 1;
+export const MAX_RENT = 100000;
 export const RESIDENCE_STATS = { skill: 10, health: 100, happiness: 100 } as const;
 
 export function parseWorkSettings(
@@ -41,12 +45,21 @@ export function parseWorkSettings(
     wage > MAX_WAGE ||
     typeof workHoursPerDay !== 'number' ||
     !Number.isInteger(workHoursPerDay) ||
-    workHoursPerDay < 1 ||
+    workHoursPerDay < MIN_WORK_HOURS ||
     workHoursPerDay > MAX_WORK_HOURS
   ) {
     return null;
   }
   return { wage, workHoursPerDay };
+}
+
+export function parseRent(value: unknown): number | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { rent } = value as Record<string, unknown>;
+  if (typeof rent !== 'number' || !Number.isInteger(rent) || rent < MIN_RENT || rent > MAX_RENT) {
+    return null;
+  }
+  return rent;
 }
 
 export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
@@ -89,6 +102,8 @@ export interface ResidentialBuilding {
   completedAt: string | null;
   wage: number;
   workHoursPerDay: number;
+  rent: number;
+  occupants: number;
 }
 
 export type ResidencePlacementError =

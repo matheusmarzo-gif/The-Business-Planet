@@ -241,12 +241,25 @@ mapeamento e verificar todas as curvas.
 - A antiga barra lateral com dados do mundo foi removida. Fora dos modos de
   construção/demolição, clicar em uma residência abre `ResidencePanel`
   (`onResidenceSelect` em `GameMap`); clicar em outro tile a fecha. Concluída:
-  ocupantes 0/capacidade, técnica 10, saúde 100, felicidade 100 (fixos em
+  ocupantes 0/capacidade (reais, vindos de `occupants`), técnica 10, saúde 100, felicidade 100 (fixos em
   `RESIDENCE_STATS`), empregados 0, renda média 0. Em construção: Work Points
-  0/necessários, empregados 0/`maxWorkers`, salário (`wage`) e carga horária
-  (`workHoursPerDay`, 1–24 h), editáveis só pelo criador (`created_by`). O
+  0/necessários, empregados 0/`maxWorkers`, salário diário (`wage`, C$ por dia
+  de trabalho) e carga horária (`workHoursPerDay`, 4–14 h), editáveis só pelo
+  criador (`created_by`). O criador também define o aluguel (`rent`, inteiro ≥
+  C$ 1, por pessoa) em qualquer status. O
   cliente consulta `GET .../ownership` porque o dono não é publicado no
-  WebSocket; o servidor revalida a autoria no `PATCH` com `parseWorkSettings`.
+  WebSocket; o servidor revalida a autoria nos `PATCH` com `parseWorkSettings`
+  e `parseRent`.
+- Imigração (`src/types/immigration.ts`): a cada virada de dia do relógio do
+  mundo (00:00 UTC do jogo), `runDailyImmigration` em `server/index.ts` (chamada
+  pelo líder do relógio em `advanceClock`, sob o lock `583921303`) leva 40
+  pessoas a cada cidade com menos de 1000 habitantes. Elas ocupam primeiro as
+  residências concluídas mais baratas com vaga; empate vai para o maior apreço
+  local. `world_state.last_immigration_day` evita repetir o dia (recupera até 30
+  dias perdidos). A população da cidade é a soma de `occupants` das residências
+  (calculada em SQL em `getCities`; `city_assemblies.population` não é mais
+  usada). A cobrança diária do aluguel ainda não existe: depende de um sistema
+  de dinheiro/carteira.
 
 ## API HTTP
 
@@ -268,7 +281,8 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |
-| `PATCH /api/residential-buildings/:id/work-settings` | Criador, obra em andamento | Valida e grava salário e carga horária diária. |
+| `PATCH /api/residential-buildings/:id/work-settings` | Criador, obra em andamento | Valida e grava salário diário e carga horária (4–14 h). |
+| `PATCH /api/residential-buildings/:id/rent` | Criador | Valida e grava o aluguel por pessoa (≥ C$ 1). |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |
 
 Falhas de validação são respostas HTTP explícitas; indisponibilidade de banco,
@@ -284,8 +298,10 @@ de sucesso.
 - `city_zones` guarda os retângulos municipais, com cascata ao excluir a cidade.
 - `road_tiles` guarda uma linha por tile, referência à cidade e autoria.
 - `residential_buildings` guarda tipo, footprint, cidade, status, autoria e
-  horários de início/conclusão, `wage` e `work_hours_per_day` (colunas
-  adicionadas com `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`); excluir a cidade
+  horários de início/conclusão, `wage`, `work_hours_per_day`, `rent` e
+  `occupants` (colunas
+  adicionadas com `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, assim como
+  `world_state.last_immigration_day`); excluir a cidade
   remove suas residências por cascata.
 - A tabela `neon_auth."user"` é gerenciada pelo Neon Auth, não pelo esquema do
   jogo.

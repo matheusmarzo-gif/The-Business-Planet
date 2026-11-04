@@ -68,7 +68,9 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
     typeof building.startedAt === 'string' &&
     (building.completedAt === null || typeof building.completedAt === 'string') &&
     Number.isInteger(building.wage) &&
-    Number.isInteger(building.workHoursPerDay)
+    Number.isInteger(building.workHoursPerDay) &&
+    Number.isInteger(building.rent) &&
+    Number.isInteger(building.occupants)
   );
 }
 

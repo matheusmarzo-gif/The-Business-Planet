@@ -26,6 +26,7 @@ import {
   MAX_CITY_ZONES,
 } from './types/city';
 import {
+  DEFAULT_RENT,
   DEFAULT_WAGE,
   DEFAULT_WORK_HOURS,
   RESIDENCES,
@@ -136,7 +137,9 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'insufficient_materials') {
           error = 'Você não possui materiais suficientes para iniciar essa construção.';
         } else if (body.error === 'invalid_work_settings') {
-          error = 'Informe um salário (0 a 100.000) e uma carga horária de 1 a 24 horas.';
+          error = 'Informe um salário (0 a 100.000) e uma carga horária de 4 a 14 horas.';
+        } else if (body.error === 'invalid_rent') {
+          error = 'O aluguel deve ser um número inteiro de C$ 1 a C$ 100.000.';
         } else if (body.error === 'building_already_complete') {
           error = 'Essa construção já foi concluída.';
         } else if (body.error === 'building_not_found') {
@@ -320,6 +323,25 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     } catch (error) {
       setWorkSettingsError(
         error instanceof Error ? error.message : 'Não foi possível salvar as configurações.',
+      );
+    } finally {
+      setIsSavingWorkSettings(false);
+    }
+  };
+  const saveRent = async (buildingId: string, rent: number) => {
+    setIsSavingWorkSettings(true);
+    setWorkSettingsError('');
+    try {
+      const building = await cityRequest<ResidentialBuilding>(
+        `/api/residential-buildings/${buildingId}/rent`,
+        { method: 'PATCH', body: JSON.stringify({ rent }) },
+      );
+      setResidentialBuildings((current) =>
+        current.map((item) => (item.id === building.id ? building : item)),
+      );
+    } catch (error) {
+      setWorkSettingsError(
+        error instanceof Error ? error.message : 'Não foi possível salvar o aluguel.',
       );
     } finally {
       setIsSavingWorkSettings(false);
@@ -532,6 +554,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       completedAt: null,
       wage: DEFAULT_WAGE,
       workHoursPerDay: DEFAULT_WORK_HOURS,
+      rent: DEFAULT_RENT,
+      occupants: 0,
     };
     setPendingResidentialBuildings((current) => [...current, pending]);
     setResidencePlacementMessage('');
@@ -862,6 +886,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             isSaving={isSavingWorkSettings}
             error={workSettingsError}
             onSave={(settings) => void saveWorkSettings(selectedResidence.id, settings)}
+            onSaveRent={(rent) => void saveRent(selectedResidence.id, rent)}
             onClose={() => setSelectedResidenceId(null)}
           />
         )}

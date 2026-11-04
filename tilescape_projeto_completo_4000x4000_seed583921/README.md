@@ -214,8 +214,13 @@ A barra lateral com dados do mundo foi removida. Clique em uma residência (fora
 dos modos de construção e demolição) para abrir o painel lateral: residências
 concluídas mostram ocupantes, capacidade, técnica, saúde, felicidade, empregados
 e renda média (valores fixos por enquanto); obras mostram Work Points, empregados
-e permitem ao dono editar o salário ofertado (por hora) e a carga horária por
-dia (1 a 24 h). Clique em outro ponto do mapa ou em × para fechar.
+e permitem ao dono editar o salário ofertado (C$ por dia de trabalho) e a carga
+horária por dia (4 a 14 h). O dono também define o aluguel por pessoa (mínimo
+C$ 1) da residência. Todo dia às 00:00 do reino, cidades com menos de 1.000
+habitantes recebem 40 imigrantes, que ocupam as residências concluídas mais
+baratas com vaga (empate: maior apreço). A população da cidade é a soma dos
+ocupantes das suas residências. A cobrança do aluguel ainda não é aplicada, pois
+o jogo não tem dinheiro dos jogadores. Clique em outro ponto do mapa ou em × para fechar.
 
 Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.

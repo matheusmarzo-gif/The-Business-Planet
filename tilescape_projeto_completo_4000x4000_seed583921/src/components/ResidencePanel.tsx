@@ -1,7 +1,10 @@
 import { FormEvent, useEffect, useState } from 'react';
 import {
+  MAX_RENT,
   MAX_WAGE,
   MAX_WORK_HOURS,
+  MIN_RENT,
+  MIN_WORK_HOURS,
   RESIDENCE_STATS,
   RESIDENCES,
   ResidentialBuilding,
@@ -13,6 +16,7 @@ interface ResidencePanelProps {
   isSaving: boolean;
   error: string;
   onSave: (settings: { wage: number; workHoursPerDay: number }) => void;
+  onSaveRent: (rent: number) => void;
   onClose: () => void;
 }
 
@@ -24,26 +28,33 @@ export default function ResidencePanel({
   isSaving,
   error,
   onSave,
+  onSaveRent,
   onClose,
 }: ResidencePanelProps) {
   const definition = RESIDENCES[building.type];
   const [wage, setWage] = useState(String(building.wage));
   const [hours, setHours] = useState(String(building.workHoursPerDay));
+  const [rent, setRent] = useState(String(building.rent));
 
   useEffect(() => {
     setWage(String(building.wage));
     setHours(String(building.workHoursPerDay));
-  }, [building.id, building.wage, building.workHoursPerDay]);
+    setRent(String(building.rent));
+  }, [building.id, building.wage, building.workHoursPerDay, building.rent]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     onSave({ wage: Number(wage), workHoursPerDay: Number(hours) });
   };
+  const submitRent = (event: FormEvent) => {
+    event.preventDefault();
+    onSaveRent(Number(rent));
+  };
 
   const rows: [string, string][] =
     building.status === 'completed'
       ? [
-          ['Ocupantes atuais', '0'],
+          ['Ocupantes atuais', number.format(building.occupants)],
           ['Máximo de ocupantes', number.format(definition.capacity)],
           ['Técnica média dos trabalhadores', String(RESIDENCE_STATS.skill)],
           ['Saúde dos trabalhadores', String(RESIDENCE_STATS.health)],
@@ -79,7 +90,7 @@ export default function ResidencePanel({
       {building.status === 'under_construction' && (
         <form className="work-settings" onSubmit={submit}>
           <label>
-            Salário ofertado (por hora)
+            Salário ofertado (C$ por dia de trabalho)
             <input
               type="number"
               min={0}
@@ -91,10 +102,10 @@ export default function ResidencePanel({
             />
           </label>
           <label>
-            Carga horária por dia
+            Carga horária por dia (horas)
             <input
               type="number"
-              min={1}
+              min={MIN_WORK_HOURS}
               max={MAX_WORK_HOURS}
               step={1}
               value={hours}
@@ -112,6 +123,28 @@ export default function ResidencePanel({
           {error && <p role="alert">{error}</p>}
         </form>
       )}
+      <form className="work-settings" onSubmit={submitRent}>
+        <label>
+          Aluguel (C$ por pessoa, cobrado às 00:00)
+          <input
+            type="number"
+            min={MIN_RENT}
+            max={MAX_RENT}
+            step={1}
+            value={rent}
+            disabled={!isOwner || isSaving}
+            onChange={(event) => setRent(event.target.value)}
+          />
+        </label>
+        {isOwner ? (
+          <button type="submit" disabled={isSaving}>
+            {isSaving ? 'Salvando…' : 'Salvar aluguel'}
+          </button>
+        ) : (
+          <small>Somente o dono da residência pode editar.</small>
+        )}
+        {building.status === 'completed' && error && <p role="alert">{error}</p>}
+      </form>
     </aside>
   );
 }

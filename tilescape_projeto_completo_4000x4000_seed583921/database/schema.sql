@@ -53,6 +53,13 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS work_hours_per_day SMALLINT NOT NULL DEFAULT 8
   CHECK (work_hours_per_day BETWEEN 1 AND 24);
 
+ALTER TABLE residential_buildings
+  ADD COLUMN IF NOT EXISTS rent INTEGER NOT NULL DEFAULT 10 CHECK (rent BETWEEN 1 AND 100000);
+ALTER TABLE residential_buildings
+  ADD COLUMN IF NOT EXISTS occupants INTEGER NOT NULL DEFAULT 0 CHECK (occupants >= 0);
+ALTER TABLE world_state
+  ADD COLUMN IF NOT EXISTS last_immigration_day DATE;
+
 CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
   ON residential_buildings (city_id);
 

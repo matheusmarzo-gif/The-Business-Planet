@@ -152,6 +152,23 @@ describe('municipal zones', () => {
       );
     });
 
+    it('places rice farms only in rural zones without requiring a road', () => {
+      const ruralCity = {
+        ...residentialCity,
+        zones: [{ id: 'rural', cityId: 'city', type: 'rural' as const, minX: 0, minY: 0, maxX: 300, maxY: 300 }],
+      };
+      const position = { x: 20, y: 20 };
+      assert.equal(getResidencePlacementError('farm_rice', position, [ruralCity], [], [], allLand, map), null);
+      assert.equal(
+        getResidencePlacementError('farm_rice', position, [residentialCity], [], [], allLand, map),
+        'outside_rural_zone',
+      );
+      assert.equal(
+        getResidencePlacementError('house_poor1', position, [ruralCity], [], [{ x: 19, y: 20 }], allLand, map),
+        'outside_urban_zone',
+      );
+    });
+
     it('prevents roads from being built over residential footprints', () => {
       const house: ResidentialBuilding = {
         id: 'house',

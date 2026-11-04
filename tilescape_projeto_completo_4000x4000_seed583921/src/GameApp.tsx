@@ -127,6 +127,8 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Essa residência não existe mais.';
         } else if (body.error === 'outside_urban_zone') {
           error = 'A residência precisa ficar dentro de uma área urbana.';
+        } else if (body.error === 'outside_rural_zone') {
+          error = 'A fazenda precisa ficar dentro de uma área rural.';
         } else if (body.error === 'residence_outside_municipality') {
           error = 'A residência precisa ficar dentro da área municipal.';
         } else if (body.error === 'not_adjacent_to_road') {
@@ -533,7 +535,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setIsDemolitionMode(false);
     setIsPlacingCity(false);
     setIsPlacingRoads(false);
-    setActiveCategory('residencias');
+    setActiveCategory(RESIDENCES[type].kind === 'farm' ? 'fazendas' : 'residencias');
     setResidencePlacementType(type);
     setResidencePlacementMessage('');
     setConstructionMessage('');
@@ -545,6 +547,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       map_bounds: 'A residência precisa caber inteira dentro do mapa.',
       outside_municipality: 'A residência precisa ficar dentro da área municipal.',
       outside_urban_zone: 'A residência precisa ficar inteiramente dentro de uma área urbana.',
+      outside_rural_zone: 'A fazenda precisa ficar inteiramente dentro de uma área rural.',
       water: 'A residência só pode ser construída em terra.',
       building_overlap: 'A residência não pode ocupar o espaço de outra construção.',
       road_overlap: 'A residência não pode ocupar o espaço de uma estrada.',
@@ -1005,9 +1008,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                 <span><strong>Estrada de Terra</strong><small>Clique e arraste para traçar · Somente em áreas municipais</small></span>
               </button>
             </>
-          ) : activeCategory === 'residencias' ? (
+          ) : activeCategory === 'residencias' || activeCategory === 'fazendas' ? (
             <>
-              {Object.values(RESIDENCES).map((residence) => (
+              {Object.values(RESIDENCES)
+                .filter((residence) => residence.kind === (activeCategory === 'fazendas' ? 'farm' : 'residence'))
+                .map((residence) => (
                 <button
                   className={`construction-card${residencePlacementType === residence.type ? ' active' : ''}`}
                   key={residence.type}
@@ -1018,13 +1023,17 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                   <span>
                     <strong>{residence.name}</strong>
                     <small>
-                      {residence.width} × {residence.height} tiles · Capacidade {residence.capacity} pessoas
+                      {residence.width} × {residence.height} tiles ·{' '}
+                      {residence.kind === 'farm'
+                        ? `Até ${residence.maxWorkers} funcionários · Estoque máx. ${residence.stockCapacity} ${residence.stockProduct}`
+                        : `Capacidade ${residence.capacity} pessoas`}
                     </small>
                     <small>
                       Custo: {residence.cost.wood} madeira · {residence.cost.stone} pedra
                     </small>
                     <small>
-                      Apreço local {residence.localAppeal} · {residence.workPoints.toLocaleString('pt-BR')} Work Points
+                      {residence.kind === 'residence' && `Apreço local ${residence.localAppeal} · `}
+                      {residence.workPoints.toLocaleString('pt-BR')} Work Points
                     </small>
                     {residencePlacementType === residence.type && (
                       <small className="construction-selected-hint">

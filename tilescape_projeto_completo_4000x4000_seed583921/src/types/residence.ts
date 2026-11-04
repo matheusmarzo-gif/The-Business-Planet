@@ -2,7 +2,8 @@ import type { CityAssembly } from './city.js';
 import { ASSEMBLY_SIZE, isFootprintInCityZone, MUNICIPAL_AREA_RADIUS } from './city.js';
 import type { RoadTile } from './road.js';
 
-export type ResidenceType = 'house_poor1' | 'house_poor2';
+export type ResidenceType = 'house_poor1' | 'house_poor2' | 'farm_rice';
+export type BuildingKind = 'residence' | 'farm';
 export type ResidentialBuildingStatus = 'under_construction' | 'completed';
 
 export interface ResidenceCost {
@@ -12,6 +13,9 @@ export interface ResidenceCost {
 
 export interface ResidenceDefinition {
   type: ResidenceType;
+  kind: BuildingKind;
+  requiredZone: 'urban' | 'rural';
+  requiresRoad: boolean;
   name: string;
   asset: string;
   width: number;
@@ -21,6 +25,8 @@ export interface ResidenceDefinition {
   cost: ResidenceCost;
   workPoints: number;
   maxWorkers: number;
+  stockProduct?: string;
+  stockCapacity?: number;
 }
 
 export const DEFAULT_WAGE = 10;
@@ -65,6 +71,9 @@ export function parseRent(value: unknown): number | null {
 export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
   house_poor1: {
     type: 'house_poor1',
+    kind: 'residence',
+    requiredZone: 'urban',
+    requiresRoad: true,
     name: 'Residência simples 1',
     asset: '/buildings/residences/house_poor1.png',
     width: 2,
@@ -77,6 +86,9 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
   },
   house_poor2: {
     type: 'house_poor2',
+    kind: 'residence',
+    requiredZone: 'urban',
+    requiresRoad: true,
     name: 'Residência simples 2',
     asset: '/buildings/residences/house_poor2.png',
     width: 3,
@@ -86,6 +98,23 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     cost: { wood: 300, stone: 450 },
     workPoints: 67500,
     maxWorkers: 20,
+  },
+  farm_rice: {
+    type: 'farm_rice',
+    kind: 'farm',
+    requiredZone: 'rural',
+    requiresRoad: false,
+    name: 'Fazenda de arroz',
+    asset: '/buildings/farms/fazenda_arroz.jpg',
+    width: 4,
+    height: 4,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 200, stone: 20 },
+    workPoints: 12000,
+    maxWorkers: 30,
+    stockProduct: 'Arroz',
+    stockCapacity: 300,
   },
 };
 
@@ -111,13 +140,16 @@ export type ResidencePlacementError =
   | 'map_bounds'
   | 'outside_municipality'
   | 'outside_urban_zone'
+  | 'outside_rural_zone'
   | 'water'
   | 'building_overlap'
   | 'road_overlap'
   | 'not_adjacent_to_road';
 
 export function getResidenceDefinition(type: string): ResidenceDefinition | null {
-  if (type === 'house_poor1' || type === 'house_poor2') return RESIDENCES[type];
+  if (type === 'house_poor1' || type === 'house_poor2' || type === 'farm_rice') {
+    return RESIDENCES[type];
+  }
   return null;
 }
 
@@ -172,8 +204,8 @@ export function getResidencePlacementError(
     maxX,
     maxY,
   };
-  if (!isFootprintInCityZone([footprint], city.zones, 'urban')) {
-    return 'outside_urban_zone';
+  if (!isFootprintInCityZone([footprint], city.zones, definition.requiredZone)) {
+    return definition.requiredZone === 'urban' ? 'outside_urban_zone' : 'outside_rural_zone';
   }
 
   const roadKeys = new Set(roads.map((road) => `${road.x},${road.y}`));
@@ -219,5 +251,5 @@ export function getResidencePlacementError(
     }
   }
 
-  return adjacentToRoad ? null : 'not_adjacent_to_road';
+  return adjacentToRoad || !definition.requiresRoad ? null : 'not_adjacent_to_road';
 }

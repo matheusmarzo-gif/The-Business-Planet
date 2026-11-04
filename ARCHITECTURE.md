@@ -221,6 +221,12 @@ mapeamento e verificar todas as curvas.
   apreço local 50, custo de 100 madeiras e 30 pedras, 18.000 Work Points) e
   `house_poor2` (3 × 3, capacidade 32, apreço local 40, custo de 300 madeiras
   e 450 pedras, 67.500 Work Points).
+- `farm_rice` (categoria Fazendas, área rural) usa o mesmo catálogo e a mesma
+  tabela `residential_buildings`: 4 × 4, até 30 funcionários, estoque máximo de
+  300 de Arroz, custo de 200 madeiras e 20 pedras, 12.000 Work Points. Exige
+  zona rural, não exige estrada, não recebe imigrantes e não tem aluguel
+  (`PATCH .../rent` só vale para casas). O CHECK de `building_type` é recriado
+  de forma idempotente no schema. Sprite: `public/buildings/farms/fazenda_arroz.jpg`.
 - O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
   área ocupada deve ficar dentro da cidade e de uma zona urbana, em terra, sem
   sobrepor Assembleia, estrada ou residência, e deve encostar ortogonalmente

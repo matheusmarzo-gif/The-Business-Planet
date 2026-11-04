@@ -228,6 +228,15 @@ baratas com vaga (empate: maior apreço). A população da cidade é a soma dos
 ocupantes das suas residências. A cobrança do aluguel ainda não é aplicada, pois
 o jogo não tem dinheiro dos jogadores. Clique em outro ponto do mapa ou em × para fechar.
 
+### Fazendas
+
+Na categoria **Fazendas**, a **Fazenda de arroz** (4 × 4 tiles, até 30 funcionários,
+estoque máximo de 300 unidades de arroz) custa 200 madeiras e 20 pedras e exige
+12.000 Work Points. Ela só pode ser construída inteiramente em área rural, sem
+sobrepor estradas ou construções; não precisa ficar ao lado de uma estrada. O
+funcionamento é o mesmo das residências (prévia, obra, demolição e painel
+lateral), mas sem moradores nem aluguel; produção e estoque ainda não existem.
+
 Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.
 Validades informadas em anos são convertidas para dias considerando 365 dias

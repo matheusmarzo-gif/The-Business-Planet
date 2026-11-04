@@ -16,7 +16,7 @@ export function allocateImmigrants(
 ): Map<string, number> {
   const additions = new Map<string, number>();
   const candidates = buildings
-    .filter((building) => building.status === 'completed')
+    .filter((building) => building.status === 'completed' && RESIDENCES[building.type].kind === 'residence')
     .sort(
       (a, b) =>
         a.rent - b.rent ||

@@ -39,7 +39,7 @@ CREATE INDEX IF NOT EXISTS city_zones_city_id_idx ON city_zones (city_id);
 
 CREATE TABLE IF NOT EXISTS residential_buildings (
   id UUID PRIMARY KEY,
-  building_type TEXT NOT NULL CHECK (building_type IN ('house_poor1', 'house_poor2')),
+  building_type TEXT NOT NULL,
   tile_x INTEGER NOT NULL CHECK (tile_x BETWEEN 0 AND 3999),
   tile_y INTEGER NOT NULL CHECK (tile_y BETWEEN 0 AND 3999),
   city_id UUID NOT NULL REFERENCES city_assemblies (id) ON DELETE CASCADE,
@@ -65,6 +65,11 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS occupants INTEGER NOT NULL DEFAULT 0 CHECK (occupants >= 0);
 ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS last_immigration_day DATE;
+
+ALTER TABLE residential_buildings
+  DROP CONSTRAINT IF EXISTS residential_buildings_building_type_check,
+  ADD CONSTRAINT residential_buildings_building_type_check
+    CHECK (building_type IN ('house_poor1', 'house_poor2', 'farm_rice'));
 
 CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
   ON residential_buildings (city_id);

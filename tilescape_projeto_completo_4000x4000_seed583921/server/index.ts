@@ -1151,7 +1151,7 @@ async function start() {
       .query<ResidentialBuildingRow>(
         `UPDATE residential_buildings
          SET rent = $3
-         WHERE id = $1 AND created_by = $2
+         WHERE id = $1 AND created_by = $2 AND building_type IN ('house_poor1', 'house_poor2')
          RETURNING ${RESIDENTIAL_COLUMNS}`,
         [request.params.id, userId, rent],
       )

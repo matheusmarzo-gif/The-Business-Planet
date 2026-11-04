@@ -51,28 +51,35 @@ export default function ResidencePanel({
     onSaveRent(Number(rent));
   };
 
+  const isFarm = definition.kind === 'farm';
   const rows: [string, string][] =
-    building.status === 'completed'
+    building.status === 'under_construction'
       ? [
-          ['Ocupantes atuais', number.format(building.occupants)],
-          ['Máximo de ocupantes', number.format(definition.capacity)],
-          ['Técnica média dos trabalhadores', String(RESIDENCE_STATS.skill)],
-          ['Saúde dos trabalhadores', String(RESIDENCE_STATS.health)],
-          ['Felicidade dos trabalhadores', String(RESIDENCE_STATS.happiness)],
-          ['Pessoas empregadas', '0'],
-          ['Renda média dos trabalhadores', '0'],
-        ]
-      : [
           ['Work Points completados', '0'],
           ['Work Points necessários', number.format(definition.workPoints)],
           ['Empregados atuais', '0'],
           ['Máximo de empregados', number.format(definition.maxWorkers)],
-        ];
+        ]
+      : isFarm
+        ? [
+            ['Funcionários atuais', '0'],
+            ['Máximo de funcionários', number.format(definition.maxWorkers)],
+            [`Estoque de ${definition.stockProduct}`, `0 / ${number.format(definition.stockCapacity ?? 0)}`],
+          ]
+        : [
+            ['Ocupantes atuais', number.format(building.occupants)],
+            ['Máximo de ocupantes', number.format(definition.capacity)],
+            ['Técnica média dos trabalhadores', String(RESIDENCE_STATS.skill)],
+            ['Saúde dos trabalhadores', String(RESIDENCE_STATS.health)],
+            ['Felicidade dos trabalhadores', String(RESIDENCE_STATS.happiness)],
+            ['Pessoas empregadas', '0'],
+            ['Renda média dos trabalhadores', '0'],
+          ];
 
   return (
     <aside className="realm-panel">
       <div className="panel-title">
-        <div className="eyebrow">{building.status === 'completed' ? 'RESIDÊNCIA' : 'EM CONSTRUÇÃO'}</div>
+        <div className="eyebrow">{building.status === 'completed' ? (isFarm ? 'FAZENDA' : 'RESIDÊNCIA') : 'EM CONSTRUÇÃO'}</div>
         <h1>{definition.name}</h1>
         <button type="button" className="panel-close" aria-label="Fechar painel" onClick={onClose}>
           ×
@@ -123,6 +130,7 @@ export default function ResidencePanel({
           {error && <p role="alert">{error}</p>}
         </form>
       )}
+      {!isFarm && (
       <form className="work-settings" onSubmit={submitRent}>
         <label>
           Aluguel (C$ por pessoa, cobrado às 00:00)
@@ -145,6 +153,7 @@ export default function ResidencePanel({
         )}
         {building.status === 'completed' && error && <p role="alert">{error}</p>}
       </form>
+      )}
     </aside>
   );
 }

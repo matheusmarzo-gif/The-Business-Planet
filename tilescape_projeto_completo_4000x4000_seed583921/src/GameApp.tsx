@@ -13,6 +13,8 @@ import ConstructionBar, { ConstructionCategory } from './components/Construction
 import CityZoneEditor from './components/CityZoneEditor';
 import ProductCatalog from './components/ProductCatalog';
 import ResidencePanel from './components/ResidencePanel';
+import WarehousePanel from './components/WarehousePanel';
+import type { WarehouseProductSetting } from './types/warehouse';
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
 import { connectToWorld, WorldSnapshot } from './game/worldClient';
@@ -128,7 +130,7 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'outside_urban_zone') {
           error = 'A residência precisa ficar dentro de uma área urbana.';
         } else if (body.error === 'outside_rural_zone') {
-          error = 'A fazenda precisa ficar dentro de uma área rural.';
+          error = 'A construção precisa ficar dentro de uma área rural.';
         } else if (body.error === 'residence_outside_municipality') {
           error = 'A residência precisa ficar dentro da área municipal.';
         } else if (body.error === 'not_adjacent_to_road') {
@@ -143,6 +145,10 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Informe um salário (0 a 100.000) e uma carga horária de 4 a 14 horas.';
         } else if (body.error === 'invalid_rent') {
           error = 'O aluguel deve ser um número inteiro de C$ 1 a C$ 100.000.';
+        } else if (body.error === 'invalid_warehouse_setting') {
+          error = 'Informe estoque desejável e valor inteiros (0 a 1.000.000) e o tipo venda/compra.';
+        } else if (body.error === 'not_a_warehouse') {
+          error = 'Essa construção não é um armazém concluído.';
         } else if (body.error === 'building_already_complete') {
           error = 'Essa construção já foi concluída.';
         } else if (body.error === 'building_not_found') {
@@ -223,6 +229,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isResidenceOwner, setIsResidenceOwner] = useState(false);
   const [isSavingWorkSettings, setIsSavingWorkSettings] = useState(false);
   const [workSettingsError, setWorkSettingsError] = useState('');
+  const [isWarehouseOpen, setIsWarehouseOpen] = useState(false);
+  const [warehouseSettings, setWarehouseSettings] = useState<Map<string, WarehouseProductSetting>>(new Map());
+  const [warehouseError, setWarehouseError] = useState('');
   const [balance, setBalance] = useState<number | null>(null);
   const gameTime = useWorldClock(snapshot);
 
@@ -325,6 +334,41 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       cancelled = true;
     };
   }, [selectedResidenceKey]);
+
+  useEffect(() => {
+    setIsWarehouseOpen(false);
+    setWarehouseError('');
+    setWarehouseSettings(new Map());
+  }, [selectedResidenceKey]);
+
+  const openWarehouse = async (buildingId: string) => {
+    setIsWarehouseOpen(true);
+    setWarehouseError('');
+    try {
+      const result = await cityRequest<{ settings: WarehouseProductSetting[] }>(
+        `/api/residential-buildings/${buildingId}/warehouse`,
+      );
+      setWarehouseSettings(new Map(result.settings.map((setting) => [setting.productId, setting])));
+    } catch (error) {
+      setWarehouseError(error instanceof Error ? error.message : 'Não foi possível carregar o armazém.');
+    }
+  };
+
+  const saveWarehouseSetting = async (buildingId: string, setting: WarehouseProductSetting) => {
+    setIsSavingWorkSettings(true);
+    setWarehouseError('');
+    try {
+      const saved = await cityRequest<WarehouseProductSetting>(
+        `/api/residential-buildings/${buildingId}/warehouse`,
+        { method: 'PUT', body: JSON.stringify(setting) },
+      );
+      setWarehouseSettings((current) => new Map(current).set(saved.productId, saved));
+    } catch (error) {
+      setWarehouseError(error instanceof Error ? error.message : 'Não foi possível salvar o produto.');
+    } finally {
+      setIsSavingWorkSettings(false);
+    }
+  };
 
   const saveWorkSettings = async (
     buildingId: string,
@@ -536,7 +580,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setIsPlacingCity(false);
     setIsPlacingRoads(false);
     setActiveCategory(
-      { farm: 'fazendas', shop: 'comerciais', residence: 'residencias' }[RESIDENCES[type].kind] as ConstructionCategory,
+      {
+        farm: 'fazendas',
+        shop: 'comerciais',
+        residence: 'residencias',
+        warehouse: 'industrias',
+      }[RESIDENCES[type].kind] as ConstructionCategory,
     );
     setResidencePlacementType(type);
     setResidencePlacementMessage('');
@@ -549,7 +598,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       map_bounds: 'A residência precisa caber inteira dentro do mapa.',
       outside_municipality: 'A residência precisa ficar dentro da área municipal.',
       outside_urban_zone: 'A residência precisa ficar inteiramente dentro de uma área urbana.',
-      outside_rural_zone: 'A fazenda precisa ficar inteiramente dentro de uma área rural.',
+      outside_rural_zone: 'A construção precisa ficar inteiramente dentro de uma área rural.',
       water: 'A residência só pode ser construída em terra.',
       building_overlap: 'A residência não pode ocupar o espaço de outra construção.',
       road_overlap: 'A residência não pode ocupar o espaço de uma estrada.',
@@ -913,7 +962,19 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             error={workSettingsError}
             onSave={(settings) => void saveWorkSettings(selectedResidence.id, settings)}
             onSaveRent={(rent) => void saveRent(selectedResidence.id, rent)}
+            onOpenWarehouse={() => void openWarehouse(selectedResidence.id)}
             onClose={() => setSelectedResidenceId(null)}
+          />
+        )}
+        {selectedResidence && selectedResidenceKey && isWarehouseOpen && (
+          <WarehousePanel
+            building={selectedResidence}
+            isOwner={isResidenceOwner}
+            settings={warehouseSettings}
+            isSaving={isSavingWorkSettings}
+            error={warehouseError}
+            onSave={(setting) => void saveWarehouseSetting(selectedResidenceKey, setting)}
+            onClose={() => setIsWarehouseOpen(false)}
           />
         )}
 
@@ -1010,13 +1071,18 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                 <span><strong>Estrada de Terra</strong><small>Clique e arraste para traçar · Somente em áreas municipais</small></span>
               </button>
             </>
-          ) : activeCategory === 'residencias' || activeCategory === 'fazendas' || activeCategory === 'comerciais' ? (
+          ) : activeCategory === 'residencias' ||
+            activeCategory === 'fazendas' ||
+            activeCategory === 'comerciais' ||
+            activeCategory === 'industrias' ? (
             <>
               {Object.values(RESIDENCES)
                 .filter(
                   (residence) =>
                     residence.kind ===
-                    (activeCategory === 'fazendas' ? 'farm' : activeCategory === 'comerciais' ? 'shop' : 'residence'),
+                    { fazendas: 'farm', comerciais: 'shop', industrias: 'warehouse', residencias: 'residence' }[
+                      activeCategory
+                    ],
                 )
                 .map((residence) => (
                 <button
@@ -1030,7 +1096,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                     <strong>{residence.name}</strong>
                     <small>
                       {residence.width} × {residence.height} tiles ·{' '}
-                      {residence.kind !== 'residence'
+                      {residence.kind === 'warehouse'
+                        ? `Até ${residence.maxWorkers} funcionários · Capacidade ${residence.storageCapacityM3} m³ de qualquer produto`
+                        : residence.kind !== 'residence'
                         ? `Até ${residence.maxWorkers} funcionários · Estoque máx. ${residence.stockCapacity} ${residence.stockProduct}`
                         : `Capacidade ${residence.capacity} pessoas`}
                     </small>

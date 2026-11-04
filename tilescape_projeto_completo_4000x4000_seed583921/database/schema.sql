@@ -69,7 +69,16 @@ ALTER TABLE world_state
 ALTER TABLE residential_buildings
   DROP CONSTRAINT IF EXISTS residential_buildings_building_type_check,
   ADD CONSTRAINT residential_buildings_building_type_check
-    CHECK (building_type IN ('house_poor1', 'house_poor2', 'farm_rice', 'shop_rice'));
+    CHECK (building_type IN ('house_poor1', 'house_poor2', 'farm_rice', 'shop_rice', 'warehouse'));
+
+CREATE TABLE IF NOT EXISTS warehouse_product_settings (
+  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL,
+  desired_stock INTEGER NOT NULL DEFAULT 0 CHECK (desired_stock BETWEEN 0 AND 1000000),
+  price INTEGER NOT NULL DEFAULT 0 CHECK (price BETWEEN 0 AND 1000000),
+  mode TEXT NOT NULL DEFAULT 'sell' CHECK (mode IN ('sell', 'buy')),
+  PRIMARY KEY (building_id, product_id)
+);
 
 CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
   ON residential_buildings (city_id);

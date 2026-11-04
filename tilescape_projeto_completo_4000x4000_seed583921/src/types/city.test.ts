@@ -21,6 +21,7 @@ import {
   type ResidentialBuilding,
 } from './residence';
 import { getRoadPlacementError } from './road';
+import { parseWarehouseSetting } from './warehouse';
 
 const city = { centerX: 1000, centerY: 1000 };
 
@@ -187,6 +188,33 @@ describe('municipal zones', () => {
         getResidencePlacementError('shop_rice', position, [{ ...residentialCity, zones: [] }], [], road, allLand, map),
         'outside_urban_zone',
       );
+    });
+
+    it('places warehouses only in rural zones next to a road', () => {
+      const ruralCity = {
+        ...residentialCity,
+        zones: [{ id: 'rural', cityId: 'city', type: 'rural' as const, minX: 0, minY: 0, maxX: 300, maxY: 300 }],
+      };
+      const position = { x: 20, y: 20 };
+      const road = [{ x: 19, y: 20 }];
+      assert.equal(getResidencePlacementError('warehouse', position, [ruralCity], [], road, allLand, map), null);
+      assert.equal(
+        getResidencePlacementError('warehouse', position, [residentialCity], [], road, allLand, map),
+        'outside_rural_zone',
+      );
+      assert.equal(
+        getResidencePlacementError('warehouse', position, [ruralCity], [], [], allLand, map),
+        'not_adjacent_to_road',
+      );
+    });
+
+    it('validates warehouse product settings', () => {
+      const valid = { productId: 'rice', desiredStock: 10, price: 5, mode: 'buy' };
+      assert.deepEqual(parseWarehouseSetting(valid), valid);
+      assert.equal(parseWarehouseSetting({ ...valid, productId: 'unknown' }), null);
+      assert.equal(parseWarehouseSetting({ ...valid, price: -1 }), null);
+      assert.equal(parseWarehouseSetting({ ...valid, desiredStock: 1.5 }), null);
+      assert.equal(parseWarehouseSetting({ ...valid, mode: 'trade' }), null);
     });
 
     it('limits the worker search area to 60 tiles from the building center', () => {

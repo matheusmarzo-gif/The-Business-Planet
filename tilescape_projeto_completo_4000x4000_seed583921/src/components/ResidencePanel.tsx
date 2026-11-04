@@ -18,6 +18,7 @@ interface ResidencePanelProps {
   error: string;
   onSave: (settings: { wage: number; workHoursPerDay: number }) => void;
   onSaveRent: (rent: number) => void;
+  onOpenWarehouse: () => void;
   onClose: () => void;
 }
 
@@ -30,6 +31,7 @@ export default function ResidencePanel({
   error,
   onSave,
   onSaveRent,
+  onOpenWarehouse,
   onClose,
 }: ResidencePanelProps) {
   const definition = RESIDENCES[building.type];
@@ -68,7 +70,9 @@ export default function ResidencePanel({
             ['Funcionários atuais', '0'],
             ['Máximo de funcionários', number.format(definition.maxWorkers)],
             ['Raio de busca de trabalhadores', `${WORKER_SEARCH_RADIUS} tiles`],
-            [`Estoque de ${definition.stockProduct}`, `0 / ${number.format(definition.stockCapacity ?? 0)}`],
+            definition.kind === 'warehouse'
+              ? ['Espaço ocupado', `0 / ${number.format(definition.storageCapacityM3 ?? 0)} m³`]
+              : [`Estoque de ${definition.stockProduct}`, `0 / ${number.format(definition.stockCapacity ?? 0)}`],
           ]
         : [
             ['Ocupantes atuais', number.format(building.occupants)],
@@ -90,7 +94,9 @@ export default function ResidencePanel({
               ? 'FAZENDA'
               : definition.kind === 'shop'
                 ? 'COMÉRCIO'
-                : 'RESIDÊNCIA'}
+                : definition.kind === 'warehouse'
+                  ? 'INDÚSTRIA'
+                  : 'RESIDÊNCIA'}
         </div>
         <h1>{definition.name}</h1>
         <button type="button" className="panel-close" aria-label="Fechar painel" onClick={onClose}>
@@ -106,6 +112,11 @@ export default function ResidencePanel({
           </div>
         ))}
       </dl>
+      {definition.kind === 'warehouse' && building.status === 'completed' && (
+        <button type="button" className="warehouse-open" onClick={onOpenWarehouse}>
+          Produtos e estoque
+        </button>
+      )}
       {building.status === 'under_construction' && (
         <form className="work-settings" onSubmit={submit}>
           <label>

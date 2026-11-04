@@ -228,6 +228,17 @@ baratas com vaga (empate: maior apreço). A população da cidade é a soma dos
 ocupantes das suas residências. A cobrança do aluguel ainda não é aplicada, pois
 o jogo não tem dinheiro dos jogadores. Clique em outro ponto do mapa ou em × para fechar.
 
+### Indústrias
+
+Na categoria **Indústrias**, o **Armazém** (4 × 4 tiles, até 100 funcionários,
+capacidade de 50 m³ para qualquer produto) custa 300 madeiras e 60 pedras e
+exige 20.000 Work Points. Deve ficar em área rural, ao lado de uma estrada. Ao
+clicar em um armazém concluído, use **Produtos e estoque** no painel lateral
+para abrir a lista de todos os produtos com o estoque atual e, para cada um, o
+estoque desejável, o valor e se é de venda ou de compra (somente o dono edita;
+cada linha tem seu botão **Salvar**). O estoque atual ainda é 0, pois o sistema
+de estoque não existe.
+
 ### Comércio
 
 Na categoria **Comerciais**, a **Loja de Arroz** (2 × 2 tiles, até 4 funcionários,

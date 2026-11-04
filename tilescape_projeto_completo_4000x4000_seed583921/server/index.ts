@@ -38,6 +38,7 @@ import {
   type ResidencePlacementError,
 } from '../src/types/residence.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
+import { parseWarehouseSetting } from '../src/types/warehouse.js';
 import {
   allocateImmigrants,
   getCityPopulation,
@@ -1086,6 +1087,95 @@ async function start() {
       })
       .catch((error: unknown) => {
         console.error('Não foi possível consultar o dono da construção:', error);
+        response.status(503).json({ error: 'residence_unavailable' });
+      });
+  });
+  app.get('/api/residential-buildings/:id/warehouse', requireAuth, (request, response) => {
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+
+    void pool
+      .query<{ building_type: string }>(
+        'SELECT building_type FROM residential_buildings WHERE id = $1',
+        [request.params.id],
+      )
+      .then(async ({ rows }) => {
+        if (!rows[0]) {
+          response.status(404).json({ error: 'residence_not_found' });
+          return;
+        }
+        if (rows[0].building_type !== 'warehouse') {
+          response.status(400).json({ error: 'not_a_warehouse' });
+          return;
+        }
+        const settings = await pool.query<{
+          product_id: string;
+          desired_stock: number;
+          price: number;
+          mode: 'sell' | 'buy';
+        }>(
+          `SELECT product_id, desired_stock, price, mode
+           FROM warehouse_product_settings WHERE building_id = $1`,
+          [request.params.id],
+        );
+        response.json({
+          settings: settings.rows.map((row) => ({
+            productId: row.product_id,
+            desiredStock: row.desired_stock,
+            price: row.price,
+            mode: row.mode,
+          })),
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível consultar o armazém:', error);
+        response.status(503).json({ error: 'residence_unavailable' });
+      });
+  });
+  app.put('/api/residential-buildings/:id/warehouse', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const setting = parseWarehouseSetting(request.body);
+    if (!residenceIdPattern.test(request.params.id) || !setting) {
+      response.status(400).json({ error: 'invalid_warehouse_setting' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void pool
+      .query<{ building_type: string; created_by: string; status: string }>(
+        'SELECT building_type, created_by, status FROM residential_buildings WHERE id = $1',
+        [request.params.id],
+      )
+      .then(async ({ rows }) => {
+        const building = rows[0];
+        if (!building) {
+          response.status(404).json({ error: 'residence_not_found' });
+          return;
+        }
+        if (building.building_type !== 'warehouse' || building.status !== 'completed') {
+          response.status(400).json({ error: 'not_a_warehouse' });
+          return;
+        }
+        if (building.created_by !== userId) {
+          response.status(403).json({ error: 'residence_not_owned' });
+          return;
+        }
+        await pool.query(
+          `INSERT INTO warehouse_product_settings (building_id, product_id, desired_stock, price, mode)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (building_id, product_id)
+           DO UPDATE SET desired_stock = EXCLUDED.desired_stock, price = EXCLUDED.price, mode = EXCLUDED.mode`,
+          [request.params.id, setting.productId, setting.desiredStock, setting.price, setting.mode],
+        );
+        response.json(setting);
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível salvar a configuração do armazém:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
   });

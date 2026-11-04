@@ -2,8 +2,8 @@ import type { CityAssembly } from './city.js';
 import { ASSEMBLY_SIZE, isFootprintInCityZone, MUNICIPAL_AREA_RADIUS } from './city.js';
 import type { RoadTile } from './road.js';
 
-export type ResidenceType = 'house_poor1' | 'house_poor2' | 'farm_rice' | 'shop_rice';
-export type BuildingKind = 'residence' | 'farm' | 'shop';
+export type ResidenceType = 'house_poor1' | 'house_poor2' | 'farm_rice' | 'shop_rice' | 'warehouse';
+export type BuildingKind = 'residence' | 'farm' | 'shop' | 'warehouse';
 export type ResidentialBuildingStatus = 'under_construction' | 'completed';
 
 export interface ResidenceCost {
@@ -27,6 +27,7 @@ export interface ResidenceDefinition {
   maxWorkers: number;
   stockProduct?: string;
   stockCapacity?: number;
+  storageCapacityM3?: number;
 }
 
 export const DEFAULT_WAGE = 10;
@@ -145,6 +146,22 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     stockProduct: 'Arroz',
     stockCapacity: 20,
   },
+  warehouse: {
+    type: 'warehouse',
+    kind: 'warehouse',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Armazém',
+    asset: '/buildings/industrial/armazem.png',
+    width: 4,
+    height: 4,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 300, stone: 60 },
+    workPoints: 20000,
+    maxWorkers: 100,
+    storageCapacityM3: 50,
+  },
 };
 
 export const UNDER_CONSTRUCTION_ASSET = '/buildings/em_construcao.png';
@@ -176,7 +193,13 @@ export type ResidencePlacementError =
   | 'not_adjacent_to_road';
 
 export function getResidenceDefinition(type: string): ResidenceDefinition | null {
-  if (type === 'house_poor1' || type === 'house_poor2' || type === 'farm_rice' || type === 'shop_rice') {
+  if (
+    type === 'house_poor1' ||
+    type === 'house_poor2' ||
+    type === 'farm_rice' ||
+    type === 'shop_rice' ||
+    type === 'warehouse'
+  ) {
     return RESIDENCES[type];
   }
   return null;

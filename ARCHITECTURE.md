@@ -221,6 +221,16 @@ mapeamento e verificar todas as curvas.
   apreço local 50, custo de 100 madeiras e 30 pedras, 18.000 Work Points) e
   `house_poor2` (3 × 3, capacidade 32, apreço local 40, custo de 300 madeiras
   e 450 pedras, 67.500 Work Points).
+- `warehouse` (categoria Indústrias, `kind: 'warehouse'`, área rural, estrada
+  adjacente) usa o mesmo catálogo/tabela: 4 × 4, até 100 funcionários,
+  capacidade de 50 m³ para qualquer produto, 300 madeiras, 60 pedras e 20.000
+  Work Points. Sprite `public/buildings/industrial/armazem.png`. As
+  configurações por produto (estoque desejável, valor e tipo venda/compra)
+  ficam em `warehouse_product_settings` (PK `building_id, product_id`, cascata
+  na demolição). `src/types/warehouse.ts` valida os dados no cliente e no
+  servidor. Rotas: `GET /api/residential-buildings/:id/warehouse` (qualquer
+  usuário autenticado) e `PUT` (somente o dono, armazém concluído, um produto
+  por chamada). O estoque atual ainda é fixo em 0 (não há sistema de estoque).
 - `shop_rice` (categoria Comerciais, área urbana, `kind: 'shop'`) também usa o
   catálogo e a tabela `residential_buildings`: 2 × 2, até 4 funcionários,
   estoque máximo de 20 de Arroz, 100 madeiras e 20 pedras, 9.000 Work Points.

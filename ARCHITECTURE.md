@@ -167,10 +167,13 @@ reimplemente as fórmulas separadamente no React e no servidor.
   imediatamente como estado otimista enquanto aguarda a API. A resposta
   autoritativa substitui essa prévia; em caso de falha, os tiles temporários
   são removidos e o erro é mostrado ao jogador.
-- No modo Demolir, clicar em um tile de estrada remove somente aquele tile,
-  sem confirmação. O servidor só permite a exclusão ao jogador indicado em
+- No modo Demolir, clicar em um tile de estrada ou arrastar sobre um trecho
+  remove os tiles atravessados sem confirmação. O cliente envia o caminho em
+  uma chamada; o servidor exclui somente tiles do jogador indicado em
   `created_by`, usa o lock transacional do mundo e publica o novo snapshot de
-  cidades e estradas. A demolição de Assembleias continua pedindo confirmação.
+  cidades e estradas. Pré-visualiza a remoção localmente enquanto aguarda a API;
+  em caso de falha, os tiles reaparecem. A demolição de Assembleias continua
+  pedindo confirmação.
 
 As regras, o caminho ortogonal e o mapeamento de imagens estão em
 `src/types/road.ts`. Não altere a ordenação dos assets sem atualizar esse
@@ -190,6 +193,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `DELETE /api/cities/:id` | Criador da cidade | Demole a Assembleia e remove as estradas da área. |
 | `POST /api/roads` | Master | Valida e grava um caminho de estrada de até 600 tiles. |
 | `DELETE /api/roads/:x/:y` | Criador do tile | Demole um tile de estrada sem confirmação; publica o novo estado. |
+| `DELETE /api/roads` | Autenticado | Demole os tiles próprios de um caminho de até 600 tiles e publica o novo estado. |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |
 
 Falhas de validação são respostas HTTP explícitas; indisponibilidade de banco,

@@ -128,6 +128,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [roads, setRoads] = useState<RoadTile[]>([]);
   const [pendingCities, setPendingCities] = useState<CityAssembly[]>([]);
   const [pendingRoads, setPendingRoads] = useState<RoadTile[]>([]);
+  const [pendingRoadDemolitionKeys, setPendingRoadDemolitionKeys] = useState<string[]>([]);
   const [activeCategory, setActiveCategory] = useState<ConstructionCategory | null>(null);
   const [isDemolitionMode, setIsDemolitionMode] = useState(false);
   const [demolitionMessage, setDemolitionMessage] = useState('');
@@ -180,8 +181,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       const key = `${road.x},${road.y}`;
       if (!byPosition.has(key)) byPosition.set(key, road);
     }
-    return [...byPosition.values()];
-  }, [pendingRoads, roads]);
+    const pendingDemolitions = new Set(pendingRoadDemolitionKeys);
+    return [...byPosition.values()].filter(
+      (road) => !pendingDemolitions.has(`${road.x},${road.y}`),
+    );
+  }, [pendingRoadDemolitionKeys, pendingRoads, roads]);
 
   const mapPosition = useMemo(() => selectedTile ?? hoveredTile, [selectedTile, hoveredTile]);
   const zoomBy = (factor: number) =>
@@ -390,20 +394,38 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
-  const demolishRoad = async (road: RoadTile) => {
+  const demolishRoads = async (roadsToDemolish: RoadTile[]) => {
+    const keys = roadsToDemolish.map((road) => `${road.x},${road.y}`);
+    setPendingRoadDemolitionKeys((current) => [...new Set([...current, ...keys])]);
     setDemolitionMessage('');
     try {
-      await cityRequest<{ x: number; y: number }>(
-        `/api/roads/${road.x}/${road.y}`,
-        { method: 'DELETE' },
+      const { removed } = await cityRequest<{ removed: RoadPosition[] }>(
+        '/api/roads',
+        {
+          method: 'DELETE',
+          body: JSON.stringify({
+            path: roadsToDemolish.map(({ x, y }) => ({ x, y })),
+          }),
+        },
       );
+      const removedKeys = new Set(removed.map((road) => `${road.x},${road.y}`));
       setRoads((current) =>
-        current.filter((tile) => tile.x !== road.x || tile.y !== road.y),
+        current.filter((road) => !removedKeys.has(`${road.x},${road.y}`)),
       );
-      setDemolitionMessage('Estrada de terra demolida.');
-    } catch (error) {
+      setPendingRoadDemolitionKeys((current) =>
+        current.filter((key) => !keys.includes(key)),
+      );
       setDemolitionMessage(
-        error instanceof Error ? error.message : 'Não foi possível demolir essa estrada.',
+        removed.length === roadsToDemolish.length
+          ? `${removed.length === 1 ? 'Estrada demolida.' : `${removed.length} estradas demolidas.`}`
+          : `${removed.length} de ${roadsToDemolish.length} estradas demolidas; só é possível demolir as que você construiu.`,
+      );
+    } catch (error) {
+      setPendingRoadDemolitionKeys((current) =>
+        current.filter((key) => !keys.includes(key)),
+      );
+      setDemolitionMessage(
+        error instanceof Error ? error.message : 'Não foi possível demolir as estradas.',
       );
     }
   };
@@ -454,7 +476,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           onInvalidCityPlacement={handleInvalidCityPlacement}
           onRoadPlace={(path) => void handleRoadPlace(path)}
           onInvalidRoadPlacement={handleInvalidRoadPlacement}
-          onRoadDemolish={(road) => void demolishRoad(road)}
+          onRoadDemolish={(roadsToDemolish) => void demolishRoads(roadsToDemolish)}
           onCityDemolish={(city) => void demolishCity(city)}
         />
         <div className="map-vignette" />
@@ -545,7 +567,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         )}
         {isDemolitionMode && (
           <div className="placement-banner demolition-banner" role="status">
-            {demolitionMessage || 'Clique numa construção ou estrada para demolir. Você só pode demolir o que construiu; estradas são removidas sem confirmação.'}
+            {demolitionMessage || 'Clique numa construção para demoli-la ou clique e arraste pelas estradas. Você só pode demolir o que construiu; estradas não exigem confirmação.'}
             <button
               type="button"
               onClick={() => {

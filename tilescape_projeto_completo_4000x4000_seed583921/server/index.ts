@@ -584,6 +584,68 @@ async function start() {
         response.status(503).json({ error: 'road_creation_unavailable' });
       });
   });
+  app.delete('/api/roads', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const { path, error } = parseRoadPath(request.body);
+    if (!path) {
+      response.status(error === 'path_too_long' ? 413 : 400).json({ error });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void pool.connect().then(async (client) => {
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const removed: RoadPosition[] = [];
+        for (const position of path) {
+          const { rows } = await client.query<{ tile_x: number; tile_y: number }>(
+            `DELETE FROM road_tiles
+             WHERE tile_x = $1 AND tile_y = $2 AND created_by = $3
+             RETURNING tile_x, tile_y`,
+            [position.x, position.y, userId],
+          );
+          if (rows[0]) removed.push({ x: rows[0].tile_x, y: rows[0].tile_y });
+        }
+
+        if (removed.length === 0) {
+          const existing = await client.query(
+            `SELECT 1
+             FROM road_tiles AS road
+             JOIN unnest($1::integer[], $2::integer[]) AS position(x, y)
+               ON road.tile_x = position.x AND road.tile_y = position.y
+             LIMIT 1`,
+            [path.map(({ x }) => x), path.map(({ y }) => y)],
+          );
+          await client.query('COMMIT');
+          response
+            .status(existing.rowCount ? 403 : 404)
+            .json({ error: existing.rowCount ? 'road_not_owned' : 'road_not_found' });
+          return;
+        }
+
+        await client.query('COMMIT');
+        response.json({ removed });
+        void publishCities().catch((publishError: unknown) => {
+          console.error('As estradas foram demolidas, mas a atualização do mundo falhou:', publishError);
+        });
+      } catch (demolitionError) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter a demolição das estradas:', rollbackError);
+        });
+        console.error('Não foi possível demolir as estradas:', demolitionError);
+        response.status(503).json({ error: 'road_demolition_unavailable' });
+      } finally {
+        client.release();
+      }
+    }).catch((connectionError: unknown) => {
+      console.error('Não foi possível iniciar a demolição das estradas:', connectionError);
+      response.status(503).json({ error: 'road_demolition_unavailable' });
+    });
+  });
   app.delete('/api/roads/:x/:y', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);
     const { x, y } = request.params;

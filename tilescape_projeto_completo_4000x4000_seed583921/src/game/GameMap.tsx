@@ -77,7 +77,7 @@ interface GameMapProps {
   onInvalidCityPlacement: (reason: CityPlacementError) => void;
   onRoadPlace: (path: RoadPosition[]) => void;
   onInvalidRoadPlacement: (reason: RoadPlacementError) => void;
-  onRoadDemolish: (road: RoadTile) => void;
+  onRoadDemolish: (roads: RoadTile[]) => void;
   onCityDemolish: (city: CityAssembly) => void;
 }
 
@@ -112,6 +112,7 @@ export function GameMap({
   const draggedRef = useRef(false);
   const roadDrawingRef = useRef(false);
   const roadPathRef = useRef<RoadPosition[]>([]);
+  const roadDemolitionPathRef = useRef<RoadPosition[]>([]);
   const [roadPath, setRoadPath] = useState<RoadPosition[]>([]);
   const [placementPreview, setPlacementPreview] = useState<{ x: number; y: number } | null>(null);
   const landTileIds = useMemo(
@@ -409,6 +410,20 @@ export function GameMap({
       event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
+    if (demolitionMode && event.button === 0) {
+      const tile = getTile(event);
+      if (!tile) return;
+      dragRef.current = {
+        x: event.clientX,
+        y: event.clientY,
+        cameraX: cameraRef.current.x,
+        cameraY: cameraRef.current.y,
+      };
+      draggedRef.current = false;
+      roadDemolitionPathRef.current = [{ x: tile.x, y: tile.y }];
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
     const currentCamera = cameraRef.current;
     dragRef.current = {
       x: event.clientX,
@@ -432,7 +447,21 @@ export function GameMap({
       }
     }
     const drag = dragRef.current;
-    if (drag && !roadMode) {
+    if (drag && demolitionMode && roadDemolitionPathRef.current.length > 0) {
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3) draggedRef.current = true;
+      if (draggedRef.current && tile) {
+        const path = roadDemolitionPathRef.current;
+        const last = path[path.length - 1];
+        if (last && (last.x !== tile.x || last.y !== tile.y)) {
+          roadDemolitionPathRef.current = [
+            ...path,
+            ...getOrthogonalPath(last, tile),
+          ].slice(0, MAX_ROAD_PATH_TILES);
+        }
+      }
+    } else if (drag && !roadMode) {
       const dx = event.clientX - drag.x;
       const dy = event.clientY - drag.y;
       if (Math.abs(dx) + Math.abs(dy) > 3) draggedRef.current = true;
@@ -492,6 +521,32 @@ export function GameMap({
       dragRef.current = null;
       return;
     }
+    if (demolitionMode && dragRef.current) {
+      const tile = getTile(event);
+      if (draggedRef.current && tile) {
+        const path = roadDemolitionPathRef.current;
+        const last = path[path.length - 1];
+        if (last && (last.x !== tile.x || last.y !== tile.y)) {
+          roadDemolitionPathRef.current = [
+            ...path,
+            ...getOrthogonalPath(last, tile),
+          ].slice(0, MAX_ROAD_PATH_TILES);
+        }
+      }
+      if (draggedRef.current) {
+        const roadKeys = new Set(
+          roadDemolitionPathRef.current.map((position) => `${position.x},${position.y}`),
+        );
+        const roadsToDemolish = roads.filter(
+          (road) => road.cityId !== '' && roadKeys.has(`${road.x},${road.y}`),
+        );
+        if (roadsToDemolish.length > 0) onRoadDemolish(roadsToDemolish);
+        roadDemolitionPathRef.current = [];
+        dragRef.current = null;
+        return;
+      }
+      roadDemolitionPathRef.current = [];
+    }
     if (dragRef.current && !draggedRef.current) {
       const tile = getTile(event);
       if (tile) {
@@ -516,7 +571,7 @@ export function GameMap({
               )
             : undefined;
           if (road) {
-            onRoadDemolish(road);
+            onRoadDemolish([road]);
             dragRef.current = null;
             return;
           }

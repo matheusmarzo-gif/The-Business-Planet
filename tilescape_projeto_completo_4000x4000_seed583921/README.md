@@ -13,6 +13,9 @@ conta para abrir o mapa e conectar ao mundo.
 O jogo também usa **Redis** para controlar a presença dos jogadores e
 distribuir atualizações em tempo real. Portanto, além do banco Neon, crie um
 serviço compatível com Redis, por exemplo o **Key Value** do Render.
+Na tela de entrada, a opção **Esqueci minha senha** envia um link de redefinição
+para o e-mail informado. O link expira após 15 minutos; para concluir a
+redefinição, a autenticação por e-mail deve estar habilitada no Neon Auth.
 
 ### 1. Enviar o projeto ao GitHub
 

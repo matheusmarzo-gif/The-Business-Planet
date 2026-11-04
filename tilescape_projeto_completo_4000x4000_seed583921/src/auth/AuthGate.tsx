@@ -15,11 +15,20 @@ interface AuthGateProps {
   }) => ReactNode;
 }
 
-type AuthMode = 'sign-in' | 'sign-up';
+type AuthMode = 'sign-in' | 'sign-up' | 'forgot-password' | 'reset-password';
 type AuthStatus = 'loading' | 'signed-out' | 'signed-in' | 'error';
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Ocorreu um erro inesperado.';
+}
+
+function getPasswordResetState(): { mode: AuthMode; token: string } {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token') ?? '';
+  return {
+    mode: token || params.get('error') ? 'reset-password' : 'sign-in',
+    token,
+  };
 }
 
 async function getMasterStatus(): Promise<boolean> {
@@ -44,11 +53,17 @@ async function getMasterStatus(): Promise<boolean> {
 export default function AuthGate({ children }: AuthGateProps) {
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
-  const [mode, setMode] = useState<AuthMode>('sign-in');
+  const [resetState] = useState(getPasswordResetState);
+  const [mode, setMode] = useState<AuthMode>(resetState.mode);
+  const [resetToken] = useState(resetState.token);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState(() =>
+    new URLSearchParams(window.location.search).has('error')
+      ? 'Este link de redefinição é inválido ou expirou. Solicite um novo.'
+      : '',
+  );
   const [notice, setNotice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -83,6 +98,34 @@ export default function AuthGate({ children }: AuthGateProps) {
     setNotice('');
 
     try {
+      if (mode === 'forgot-password') {
+        const { error } = await authClient.requestPasswordReset({
+          email,
+          redirectTo: `${window.location.origin}/?view=reset-password`,
+        });
+        if (error) throw error;
+        setNotice(
+          'Se este e-mail estiver cadastrado, enviaremos um link para redefinir a senha. Verifique sua caixa de entrada.',
+        );
+        return;
+      }
+
+      if (mode === 'reset-password') {
+        if (!resetToken) {
+          throw new Error('Este link de redefinição é inválido ou expirou. Solicite um novo.');
+        }
+        const result = await authClient.resetPassword({
+          newPassword: password,
+          token: resetToken,
+        });
+        if (result.error) throw result.error;
+        window.history.replaceState({}, '', window.location.pathname);
+        setPassword('');
+        setMode('sign-in');
+        setNotice('Senha redefinida com sucesso. Entre com sua nova senha.');
+        return;
+      }
+
       const result =
         mode === 'sign-up'
           ? await authClient.signUp.email({ email, password, name })
@@ -126,7 +169,7 @@ export default function AuthGate({ children }: AuthGateProps) {
     }
   };
 
-  if (status === 'signed-in' && user) {
+  if (status === 'signed-in' && user && mode !== 'reset-password') {
     return children({ user, onSignOut: handleSignOut, signOutError: errorMessage });
   }
 
@@ -150,7 +193,11 @@ export default function AuthGate({ children }: AuthGateProps) {
         <p className="auth-description">
           {mode === 'sign-up'
             ? 'Crie uma conta para explorar as terras do reino.'
-            : 'Entre para continuar sua jornada pelas terras do reino.'}
+            : mode === 'forgot-password'
+              ? 'Informe seu e-mail cadastrado para receber um link de redefinição.'
+              : mode === 'reset-password'
+                ? 'Escolha uma nova senha para sua conta.'
+                : 'Entre para continuar sua jornada pelas terras do reino.'}
         </p>
 
         {status === 'error' && (
@@ -167,44 +214,68 @@ export default function AuthGate({ children }: AuthGateProps) {
         {notice && <p className="auth-message auth-notice" role="status">{notice}</p>}
 
         <form className="auth-form" onSubmit={handleSubmit}>
-          {mode === 'sign-up' && (
+          {mode === 'reset-password' ? (
             <label>
-              Nome
+              Nova senha
               <input
-                autoComplete="name"
+                autoComplete="new-password"
+                type="password"
+                minLength={8}
+                maxLength={128}
                 required
-                value={name}
-                onChange={(event) => setName(event.target.value)}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
               />
             </label>
+          ) : (
+            <>
+            {mode === 'sign-up' && (
+              <label>
+                Nome
+                <input
+                  autoComplete="name"
+                  required
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </label>
+            )}
+            <label>
+              E-mail
+              <input
+                autoComplete="email"
+                type="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+            {(mode === 'sign-in' || mode === 'sign-up') && (
+              <label>
+                Senha
+                <input
+                  autoComplete={mode === 'sign-up' ? 'new-password' : 'current-password'}
+                  type="password"
+                  minLength={8}
+                  maxLength={128}
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </label>
+            )}
+          </>
           )}
-          <label>
-            E-mail
-            <input
-              autoComplete="email"
-              type="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
-          <label>
-            Senha
-            <input
-              autoComplete={mode === 'sign-up' ? 'new-password' : 'current-password'}
-              type="password"
-              minLength={8}
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
           <button className="auth-submit" type="submit" disabled={isSubmitting || status === 'error'}>
-            {isSubmitting
-              ? 'Aguarde…'
-              : mode === 'sign-up'
-                ? 'Criar conta'
-                : 'Entrar'}
+          {isSubmitting
+            ? 'Aguarde…'
+            : mode === 'sign-up'
+              ? 'Criar conta'
+              : mode === 'forgot-password'
+                ? 'Enviar link de redefinição'
+                : mode === 'reset-password'
+                  ? 'Salvar nova senha'
+                  : 'Entrar'}
           </button>
         </form>
 
@@ -213,13 +284,33 @@ export default function AuthGate({ children }: AuthGateProps) {
           type="button"
           disabled={isSubmitting}
           onClick={() => {
-            setMode(mode === 'sign-up' ? 'sign-in' : 'sign-up');
+          setMode(
+            mode === 'sign-up' || mode === 'forgot-password' || mode === 'reset-password'
+              ? 'sign-in'
+              : 'sign-up',
+          );
+          setErrorMessage('');
+          setNotice('');
+          }}
+        >
+          {mode === 'sign-up' || mode === 'forgot-password' || mode === 'reset-password'
+          ? 'Voltar para entrar'
+          : 'Ainda não tem conta? Criar conta'}
+        </button>
+        {mode === 'sign-in' && (
+          <button
+          className="auth-mode-toggle"
+          type="button"
+          disabled={isSubmitting}
+          onClick={() => {
+            setMode('forgot-password');
             setErrorMessage('');
             setNotice('');
           }}
-        >
-          {mode === 'sign-up' ? 'Já tem uma conta? Entrar' : 'Ainda não tem conta? Criar conta'}
-        </button>
+          >
+          Esqueci minha senha
+          </button>
+        )}
       </section>
     </main>
   );

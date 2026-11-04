@@ -31,6 +31,18 @@ export function getHoursFactor(hours: number): number {
   return 1 - 0.5 * deviation * deviation;
 }
 
+// Fator de descanso: 1,2 com 4 h, 1 com 8 h e 0,8 com 14 h (linear entre os pontos).
+export function getRestFactor(hours: number): number {
+  return hours <= 8 ? 1.2 - (0.2 * (hours - 4)) / 4 : 1 - (0.2 * (hours - 8)) / 6;
+}
+
+export const WORK_POINTS_RATE = 12.5;
+
+// Work Points diários de um funcionário (saúde e felicidade em 0–100).
+export function getDailyWorkPoints(hours: number, health: number, happiness: number): number {
+  return WORK_POINTS_RATE * hours * (health / 100) * (happiness / 100) * getRestFactor(hours);
+}
+
 export function getWorkBenefit(openJobs: number, wage: number, hours: number): number {
   const factor = getHoursFactor(hours);
   return (openJobs * factor * factor * wage) / hours;

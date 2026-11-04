@@ -268,7 +268,11 @@ são distribuídos: cada construção com vagas tem um *benefício*
 `vagas × F_H² × salário / carga horária`, com `F_H = 1 − 0,5·(|H−8|/6)²`, e as
 residências empregam seus moradores (dentro de 60 tiles) do maior benefício para
 o menor, atualizando as vagas a cada preenchimento. Às 00:00 o dono paga o
-salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). O
+salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). Também
+às 00:00 cada funcionário de uma obra gera
+`12,5 × horas × saúde/100 × felicidade/100 × fator de descanso` Work Points (fator
+1,2 com 4 h, 1 com 8 h, 0,8 com 14 h); a obra termina sozinha ao atingir o total
+necessário. Saúde e felicidade ainda são fixas em 100. O
 painel mostra funcionários atuais, desejados e vagas; nas residências, as
 pessoas empregadas.
 

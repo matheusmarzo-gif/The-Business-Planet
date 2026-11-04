@@ -73,7 +73,9 @@ ALTER TABLE world_state
 ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS desired_workers INTEGER NOT NULL DEFAULT 0 CHECK (desired_workers >= 0);
 
--- O caixa dos jogadores pode ficar negativo (folha de pagamento).
+ALTER TABLE residential_buildings
+  ADD COLUMN IF NOT EXISTS work_points_done DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (work_points_done >= 0);
+ pode ficar negativo (folha de pagamento).
 ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_check;
 
 ALTER TABLE residential_buildings

@@ -629,6 +629,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       rent: DEFAULT_RENT,
       occupants: 0,
       desiredWorkers: 0,
+      workPointsDone: 0,
       employed: 0,
     };
     setPendingResidentialBuildings((current) => [...current, pending]);

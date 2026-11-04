@@ -21,7 +21,7 @@ import {
   type ResidentialBuilding,
 } from './residence';
 import { getRoadPlacementError } from './road';
-import { allocateWorkers, getHoursFactor, getPayroll, getWorkBenefit } from './employment';
+import { allocateWorkers, getDailyWorkPoints, getHoursFactor, getPayroll, getRestFactor, getWorkBenefit } from './employment';
 import { parseWarehouseSetting } from './warehouse';
 
 const city = { centerX: 1000, centerY: 1000 };
@@ -56,6 +56,12 @@ describe('work settings', () => {
     assert.equal(getHoursFactor(14), 0.5);
     assert.equal(getHoursFactor(2), 0.5);
     assert.equal(getWorkBenefit(10, 80, 8), 100);
+    assert.equal(getRestFactor(4), 1.2);
+    assert.equal(getRestFactor(8), 1);
+    assert.ok(Math.abs(getRestFactor(14) - 0.8) < 1e-9);
+    assert.equal(getDailyWorkPoints(8, 100, 100), 100);
+    assert.equal(getDailyWorkPoints(8, 50, 100), 50);
+    assert.ok(Math.abs(getDailyWorkPoints(4, 100, 100) - 60) < 1e-9);
     const workplace = (id: string, x: number, wage: number, desiredWorkers: number) => ({
       id,
       type: 'farm_rice' as const,
@@ -288,6 +294,7 @@ describe('municipal zones', () => {
         rent: 10,
         occupants: 0,
         desiredWorkers: 0,
+        workPointsDone: 0,
         employed: 0,
       };
 
@@ -326,6 +333,7 @@ describe('municipal zones', () => {
         rent: 10,
         occupants: 0,
         desiredWorkers: 0,
+        workPointsDone: 0,
         employed: 0,
       };
       assert.equal(

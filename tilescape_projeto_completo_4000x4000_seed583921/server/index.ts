@@ -33,12 +33,13 @@ import {
   parseRent,
   parseWorkSettings,
   RESIDENCES,
+  RESIDENCE_STATS,
   type ResidentialBuilding,
   type ResidenceType,
   type ResidencePlacementError,
 } from '../src/types/residence.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
-import { allocateWorkers, getPayroll, type JobAssignment } from '../src/types/employment.js';
+import { allocateWorkers, getDailyWorkPoints, getPayroll, type JobAssignment } from '../src/types/employment.js';
 import { parseWarehouseSetting } from '../src/types/warehouse.js';
 import {
   allocateImmigrants,
@@ -112,10 +113,11 @@ type ResidentialBuildingRow = {
   rent: number;
   occupants: number;
   desired_workers: number;
+  work_points_done: number;
   employed: number;
 };
 
-const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers,
+const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done,
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
    WHERE j.workplace_id = residential_buildings.id OR j.residence_id = residential_buildings.id) AS employed`;
 
@@ -134,6 +136,7 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     rent: row.rent,
     occupants: row.occupants,
     desiredWorkers: row.desired_workers,
+    workPointsDone: row.work_points_done,
     employed: row.employed,
   };
 }
@@ -355,8 +358,16 @@ async function runDailyEmployment(): Promise<boolean> {
     if (state.last_payroll === null) {
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
     } else if (state.last_payroll < state.day) {
-      const { rows: workplaces } = await client.query<{ id: string; created_by: string; wage: number }>(
-        'SELECT id, created_by, wage FROM residential_buildings',
+      const { rows: workplaces } = await client.query<{
+        id: string;
+        created_by: string;
+        wage: number;
+        status: string;
+        building_type: ResidenceType;
+        work_hours_per_day: number;
+        work_points_done: number;
+      }>(
+        'SELECT id, created_by, wage, status, building_type, work_hours_per_day, work_points_done FROM residential_buildings',
       );
       const { rows: assignmentRows } = await client.query<{
         workplace_id: string;
@@ -377,6 +388,29 @@ async function runDailyEmployment(): Promise<boolean> {
            ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance - $2::bigint`,
           [ownerId, amount, STARTING_BALANCE],
         );
+      }
+      // Work Points diários das obras: cada funcionário contribui conforme a carga horária.
+      const workers = new Map<string, number>();
+      for (const row of assignmentRows) {
+        workers.set(row.workplace_id, (workers.get(row.workplace_id) ?? 0) + row.count);
+      }
+      for (const site of workplaces) {
+        const count = workers.get(site.id) ?? 0;
+        if (site.status !== 'under_construction' || count === 0) continue;
+        const total =
+          site.work_points_done +
+          count * getDailyWorkPoints(site.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness);
+        const needed = RESIDENCES[site.building_type].workPoints;
+        await client.query(
+          `UPDATE residential_buildings
+           SET work_points_done = LEAST($2::double precision, $3::double precision),
+               status = CASE WHEN $2::double precision >= $3::double precision THEN 'completed' ELSE status END,
+               completed_at = CASE WHEN $2::double precision >= $3::double precision
+                                   THEN clock_timestamp() ELSE completed_at END
+           WHERE id = $1`,
+          [site.id, total, needed],
+        );
+        changed = true;
       }
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
     }

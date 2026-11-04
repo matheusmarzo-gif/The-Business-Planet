@@ -73,7 +73,7 @@ export default function ResidencePanel({
   const rows: [string, string][] =
     building.status === 'under_construction'
       ? [
-          ['Work Points completados', '0'],
+          ['Work Points completados', number.format(Math.floor(building.workPointsDone))],
           ['Work Points necessários', number.format(definition.workPoints)],
           ...jobRows,
         ]

@@ -294,6 +294,11 @@ mapeamento e verificar todas as curvas.
   À 00:00 o mesmo job debita de cada dono `salário × empregados` em
   `player_wallets` (o dinheiro some; o saldo pode ficar negativo). Controle
   de idempotência em `world_state.last_job_allocation_day` e `last_payroll_day`.
+  No mesmo job das 00:00, cada obra soma `work_points_done += empregados ×
+  getDailyWorkPoints` (`12,5 · H · saúde/100 · felicidade/100 · fator_descanso`;
+  fator 1,2 em 4 h, 1 em 8 h, 0,8 em 14 h, linear entre eles; saúde e felicidade
+  fixas em 100 por enquanto) e é concluída automaticamente ao atingir os Work
+  Points necessários.
   `employed` em `ResidentialBuilding` é calculado por subquery em
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
 

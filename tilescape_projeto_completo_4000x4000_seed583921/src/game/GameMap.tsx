@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as PIXI from 'pixi.js';
 import { MapGeneratorInstance } from '../utils/mapGenerator';
 import { TileInfo } from '../types/map';
-import { ASSEMBLY_SIZE, CityAssembly, MUNICIPAL_AREA_SIZE } from '../types/city';
+import {
+  ASSEMBLY_SIZE,
+  CityAssembly,
+  CityPlacementError,
+  getCityPlacementError,
+  MUNICIPAL_AREA_SIZE,
+} from '../types/city';
 
 const BASE_TILE_SIZE = 24;
 const ASSEMBLY_ASSET = '/buildings/assembleia.png';
@@ -18,9 +24,11 @@ interface GameMapProps {
   onTileSelect: (tile: TileInfo) => void;
   cities: CityAssembly[];
   placementMode: boolean;
+  placementName: string;
   demolitionMode: boolean;
   onCitySelect: (city: CityAssembly) => void;
   onCityPlace: (center: { x: number; y: number }) => void;
+  onInvalidCityPlacement: (reason: CityPlacementError) => void;
   onCityDemolish: (city: CityAssembly) => void;
 }
 
@@ -32,17 +40,25 @@ export function GameMap({
   onTileSelect,
   cities,
   placementMode,
+  placementName,
   demolitionMode,
   onCitySelect,
   onCityPlace,
+  onInvalidCityPlacement,
   onCityDemolish,
 }: GameMapProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const layerRef = useRef<PIXI.Container | null>(null);
+  const previewLayerRef = useRef<PIXI.Container | null>(null);
   const cameraRef = useRef(camera);
   const dragRef = useRef<{ x: number; y: number; cameraX: number; cameraY: number } | null>(null);
   const draggedRef = useRef(false);
+  const [placementPreview, setPlacementPreview] = useState<{ x: number; y: number } | null>(null);
+  const landTileIds = useMemo(
+    () => new Set(generator.tiles.filter((tile) => tile.category === 'land').map((tile) => tile.id)),
+    [generator],
+  );
 
   useEffect(() => {
     cameraRef.current = camera;
@@ -60,13 +76,17 @@ export function GameMap({
       resizeTo: host,
     });
     const layer = new PIXI.Container();
+    const previewLayer = new PIXI.Container();
     app.stage.addChild(layer);
+    app.stage.addChild(previewLayer);
     host.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
     layerRef.current = layer;
+    previewLayerRef.current = previewLayer;
 
     return () => {
       layerRef.current = null;
+      previewLayerRef.current = null;
       appRef.current = null;
       app.destroy(true, { children: true, texture: false, baseTexture: false });
     };
@@ -160,26 +180,116 @@ export function GameMap({
         assembly.height = ASSEMBLY_SIZE;
         layer.addChild(assembly);
 
-        if (tilePixels >= 4) {
+        if (tilePixels >= 0.5) {
           const label = new PIXI.Text(city.name, {
-            fontFamily: 'Arial',
-            fontSize: 13 / tilePixels,
+            fontFamily: 'Arial, sans-serif',
+            fontSize: 14 / tilePixels,
             fontWeight: 'bold',
             fill: 0xffffff,
-            stroke: 0x182019,
-            strokeThickness: 3 / tilePixels,
+            stroke: 0x101914,
+            strokeThickness: 4 / tilePixels,
+            align: 'center',
+            wordWrap: true,
+            wordWrapWidth: 240 / tilePixels,
           });
+          const labelY = city.centerY - ASSEMBLY_SIZE / 2 - 0.35;
+          const labelContainer = new PIXI.Container();
+          labelContainer.position.set(city.centerX + 0.5, labelY);
           label.anchor.set(0.5, 1);
-          label.position.set(city.centerX + 0.5, city.centerY - ASSEMBLY_SIZE / 2 - 0.2);
-          layer.addChild(label);
+          const labelBackground = new PIXI.Graphics();
+          labelBackground.lineStyle(1 / tilePixels, 0xd5c08b, 0.9);
+          labelBackground.beginFill(0x101914, 0.92);
+          labelBackground.drawRoundedRect(
+            -label.width / 2 - 6 / tilePixels,
+            -label.height - 4 / tilePixels,
+            label.width + 12 / tilePixels,
+            label.height + 8 / tilePixels,
+            4 / tilePixels,
+          );
+          labelBackground.endFill();
+          labelContainer.addChild(labelBackground);
+          labelContainer.addChild(label);
+          layer.addChild(labelContainer);
         }
       }
     }
+
   }, [camera, cities, generator]);
 
   useEffect(() => {
     renderMap();
   }, [renderMap]);
+
+  useEffect(() => {
+    const app = appRef.current;
+    const previewLayer = previewLayerRef.current;
+    if (!app || !previewLayer) return;
+
+    for (const child of previewLayer.removeChildren()) {
+      child.destroy({ children: true, texture: false, baseTexture: false });
+    }
+
+    const tilePixels = BASE_TILE_SIZE * camera.zoom;
+    previewLayer.position.set(camera.x, camera.y);
+    previewLayer.scale.set(tilePixels);
+    if (!placementMode || !placementPreview) return;
+
+    const valid =
+      getCityPlacementError(
+        placementPreview,
+        cities,
+        (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+        generator.config,
+      ) === null;
+    const tint = valid ? 0x55ff88 : 0xff4b55;
+    const footprint = new PIXI.Graphics();
+    footprint.lineStyle(0.12, tint, 1);
+    footprint.beginFill(tint, 0.28);
+    footprint.drawRect(
+      placementPreview.x - Math.floor(ASSEMBLY_SIZE / 2),
+      placementPreview.y - Math.floor(ASSEMBLY_SIZE / 2),
+      ASSEMBLY_SIZE,
+      ASSEMBLY_SIZE,
+    );
+    footprint.endFill();
+    previewLayer.addChild(footprint);
+
+    const preview = new PIXI.Sprite(PIXI.Texture.from(ASSEMBLY_ASSET));
+    preview.position.set(
+      placementPreview.x - Math.floor(ASSEMBLY_SIZE / 2),
+      placementPreview.y - Math.floor(ASSEMBLY_SIZE / 2),
+    );
+    preview.width = ASSEMBLY_SIZE;
+    preview.height = ASSEMBLY_SIZE;
+    preview.tint = tint;
+    preview.alpha = 0.72;
+    previewLayer.addChild(preview);
+
+    if (placementName && tilePixels >= 0.5) {
+      const label = new PIXI.Text(placementName, {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: 14 / tilePixels,
+        fontWeight: 'bold',
+        fill: 0xffffff,
+        stroke: 0x101914,
+        strokeThickness: 4 / tilePixels,
+        align: 'center',
+        wordWrap: true,
+        wordWrapWidth: 240 / tilePixels,
+      });
+      label.anchor.set(0.5, 1);
+      label.position.set(placementPreview.x + 0.5, placementPreview.y - ASSEMBLY_SIZE / 2 - 0.35);
+      previewLayer.addChild(label);
+    }
+  }, [
+    camera,
+    cities,
+    generator,
+    landTileIds,
+    placementMode,
+    placementName,
+    placementPreview,
+  ]);
 
   const getTile = (event: React.PointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -214,7 +324,17 @@ export function GameMap({
       if (Math.abs(dx) + Math.abs(dy) > 3) draggedRef.current = true;
       onCameraChange({ ...cameraRef.current, x: drag.cameraX + dx, y: drag.cameraY + dy });
     }
-    onTileHover(getTile(event));
+    const tile = getTile(event);
+    onTileHover(tile);
+    if (placementMode) {
+      setPlacementPreview((current) =>
+        current?.x === tile?.x && current?.y === tile?.y
+          ? current
+          : tile
+            ? { x: tile.x, y: tile.y }
+            : null,
+      );
+    }
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -222,7 +342,15 @@ export function GameMap({
       const tile = getTile(event);
       if (tile) {
         if (placementMode) {
-          onCityPlace({ x: tile.x, y: tile.y });
+          const center = { x: tile.x, y: tile.y };
+          const reason = getCityPlacementError(
+            center,
+            cities,
+            (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+            generator.config,
+          );
+          if (reason) onInvalidCityPlacement(reason);
+          else onCityPlace(center);
         } else {
           const city = cities.find(
             (candidate) =>
@@ -263,7 +391,10 @@ export function GameMap({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerLeave={() => onTileHover(null)}
+      onPointerLeave={() => {
+        onTileHover(null);
+        setPlacementPreview(null);
+      }}
       onWheel={handleWheel}
     />
   );

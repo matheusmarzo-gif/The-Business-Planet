@@ -1,6 +1,6 @@
-import { BiomeStats, MapConfig, TileDefinition, TileId, TileInfo } from '../types/map';
-import { PerlinNoise } from './perlin';
-import { DEFAULT_TILE_LIST } from './tileAssets';
+import type { BiomeStats, MapConfig, TileDefinition, TileId, TileInfo } from '../types/map.js';
+import { PerlinNoise } from './perlin.js';
+import { DEFAULT_TILE_LIST } from './tileAssets.js';
 
 export interface MapGeneratorInstance {
   config: MapConfig;

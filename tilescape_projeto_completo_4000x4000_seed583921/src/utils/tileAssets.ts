@@ -1,4 +1,4 @@
-import { TileDefinition, TileId } from '../types/map';
+import type { TileDefinition, TileId } from '../types/map.js';
 
 export const DEFAULT_TILES: Record<string, TileDefinition> = {
   water_deep: {

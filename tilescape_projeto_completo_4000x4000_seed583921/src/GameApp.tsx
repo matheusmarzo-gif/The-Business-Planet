@@ -17,24 +17,11 @@ import ConstructionBar, { ConstructionCategory } from './components/Construction
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
 import { connectToWorld, WorldSnapshot } from './game/worldClient';
-import { CityAssembly, MUNICIPAL_AREA_RADIUS } from './types/city';
+import { CityAssembly, CityPlacementError } from './types/city';
 import { TileInfo } from './types/map';
 import { createMapGenerator } from './utils/mapGenerator';
 import { DEFAULT_TILE_LIST } from './utils/tileAssets';
-
-const WORLD_CONFIG = {
-  width: 4000,
-  height: 4000,
-  seed: 583921,
-  scale: 0.008,
-  seaLevel: 0.46,
-  octaves: 4,
-  persistence: 0.5,
-  lacunarity: 2,
-  moistureScale: 0.006,
-  flowerDensity: 0.5,
-  preset: 'continents' as const,
-};
+import { WORLD_CONFIG } from './utils/worldConfig';
 
 const SPAWN = { x: 2000, y: 2000 };
 const BASE_TILE_SIZE = 24;
@@ -76,11 +63,19 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, headers });
   if (!response.ok) {
     let error = 'Não foi possível concluir a operação da cidade.';
+    let errorCode = '';
     try {
       const body: unknown = await response.json();
-      if (typeof body === 'object' && body !== null && 'error' in body) {
-        if (body.error === 'municipal_area_overlap') {
-          error = 'Essa área municipal sobrepõe outra cidade. Escolha um centro mais distante.';
+      if (typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string') {
+        errorCode = body.error;
+        if (body.error === 'map_bounds') {
+          error = 'A área municipal precisa caber inteira dentro do mapa.';
+        } else if (body.error === 'water') {
+          error = 'A Assembleia só pode ser construída totalmente em terra.';
+        } else if (body.error === 'building_overlap') {
+          error = 'Esse local já está ocupado por outra construção.';
+        } else if (body.error === 'municipal_area_overlap') {
+          error = 'A área municipal sobrepõe outra cidade.';
         } else if (body.error === 'master_required') {
           error = 'Somente a conta master pode gerenciar estruturas da prefeitura.';
         } else if (body.error === 'city_not_owned') {
@@ -92,9 +87,16 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
     } catch (parseError) {
       console.error('Não foi possível ler a resposta da cidade:', parseError);
     }
-    throw new Error(error);
+    throw new CityRequestError(error, errorCode);
   }
   return (await response.json()) as T;
+}
+
+class CityRequestError extends Error {
+  constructor(message: string, readonly code: string) {
+    super(message);
+    this.name = 'CityRequestError';
+  }
 }
 
 function useWorldClock(snapshot: WorldSnapshot | null) {
@@ -122,6 +124,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [cityError, setCityError] = useState('');
   const [isCitySaving, setIsCitySaving] = useState(false);
   const [isPlacingCity, setIsPlacingCity] = useState(false);
+  const [cityPlacementMessage, setCityPlacementMessage] = useState('');
   const [camera, setCamera] = useState(() => {
     const zoom = 0.14;
     const mapViewportWidth = Math.max(320, window.innerWidth - getSidePanelWidth(window.innerWidth));
@@ -174,6 +177,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setSelectedCity(null);
     setCityName('Nova cidade');
     setCityError('');
+    setCityPlacementMessage('');
     setIsCreatingCity(true);
     setIsCityModalOpen(true);
   };
@@ -194,24 +198,13 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
     setCityName(trimmedName);
     setCityError('');
+    setCityPlacementMessage('');
     setIsCityModalOpen(false);
     setIsPlacingCity(true);
   };
 
   const handleCityPlace = async (center: { x: number; y: number }) => {
     if (!user.isMaster) return;
-    if (
-      center.x < MUNICIPAL_AREA_RADIUS ||
-      center.y < MUNICIPAL_AREA_RADIUS ||
-      center.x >= WORLD_CONFIG.width - MUNICIPAL_AREA_RADIUS ||
-      center.y >= WORLD_CONFIG.height - MUNICIPAL_AREA_RADIUS
-    ) {
-      setCityError('A área de 303 × 303 tiles precisa caber inteira dentro do mapa.');
-      setIsCityModalOpen(true);
-      setIsPlacingCity(false);
-      return;
-    }
-
     setIsCitySaving(true);
     setCityError('');
     try {
@@ -226,13 +219,30 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setIsPlacingCity(false);
       setIsCityModalOpen(true);
     } catch (error) {
-      setCityError(error instanceof Error ? error.message : 'Não foi possível criar a assembleia.');
-      setIsPlacingCity(false);
-      setIsCreatingCity(true);
-      setIsCityModalOpen(true);
+      if (
+        error instanceof CityRequestError &&
+        ['map_bounds', 'water', 'building_overlap', 'municipal_area_overlap'].includes(error.code)
+      ) {
+        setCityPlacementMessage(error.message);
+      } else {
+        setCityError(error instanceof Error ? error.message : 'Não foi possível criar a assembleia.');
+        setIsPlacingCity(false);
+        setIsCreatingCity(true);
+        setIsCityModalOpen(true);
+      }
     } finally {
       setIsCitySaving(false);
     }
+  };
+
+  const handleInvalidCityPlacement = (reason: CityPlacementError) => {
+    const messages: Record<CityPlacementError, string> = {
+      map_bounds: 'A área municipal precisa caber inteira dentro do mapa.',
+      water: 'A Assembleia só pode ser construída totalmente em terra.',
+      building_overlap: 'Esse local já está ocupado por outra construção.',
+      municipal_area_overlap: 'A área municipal sobrepõe outra cidade.',
+    };
+    setCityPlacementMessage(messages[reason]);
   };
 
   const saveCityName = async () => {
@@ -318,12 +328,14 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           camera={camera}
           cities={cities}
           placementMode={isPlacingCity}
+          placementName={cityName}
           demolitionMode={isDemolitionMode}
           onCameraChange={setCamera}
           onTileHover={setHoveredTile}
           onTileSelect={setSelectedTile}
           onCitySelect={openCityDetails}
           onCityPlace={(center) => void handleCityPlace(center)}
+          onInvalidCityPlacement={handleInvalidCityPlacement}
           onCityDemolish={(city) => void demolishCity(city)}
         />
         <div className="map-vignette" />
@@ -396,8 +408,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         <div className="map-credit">UM REINO · UM MUNDO · UMA HISTÓRIA</div>
         {isPlacingCity && (
           <div className="placement-banner" role="status">
-            Clique no centro da assembleia. A área municipal terá 303 × 303 tiles.
-            <button type="button" onClick={() => setIsPlacingCity(false)}>Cancelar</button>
+            {cityPlacementMessage || 'Mova o mouse para ver a prévia. Verde: local válido; vermelho: local inválido.'}
+            <button type="button" onClick={() => {
+              setIsPlacingCity(false);
+              setCityPlacementMessage('');
+            }}>Cancelar</button>
           </div>
         )}
         {isDemolitionMode && (

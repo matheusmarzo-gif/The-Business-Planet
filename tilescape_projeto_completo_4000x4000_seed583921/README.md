@@ -150,9 +150,12 @@ nas variáveis locais e no Render; crie essa conta pelo formulário do jogo para
 ativar a permissão.
 
 A primeira estrutura da Prefeitura é a **Assembleia**. Escolha-a no catálogo,
-informe o nome da cidade e clique no mapa para selecionar o centro. A
-Assembleia ocupa 3 × 3 tiles, e sua área municipal ocupa 303 × 303 tiles.
-Áreas municipais não podem se sobrepor nem ultrapassar os limites do mapa.
+informe o nome da cidade e mova o cursor pelo mapa para ver uma prévia: verde
+indica um local válido e vermelho indica água, outra construção ou uma área
+municipal incompatível. Clique para selecionar o centro. A Assembleia ocupa
+3 × 3 tiles e só pode ser colocada inteiramente em terra; sua área municipal
+ocupa 303 × 303 tiles. Áreas municipais não podem se sobrepor nem ultrapassar
+os limites do mapa, e o servidor valida essas regras antes de salvar.
 Clique na Assembleia para consultar os dados da cidade; a conta master também
 pode editar o nome. População, bem-estar e economia começam em zero.
 Use **Demolir** na barra inferior e clique em uma construção para removê-la.

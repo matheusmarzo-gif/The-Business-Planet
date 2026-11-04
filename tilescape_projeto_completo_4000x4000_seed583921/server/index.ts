@@ -10,7 +10,13 @@ import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
 import { Pool } from 'pg';
 import { createClient } from 'redis';
 import { WebSocket, WebSocketServer } from 'ws';
-import { MUNICIPAL_AREA_RADIUS, MUNICIPAL_AREA_SIZE } from '../src/types/city.js';
+import {
+  type CityPlacementError,
+  getCityPlacementError,
+} from '../src/types/city.js';
+import { DEFAULT_TILE_LIST } from '../src/utils/tileAssets.js';
+import { createMapGenerator } from '../src/utils/mapGenerator.js';
+import { WORLD_CONFIG } from '../src/utils/worldConfig.js';
 
 loadDotEnv({
   path: [resolve(process.cwd(), '.env.local'), resolve(process.cwd(), '.env')],
@@ -18,7 +24,15 @@ loadDotEnv({
 
 const PORT = Number(process.env.PORT ?? 3001);
 const TIME_SCALE = 15;
-const MAP = { width: 4000, height: 4000, seed: 583921 };
+const MAP = {
+  width: WORLD_CONFIG.width,
+  height: WORLD_CONFIG.height,
+  seed: WORLD_CONFIG.seed,
+};
+const mapGenerator = createMapGenerator(WORLD_CONFIG, DEFAULT_TILE_LIST);
+const landTileIds = new Set(
+  DEFAULT_TILE_LIST.filter((tile) => tile.category === 'land').map((tile) => tile.id),
+);
 const CLOCK_LEADER_KEY = 'valdora:clock:leader';
 const PRESENCE_KEY = 'valdora:presence';
 const SNAPSHOT_CHANNEL = 'valdora:world:snapshots';
@@ -247,10 +261,10 @@ function parseCityInput(body: unknown): { name: string; centerX: number; centerY
     !Number.isInteger(centerX) ||
     typeof centerY !== 'number' ||
     !Number.isInteger(centerY) ||
-    centerX < MUNICIPAL_AREA_RADIUS ||
-    centerY < MUNICIPAL_AREA_RADIUS ||
-    centerX >= MAP.width - MUNICIPAL_AREA_RADIUS ||
-    centerY >= MAP.height - MUNICIPAL_AREA_RADIUS
+    centerX < 0 ||
+    centerY < 0 ||
+    centerX >= MAP.width ||
+    centerY >= MAP.height
   ) {
     return null;
   }
@@ -260,22 +274,23 @@ function parseCityInput(body: unknown): { name: string; centerX: number; centerY
 async function createCityAssembly(
   city: { name: string; centerX: number; centerY: number },
   userId: string,
-): Promise<CityAssembly | null> {
+): Promise<{ city: CityAssembly | null; error: CityPlacementError | null }> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
-    const overlap = await client.query(
-      `SELECT 1
-       FROM city_assemblies
-       WHERE ABS(center_x - $1) < $3
-         AND ABS(center_y - $2) < $3
-       LIMIT 1`,
-       [city.centerX, city.centerY, MUNICIPAL_AREA_SIZE],
+    const existingCities = await client.query<{ center_x: number; center_y: number }>(
+      `SELECT center_x, center_y FROM city_assemblies`,
     );
-    if (overlap.rowCount) {
+    const placementError = getCityPlacementError(
+      { x: city.centerX, y: city.centerY },
+      existingCities.rows.map((row) => ({ centerX: row.center_x, centerY: row.center_y })),
+      (x, y) => landTileIds.has(mapGenerator.getTileAt(x, y).tileId),
+      WORLD_CONFIG,
+    );
+    if (placementError) {
       await client.query('ROLLBACK');
-      return null;
+      return { city: null, error: placementError };
     }
 
     const { rows } = await client.query<{
@@ -295,13 +310,16 @@ async function createCityAssembly(
     await client.query('COMMIT');
     const row = rows[0];
     return {
-      id: row.id,
-      name: row.name,
-      centerX: row.center_x,
-      centerY: row.center_y,
-      population: row.population,
-      wellbeing: row.wellbeing,
-      economy: row.economy,
+      city: {
+        id: row.id,
+        name: row.name,
+        centerX: row.center_x,
+        centerY: row.center_y,
+        population: row.population,
+        wellbeing: row.wellbeing,
+        economy: row.economy,
+      },
+      error: null,
     };
   } catch (error) {
     await client.query('ROLLBACK').catch((rollbackError: unknown) => {
@@ -384,9 +402,9 @@ async function start() {
     }
 
     void createCityAssembly(city, userId)
-      .then((createdCity) => {
+      .then(({ city: createdCity, error }) => {
         if (!createdCity) {
-          response.status(409).json({ error: 'municipal_area_overlap' });
+          response.status(409).json({ error });
           return;
         }
         response.status(201).json(createdCity);

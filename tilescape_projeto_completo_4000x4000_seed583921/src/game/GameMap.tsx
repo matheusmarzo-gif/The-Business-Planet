@@ -12,9 +12,40 @@ import {
 
 const BASE_TILE_SIZE = 24;
 const ASSEMBLY_ASSET = '/buildings/assembleia.png';
-const SPAWN = { x: 2000, y: 2000 };
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
+
+function createCityLabel(name: string, x: number, y: number): PIXI.Container {
+  const label = new PIXI.Text(name, {
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 14,
+    fontWeight: 'bold',
+    fill: 0xffffff,
+    stroke: 0x101914,
+    strokeThickness: 3,
+    align: 'center',
+    wordWrap: true,
+    wordWrapWidth: 220,
+    breakWords: true,
+  });
+  label.anchor.set(0.5, 1);
+
+  const container = new PIXI.Container();
+  container.position.set(x, y);
+  const background = new PIXI.Graphics();
+  background.lineStyle(1, 0xd5c08b, 0.9);
+  background.beginFill(0x101914, 0.94);
+  background.drawRoundedRect(
+    -label.width / 2 - 6,
+    -label.height - 4,
+    label.width + 12,
+    label.height + 8,
+    4,
+  );
+  background.endFill();
+  container.addChild(background, label);
+  return container;
+}
 
 interface GameMapProps {
   generator: MapGeneratorInstance;
@@ -51,6 +82,7 @@ export function GameMap({
   const appRef = useRef<PIXI.Application | null>(null);
   const layerRef = useRef<PIXI.Container | null>(null);
   const previewLayerRef = useRef<PIXI.Container | null>(null);
+  const labelsLayerRef = useRef<PIXI.Container | null>(null);
   const cameraRef = useRef(camera);
   const dragRef = useRef<{ x: number; y: number; cameraX: number; cameraY: number } | null>(null);
   const draggedRef = useRef(false);
@@ -77,16 +109,20 @@ export function GameMap({
     });
     const layer = new PIXI.Container();
     const previewLayer = new PIXI.Container();
+    const labelsLayer = new PIXI.Container();
     app.stage.addChild(layer);
     app.stage.addChild(previewLayer);
+    app.stage.addChild(labelsLayer);
     host.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
     layerRef.current = layer;
     previewLayerRef.current = previewLayer;
+    labelsLayerRef.current = labelsLayer;
 
     return () => {
       layerRef.current = null;
       previewLayerRef.current = null;
+      labelsLayerRef.current = null;
       appRef.current = null;
       app.destroy(true, { children: true, texture: false, baseTexture: false });
     };
@@ -162,12 +198,6 @@ export function GameMap({
     border.drawRect(0, 0, generator.config.width, generator.config.height);
     layer.addChild(border);
 
-    const marker = new PIXI.Graphics();
-    marker.beginFill(0xf1c87b);
-    marker.lineStyle(0.12, 0x332b1e, 0.95);
-    marker.drawCircle(SPAWN.x + 0.5, SPAWN.y + 0.5, 2.6);
-    marker.endFill();
-    layer.addChild(marker);
     if (tilePixels >= 2) {
       const assemblyTexture = PIXI.Texture.from(ASSEMBLY_ASSET);
       for (const city of cities) {
@@ -179,38 +209,6 @@ export function GameMap({
         assembly.width = ASSEMBLY_SIZE;
         assembly.height = ASSEMBLY_SIZE;
         layer.addChild(assembly);
-
-        if (tilePixels >= 0.5) {
-          const label = new PIXI.Text(city.name, {
-            fontFamily: 'Arial, sans-serif',
-            fontSize: 14 / tilePixels,
-            fontWeight: 'bold',
-            fill: 0xffffff,
-            stroke: 0x101914,
-            strokeThickness: 4 / tilePixels,
-            align: 'center',
-            wordWrap: true,
-            wordWrapWidth: 240 / tilePixels,
-          });
-          const labelY = city.centerY - ASSEMBLY_SIZE / 2 - 0.35;
-          const labelContainer = new PIXI.Container();
-          labelContainer.position.set(city.centerX + 0.5, labelY);
-          label.anchor.set(0.5, 1);
-          const labelBackground = new PIXI.Graphics();
-          labelBackground.lineStyle(1 / tilePixels, 0xd5c08b, 0.9);
-          labelBackground.beginFill(0x101914, 0.92);
-          labelBackground.drawRoundedRect(
-            -label.width / 2 - 6 / tilePixels,
-            -label.height - 4 / tilePixels,
-            label.width + 12 / tilePixels,
-            label.height + 8 / tilePixels,
-            4 / tilePixels,
-          );
-          labelBackground.endFill();
-          labelContainer.addChild(labelBackground);
-          labelContainer.addChild(label);
-          layer.addChild(labelContainer);
-        }
       }
     }
 
@@ -223,15 +221,28 @@ export function GameMap({
   useEffect(() => {
     const app = appRef.current;
     const previewLayer = previewLayerRef.current;
-    if (!app || !previewLayer) return;
+    const labelsLayer = labelsLayerRef.current;
+    if (!app || !previewLayer || !labelsLayer) return;
 
     for (const child of previewLayer.removeChildren()) {
+      child.destroy({ children: true, texture: false, baseTexture: false });
+    }
+    for (const child of labelsLayer.removeChildren()) {
       child.destroy({ children: true, texture: false, baseTexture: false });
     }
 
     const tilePixels = BASE_TILE_SIZE * camera.zoom;
     previewLayer.position.set(camera.x, camera.y);
     previewLayer.scale.set(tilePixels);
+    for (const city of cities) {
+      labelsLayer.addChild(
+        createCityLabel(
+          city.name,
+          camera.x + (city.centerX + 0.5) * tilePixels,
+          camera.y + (city.centerY - ASSEMBLY_SIZE / 2 - 0.35) * tilePixels,
+        ),
+      );
+    }
     if (!placementMode || !placementPreview) return;
 
     const valid =
@@ -265,22 +276,13 @@ export function GameMap({
     preview.alpha = 0.72;
     previewLayer.addChild(preview);
 
-    if (placementName && tilePixels >= 0.5) {
-      const label = new PIXI.Text(placementName, {
-        fontFamily: 'Arial, sans-serif',
-        fontSize: 14 / tilePixels,
-        fontWeight: 'bold',
-        fill: 0xffffff,
-        stroke: 0x101914,
-        strokeThickness: 4 / tilePixels,
-        align: 'center',
-        wordWrap: true,
-        wordWrapWidth: 240 / tilePixels,
-      });
-      label.anchor.set(0.5, 1);
-      label.position.set(placementPreview.x + 0.5, placementPreview.y - ASSEMBLY_SIZE / 2 - 0.35);
-      previewLayer.addChild(label);
-    }
+    labelsLayer.addChild(
+      createCityLabel(
+        placementName,
+        camera.x + (placementPreview.x + 0.5) * tilePixels,
+        camera.y + (placementPreview.y - ASSEMBLY_SIZE / 2 - 0.35) * tilePixels,
+      ),
+    );
   }, [
     camera,
     cities,

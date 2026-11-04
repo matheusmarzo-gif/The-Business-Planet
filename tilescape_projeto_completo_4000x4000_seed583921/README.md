@@ -157,7 +157,8 @@ municipal incompatível. Clique para selecionar o centro. A Assembleia ocupa
 ocupa 303 × 303 tiles. Áreas municipais não podem se sobrepor nem ultrapassar
 os limites do mapa, e o servidor valida essas regras antes de salvar.
 Clique na Assembleia para consultar os dados da cidade; a conta master também
-pode editar o nome. População, bem-estar e economia começam em zero.
+pode editar o nome. O rótulo da cidade mantém tamanho legível mesmo ao mudar o
+zoom. População, bem-estar e economia começam em zero.
 Use **Demolir** na barra inferior e clique em uma construção para removê-la.
 O servidor só permite que o jogador que criou a construção a demola; ao
 demolir uma Assembleia, sua cidade e área municipal também são removidas.

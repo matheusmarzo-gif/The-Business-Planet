@@ -23,6 +23,7 @@ export function getCityPlacementError(
   cities: Pick<CityAssembly, 'centerX' | 'centerY'>[],
   isLandAt: (x: number, y: number) => boolean,
   map: { width: number; height: number },
+  occupiedTiles: { x: number; y: number }[] = [],
 ): CityPlacementError | null {
   if (
     center.x < MUNICIPAL_AREA_RADIUS ||
@@ -37,6 +38,9 @@ export function getCityPlacementError(
   for (let y = center.y - buildingOffset; y <= center.y + buildingOffset; y += 1) {
     for (let x = center.x - buildingOffset; x <= center.x + buildingOffset; x += 1) {
       if (!isLandAt(x, y)) return 'water';
+      if (occupiedTiles.some((tile) => tile.x === x && tile.y === y)) {
+        return 'building_overlap';
+      }
     }
   }
 

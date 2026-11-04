@@ -1,5 +1,6 @@
 import { getAccessToken } from '../auth/authClient';
-import { CityAssembly } from '../types/city';
+import type { CityAssembly } from '../types/city';
+import type { RoadTile } from '../types/road';
 
 export interface WorldSnapshot {
   worldTime: string;
@@ -27,10 +28,21 @@ function isCityAssembly(value: unknown): value is CityAssembly {
   );
 }
 
+function isRoadTile(value: unknown): value is RoadTile {
+  if (typeof value !== 'object' || value === null) return false;
+  const road = value as Record<string, unknown>;
+  return (
+    Number.isInteger(road.x) &&
+    Number.isInteger(road.y) &&
+    typeof road.cityId === 'string'
+  );
+}
+
 export function connectToWorld(
   onSnapshot: (snapshot: WorldSnapshot) => void,
   onConnectionChange: (connected: boolean) => void,
   onCitiesChange: (cities: CityAssembly[]) => void,
+  onRoadsChange: (roads: RoadTile[]) => void,
 ): () => void {
   let socket: WebSocket | null = null;
   let reconnectTimer: number | undefined;
@@ -77,9 +89,13 @@ export function connectToWorld(
           message.type === 'cities' &&
           'cities' in message &&
           Array.isArray(message.cities) &&
-          message.cities.every(isCityAssembly)
+          message.cities.every(isCityAssembly) &&
+          'roads' in message &&
+          Array.isArray(message.roads) &&
+          message.roads.every(isRoadTile)
         ) {
           onCitiesChange(message.cities);
+          onRoadsChange(message.roads);
           return;
         }
         const snapshot = message as WorldSnapshot;

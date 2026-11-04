@@ -9,9 +9,22 @@ import {
   getCityPlacementError,
   MUNICIPAL_AREA_SIZE,
 } from '../types/city';
+import {
+  getOrthogonalPath,
+  getRoadAssetIndex,
+  getRoadPlacementError,
+  MAX_ROAD_PATH_TILES,
+  RoadPlacementError,
+  RoadPosition,
+  RoadTile,
+} from '../types/road';
 
 const BASE_TILE_SIZE = 24;
 const ASSEMBLY_ASSET = '/buildings/assembleia.png';
+const ROAD_ASSETS = Array.from(
+  { length: 6 },
+  (_, index) => `/buildings/roads/grass_dirt${index + 1}.png`,
+);
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
@@ -54,12 +67,16 @@ interface GameMapProps {
   onTileHover: (tile: TileInfo | null) => void;
   onTileSelect: (tile: TileInfo) => void;
   cities: CityAssembly[];
+  roads: RoadTile[];
   placementMode: boolean;
   placementName: string;
+  roadMode: boolean;
   demolitionMode: boolean;
   onCitySelect: (city: CityAssembly) => void;
   onCityPlace: (center: { x: number; y: number }) => void;
   onInvalidCityPlacement: (reason: CityPlacementError) => void;
+  onRoadPlace: (path: RoadPosition[]) => void;
+  onInvalidRoadPlacement: (reason: RoadPlacementError) => void;
   onCityDemolish: (city: CityAssembly) => void;
 }
 
@@ -70,22 +87,30 @@ export function GameMap({
   onTileHover,
   onTileSelect,
   cities,
+  roads,
   placementMode,
   placementName,
+  roadMode,
   demolitionMode,
   onCitySelect,
   onCityPlace,
   onInvalidCityPlacement,
+  onRoadPlace,
+  onInvalidRoadPlacement,
   onCityDemolish,
 }: GameMapProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
   const layerRef = useRef<PIXI.Container | null>(null);
   const previewLayerRef = useRef<PIXI.Container | null>(null);
+  const roadPreviewLayerRef = useRef<PIXI.Container | null>(null);
   const labelsLayerRef = useRef<PIXI.Container | null>(null);
   const cameraRef = useRef(camera);
   const dragRef = useRef<{ x: number; y: number; cameraX: number; cameraY: number } | null>(null);
   const draggedRef = useRef(false);
+  const roadDrawingRef = useRef(false);
+  const roadPathRef = useRef<RoadPosition[]>([]);
+  const [roadPath, setRoadPath] = useState<RoadPosition[]>([]);
   const [placementPreview, setPlacementPreview] = useState<{ x: number; y: number } | null>(null);
   const landTileIds = useMemo(
     () => new Set(generator.tiles.filter((tile) => tile.category === 'land').map((tile) => tile.id)),
@@ -109,19 +134,23 @@ export function GameMap({
     });
     const layer = new PIXI.Container();
     const previewLayer = new PIXI.Container();
+    const roadPreviewLayer = new PIXI.Container();
     const labelsLayer = new PIXI.Container();
     app.stage.addChild(layer);
     app.stage.addChild(previewLayer);
+    app.stage.addChild(roadPreviewLayer);
     app.stage.addChild(labelsLayer);
     host.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
     layerRef.current = layer;
     previewLayerRef.current = previewLayer;
+    roadPreviewLayerRef.current = roadPreviewLayer;
     labelsLayerRef.current = labelsLayer;
 
     return () => {
       layerRef.current = null;
       previewLayerRef.current = null;
+      roadPreviewLayerRef.current = null;
       labelsLayerRef.current = null;
       appRef.current = null;
       app.destroy(true, { children: true, texture: false, baseTexture: false });
@@ -147,7 +176,6 @@ export function GameMap({
 
     layer.position.set(x, y);
     layer.scale.set(tilePixels);
-
     if (tilePixels >= 12) {
       const tileTextures = new Map(
         generator.tiles.map((tile) => [tile.id, PIXI.Texture.from(tile.src)]),
@@ -177,6 +205,24 @@ export function GameMap({
         }
       }
       layer.addChild(graphics);
+    }
+
+    const roadKeys = new Set(roads.map((road) => `${road.x},${road.y}`));
+    const visibleRoads = roads.filter(
+      (road) =>
+        road.x >= minX - 1 &&
+        road.x <= maxX &&
+        road.y >= minY - 1 &&
+        road.y <= maxY,
+    );
+    for (const road of visibleRoads) {
+      const sprite = new PIXI.Sprite(
+        PIXI.Texture.from(ROAD_ASSETS[getRoadAssetIndex(road, roads, roadKeys) - 1]),
+      );
+      sprite.position.set(road.x, road.y);
+      sprite.width = 1.02;
+      sprite.height = 1.02;
+      layer.addChild(sprite);
     }
 
     const municipalAreas = new PIXI.Graphics();
@@ -212,7 +258,7 @@ export function GameMap({
       }
     }
 
-  }, [camera, cities, generator]);
+  }, [camera, cities, generator, roads]);
 
   useEffect(() => {
     renderMap();
@@ -251,6 +297,7 @@ export function GameMap({
         cities,
         (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
         generator.config,
+        roads,
       ) === null;
     const tint = valid ? 0x55ff88 : 0xff4b55;
     const footprint = new PIXI.Graphics();
@@ -293,6 +340,48 @@ export function GameMap({
     placementPreview,
   ]);
 
+  useEffect(() => {
+    if (!roadMode) {
+      roadDrawingRef.current = false;
+      roadPathRef.current = [];
+      setRoadPath([]);
+    }
+  }, [roadMode]);
+
+  useEffect(() => {
+    const previewLayer = roadPreviewLayerRef.current;
+    if (!previewLayer) return;
+    for (const child of previewLayer.removeChildren()) {
+      child.destroy({ children: true, texture: false, baseTexture: false });
+    }
+    const tilePixels = BASE_TILE_SIZE * camera.zoom;
+    previewLayer.position.set(camera.x, camera.y);
+    previewLayer.scale.set(tilePixels);
+    if (!roadMode || roadPath.length === 0) return;
+
+    const combinedRoads = [...roads, ...roadPath.map((position) => ({ ...position, cityId: '' }))];
+    const roadKeys = new Set(combinedRoads.map((road) => `${road.x},${road.y}`));
+    const roadSet = new Set(roads.map((road) => `${road.x},${road.y}`));
+    for (const position of roadPath) {
+      if (roadSet.has(`${position.x},${position.y}`)) continue;
+      const valid =
+        getRoadPlacementError(
+          position,
+          cities,
+          (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+        ) === null;
+      const sprite = new PIXI.Sprite(
+        PIXI.Texture.from(ROAD_ASSETS[getRoadAssetIndex(position, combinedRoads, roadKeys) - 1]),
+      );
+      sprite.position.set(position.x, position.y);
+      sprite.width = 1.02;
+      sprite.height = 1.02;
+      sprite.alpha = 0.75;
+      if (!valid) sprite.tint = 0xff4b55;
+      previewLayer.addChild(sprite);
+    }
+  }, [camera, cities, generator, landTileIds, roadMode, roadPath, roads]);
+
   const getTile = (event: React.PointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
     const currentCamera = cameraRef.current;
@@ -307,6 +396,17 @@ export function GameMap({
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 && event.button !== 1) return;
+    if (roadMode) {
+      if (event.button !== 0) return;
+      const tile = getTile(event);
+      if (!tile) return;
+      dragRef.current = null;
+      roadDrawingRef.current = true;
+      roadPathRef.current = [{ x: tile.x, y: tile.y }];
+      setRoadPath(roadPathRef.current);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
     const currentCamera = cameraRef.current;
     dragRef.current = {
       x: event.clientX,
@@ -319,14 +419,23 @@ export function GameMap({
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const tile = getTile(event);
+    if (roadMode && roadDrawingRef.current && tile && roadPathRef.current.length <= MAX_ROAD_PATH_TILES) {
+      const last = roadPathRef.current[roadPathRef.current.length - 1];
+      if (last) {
+        const segment = getOrthogonalPath(last, tile);
+        const nextPath = [...roadPathRef.current, ...segment];
+        roadPathRef.current = nextPath.slice(0, MAX_ROAD_PATH_TILES + 1);
+        setRoadPath(roadPathRef.current);
+      }
+    }
     const drag = dragRef.current;
-    if (drag) {
+    if (drag && !roadMode) {
       const dx = event.clientX - drag.x;
       const dy = event.clientY - drag.y;
       if (Math.abs(dx) + Math.abs(dy) > 3) draggedRef.current = true;
       onCameraChange({ ...cameraRef.current, x: drag.cameraX + dx, y: drag.cameraY + dy });
     }
-    const tile = getTile(event);
     onTileHover(tile);
     if (placementMode) {
       setPlacementPreview((current) =>
@@ -340,6 +449,47 @@ export function GameMap({
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (roadMode) {
+      if (roadDrawingRef.current) {
+        const tile = getTile(event);
+        if (tile && roadPathRef.current.length <= MAX_ROAD_PATH_TILES) {
+          const last = roadPathRef.current[roadPathRef.current.length - 1];
+          if (last) {
+            roadPathRef.current = [
+              ...roadPathRef.current,
+              ...getOrthogonalPath(last, tile),
+            ].slice(0, MAX_ROAD_PATH_TILES + 1);
+          }
+        }
+        const path = roadPathRef.current;
+        roadDrawingRef.current = false;
+        roadPathRef.current = [];
+        setRoadPath([]);
+        if (path.length > MAX_ROAD_PATH_TILES) {
+          onInvalidRoadPlacement('path_too_long');
+        } else if (path.length > 0) {
+          const invalidPosition = path.find((position) =>
+            getRoadPlacementError(
+              position,
+              cities,
+              (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+            ),
+          );
+          if (invalidPosition) {
+            const reason = getRoadPlacementError(
+              invalidPosition,
+              cities,
+              (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+            );
+            if (reason) onInvalidRoadPlacement(reason);
+          } else {
+            onRoadPlace(path);
+          }
+        }
+      }
+      dragRef.current = null;
+      return;
+    }
     if (dragRef.current && !draggedRef.current) {
       const tile = getTile(event);
       if (tile) {
@@ -350,6 +500,7 @@ export function GameMap({
             cities,
             (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
             generator.config,
+            roads,
           );
           if (reason) onInvalidCityPlacement(reason);
           else onCityPlace(center);
@@ -388,7 +539,7 @@ export function GameMap({
   return (
     <div
       ref={hostRef}
-      className={`game-map${placementMode ? ' placement-mode' : ''}${demolitionMode ? ' demolition-mode' : ''}`}
+      className={`game-map${placementMode ? ' placement-mode' : ''}${roadMode ? ' road-mode' : ''}${demolitionMode ? ' demolition-mode' : ''}`}
       aria-label="Mapa interativo do mundo"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

@@ -13,7 +13,15 @@ import { WebSocket, WebSocketServer } from 'ws';
 import {
   type CityPlacementError,
   getCityPlacementError,
+  MUNICIPAL_AREA_RADIUS,
 } from '../src/types/city.js';
+import {
+  getRoadPlacementError,
+  MAX_ROAD_PATH_TILES,
+  type RoadPlacementError,
+  type RoadPosition,
+  type RoadTile,
+} from '../src/types/road.js';
 import { DEFAULT_TILE_LIST } from '../src/utils/tileAssets.js';
 import { createMapGenerator } from '../src/utils/mapGenerator.js';
 import { WORLD_CONFIG } from '../src/utils/worldConfig.js';
@@ -135,9 +143,20 @@ async function getCities(): Promise<CityAssembly[]> {
   }));
 }
 
+async function getRoadTiles(): Promise<RoadTile[]> {
+  const { rows } = await pool.query<{ tile_x: number; tile_y: number; city_id: string }>(
+    `SELECT tile_x, tile_y, city_id FROM road_tiles ORDER BY tile_y, tile_x`,
+  );
+  return rows.map((row) => ({
+    x: row.tile_x,
+    y: row.tile_y,
+    cityId: row.city_id,
+  }));
+}
+
 async function publishCities() {
-  const cities = await getCities();
-  await redis.publish(CITIES_CHANNEL, JSON.stringify({ type: 'cities', cities }));
+  const [cities, roads] = await Promise.all([getCities(), getRoadTiles()]);
+  await redis.publish(CITIES_CHANNEL, JSON.stringify({ type: 'cities', cities, roads }));
 }
 
 async function advanceClock() {
@@ -271,6 +290,122 @@ function parseCityInput(body: unknown): { name: string; centerX: number; centerY
   return { name, centerX, centerY };
 }
 
+function parseRoadPath(
+  body: unknown,
+):
+  | { path: RoadPosition[]; error: null }
+  | { path: null; error: 'invalid_road' | 'path_too_long' } {
+  if (typeof body !== 'object' || body === null || !('path' in body) || !Array.isArray(body.path)) {
+    return { path: null, error: 'invalid_road' };
+  }
+  if (body.path.length === 0) return { path: null, error: 'invalid_road' };
+  if (body.path.length > MAX_ROAD_PATH_TILES) {
+    return { path: null, error: 'path_too_long' };
+  }
+
+  const path: RoadPosition[] = [];
+  for (const point of body.path) {
+    if (
+      typeof point !== 'object' ||
+      point === null ||
+      !('x' in point) ||
+      !('y' in point) ||
+      typeof point.x !== 'number' ||
+      !Number.isInteger(point.x) ||
+      typeof point.y !== 'number' ||
+      !Number.isInteger(point.y) ||
+      point.x < 0 ||
+      point.y < 0 ||
+      point.x >= MAP.width ||
+      point.y >= MAP.height
+    ) {
+      return { path: null, error: 'invalid_road' };
+    }
+
+    const previous = path[path.length - 1];
+    if (
+      previous &&
+      Math.abs(previous.x - point.x) + Math.abs(previous.y - point.y) !== 1
+    ) {
+      return { path: null, error: 'invalid_road' };
+    }
+    path.push({ x: point.x, y: point.y });
+  }
+
+  return { path, error: null };
+}
+
+async function createRoadPath(
+  path: RoadPosition[],
+  userId: string,
+): Promise<{ roads: RoadTile[] | null; error: RoadPlacementError | null }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const { rows: cityRows } = await client.query<{
+      id: string;
+      center_x: number;
+      center_y: number;
+    }>(`SELECT id, center_x, center_y FROM city_assemblies`);
+    const cities = cityRows.map((city) => ({
+      id: city.id,
+      centerX: city.center_x,
+      centerY: city.center_y,
+    }));
+
+    for (const position of path) {
+      const placementError = getRoadPlacementError(
+        position,
+        cities,
+        (x, y) => landTileIds.has(mapGenerator.getTileAt(x, y).tileId),
+      );
+      if (placementError) {
+        await client.query('ROLLBACK');
+        return { roads: null, error: placementError };
+      }
+
+      const city = cities.find(
+        (candidate) =>
+          Math.abs(candidate.centerX - position.x) <= MUNICIPAL_AREA_RADIUS &&
+          Math.abs(candidate.centerY - position.y) <= MUNICIPAL_AREA_RADIUS,
+      );
+      if (!city) {
+        await client.query('ROLLBACK');
+        return { roads: null, error: 'outside_municipality' };
+      }
+      await client.query(
+        `INSERT INTO road_tiles (tile_x, tile_y, city_id, created_by)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (tile_x, tile_y) DO NOTHING`,
+        [position.x, position.y, city.id, userId],
+      );
+    }
+
+    const { rows: roadRows } = await client.query<{
+      tile_x: number;
+      tile_y: number;
+      city_id: string;
+    }>(`SELECT tile_x, tile_y, city_id FROM road_tiles ORDER BY tile_y, tile_x`);
+    await client.query('COMMIT');
+    return {
+      roads: roadRows.map((road) => ({
+        x: road.tile_x,
+        y: road.tile_y,
+        cityId: road.city_id,
+      })),
+      error: null,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter a construção da estrada:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function createCityAssembly(
   city: { name: string; centerX: number; centerY: number },
   userId: string,
@@ -282,11 +417,15 @@ async function createCityAssembly(
     const existingCities = await client.query<{ center_x: number; center_y: number }>(
       `SELECT center_x, center_y FROM city_assemblies`,
     );
+    const existingRoads = await client.query<{ tile_x: number; tile_y: number }>(
+      `SELECT tile_x, tile_y FROM road_tiles`,
+    );
     const placementError = getCityPlacementError(
       { x: city.centerX, y: city.centerY },
       existingCities.rows.map((row) => ({ centerX: row.center_x, centerY: row.center_y })),
       (x, y) => landTileIds.has(mapGenerator.getTileAt(x, y).tileId),
       WORLD_CONFIG,
+      existingRoads.rows.map((row) => ({ x: row.tile_x, y: row.tile_y })),
     );
     if (placementError) {
       await client.query('ROLLBACK');
@@ -415,6 +554,34 @@ async function start() {
       .catch((error: unknown) => {
         console.error('Não foi possível criar a assembleia:', error);
         response.status(503).json({ error: 'city_creation_unavailable' });
+      });
+  });
+  app.post('/api/roads', requireAuth, requireMasterAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const { path, error } = parseRoadPath(request.body);
+    if (!path) {
+      response.status(error === 'path_too_long' ? 413 : 400).json({ error });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void createRoadPath(path, userId)
+      .then(({ roads, error: placementError }) => {
+        if (!roads) {
+          response.status(409).json({ error: placementError });
+          return;
+        }
+        response.status(201).json(roads);
+        void publishCities().catch((publishError: unknown) => {
+          console.error('A estrada foi construída, mas a atualização do mundo falhou:', publishError);
+        });
+      })
+      .catch((creationError: unknown) => {
+        console.error('Não foi possível construir a estrada:', creationError);
+        response.status(503).json({ error: 'road_creation_unavailable' });
       });
   });
   app.patch('/api/cities/:id', requireAuth, requireMasterAuth, (request, response) => {
@@ -547,7 +714,8 @@ async function start() {
     void registerPresence()
       .then(async () => {
         websocket.send(JSON.stringify(await getSnapshot()));
-        websocket.send(JSON.stringify({ type: 'cities', cities: await getCities() }));
+            const [cities, roads] = await Promise.all([getCities(), getRoadTiles()]);
+            websocket.send(JSON.stringify({ type: 'cities', cities, roads }));
         await publishSnapshot();
         presenceTimer = setInterval(() => {
           void registerPresence().catch((error: unknown) => {

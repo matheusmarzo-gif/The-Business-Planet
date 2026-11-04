@@ -162,6 +162,12 @@ zoom. População, bem-estar e economia começam em zero.
 Use **Demolir** na barra inferior e clique em uma construção para removê-la.
 O servidor só permite que o jogador que criou a construção a demola; ao
 demolir uma Assembleia, sua cidade e área municipal também são removidas.
+Na Prefeitura, selecione **Estrada de Terra** e clique e arraste para desenhar
+um traçado de até 600 tiles. As peças retas e curvas se ajustam aos trechos
+vizinhos; estradas só são aceitas em terra dentro de uma área municipal e não
+podem passar sobre a Assembleia. Apenas a conta master pode construí-las; os
+traçados são salvos e sincronizados com o mundo. Ainda não há demolição
+individual de estradas: elas são removidas quando sua Assembleia é demolida.
 
 ## Sobre o jogo
 
@@ -175,5 +181,5 @@ suas coordenadas e bioma.
 As regras de construções, produção, estoques, trabalho e compra regional estão
 em `RegrasGerais.odt` na pasta do projeto. Esta primeira etapa estabelece o mapa
 e a infraestrutura persistente em tempo real, com a assembleia municipal como
-primeira estrutura fundamental. As outras construções e transações econômicas
-ainda não estão habilitadas.
+primeira estrutura fundamental e estradas de terra como primeira infraestrutura
+urbana. As demais construções e transações econômicas ainda não estão habilitadas.

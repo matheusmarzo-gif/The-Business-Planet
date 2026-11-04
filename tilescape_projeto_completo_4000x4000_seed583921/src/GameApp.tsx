@@ -17,7 +17,8 @@ import ConstructionBar, { ConstructionCategory } from './components/Construction
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
 import { connectToWorld, WorldSnapshot } from './game/worldClient';
-import { CityAssembly, CityPlacementError } from './types/city';
+import type { CityAssembly, CityPlacementError } from './types/city';
+import type { RoadPlacementError, RoadPosition, RoadTile } from './types/road';
 import { TileInfo } from './types/map';
 import { createMapGenerator } from './utils/mapGenerator';
 import { DEFAULT_TILE_LIST } from './utils/tileAssets';
@@ -71,11 +72,17 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         if (body.error === 'map_bounds') {
           error = 'A área municipal precisa caber inteira dentro do mapa.';
         } else if (body.error === 'water') {
-          error = 'A Assembleia só pode ser construída totalmente em terra.';
+          error = 'A construção só pode ser colocada em terra.';
         } else if (body.error === 'building_overlap') {
           error = 'Esse local já está ocupado por outra construção.';
         } else if (body.error === 'municipal_area_overlap') {
           error = 'A área municipal sobrepõe outra cidade.';
+        } else if (body.error === 'outside_municipality') {
+          error = 'A estrada só pode ser construída dentro de uma área municipal.';
+        } else if (body.error === 'path_too_long') {
+          error = 'O trajeto pode ter no máximo 600 tiles. Faça estradas menores.';
+        } else if (body.error === 'invalid_road') {
+          error = 'O trajeto enviado não é válido.';
         } else if (body.error === 'master_required') {
           error = 'Somente a conta master pode gerenciar estruturas da prefeitura.';
         } else if (body.error === 'city_not_owned') {
@@ -114,6 +121,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null);
   const [isOnline, setIsOnline] = useState(false);
   const [cities, setCities] = useState<CityAssembly[]>([]);
+  const [roads, setRoads] = useState<RoadTile[]>([]);
   const [activeCategory, setActiveCategory] = useState<ConstructionCategory | null>(null);
   const [isDemolitionMode, setIsDemolitionMode] = useState(false);
   const [demolitionMessage, setDemolitionMessage] = useState('');
@@ -125,6 +133,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isCitySaving, setIsCitySaving] = useState(false);
   const [isPlacingCity, setIsPlacingCity] = useState(false);
   const [cityPlacementMessage, setCityPlacementMessage] = useState('');
+  const [isPlacingRoads, setIsPlacingRoads] = useState(false);
+  const [roadPlacementMessage, setRoadPlacementMessage] = useState('');
   const [camera, setCamera] = useState(() => {
     const zoom = 0.14;
     const mapViewportWidth = Math.max(320, window.innerWidth - getSidePanelWidth(window.innerWidth));
@@ -146,7 +156,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   }, []);
 
   useEffect(() => {
-    return connectToWorld(setSnapshot, setIsOnline, setCities);
+    return connectToWorld(setSnapshot, setIsOnline, setCities, setRoads);
   }, []);
 
   const mapPosition = useMemo(() => selectedTile ?? hoveredTile, [selectedTile, hoveredTile]);
@@ -174,6 +184,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
 
   const openNewAssembly = () => {
     setActiveCategory(null);
+    setIsPlacingRoads(false);
     setSelectedCity(null);
     setCityName('Nova cidade');
     setCityError('');
@@ -243,6 +254,38 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       municipal_area_overlap: 'A área municipal sobrepõe outra cidade.',
     };
     setCityPlacementMessage(messages[reason]);
+  };
+
+  const startRoadPlacement = () => {
+    setActiveCategory(null);
+    setIsPlacingCity(false);
+    setRoadPlacementMessage('');
+    setIsPlacingRoads(true);
+  };
+
+  const handleInvalidRoadPlacement = (reason: RoadPlacementError) => {
+    const messages: Record<RoadPlacementError, string> = {
+      outside_municipality: 'A estrada só pode ser construída dentro de uma área municipal.',
+      water: 'A estrada só pode ser construída em terra.',
+      building_overlap: 'A estrada não pode passar sobre outra construção.',
+      path_too_long: 'O trajeto pode ter no máximo 600 tiles. Faça estradas menores.',
+    };
+    setRoadPlacementMessage(messages[reason]);
+  };
+
+  const handleRoadPlace = async (path: RoadPosition[]) => {
+    try {
+      const updatedRoads = await cityRequest<RoadTile[]>('/api/roads', {
+        method: 'POST',
+        body: JSON.stringify({ path }),
+      });
+      setRoads(updatedRoads);
+      setRoadPlacementMessage('');
+    } catch (error) {
+      setRoadPlacementMessage(
+        error instanceof Error ? error.message : 'Não foi possível construir a estrada.',
+      );
+    }
   };
 
   const saveCityName = async () => {
@@ -327,8 +370,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           generator={generator}
           camera={camera}
           cities={cities}
+          roads={roads}
           placementMode={isPlacingCity}
           placementName={cityName}
+          roadMode={isPlacingRoads}
           demolitionMode={isDemolitionMode}
           onCameraChange={setCamera}
           onTileHover={setHoveredTile}
@@ -336,6 +381,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           onCitySelect={openCityDetails}
           onCityPlace={(center) => void handleCityPlace(center)}
           onInvalidCityPlacement={handleInvalidCityPlacement}
+          onRoadPlace={(path) => void handleRoadPlace(path)}
+          onInvalidRoadPlacement={handleInvalidRoadPlacement}
           onCityDemolish={(city) => void demolishCity(city)}
         />
         <div className="map-vignette" />
@@ -415,6 +462,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             }}>Cancelar</button>
           </div>
         )}
+        {isPlacingRoads && (
+          <div className="placement-banner" role="status">
+            {roadPlacementMessage || 'Clique e arraste sobre terra dentro de uma área municipal para traçar até 600 tiles de estrada.'}
+            <button type="button" onClick={() => {
+              setIsPlacingRoads(false);
+              setRoadPlacementMessage('');
+            }}>Cancelar</button>
+          </div>
+        )}
         {isDemolitionMode && (
           <div className="placement-banner demolition-banner" role="status">
             {demolitionMessage || 'Clique numa construção para demoli-la. Você só pode demolir construções que criou.'}
@@ -439,10 +495,16 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             </button>
           </div>
           {activeCategory === 'prefeitura' && user.isMaster ? (
-            <button className="construction-card" type="button" onClick={openNewAssembly}>
-              <img src="/buildings/assembleia.png" alt="" />
-              <span><strong>Assembleia</strong><small>Ocupa 3 × 3 tiles · Área municipal 303 × 303</small></span>
-            </button>
+            <>
+              <button className="construction-card" type="button" onClick={openNewAssembly}>
+                <img src="/buildings/assembleia.png" alt="" />
+                <span><strong>Assembleia</strong><small>Ocupa 3 × 3 tiles · Área municipal 303 × 303</small></span>
+              </button>
+              <button className="construction-card" type="button" onClick={startRoadPlacement}>
+                <img src="/buildings/roads/grass_dirt1.png" alt="" />
+                <span><strong>Estrada de Terra</strong><small>Clique e arraste para traçar · Somente em áreas municipais</small></span>
+              </button>
+            </>
           ) : (
             <p className="construction-empty">
               As construções desta categoria serão adicionadas em uma próxima etapa.
@@ -458,11 +520,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           setIsDemolitionMode(false);
           setDemolitionMessage('');
           setIsPlacingCity(false);
+          setIsPlacingRoads(false);
+          setRoadPlacementMessage('');
           setActiveCategory((current) => (current === category ? null : category));
         }}
         onToggleDemolition={() => {
           setActiveCategory(null);
           setIsPlacingCity(false);
+          setIsPlacingRoads(false);
+          setRoadPlacementMessage('');
           setDemolitionMessage('');
           setIsDemolitionMode((current) => !current);
         }}

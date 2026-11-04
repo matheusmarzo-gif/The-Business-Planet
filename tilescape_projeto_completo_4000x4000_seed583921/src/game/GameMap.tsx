@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef } from 'react';
 import * as PIXI from 'pixi.js';
 import { MapGeneratorInstance } from '../utils/mapGenerator';
 import { TileInfo } from '../types/map';
+import { ASSEMBLY_SIZE, CityAssembly, MUNICIPAL_AREA_SIZE } from '../types/city';
 
 const BASE_TILE_SIZE = 24;
+const ASSEMBLY_ASSET = '/buildings/assembleia.png';
 const SPAWN = { x: 2000, y: 2000 };
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -14,6 +16,12 @@ interface GameMapProps {
   onCameraChange: (camera: { x: number; y: number; zoom: number }) => void;
   onTileHover: (tile: TileInfo | null) => void;
   onTileSelect: (tile: TileInfo) => void;
+  cities: CityAssembly[];
+  placementMode: boolean;
+  demolitionMode: boolean;
+  onCitySelect: (city: CityAssembly) => void;
+  onCityPlace: (center: { x: number; y: number }) => void;
+  onCityDemolish: (city: CityAssembly) => void;
 }
 
 export function GameMap({
@@ -22,6 +30,12 @@ export function GameMap({
   onCameraChange,
   onTileHover,
   onTileSelect,
+  cities,
+  placementMode,
+  demolitionMode,
+  onCitySelect,
+  onCityPlace,
+  onCityDemolish,
 }: GameMapProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -109,6 +123,20 @@ export function GameMap({
       layer.addChild(graphics);
     }
 
+    const municipalAreas = new PIXI.Graphics();
+    for (const city of cities) {
+      municipalAreas.beginFill(0xd5c08b, 0.1);
+      municipalAreas.lineStyle(1 / tilePixels, 0xd5c08b, 0.82);
+      municipalAreas.drawRect(
+        city.centerX - Math.floor(MUNICIPAL_AREA_SIZE / 2),
+        city.centerY - Math.floor(MUNICIPAL_AREA_SIZE / 2),
+        MUNICIPAL_AREA_SIZE,
+        MUNICIPAL_AREA_SIZE,
+      );
+      municipalAreas.endFill();
+    }
+    layer.addChild(municipalAreas);
+
     const border = new PIXI.Graphics();
     border.lineStyle(2 / tilePixels, 0xd5c08b, 0.8);
     border.drawRect(0, 0, generator.config.width, generator.config.height);
@@ -120,7 +148,34 @@ export function GameMap({
     marker.drawCircle(SPAWN.x + 0.5, SPAWN.y + 0.5, 2.6);
     marker.endFill();
     layer.addChild(marker);
-  }, [camera, generator]);
+    if (tilePixels >= 2) {
+      const assemblyTexture = PIXI.Texture.from(ASSEMBLY_ASSET);
+      for (const city of cities) {
+        const assembly = new PIXI.Sprite(assemblyTexture);
+        assembly.position.set(
+          city.centerX - Math.floor(ASSEMBLY_SIZE / 2),
+          city.centerY - Math.floor(ASSEMBLY_SIZE / 2),
+        );
+        assembly.width = ASSEMBLY_SIZE;
+        assembly.height = ASSEMBLY_SIZE;
+        layer.addChild(assembly);
+
+        if (tilePixels >= 4) {
+          const label = new PIXI.Text(city.name, {
+            fontFamily: 'Arial',
+            fontSize: 13 / tilePixels,
+            fontWeight: 'bold',
+            fill: 0xffffff,
+            stroke: 0x182019,
+            strokeThickness: 3 / tilePixels,
+          });
+          label.anchor.set(0.5, 1);
+          label.position.set(city.centerX + 0.5, city.centerY - ASSEMBLY_SIZE / 2 - 0.2);
+          layer.addChild(label);
+        }
+      }
+    }
+  }, [camera, cities, generator]);
 
   useEffect(() => {
     renderMap();
@@ -165,7 +220,22 @@ export function GameMap({
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
     if (dragRef.current && !draggedRef.current) {
       const tile = getTile(event);
-      if (tile) onTileSelect(tile);
+      if (tile) {
+        if (placementMode) {
+          onCityPlace({ x: tile.x, y: tile.y });
+        } else {
+          const city = cities.find(
+            (candidate) =>
+              Math.abs(candidate.centerX - tile.x) <= 1 &&
+              Math.abs(candidate.centerY - tile.y) <= 1,
+          );
+          if (city) {
+            if (demolitionMode) onCityDemolish(city);
+            else onCitySelect(city);
+          }
+          else onTileSelect(tile);
+        }
+      }
     }
     dragRef.current = null;
   };
@@ -188,7 +258,7 @@ export function GameMap({
   return (
     <div
       ref={hostRef}
-      className="game-map"
+      className={`game-map${placementMode ? ' placement-mode' : ''}${demolitionMode ? ' demolition-mode' : ''}`}
       aria-label="Mapa interativo do mundo"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

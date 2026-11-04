@@ -2,11 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
+import type { Duplex } from 'node:stream';
 import { fileURLToPath } from 'node:url';
-import express from 'express';
+import { config as loadDotEnv } from 'dotenv';
+import express, { type RequestHandler } from 'express';
+import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
 import { Pool } from 'pg';
 import { createClient } from 'redis';
 import { WebSocket, WebSocketServer } from 'ws';
+import { MUNICIPAL_AREA_RADIUS, MUNICIPAL_AREA_SIZE } from '../src/types/city.js';
+
+loadDotEnv({
+  path: [resolve(process.cwd(), '.env.local'), resolve(process.cwd(), '.env')],
+});
 
 const PORT = Number(process.env.PORT ?? 3001);
 const TIME_SCALE = 15;
@@ -14,6 +22,7 @@ const MAP = { width: 4000, height: 4000, seed: 583921 };
 const CLOCK_LEADER_KEY = 'valdora:clock:leader';
 const PRESENCE_KEY = 'valdora:presence';
 const SNAPSHOT_CHANNEL = 'valdora:world:snapshots';
+const CITIES_CHANNEL = 'valdora:world:cities';
 const INSTANCE_ID = randomUUID();
 const PRESENCE_TTL_MS = 35_000;
 const pool = new Pool({
@@ -26,6 +35,23 @@ const clients = new Set<WebSocket>();
 const app = express();
 const server = createServer(app);
 const websocketServer = new WebSocketServer({ noServer: true });
+
+interface AuthConfig {
+  jwks: ReturnType<typeof createRemoteJWKSet>;
+  issuer: string;
+}
+
+interface CityAssembly {
+  id: string;
+  name: string;
+  centerX: number;
+  centerY: number;
+  population: number;
+  wellbeing: number;
+  economy: number;
+}
+
+const authenticatedUserIds = new WeakMap<express.Request, string>();
 
 redis.on('error', (error) => console.error('Redis:', error));
 subscriber.on('error', (error) => console.error('Redis subscriber:', error));
@@ -70,6 +96,36 @@ async function publishSnapshot() {
   await redis.publish(SNAPSHOT_CHANNEL, JSON.stringify(snapshot));
 }
 
+async function getCities(): Promise<CityAssembly[]> {
+  const { rows } = await pool.query<{
+    id: string;
+    name: string;
+    center_x: number;
+    center_y: number;
+    population: number;
+    wellbeing: number;
+    economy: number;
+  }>(
+    `SELECT id, name, center_x, center_y, population, wellbeing, economy
+     FROM city_assemblies
+     ORDER BY created_at, id`,
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    centerX: row.center_x,
+    centerY: row.center_y,
+    population: row.population,
+    wellbeing: row.wellbeing,
+    economy: row.economy,
+  }));
+}
+
+async function publishCities() {
+  const cities = await getCities();
+  await redis.publish(CITIES_CHANNEL, JSON.stringify({ type: 'cities', cities }));
+}
+
 async function advanceClock() {
   await pool.query(
     `UPDATE world_state
@@ -83,7 +139,191 @@ async function advanceClock() {
   await publishSnapshot();
 }
 
+function getAuthConfig(): AuthConfig {
+  const baseUrl = process.env.NEON_AUTH_BASE_URL;
+  const jwksUrl = process.env.NEON_AUTH_JWKS_URL;
+  if (!baseUrl || !jwksUrl) {
+    throw new Error('NEON_AUTH_BASE_URL e NEON_AUTH_JWKS_URL são obrigatórias.');
+  }
+
+  return {
+    jwks: createRemoteJWKSet(new URL(jwksUrl)),
+    issuer: new URL(baseUrl).origin,
+  };
+}
+
+async function verifyAccessToken(token: string, auth: AuthConfig): Promise<string | null> {
+  try {
+    const { payload } = await jwtVerify(token, auth.jwks, { issuer: auth.issuer });
+    return typeof payload.sub === 'string' && payload.sub.length > 0 ? payload.sub : null;
+  } catch (error) {
+    if (
+      error instanceof joseErrors.JWTClaimValidationFailed ||
+      error instanceof joseErrors.JWTExpired ||
+      error instanceof joseErrors.JWTInvalid ||
+      error instanceof joseErrors.JWSInvalid ||
+      error instanceof joseErrors.JWSSignatureVerificationFailed ||
+      error instanceof joseErrors.JWKSNoMatchingKey ||
+      error instanceof joseErrors.JOSEAlgNotAllowed
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+function requireAuthentication(auth: AuthConfig): RequestHandler {
+  return (request, response, next) => {
+    const token = request.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
+    if (!token) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void verifyAccessToken(token, auth)
+      .then((userId) => {
+        if (!userId) {
+          response.status(401).json({ error: 'unauthorized' });
+          return;
+        }
+        authenticatedUserIds.set(request, userId);
+        next();
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível validar a sessão Neon Auth:', error);
+        response.status(503).json({ error: 'auth_unavailable' });
+      });
+  };
+}
+
+async function isMasterUser(userId: string): Promise<boolean> {
+  const masterEmail = process.env.MASTER_EMAIL?.trim().toLowerCase();
+  if (!masterEmail) throw new Error('MASTER_EMAIL não foi configurada.');
+
+  const { rows } = await pool.query<{ is_master: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM neon_auth."user"
+       WHERE id = $1 AND lower(email) = $2
+     ) AS is_master`,
+    [userId, masterEmail],
+  );
+  return rows[0]?.is_master === true;
+}
+
+function requireMaster(): RequestHandler {
+  return (request, response, next) => {
+    const userId = authenticatedUserIds.get(request);
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void isMasterUser(userId)
+      .then((isMaster) => {
+        if (!isMaster) {
+          response.status(403).json({ error: 'master_required' });
+          return;
+        }
+        next();
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível verificar a conta master:', error);
+        response.status(503).json({ error: 'authorization_unavailable' });
+      });
+  };
+}
+
+function parseCityInput(body: unknown): { name: string; centerX: number; centerY: number } | null {
+  if (typeof body !== 'object' || body === null) return null;
+  const record = body as Record<string, unknown>;
+  const name = typeof record.name === 'string' ? record.name.trim() : '';
+  const centerX = record.centerX;
+  const centerY = record.centerY;
+  if (
+    name.length === 0 ||
+    name.length > 80 ||
+    typeof centerX !== 'number' ||
+    !Number.isInteger(centerX) ||
+    typeof centerY !== 'number' ||
+    !Number.isInteger(centerY) ||
+    centerX < MUNICIPAL_AREA_RADIUS ||
+    centerY < MUNICIPAL_AREA_RADIUS ||
+    centerX >= MAP.width - MUNICIPAL_AREA_RADIUS ||
+    centerY >= MAP.height - MUNICIPAL_AREA_RADIUS
+  ) {
+    return null;
+  }
+  return { name, centerX, centerY };
+}
+
+async function createCityAssembly(
+  city: { name: string; centerX: number; centerY: number },
+  userId: string,
+): Promise<CityAssembly | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const overlap = await client.query(
+      `SELECT 1
+       FROM city_assemblies
+       WHERE ABS(center_x - $1) < $3
+         AND ABS(center_y - $2) < $3
+       LIMIT 1`,
+       [city.centerX, city.centerY, MUNICIPAL_AREA_SIZE],
+    );
+    if (overlap.rowCount) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    const { rows } = await client.query<{
+      id: string;
+      name: string;
+      center_x: number;
+      center_y: number;
+      population: number;
+      wellbeing: number;
+      economy: number;
+    }>(
+      `INSERT INTO city_assemblies (id, name, center_x, center_y, created_by)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, name, center_x, center_y, population, wellbeing, economy`,
+      [randomUUID(), city.name, city.centerX, city.centerY, userId],
+    );
+    await client.query('COMMIT');
+    const row = rows[0];
+    return {
+      id: row.id,
+      name: row.name,
+      centerX: row.center_x,
+      centerY: row.center_y,
+      population: row.population,
+      wellbeing: row.wellbeing,
+      economy: row.economy,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter a criação da assembleia:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function rejectWebSocketUpgrade(socket: Duplex, status: 401 | 404 | 503) {
+  if (socket.destroyed) return;
+  const statusText = status === 401 ? 'Unauthorized' : status === 404 ? 'Not Found' : 'Service Unavailable';
+  socket.write(`HTTP/1.1 ${status} ${statusText}\r\nConnection: close\r\n\r\n`);
+  socket.destroy();
+}
+
 async function start() {
+  const auth = getAuthConfig();
+  const requireAuth = requireAuthentication(auth);
+  const requireMasterAuth = requireMaster();
   await Promise.all([redis.connect(), subscriber.connect()]);
   const schema = await readFile(
     fileURLToPath(new URL('../database/schema.sql', import.meta.url)),
@@ -96,7 +336,10 @@ async function start() {
      ON CONFLICT (id) DO NOTHING`,
   );
 
-  await subscriber.subscribe(SNAPSHOT_CHANNEL, (message) => broadcast(message));
+  await Promise.all([
+    subscriber.subscribe(SNAPSHOT_CHANNEL, (message) => broadcast(message)),
+    subscriber.subscribe(CITIES_CHANNEL, (message) => broadcast(message)),
+  ]);
 
   app.use(express.json({ limit: '16kb' }));
   app.get('/api/health', (_request, response) => {
@@ -107,7 +350,135 @@ async function start() {
         response.status(503).json({ status: 'unavailable' });
       });
   });
-  app.get('/api/world', (_request, response) => {
+  app.get('/api/me', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    void isMasterUser(userId)
+      .then((isMaster) => response.json({ isMaster }))
+      .catch((error: unknown) => {
+        console.error('Não foi possível consultar a permissão da conta:', error);
+        response.status(503).json({ error: 'authorization_unavailable' });
+      });
+  });
+  app.get('/api/cities', requireAuth, (_request, response) => {
+    void getCities()
+      .then((cities) => response.json(cities))
+      .catch((error: unknown) => {
+        console.error('Não foi possível consultar as cidades:', error);
+        response.status(503).json({ error: 'cities_unavailable' });
+      });
+  });
+  app.post('/api/cities', requireAuth, requireMasterAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const city = parseCityInput(request.body);
+    if (!city) {
+      response.status(400).json({ error: 'invalid_city' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void createCityAssembly(city, userId)
+      .then((createdCity) => {
+        if (!createdCity) {
+          response.status(409).json({ error: 'municipal_area_overlap' });
+          return;
+        }
+        response.status(201).json(createdCity);
+        void publishCities().catch((error: unknown) => {
+          console.error('A assembleia foi criada, mas a atualização das cidades falhou:', error);
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível criar a assembleia:', error);
+        response.status(503).json({ error: 'city_creation_unavailable' });
+      });
+  });
+  app.patch('/api/cities/:id', requireAuth, requireMasterAuth, (request, response) => {
+    const name =
+      typeof request.body?.name === 'string' ? request.body.name.trim() : '';
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        request.params.id,
+      ) ||
+      name.length === 0 ||
+      name.length > 80
+    ) {
+      response.status(400).json({ error: 'invalid_city' });
+      return;
+    }
+
+    void pool
+      .query<{ id: string; name: string }>(
+        `UPDATE city_assemblies SET name = $1 WHERE id = $2 RETURNING id, name`,
+        [name, request.params.id],
+      )
+      .then(({ rows }) => {
+        const city = rows[0];
+        if (!city) {
+          response.status(404).json({ error: 'city_not_found' });
+          return;
+        }
+        response.json(city);
+        void publishCities().catch((error: unknown) => {
+          console.error('O nome da cidade foi salvo, mas a atualização falhou:', error);
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível atualizar o nome da cidade:', error);
+        response.status(503).json({ error: 'city_update_unavailable' });
+      });
+  });
+  app.delete('/api/cities/:id', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        request.params.id,
+      )
+    ) {
+      response.status(400).json({ error: 'invalid_city' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void pool
+      .query<{ id: string }>(
+        `DELETE FROM city_assemblies
+         WHERE id = $1 AND created_by = $2
+         RETURNING id`,
+        [request.params.id, userId],
+      )
+      .then(async ({ rows }) => {
+        if (!rows[0]) {
+          const existing = await pool.query(
+            'SELECT 1 FROM city_assemblies WHERE id = $1',
+            [request.params.id],
+          );
+          response
+            .status(existing.rowCount ? 403 : 404)
+            .json({ error: existing.rowCount ? 'city_not_owned' : 'city_not_found' });
+          return;
+        }
+
+        response.json(rows[0]);
+        void publishCities().catch((error: unknown) => {
+          console.error('A construção foi demolida, mas a atualização das cidades falhou:', error);
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível demolir a construção:', error);
+        response.status(503).json({ error: 'city_demolition_unavailable' });
+      });
+  });
+  app.get('/api/world', requireAuth, (_request, response) => {
     void getSnapshot()
       .then((snapshot) => response.json(snapshot))
       .catch((error: unknown) => {
@@ -121,14 +492,25 @@ async function start() {
   app.get('*', (_request, response) => response.sendFile(resolve(webRoot, 'index.html')));
 
   server.on('upgrade', (request, socket, head) => {
-    const path = new URL(request.url ?? '/', 'http://localhost').pathname;
-    if (path !== '/ws') {
-      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
-      socket.destroy();
-      return;
-    }
-    websocketServer.handleUpgrade(request, socket, head, (websocket) => {
-      websocketServer.emit('connection', websocket, request);
+    void (async () => {
+      const url = new URL(request.url ?? '/', 'http://localhost');
+      if (url.pathname !== '/ws') {
+        rejectWebSocketUpgrade(socket, 404);
+        return;
+      }
+
+      const token = url.searchParams.get('token');
+      if (!token || !(await verifyAccessToken(token, auth))) {
+        rejectWebSocketUpgrade(socket, 401);
+        return;
+      }
+
+      websocketServer.handleUpgrade(request, socket, head, (websocket) => {
+        websocketServer.emit('connection', websocket, request);
+      });
+    })().catch((error: unknown) => {
+      console.error('Não foi possível autenticar a conexão WebSocket:', error);
+      rejectWebSocketUpgrade(socket, 503);
     });
   });
 
@@ -147,6 +529,7 @@ async function start() {
     void registerPresence()
       .then(async () => {
         websocket.send(JSON.stringify(await getSnapshot()));
+        websocket.send(JSON.stringify({ type: 'cities', cities: await getCities() }));
         await publishSnapshot();
         presenceTimer = setInterval(() => {
           void registerPresence().catch((error: unknown) => {

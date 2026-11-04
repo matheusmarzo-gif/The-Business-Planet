@@ -17,7 +17,7 @@ body { margin: 0; min-width: 360px; min-height: 100vh; overflow: hidden; }
 button, a { font: inherit; }
 button { color: inherit; }
 
-.realm-shell { height: 100dvh; min-height: 520px; display: flex; flex-direction: column; background: #101914; }
+.realm-shell { height: 100dvh; min-height: 520px; display: flex; flex-direction: column; overflow: hidden; background: #101914; }
 .topbar { height: 68px; flex: 0 0 68px; z-index: 3; display: flex; align-items: center; padding: 0 25px; gap: 29px; background: #111a16; border-bottom: 1px solid rgba(208, 190, 145, .14); }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #f5f0e5; min-width: 215px; }
 .brand-mark { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid rgba(202, 169, 105, .52); border-radius: 50%; color: #d7bd81; }
@@ -30,6 +30,11 @@ button { color: inherit; }
 .world-title { font: 600 13px 'Manrope', sans-serif; color: #eee8d8; }
 .world-seed { margin-left: 7px; color: #a4a48f; font: 500 10px 'DM Sans', sans-serif; }
 .topbar-status { margin-left: auto; display: flex; align-items: center; gap: 21px; }
+.account-menu { display: flex; align-items: center; gap: 10px; color: #b7b19e; font-size: 10px; }
+.account-menu span { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-menu button { padding: 6px 9px; border: 1px solid rgba(219,201,158,.2); border-radius: 6px; color: #ead9a6; background: transparent; cursor: pointer; }
+.account-menu button:hover { background: rgba(255,255,255,.07); }
+.account-error { max-width: 180px; color: #f0b3aa; font-size: 10px; }
 .connection-pill { display: flex; align-items: center; gap: 7px; color: #a5a18e; font-size: 9px; font-weight: 700; letter-spacing: .1em; }
 .connection-pill.connected { color: #a4c99c; }
 .player-count { display: flex; align-items: center; gap: 7px; color: #eee8d8; font-size: 12px; font-weight: 700; }
@@ -39,6 +44,8 @@ button { color: inherit; }
 .world-stage { position: relative; isolation: isolate; overflow: hidden; flex: 1; background: #142b30; }
 .game-map { position: absolute; inset: 0; z-index: 0; overflow: hidden; cursor: grab; touch-action: none; }
 .game-map:active { cursor: grabbing; }
+.game-map.placement-mode, .game-map.placement-mode:active { cursor: crosshair; }
+.game-map.demolition-mode, .game-map.demolition-mode:active { cursor: pointer; }
 .game-map canvas { display: block; width: 100%; height: 100%; }
 .map-vignette { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, rgba(14,24,21,.08) 44%, rgba(12,21,19,.17) 69%, rgba(12,21,19,.33) 100%), linear-gradient(0deg, rgba(12,19,17,.39), transparent 22%, transparent 76%, rgba(12,19,17,.15)); }
 .map-heading, .map-scale, .time-card, .map-tools, .realm-panel, .map-coordinates, .map-hint, .map-credit { z-index: 2; }
@@ -94,6 +101,61 @@ button { color: inherit; }
 .mouse-icon { font-size: 14px; }
 .map-credit { position: absolute; right: 25px; bottom: 22px; color: rgba(212,205,185,.46); font-size: 7px; letter-spacing: .14em; }
 
+.auth-screen { min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: radial-gradient(ellipse at top, #26372a 0, #101914 62%); }
+.auth-card { width: min(100%, 420px); padding: 36px; border: 1px solid rgba(213,194,149,.2); border-radius: 16px; background: rgba(19,28,23,.94); box-shadow: 0 24px 80px rgba(0,0,0,.32); }
+.auth-eyebrow { margin: 0 0 18px; color: #b29a66; font-size: 9px; font-weight: 700; letter-spacing: .14em; }
+.auth-card h1 { margin: 0; color: #f0e9d8; font: 600 26px 'Manrope', sans-serif; }
+.auth-description { margin: 10px 0 24px; color: #a6a897; font-size: 13px; line-height: 1.6; }
+.auth-form { display: grid; gap: 15px; }
+.auth-form label { display: grid; gap: 7px; color: #ddd6c2; font-size: 11px; }
+.auth-form input { width: 100%; padding: 11px 12px; border: 1px solid rgba(219,201,158,.22); border-radius: 7px; outline: none; color: #f5f0e5; background: #101914; }
+.auth-form input:focus { border-color: #cbb77f; box-shadow: 0 0 0 2px rgba(203,183,127,.15); }
+.auth-submit { margin-top: 5px; padding: 11px; border: 0; border-radius: 7px; color: #172019; background: #d4bd86; font-weight: 700; cursor: pointer; }
+.auth-submit:disabled { opacity: .6; cursor: wait; }
+.auth-mode-toggle { width: 100%; margin-top: 20px; padding: 8px; border: 0; color: #d4bd86; background: transparent; font-size: 11px; cursor: pointer; }
+.auth-mode-toggle:disabled { opacity: .6; cursor: wait; }
+.auth-message { padding: 11px 12px; border-radius: 7px; font-size: 11px; line-height: 1.55; }
+.auth-error { border: 1px solid rgba(220,113,99,.3); color: #f0b3aa; background: rgba(130,46,39,.16); }
+.auth-notice { border: 1px solid rgba(164,201,156,.25); color: #c3d6b7; background: rgba(69,104,62,.15); }
+.auth-error button { display: block; margin-top: 8px; padding: 0; border: 0; color: #f0d7a2; background: transparent; text-decoration: underline; cursor: pointer; }
+.construction-bar { z-index: 5; flex: 0 0 78px; display: flex; justify-content: center; gap: 8px; overflow-x: auto; padding: 7px 12px max(7px, env(safe-area-inset-bottom)); border-top: 1px solid rgba(208,190,145,.14); background: #111a16; }
+.construction-tab { min-width: 100px; display: flex; flex: 0 1 152px; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 7px 9px; border: 1px solid transparent; border-radius: 9px; color: #a6a897; background: transparent; cursor: pointer; }
+.construction-tab span { font-size: 9px; line-height: 1.2; text-align: center; white-space: nowrap; }
+.construction-tab:hover, .construction-tab.active { border-color: rgba(219,201,158,.18); color: #ead9a6; background: rgba(255,255,255,.045); }
+.demolition-tab { color: #d29a86; }
+.demolition-tab:hover, .demolition-tab.active { border-color: rgba(210,154,134,.28); color: #f0ad93; background: rgba(160,70,48,.12); }
+.construction-drawer { position: fixed; right: 16px; bottom: calc(86px + env(safe-area-inset-bottom)); z-index: 6; width: min(520px, calc(100vw - 32px)); max-height: min(300px, 42vh); overflow: auto; padding: 18px; border: 1px solid rgba(219,201,158,.2); border-radius: 13px; background: rgba(19,28,23,.97); box-shadow: 0 18px 50px rgba(0,0,0,.38); backdrop-filter: blur(18px); }
+.construction-drawer-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
+.construction-drawer-heading h2 { margin: 0; color: #f0e9d8; font: 600 15px 'Manrope', sans-serif; }
+.construction-drawer-heading button, .city-modal-close { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid rgba(219,201,158,.18); border-radius: 7px; color: #c9c1ad; background: transparent; cursor: pointer; }
+.construction-card { width: 100%; display: flex; align-items: center; gap: 15px; padding: 10px; border: 1px solid rgba(219,201,158,.15); border-radius: 9px; color: #eee8d8; text-align: left; background: rgba(255,255,255,.025); cursor: pointer; }
+.construction-card:hover { border-color: rgba(219,201,158,.38); background: rgba(255,255,255,.06); }
+.construction-card img { width: 72px; height: 72px; object-fit: contain; border-radius: 7px; background: #16211b; }
+.construction-card span { display: grid; gap: 5px; }
+.construction-card strong { font: 600 13px 'Manrope', sans-serif; }
+.construction-card small, .construction-empty { color: #a6a897; font-size: 10px; line-height: 1.6; }
+.construction-empty { margin: 4px 0 0; }
+.placement-banner { position: absolute; right: 50%; bottom: 76px; z-index: 3; display: flex; align-items: center; gap: 14px; max-width: calc(100% - 24px); padding: 11px 14px; transform: translateX(50%); border: 1px solid rgba(219,201,158,.24); border-radius: 9px; color: #eee8d8; font-size: 11px; background: rgba(19,28,23,.95); box-shadow: 0 8px 26px rgba(0,0,0,.25); }
+.placement-banner button { flex: 0 0 auto; padding: 6px 9px; border: 1px solid rgba(219,201,158,.22); border-radius: 6px; color: #ead9a6; background: transparent; cursor: pointer; }
+.demolition-banner { border-color: rgba(210,154,134,.35); }
+.demolition-banner button { border-color: rgba(210,154,134,.35); color: #f0ad93; }
+.city-modal-backdrop { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; overflow-y: auto; padding: 20px; background: rgba(5,9,7,.68); backdrop-filter: blur(5px); }
+.city-modal { position: relative; width: min(100%, 440px); max-height: min(90dvh, 680px); overflow-y: auto; padding: 30px; border: 1px solid rgba(213,194,149,.22); border-radius: 15px; background: #131c17; box-shadow: 0 24px 80px rgba(0,0,0,.4); }
+.city-modal-close { position: absolute; top: 16px; right: 16px; }
+.city-modal h2 { max-width: calc(100% - 28px); margin: 0; color: #f0e9d8; font: 600 20px 'Manrope', sans-serif; }
+.city-modal .auth-description { margin: 9px 0 18px; }
+.city-details-form { display: grid; gap: 18px; }
+.city-details-form>label { display: grid; gap: 8px; color: #b29a66; font-size: 9px; font-weight: 700; letter-spacing: .12em; }
+.city-details-form input { width: 100%; padding: 11px 12px; border: 1px solid rgba(219,201,158,.22); border-radius: 7px; outline: none; color: #f5f0e5; background: #101914; font: 500 13px 'DM Sans', sans-serif; letter-spacing: normal; }
+.city-details-form input:focus { border-color: #cbb77f; box-shadow: 0 0 0 2px rgba(203,183,127,.15); }
+.city-details-form>label>strong { color: #f0e9d8; font: 600 15px 'Manrope', sans-serif; letter-spacing: normal; }
+.city-stat-list { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; margin: 0; }
+.city-stat-list>div { min-width: 0; display: grid; gap: 7px; padding: 10px; border: 1px solid rgba(219,201,158,.12); border-radius: 8px; background: rgba(255,255,255,.025); }
+.city-stat-list dt { color: #a6a897; font-size: 8px; font-weight: 700; letter-spacing: .08em; }
+.city-stat-list dd { margin: 0; color: #eee8d8; font: 600 14px 'Manrope', sans-serif; }
+.city-details-form .auth-submit { width: 100%; }
+.city-modal>.auth-mode-toggle { margin-top: 8px; }
+
 @media (max-width: 900px) {
   .topbar { padding: 0 17px; gap: 15px; }
   .brand { min-width: 0; }
@@ -111,9 +173,16 @@ button { color: inherit; }
   .brand-copy small { font-size: 6px; }
   .world-name { display: none; }
   .topbar-status { gap: 11px; }
+  .account-menu span { display: none; }
+  .account-menu button { padding: 5px 7px; }
   .connection-pill { font-size: 0; }
   .connection-pill svg { width: 17px; height: 17px; }
   .player-count { font-size: 11px; }
+  .construction-bar { justify-content: flex-start; gap: 3px; padding-right: 8px; padding-left: 8px; }
+  .construction-tab { min-width: 72px; flex: 0 0 76px; padding-right: 4px; padding-left: 4px; }
+  .construction-tab span { max-width: 72px; font-size: 8px; white-space: normal; }
+  .construction-drawer { right: 10px; bottom: calc(84px + env(safe-area-inset-bottom)); }
+  .placement-banner { bottom: 12px; font-size: 10px; }
   .realm-panel { top: auto; left: 10px; right: 10px; bottom: 55px; width: auto; max-height: 190px; overflow: auto; padding: 15px; border: 1px solid rgba(213,194,149,.2); border-radius: 11px; }
   .panel-title h1 { margin: 6px 0; font-size: 19px; }
   .panel-title p { display: none; }

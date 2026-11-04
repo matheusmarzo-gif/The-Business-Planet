@@ -16,10 +16,12 @@ atualizações entre instâncias.
 O mapa base é determinístico: não é persistido tile a tile. Cidades e estradas
 são sobrepostas ao terreno gerado. Atualmente, a construção disponível na
 Prefeitura é a Assembleia, que cria uma área municipal; Estrada de Terra é a
-primeira infraestrutura rodoviária. O jogo também possui um catálogo estático
-de produtos com atributos padrão; estoques, produção e deterioração ainda não
-estão implementados. População, bem-estar e economia são dados da cidade, mas
-ainda não existe simulação econômica ou de crescimento que os altere.
+primeira infraestrutura rodoviária. A conta master pode dividir cada área
+municipal em regiões urbanas e rurais persistentes. O jogo também possui um
+catálogo estático de produtos com atributos padrão; estoques, produção e
+deterioração ainda não estão implementados. População, bem-estar e economia
+são dados da cidade, mas ainda não existe simulação econômica ou de crescimento
+que os altere.
 
 ## Estrutura do repositório
 
@@ -38,6 +40,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/types/road.ts` | Tipos, limites, validação, interpolação e escolha das peças de estrada. |
 | `src/types/product.ts` | Catálogo estático dos produtos, unidades, peso, volume e validade padrão. |
 | `src/components/ProductCatalog.tsx` | Interface pesquisável para consultar as fichas de produtos. |
+| `src/components/CityZoneEditor.tsx` | Editor master das regiões urbanas e rurais de uma cidade. |
 | `src/types/map.ts` | Tipos de configuração do mundo, terrenos, tiles e informações de mapa. |
 | `src/utils/worldConfig.ts` | Configuração única do mapa usada pelo cliente e pelo servidor. |
 | `src/utils/mapGenerator.ts`, `src/utils/perlin.ts` | Geração procedural determinística do terreno. |
@@ -141,6 +144,17 @@ das cidades legíveis em tamanho fixo na tela.
 - A prévia verde/vermelha é uma indicação rápida do cliente. O servidor repete
   as validações sob lock transacional antes de inserir.
 - A Prefeitura e a criação/edição de Assembleias são restritas à conta master.
+- A conta master pode abrir o editor de regiões ao clicar em uma Assembleia e
+  definir até 100 retângulos urbanos ou rurais por cidade, arrastando no mapa.
+  Cada retângulo deve ficar dentro dos limites municipais e nenhum tile pode
+  pertencer a mais de uma região. O servidor repete a validação sob o lock
+  transacional antes de substituir a lista persistida.
+- Áreas urbanas são mostradas em azul e rurais em verde somente durante a
+  edição master ou ao selecionar uma categoria correspondente. Artesanais,
+  Comerciais e Residências mapeiam à área urbana; Fazendas, Recursos e
+  Indústrias mapeiam à rural. Prefeitura e Estrada de Terra não usam zonas.
+  Este mapeamento é uma regra compartilhada preparada para posicionamento
+  futuro; a colocação dos edifícios dessas categorias não está habilitada.
 - Qualquer jogador pode consultar cidades autenticado; os dados demográficos e
   econômicos são atualmente inicializados em zero.
 - Demolir uma Assembleia usa a propriedade `created_by`. A chave estrangeira
@@ -208,6 +222,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities` | Autenticado | Retorna cidades persistidas. |
 | `POST /api/cities` | Master | Valida e cria Assembleia/cidade. |
 | `PATCH /api/cities/:id` | Master | Altera o nome de uma cidade. |
+| `PUT /api/cities/:id/zones` | Master | Valida e substitui as regiões urbanas/rurais da cidade. |
 | `DELETE /api/cities/:id` | Criador da cidade | Demole a Assembleia e remove as estradas da área. |
 | `POST /api/roads` | Master | Valida e grava um caminho de estrada de até 600 tiles. |
 | `DELETE /api/roads/:x/:y` | Criador do tile | Demole um tile de estrada sem confirmação; publica o novo estado. |
@@ -224,6 +239,7 @@ de sucesso.
 
 - `world_state` guarda o relógio persistente do mundo.
 - `city_assemblies` guarda nomes, centros, métricas e autorias.
+- `city_zones` guarda os retângulos municipais, com cascata ao excluir a cidade.
 - `road_tiles` guarda uma linha por tile, referência à cidade e autoria.
 - A tabela `neon_auth."user"` é gerenciada pelo Neon Auth, não pelo esquema do
   jogo.
@@ -276,9 +292,9 @@ npm.cmd run lint
 npm.cmd run build
 ```
 
-`lint` executa o TypeScript do cliente e do servidor. Acrescente testes focados
-para as regras de domínio afetadas; atualmente não existe script geral de
-testes no `package.json`. Para operações de banco/sincronização, verifique
+`lint` executa o TypeScript do cliente e do servidor. `npm test` executa os
+testes focados das regras geométricas de zonas. Para operações de
+banco/sincronização, verifique
 também que a API retorna erros apropriados e que os clientes recebem o estado
 persistido atualizado.
 
@@ -286,10 +302,9 @@ persistido atualizado.
 
 - Não há ainda produção de bens, comércio, evolução de população, bem-estar ou
   economia.
-- As categorias Construções Artesanais, Fazendas, Residências e Indústrias
-  aparecem na interface, mas não possuem catálogo funcional de construções.
-- Estradas não têm demolição individual; as peças disponíveis não cobrem
-  junções em T ou cruzamentos.
+- As categorias Construções Artesanais, Comerciais, Fazendas, Residências,
+  Recursos e Indústrias aparecem na interface, mas ainda não habilitam
+  posicionamento ou catálogo de edifícios.
 - O estado de cada cidade/estrada é consultado e enviado integralmente na
   sincronização atual; crescimento grande do mundo pode exigir paginação ou
   atualizações incrementais.

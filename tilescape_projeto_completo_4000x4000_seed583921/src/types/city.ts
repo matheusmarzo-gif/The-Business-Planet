@@ -1,12 +1,39 @@
 export const MUNICIPAL_AREA_SIZE = 303;
 export const MUNICIPAL_AREA_RADIUS = Math.floor(MUNICIPAL_AREA_SIZE / 2);
 export const ASSEMBLY_SIZE = 3;
+export const MAX_CITY_ZONES = 100;
 
 export type CityPlacementError =
   | 'map_bounds'
   | 'water'
   | 'building_overlap'
   | 'municipal_area_overlap';
+
+export type CityZoneType = 'urban' | 'rural';
+
+export type ConstructionCategory =
+  | 'artesanais'
+  | 'comerciais'
+  | 'fazendas'
+  | 'residencias'
+  | 'recursos'
+  | 'industrias'
+  | 'prefeitura';
+
+export interface CityZoneBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+export interface CityZone extends CityZoneBounds {
+  id: string;
+  cityId: string;
+  type: CityZoneType;
+}
+
+export type CityZonePlacementError = 'invalid_zone' | 'zone_outside_municipality' | 'zone_overlap';
 
 export interface CityAssembly {
   id: string;
@@ -16,6 +43,88 @@ export interface CityAssembly {
   population: number;
   wellbeing: number;
   economy: number;
+  zones: CityZone[];
+}
+
+export function getCityZonePlacementError(
+  bounds: CityZoneBounds,
+  city: Pick<CityAssembly, 'centerX' | 'centerY'>,
+  existingZones: CityZoneBounds[],
+): CityZonePlacementError | null {
+  if (
+    !Number.isInteger(bounds.minX) ||
+    !Number.isInteger(bounds.minY) ||
+    !Number.isInteger(bounds.maxX) ||
+    !Number.isInteger(bounds.maxY) ||
+    bounds.minX > bounds.maxX ||
+    bounds.minY > bounds.maxY
+  ) {
+    return 'invalid_zone';
+  }
+
+  const municipalityMinX = city.centerX - MUNICIPAL_AREA_RADIUS;
+  const municipalityMinY = city.centerY - MUNICIPAL_AREA_RADIUS;
+  const municipalityMaxX = city.centerX + MUNICIPAL_AREA_RADIUS;
+  const municipalityMaxY = city.centerY + MUNICIPAL_AREA_RADIUS;
+  if (
+    bounds.minX < municipalityMinX ||
+    bounds.minY < municipalityMinY ||
+    bounds.maxX > municipalityMaxX ||
+    bounds.maxY > municipalityMaxY
+  ) {
+    return 'zone_outside_municipality';
+  }
+
+  if (
+    existingZones.some(
+      (zone) =>
+        bounds.minX <= zone.maxX &&
+        bounds.maxX >= zone.minX &&
+        bounds.minY <= zone.maxY &&
+        bounds.maxY >= zone.minY,
+    )
+  ) {
+    return 'zone_overlap';
+  }
+
+  return null;
+}
+
+export function getRequiredCityZone(
+  category: ConstructionCategory,
+): CityZoneType | null {
+  switch (category) {
+    case 'artesanais':
+    case 'comerciais':
+    case 'residencias':
+      return 'urban';
+    case 'fazendas':
+    case 'recursos':
+    case 'industrias':
+      return 'rural';
+    default:
+      return null;
+  }
+}
+
+export function isFootprintInCityZone(
+  footprint: CityZoneBounds[],
+  zones: CityZone[],
+  requiredType: CityZoneType,
+): boolean {
+  return (
+    footprint.length > 0 &&
+    footprint.every((tile) =>
+      zones.some(
+        (zone) =>
+          zone.type === requiredType &&
+          tile.minX >= zone.minX &&
+          tile.maxX <= zone.maxX &&
+          tile.minY >= zone.minY &&
+          tile.maxY <= zone.maxY,
+      ),
+    )
+  );
 }
 
 export function getCityPlacementError(

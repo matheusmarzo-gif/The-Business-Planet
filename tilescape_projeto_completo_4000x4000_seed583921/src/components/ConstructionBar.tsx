@@ -4,16 +4,14 @@ import {
   House,
   Landmark,
   PackageOpen,
+  Pickaxe,
+  Store,
   Trash2,
   Wheat,
 } from 'lucide-react';
+import type { ConstructionCategory } from '../types/city';
 
-export type ConstructionCategory =
-  | 'artesanais'
-  | 'fazendas'
-  | 'residencias'
-  | 'industrias'
-  | 'prefeitura';
+export type { ConstructionCategory } from '../types/city';
 
 interface ConstructionBarProps {
   activeCategory: ConstructionCategory | null;
@@ -27,8 +25,10 @@ interface ConstructionBarProps {
 
 const categories = [
   { id: 'artesanais', label: 'Construções Artesanais', Icon: Hammer },
+  { id: 'comerciais', label: 'Comerciais', Icon: Store },
   { id: 'fazendas', label: 'Fazendas', Icon: Wheat },
   { id: 'residencias', label: 'Residências', Icon: House },
+  { id: 'recursos', label: 'Recursos', Icon: Pickaxe },
   { id: 'industrias', label: 'Indústrias', Icon: Factory },
   { id: 'prefeitura', label: 'Prefeitura', Icon: Landmark, masterOnly: true },
 ] as const;

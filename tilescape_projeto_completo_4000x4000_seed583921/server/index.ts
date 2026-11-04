@@ -11,8 +11,13 @@ import { Pool } from 'pg';
 import { createClient } from 'redis';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
+  type CityZone,
+  type CityZoneBounds,
+  type CityZoneType,
   type CityPlacementError,
+  getCityZonePlacementError,
   getCityPlacementError,
+  MAX_CITY_ZONES,
   MUNICIPAL_AREA_RADIUS,
 } from '../src/types/city.js';
 import {
@@ -71,7 +76,10 @@ interface CityAssembly {
   population: number;
   wellbeing: number;
   economy: number;
+  zones: CityZone[];
 }
+
+type CityZoneInput = CityZoneBounds & { type: CityZoneType };
 
 const authenticatedUserIds = new WeakMap<express.Request, string>();
 
@@ -127,10 +135,27 @@ async function getCities(): Promise<CityAssembly[]> {
     population: number;
     wellbeing: number;
     economy: number;
+    zones: CityZone[];
   }>(
-    `SELECT id, name, center_x, center_y, population, wellbeing, economy
-     FROM city_assemblies
-     ORDER BY created_at, id`,
+    `SELECT city.id, city.name, city.center_x, city.center_y,
+            city.population, city.wellbeing, city.economy,
+            COALESCE(
+              json_agg(json_build_object(
+                'id', zone.id,
+                'cityId', zone.city_id,
+                'type', zone.zone_type,
+                'minX', zone.min_x,
+                'minY', zone.min_y,
+                'maxX', zone.max_x,
+                'maxY', zone.max_y
+              ) ORDER BY zone.min_y, zone.min_x)
+                FILTER (WHERE zone.id IS NOT NULL),
+              '[]'::json
+            ) AS zones
+     FROM city_assemblies AS city
+     LEFT JOIN city_zones AS zone ON zone.city_id = city.id
+     GROUP BY city.id
+     ORDER BY city.created_at, city.id`,
   );
   return rows.map((row) => ({
     id: row.id,
@@ -140,6 +165,7 @@ async function getCities(): Promise<CityAssembly[]> {
     population: row.population,
     wellbeing: row.wellbeing,
     economy: row.economy,
+    zones: row.zones,
   }));
 }
 
@@ -288,6 +314,40 @@ function parseCityInput(body: unknown): { name: string; centerX: number; centerY
     return null;
   }
   return { name, centerX, centerY };
+}
+
+function parseCityZones(body: unknown): CityZoneInput[] | null {
+  if (typeof body !== 'object' || body === null || !('zones' in body) || !Array.isArray(body.zones)) {
+    return null;
+  }
+  if (body.zones.length > MAX_CITY_ZONES) return null;
+
+  const zones: CityZoneInput[] = [];
+  for (const value of body.zones) {
+    if (typeof value !== 'object' || value === null) return null;
+    const zone = value as Record<string, unknown>;
+    if (
+      (zone.type !== 'urban' && zone.type !== 'rural') ||
+      typeof zone.minX !== 'number' ||
+      typeof zone.minY !== 'number' ||
+      typeof zone.maxX !== 'number' ||
+      typeof zone.maxY !== 'number' ||
+      !Number.isInteger(zone.minX) ||
+      !Number.isInteger(zone.minY) ||
+      !Number.isInteger(zone.maxX) ||
+      !Number.isInteger(zone.maxY)
+    ) {
+      return null;
+    }
+    zones.push({
+      type: zone.type,
+      minX: zone.minX,
+      minY: zone.minY,
+      maxX: zone.maxX,
+      maxY: zone.maxY,
+    });
+  }
+  return zones;
 }
 
 function parseRoadPath(
@@ -457,12 +517,86 @@ async function createCityAssembly(
         population: row.population,
         wellbeing: row.wellbeing,
         economy: row.economy,
+        zones: [],
       },
       error: null,
     };
   } catch (error) {
     await client.query('ROLLBACK').catch((rollbackError: unknown) => {
       console.error('Não foi possível reverter a criação da assembleia:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function replaceCityZones(
+  cityId: string,
+  zones: CityZoneInput[],
+): Promise<{ city: CityAssembly | null; error: string | null }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const { rows } = await client.query<{
+      id: string;
+      name: string;
+      center_x: number;
+      center_y: number;
+      population: number;
+      wellbeing: number;
+      economy: number;
+    }>(
+      `SELECT id, name, center_x, center_y, population, wellbeing, economy
+       FROM city_assemblies WHERE id = $1 FOR UPDATE`,
+      [cityId],
+    );
+    const cityRow = rows[0];
+    if (!cityRow) {
+      await client.query('ROLLBACK');
+      return { city: null, error: 'city_not_found' };
+    }
+
+    const normalizedZones: CityZone[] = [];
+    for (const zone of zones) {
+      const placementError = getCityZonePlacementError(
+        zone,
+        { centerX: cityRow.center_x, centerY: cityRow.center_y },
+        normalizedZones,
+      );
+      if (placementError) {
+        await client.query('ROLLBACK');
+        return { city: null, error: placementError };
+      }
+      normalizedZones.push({ ...zone, id: randomUUID(), cityId });
+    }
+
+    await client.query('DELETE FROM city_zones WHERE city_id = $1', [cityId]);
+    for (const zone of normalizedZones) {
+      await client.query(
+        `INSERT INTO city_zones (id, city_id, zone_type, min_x, min_y, max_x, max_y)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [zone.id, cityId, zone.type, zone.minX, zone.minY, zone.maxX, zone.maxY],
+      );
+    }
+    await client.query('COMMIT');
+    return {
+      city: {
+        id: cityRow.id,
+        name: cityRow.name,
+        centerX: cityRow.center_x,
+        centerY: cityRow.center_y,
+        population: cityRow.population,
+        wellbeing: cityRow.wellbeing,
+        economy: cityRow.economy,
+        zones: normalizedZones,
+      },
+      error: null,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter a atualização das regiões:', rollbackError);
     });
     throw error;
   } finally {
@@ -554,6 +688,44 @@ async function start() {
       .catch((error: unknown) => {
         console.error('Não foi possível criar a assembleia:', error);
         response.status(503).json({ error: 'city_creation_unavailable' });
+      });
+  });
+  app.put('/api/cities/:id/zones', requireAuth, requireMasterAuth, (request, response) => {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        request.params.id,
+      )
+    ) {
+      response.status(400).json({ error: 'invalid_city' });
+      return;
+    }
+
+    const zones = parseCityZones(request.body);
+    if (!zones) {
+      response.status(400).json({ error: 'invalid_zones' });
+      return;
+    }
+
+    void replaceCityZones(request.params.id, zones)
+      .then(({ city, error }) => {
+        if (!city) {
+          if (error === 'city_not_found') {
+            response.status(404).json({ error });
+          } else {
+            response.status(409).json({
+              error: error === 'invalid_zone' ? 'invalid_zones' : error,
+            });
+          }
+          return;
+        }
+        response.json(city);
+        void publishCities().catch((publishError: unknown) => {
+          console.error('As regiões foram salvas, mas a atualização das cidades falhou:', publishError);
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível salvar as regiões da cidade:', error);
+        response.status(503).json({ error: 'city_zones_unavailable' });
       });
   });
   app.post('/api/roads', requireAuth, requireMasterAuth, (request, response) => {

@@ -16,6 +16,21 @@ CREATE TABLE IF NOT EXISTS city_assemblies (
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
 
+CREATE TABLE IF NOT EXISTS city_zones (
+  id UUID PRIMARY KEY,
+  city_id UUID NOT NULL REFERENCES city_assemblies (id) ON DELETE CASCADE,
+  zone_type TEXT NOT NULL CHECK (zone_type IN ('urban', 'rural')),
+  min_x INTEGER NOT NULL,
+  min_y INTEGER NOT NULL,
+  max_x INTEGER NOT NULL,
+  max_y INTEGER NOT NULL,
+  CHECK (min_x <= max_x),
+  CHECK (min_y <= max_y),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE INDEX IF NOT EXISTS city_zones_city_id_idx ON city_zones (city_id);
+
 CREATE TABLE IF NOT EXISTS road_tiles (
   tile_x INTEGER NOT NULL CHECK (tile_x BETWEEN 0 AND 3999),
   tile_y INTEGER NOT NULL CHECK (tile_y BETWEEN 0 AND 3999),

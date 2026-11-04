@@ -13,6 +13,7 @@ interface CityAssemblyModalProps {
   onClose: () => void;
   onSave: () => void;
   onChooseLocation: () => void;
+  onManageZones: () => void;
 }
 
 export default function CityAssemblyModal({
@@ -26,6 +27,7 @@ export default function CityAssemblyModal({
   onClose,
   onSave,
   onChooseLocation,
+  onManageZones,
 }: CityAssemblyModalProps) {
   const canEditName = isMaster && (isCreating || city !== null);
   const nameChanged = city !== null && name.trim() !== city.name;
@@ -93,6 +95,12 @@ export default function CityAssemblyModal({
             </button>
           )}
         </form>
+
+        {isMaster && city && (
+          <button className="auth-submit city-zone-manage-button" type="button" onClick={onManageZones}>
+            Configurar áreas urbanas e rurais
+          </button>
+        )}
 
         <button className="auth-mode-toggle" type="button" onClick={onClose}>
           Fechar

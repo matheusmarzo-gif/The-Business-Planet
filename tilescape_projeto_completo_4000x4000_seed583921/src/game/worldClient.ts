@@ -1,5 +1,6 @@
 import { getAccessToken } from '../auth/authClient';
 import type { CityAssembly } from '../types/city';
+import type { CityZone } from '../types/city';
 import type { RoadTile } from '../types/road';
 
 export interface WorldSnapshot {
@@ -24,7 +25,22 @@ function isCityAssembly(value: unknown): value is CityAssembly {
     Number.isInteger(city.centerY) &&
     Number.isInteger(city.population) &&
     Number.isInteger(city.wellbeing) &&
-    Number.isInteger(city.economy)
+    Number.isInteger(city.economy) &&
+    (city.zones === undefined || (Array.isArray(city.zones) && city.zones.every(isCityZone)))
+  );
+}
+
+function isCityZone(value: unknown): value is CityZone {
+  if (typeof value !== 'object' || value === null) return false;
+  const zone = value as Record<string, unknown>;
+  return (
+    typeof zone.id === 'string' &&
+    typeof zone.cityId === 'string' &&
+    (zone.type === 'urban' || zone.type === 'rural') &&
+    Number.isInteger(zone.minX) &&
+    Number.isInteger(zone.minY) &&
+    Number.isInteger(zone.maxX) &&
+    Number.isInteger(zone.maxY)
   );
 }
 
@@ -94,7 +110,12 @@ export function connectToWorld(
           Array.isArray(message.roads) &&
           message.roads.every(isRoadTile)
         ) {
-          onCitiesChange(message.cities);
+          onCitiesChange(
+            message.cities.map((city) => ({
+              ...city,
+              zones: city.zones ?? [],
+            })),
+          );
           onRoadsChange(message.roads);
           return;
         }

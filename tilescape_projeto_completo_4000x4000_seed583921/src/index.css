@@ -47,6 +47,7 @@ button { color: inherit; }
 .game-map.placement-mode, .game-map.placement-mode:active { cursor: crosshair; }
 .game-map.road-mode, .game-map.road-mode:active { cursor: crosshair; }
 .game-map.demolition-mode, .game-map.demolition-mode:active { cursor: pointer; }
+.game-map.zone-mode, .game-map.zone-mode:active { cursor: crosshair; }
 .game-map canvas { display: block; width: 100%; height: 100%; }
 .map-vignette { position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, rgba(14,24,21,.08) 44%, rgba(12,21,19,.17) 69%, rgba(12,21,19,.33) 100%), linear-gradient(0deg, rgba(12,19,17,.39), transparent 22%, transparent 76%, rgba(12,19,17,.15)); }
 .map-heading, .map-scale, .time-card, .map-tools, .realm-panel, .map-coordinates, .map-hint, .map-credit { z-index: 2; }
@@ -179,6 +180,32 @@ button { color: inherit; }
 .city-stat-list dd { margin: 0; color: #eee8d8; font: 600 14px 'Manrope', sans-serif; }
 .city-details-form .auth-submit { width: 100%; }
 .city-modal>.auth-mode-toggle { margin-top: 8px; }
+.city-zone-manage-button { margin-top: 10px; }
+.city-zone-editor { position: absolute; z-index: 4; top: 112px; left: 22px; width: min(340px, calc(100% - 44px)); max-height: calc(100% - 135px); overflow-y: auto; padding: 15px; border: 1px solid rgba(219,201,158,.24); border-radius: 12px; color: #eee8d8; background: rgba(19,28,23,.94); box-shadow: 0 12px 35px rgba(0,0,0,.3); backdrop-filter: blur(14px); }
+.city-zone-editor-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.city-zone-editor-heading>div { display: grid; gap: 4px; }
+.city-zone-editor-heading span { color: #b29a66; font-size: 8px; font-weight: 700; letter-spacing: .12em; }
+.city-zone-editor-heading strong { font: 600 15px 'Manrope', sans-serif; }
+.city-zone-editor-heading button, .city-zone-row button { display: grid; place-items: center; border: 1px solid rgba(219,201,158,.18); border-radius: 6px; color: #c9c1ad; background: transparent; cursor: pointer; }
+.city-zone-editor-heading button { width: 28px; height: 28px; flex: 0 0 28px; }
+.city-zone-editor>p { margin: 10px 0; color: #aaa997; font-size: 10px; line-height: 1.5; }
+.city-zone-editor .city-zone-editor-error { color: #f0b3aa; }
+.city-zone-editor-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.city-zone-draw-button { min-height: 34px; padding: 6px; border: 1px solid rgba(219,201,158,.2); border-radius: 7px; color: #e8e3d2; background: rgba(255,255,255,.03); font-size: 10px; cursor: pointer; }
+.city-zone-draw-button.urban { border-color: rgba(89,168,235,.45); }
+.city-zone-draw-button.rural { border-color: rgba(119,199,118,.45); }
+.city-zone-draw-button.active { color: #fff; background: rgba(255,255,255,.13); }
+.city-zone-draw-button:disabled, .city-zone-row button:disabled { opacity: .5; cursor: not-allowed; }
+.city-zone-list { display: grid; gap: 12px; margin-top: 14px; }
+.city-zone-group { display: grid; gap: 6px; }
+.city-zone-group>strong { color: #ded8c4; font-size: 10px; }
+.city-zone-group>span { color: #969787; font-size: 10px; }
+.city-zone-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 26px; padding: 3px 4px 3px 8px; border-radius: 5px; background: rgba(255,255,255,.045); }
+.city-zone-row span { color: #b9b7a8; font-size: 9px; }
+.city-zone-row button { width: 23px; height: 23px; flex: 0 0 23px; }
+.city-zone-saving { display: block; margin-top: 10px; color: #c6b27d; font-size: 10px; }
+.zone-category-hint { margin: 0 0 10px; color: #9cb4c8; font-size: 10px; line-height: 1.5; }
+.zone-category-hint.rural { color: #a9c49d; }
 
 @media (max-width: 900px) {
   .topbar { padding: 0 17px; gap: 15px; }

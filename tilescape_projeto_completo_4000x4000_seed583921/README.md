@@ -144,7 +144,7 @@ opção apaga os volumes, incluindo o banco e o estado persistente do mundo.
 ## Construções e cidades
 
 O mapa tem uma barra inferior com as categorias Construções Artesanais,
-Fazendas, Residências, Indústrias e Prefeitura. A Prefeitura aparece somente
+Comerciais, Fazendas, Residências, Recursos, Indústrias e Prefeitura. A Prefeitura aparece somente
 para a conta Neon Auth configurada em `MASTER_EMAIL`. Cadastre o mesmo e-mail
 nas variáveis locais e no Render; crie essa conta pelo formulário do jogo para
 ativar a permissão.
@@ -159,6 +159,15 @@ os limites do mapa, e o servidor valida essas regras antes de salvar.
 Clique na Assembleia para consultar os dados da cidade; a conta master também
 pode editar o nome. O rótulo da cidade mantém tamanho legível mesmo ao mudar o
 zoom. População, bem-estar e economia começam em zero.
+Na janela da Assembleia, a conta master pode abrir **Configurar áreas urbanas
+e rurais** e arrastar no mapa para desenhar vários retângulos por tipo. Cada
+região precisa ficar dentro dos 303 × 303 tiles municipais e as áreas não
+podem se sobrepor. Regiões urbanas aparecem em azul e rurais em verde durante
+a edição; jogadores também veem somente a região relevante quando selecionam
+uma categoria: Construções Artesanais, Comerciais e Residências usam áreas
+urbanas; Fazendas, Recursos e Indústrias usam áreas rurais. A definição das
+zonas é persistida e sincronizada em tempo real. O posicionamento de edifícios
+dessas categorias ainda não está habilitado.
 Depois de confirmar o local, a Assembleia aparece imediatamente enquanto o
 servidor salva; se a operação falhar, ela é removida e a mensagem de erro é
 exibida.

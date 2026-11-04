@@ -5,6 +5,9 @@ import { TileInfo } from '../types/map';
 import {
   ASSEMBLY_SIZE,
   CityAssembly,
+  CityZoneBounds,
+  CityZoneType,
+  getCityZonePlacementError,
   CityPlacementError,
   getCityPlacementError,
   MUNICIPAL_AREA_SIZE,
@@ -72,6 +75,9 @@ interface GameMapProps {
   placementName: string;
   roadMode: boolean;
   demolitionMode: boolean;
+  zoneOverlay: CityZoneType | 'all' | null;
+  zoneEditorCityId: string | null;
+  zoneDrawingType: CityZoneType | null;
   onCitySelect: (city: CityAssembly) => void;
   onCityPlace: (center: { x: number; y: number }) => void;
   onInvalidCityPlacement: (reason: CityPlacementError) => void;
@@ -79,6 +85,7 @@ interface GameMapProps {
   onInvalidRoadPlacement: (reason: RoadPlacementError) => void;
   onRoadDemolish: (roads: RoadTile[]) => void;
   onCityDemolish: (city: CityAssembly) => void;
+  onCityZoneDraw: (bounds: CityZoneBounds) => void;
 }
 
 export function GameMap({
@@ -93,6 +100,9 @@ export function GameMap({
   placementName,
   roadMode,
   demolitionMode,
+  zoneOverlay,
+  zoneEditorCityId,
+  zoneDrawingType,
   onCitySelect,
   onCityPlace,
   onInvalidCityPlacement,
@@ -100,6 +110,7 @@ export function GameMap({
   onInvalidRoadPlacement,
   onRoadDemolish,
   onCityDemolish,
+  onCityZoneDraw,
 }: GameMapProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -111,10 +122,13 @@ export function GameMap({
   const dragRef = useRef<{ x: number; y: number; cameraX: number; cameraY: number } | null>(null);
   const draggedRef = useRef(false);
   const roadDrawingRef = useRef(false);
+  const zoneDrawingRef = useRef(false);
+  const zoneStartRef = useRef<RoadPosition | null>(null);
   const roadPathRef = useRef<RoadPosition[]>([]);
   const roadDemolitionPathRef = useRef<RoadPosition[]>([]);
   const [roadPath, setRoadPath] = useState<RoadPosition[]>([]);
   const [placementPreview, setPlacementPreview] = useState<{ x: number; y: number } | null>(null);
+  const [zonePreview, setZonePreview] = useState<CityZoneBounds | null>(null);
   const landTileIds = useMemo(
     () => new Set(generator.tiles.filter((tile) => tile.category === 'land').map((tile) => tile.id)),
     [generator],
@@ -242,6 +256,27 @@ export function GameMap({
     }
     layer.addChild(municipalAreas);
 
+    if (zoneOverlay) {
+      const zoneGraphics = new PIXI.Graphics();
+      for (const city of cities) {
+        if (zoneOverlay === 'all' && city.id !== zoneEditorCityId) continue;
+        for (const zone of city.zones) {
+          if (zoneOverlay !== 'all' && zone.type !== zoneOverlay) continue;
+          const color = zone.type === 'urban' ? 0x59a8eb : 0x77c776;
+          zoneGraphics.lineStyle(0.12, color, 0.9);
+          zoneGraphics.beginFill(color, 0.2);
+          zoneGraphics.drawRect(
+            zone.minX,
+            zone.minY,
+            zone.maxX - zone.minX + 1,
+            zone.maxY - zone.minY + 1,
+          );
+          zoneGraphics.endFill();
+        }
+      }
+      layer.addChild(zoneGraphics);
+    }
+
     const border = new PIXI.Graphics();
     border.lineStyle(2 / tilePixels, 0xd5c08b, 0.8);
     border.drawRect(0, 0, generator.config.width, generator.config.height);
@@ -261,7 +296,7 @@ export function GameMap({
       }
     }
 
-  }, [camera, cities, generator, roads]);
+  }, [camera, cities, generator, roads, zoneEditorCityId, zoneOverlay]);
 
   useEffect(() => {
     renderMap();
@@ -292,47 +327,71 @@ export function GameMap({
         ),
       );
     }
-    if (!placementMode || !placementPreview) return;
+    if (zonePreview) {
+      const bounds = {
+        minX: Math.min(zonePreview.minX, zonePreview.maxX),
+        minY: Math.min(zonePreview.minY, zonePreview.maxY),
+        maxX: Math.max(zonePreview.minX, zonePreview.maxX),
+        maxY: Math.max(zonePreview.minY, zonePreview.maxY),
+      };
+      const targetCity = cities.find((city) => city.id === zoneEditorCityId);
+      const isValid =
+        targetCity !== undefined &&
+        getCityZonePlacementError(bounds, targetCity, targetCity.zones) === null;
+      const zoneColor = isValid
+        ? zoneDrawingType === 'urban'
+          ? 0x59a8eb
+          : 0x77c776
+        : 0xff4b55;
+      const preview = new PIXI.Graphics();
+      preview.lineStyle(0.12, zoneColor, 1);
+      preview.beginFill(zoneColor, 0.28);
+      preview.drawRect(bounds.minX, bounds.minY, bounds.maxX - bounds.minX + 1, bounds.maxY - bounds.minY + 1);
+      preview.endFill();
+      previewLayer.addChild(preview);
+    }
 
-    const valid =
-      getCityPlacementError(
-        placementPreview,
-        cities,
-        (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
-        generator.config,
-        roads,
-      ) === null;
-    const tint = valid ? 0x55ff88 : 0xff4b55;
-    const footprint = new PIXI.Graphics();
-    footprint.lineStyle(0.12, tint, 1);
-    footprint.beginFill(tint, 0.28);
-    footprint.drawRect(
-      placementPreview.x - Math.floor(ASSEMBLY_SIZE / 2),
-      placementPreview.y - Math.floor(ASSEMBLY_SIZE / 2),
-      ASSEMBLY_SIZE,
-      ASSEMBLY_SIZE,
-    );
-    footprint.endFill();
-    previewLayer.addChild(footprint);
+    if (placementMode && placementPreview) {
+      const valid =
+        getCityPlacementError(
+          placementPreview,
+          cities,
+          (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+          generator.config,
+          roads,
+        ) === null;
+      const tint = valid ? 0x55ff88 : 0xff4b55;
+      const footprint = new PIXI.Graphics();
+      footprint.lineStyle(0.12, tint, 1);
+      footprint.beginFill(tint, 0.28);
+      footprint.drawRect(
+        placementPreview.x - Math.floor(ASSEMBLY_SIZE / 2),
+        placementPreview.y - Math.floor(ASSEMBLY_SIZE / 2),
+        ASSEMBLY_SIZE,
+        ASSEMBLY_SIZE,
+      );
+      footprint.endFill();
+      previewLayer.addChild(footprint);
 
-    const preview = new PIXI.Sprite(PIXI.Texture.from(ASSEMBLY_ASSET));
-    preview.position.set(
-      placementPreview.x - Math.floor(ASSEMBLY_SIZE / 2),
-      placementPreview.y - Math.floor(ASSEMBLY_SIZE / 2),
-    );
-    preview.width = ASSEMBLY_SIZE;
-    preview.height = ASSEMBLY_SIZE;
-    preview.tint = tint;
-    preview.alpha = 0.72;
-    previewLayer.addChild(preview);
+      const preview = new PIXI.Sprite(PIXI.Texture.from(ASSEMBLY_ASSET));
+      preview.position.set(
+        placementPreview.x - Math.floor(ASSEMBLY_SIZE / 2),
+        placementPreview.y - Math.floor(ASSEMBLY_SIZE / 2),
+      );
+      preview.width = ASSEMBLY_SIZE;
+      preview.height = ASSEMBLY_SIZE;
+      preview.tint = tint;
+      preview.alpha = 0.72;
+      previewLayer.addChild(preview);
 
-    labelsLayer.addChild(
-      createCityLabel(
-        placementName,
-        camera.x + (placementPreview.x + 0.5) * tilePixels,
-        camera.y + (placementPreview.y - ASSEMBLY_SIZE / 2 - 0.35) * tilePixels,
-      ),
-    );
+      labelsLayer.addChild(
+        createCityLabel(
+          placementName,
+          camera.x + (placementPreview.x + 0.5) * tilePixels,
+          camera.y + (placementPreview.y - ASSEMBLY_SIZE / 2 - 0.35) * tilePixels,
+        ),
+      );
+    }
   }, [
     camera,
     cities,
@@ -341,6 +400,9 @@ export function GameMap({
     placementMode,
     placementName,
     placementPreview,
+    zoneEditorCityId,
+    zoneDrawingType,
+    zonePreview,
   ]);
 
   useEffect(() => {
@@ -350,6 +412,13 @@ export function GameMap({
       setRoadPath([]);
     }
   }, [roadMode]);
+
+  useEffect(() => {
+    if (zoneDrawingType) return;
+    zoneDrawingRef.current = false;
+    zoneStartRef.current = null;
+    setZonePreview(null);
+  }, [zoneDrawingType]);
 
   useEffect(() => {
     const previewLayer = roadPreviewLayerRef.current;
@@ -399,6 +468,17 @@ export function GameMap({
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 && event.button !== 1) return;
+    if (zoneDrawingType) {
+      if (event.button !== 0) return;
+      const tile = getTile(event);
+      if (!tile) return;
+      dragRef.current = null;
+      zoneDrawingRef.current = true;
+      zoneStartRef.current = { x: tile.x, y: tile.y };
+      setZonePreview({ minX: tile.x, minY: tile.y, maxX: tile.x, maxY: tile.y });
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
     if (roadMode) {
       if (event.button !== 0) return;
       const tile = getTile(event);
@@ -437,6 +517,14 @@ export function GameMap({
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
     const tile = getTile(event);
+    if (zoneDrawingRef.current && zoneStartRef.current && tile) {
+      setZonePreview({
+        minX: Math.min(zoneStartRef.current.x, tile.x),
+        minY: Math.min(zoneStartRef.current.y, tile.y),
+        maxX: Math.max(zoneStartRef.current.x, tile.x),
+        maxY: Math.max(zoneStartRef.current.y, tile.y),
+      });
+    }
     if (roadMode && roadDrawingRef.current && tile && roadPathRef.current.length <= MAX_ROAD_PATH_TILES) {
       const last = roadPathRef.current[roadPathRef.current.length - 1];
       if (last) {
@@ -480,6 +568,23 @@ export function GameMap({
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (zoneDrawingRef.current) {
+      const tile = getTile(event);
+      const start = zoneStartRef.current;
+      zoneDrawingRef.current = false;
+      zoneStartRef.current = null;
+      setZonePreview(null);
+      if (tile && start) {
+        onCityZoneDraw({
+          minX: Math.min(start.x, tile.x),
+          minY: Math.min(start.y, tile.y),
+          maxX: Math.max(start.x, tile.x),
+          maxY: Math.max(start.y, tile.y),
+        });
+      }
+      dragRef.current = null;
+      return;
+    }
     if (roadMode) {
       if (roadDrawingRef.current) {
         const tile = getTile(event);
@@ -610,7 +715,7 @@ export function GameMap({
   return (
     <div
       ref={hostRef}
-      className={`game-map${placementMode ? ' placement-mode' : ''}${roadMode ? ' road-mode' : ''}${demolitionMode ? ' demolition-mode' : ''}`}
+      className={`game-map${placementMode ? ' placement-mode' : ''}${roadMode ? ' road-mode' : ''}${demolitionMode ? ' demolition-mode' : ''}${zoneDrawingType ? ' zone-mode' : ''}`}
       aria-label="Mapa interativo do mundo"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

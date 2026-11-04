@@ -14,11 +14,20 @@ import {
 } from 'lucide-react';
 import CityAssemblyModal from './components/CityAssemblyModal';
 import ConstructionBar, { ConstructionCategory } from './components/ConstructionBar';
+import CityZoneEditor from './components/CityZoneEditor';
 import ProductCatalog from './components/ProductCatalog';
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
 import { connectToWorld, WorldSnapshot } from './game/worldClient';
-import type { CityAssembly, CityPlacementError } from './types/city';
+import {
+  CityAssembly,
+  CityPlacementError,
+  CityZoneBounds,
+  CityZoneType,
+  getCityZonePlacementError,
+  getRequiredCityZone,
+  MAX_CITY_ZONES,
+} from './types/city';
 import type { RoadPlacementError, RoadPosition, RoadTile } from './types/road';
 import { TileInfo } from './types/map';
 import { createMapGenerator } from './utils/mapGenerator';
@@ -40,8 +49,10 @@ const formatter = new Intl.DateTimeFormat('pt-BR', {
 });
 const CATEGORY_LABELS: Record<ConstructionCategory, string> = {
   artesanais: 'Construções Artesanais',
+  comerciais: 'Comerciais',
   fazendas: 'Fazendas',
   residencias: 'Residências',
+  recursos: 'Recursos',
   industrias: 'Indústrias',
   prefeitura: 'Prefeitura',
 };
@@ -90,6 +101,12 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Você só pode demolir construções que criou.';
         } else if (body.error === 'city_not_found') {
           error = 'Essa construção não existe mais.';
+        } else if (body.error === 'invalid_zones') {
+          error = 'As regiões enviadas são inválidas.';
+        } else if (body.error === 'zone_outside_municipality') {
+          error = 'As regiões precisam ficar dentro da área municipal.';
+        } else if (body.error === 'zone_overlap') {
+          error = 'As áreas urbanas e rurais não podem se sobrepor.';
         } else if (body.error === 'road_not_owned') {
           error = 'Você só pode demolir estradas que construiu.';
         } else if (body.error === 'road_not_found') {
@@ -140,6 +157,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [cityName, setCityName] = useState('');
   const [cityError, setCityError] = useState('');
   const [isCitySaving, setIsCitySaving] = useState(false);
+  const [zoneEditorCityId, setZoneEditorCityId] = useState<string | null>(null);
+  const [zoneDrawingType, setZoneDrawingType] = useState<CityZoneType | null>(null);
+  const [zoneEditorError, setZoneEditorError] = useState('');
+  const [isSavingZones, setIsSavingZones] = useState(false);
   const [isPlacingCity, setIsPlacingCity] = useState(false);
   const [cityPlacementMessage, setCityPlacementMessage] = useState('');
   const [isPlacingRoads, setIsPlacingRoads] = useState(false);
@@ -177,6 +198,20 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
     return [...byPosition.values()];
   }, [cities, pendingCities]);
+  const cityZoneEditorCity = zoneEditorCityId
+    ? visibleCities.find((city) => city.id === zoneEditorCityId) ?? null
+    : null;
+  const zoneOverlay = zoneEditorCityId
+    ? 'all'
+    : activeCategory
+      ? getRequiredCityZone(activeCategory)
+      : null;
+  const activeZoneCount = zoneOverlay
+    ? visibleCities.reduce(
+        (count, city) => count + city.zones.filter((zone) => zone.type === zoneOverlay).length,
+        0,
+      )
+    : 0;
   const visibleRoads = useMemo(() => {
     const byPosition = new Map(roads.map((road) => [`${road.x},${road.y}`, road]));
     for (const road of pendingRoads) {
@@ -213,6 +248,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   };
 
   const openNewAssembly = () => {
+    closeCityZoneEditor();
     setActiveCategory(null);
     setIsPlacingRoads(false);
     setSelectedCity(null);
@@ -224,6 +260,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   };
 
   const openCityDetails = (city: CityAssembly) => {
+    closeCityZoneEditor();
     setSelectedCity(city);
     setCityName(city.name);
     setCityError('');
@@ -254,6 +291,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       population: 0,
       wellbeing: 0,
       economy: 0,
+      zones: [],
     };
     setPendingCities((current) => [...current, pendingCity]);
     setIsPlacingCity(false);
@@ -373,6 +411,85 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
+  const saveCityZones = async (
+    city: CityAssembly,
+    zones: (CityZoneBounds & { type: CityZoneType })[],
+  ) => {
+    setIsSavingZones(true);
+    setZoneDrawingType(null);
+    setZoneEditorError('');
+    try {
+      const updated = await cityRequest<CityAssembly>(`/api/cities/${city.id}/zones`, {
+        method: 'PUT',
+        body: JSON.stringify({ zones }),
+      });
+      setCities((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setSelectedCity((current) => (current?.id === updated.id ? updated : current));
+    } catch (error) {
+      setZoneEditorError(error instanceof Error ? error.message : 'Não foi possível salvar as regiões.');
+    } finally {
+      setIsSavingZones(false);
+    }
+  };
+
+  const handleCityZoneDraw = (bounds: CityZoneBounds) => {
+    if (!user.isMaster || !zoneEditorCityId || !zoneDrawingType) return;
+    const city = visibleCities.find((item) => item.id === zoneEditorCityId);
+    if (!city) return;
+    const existingZones = city.zones;
+    const zoneError = getCityZonePlacementError(bounds, city, existingZones);
+    if (zoneError) {
+      setZoneEditorError(
+        zoneError === 'zone_outside_municipality'
+          ? 'A região precisa ficar dentro da área municipal.'
+          : zoneError === 'zone_overlap'
+            ? 'As áreas urbanas e rurais não podem se sobrepor.'
+            : 'A região desenhada é inválida.',
+      );
+      return;
+    }
+    if (existingZones.length >= MAX_CITY_ZONES) {
+      setZoneEditorError(`Cada cidade pode ter até ${MAX_CITY_ZONES} regiões.`);
+      return;
+    }
+    void saveCityZones(city, [
+      ...existingZones.map(({ type, minX, minY, maxX, maxY }) => ({ type, minX, minY, maxX, maxY })),
+      { ...bounds, type: zoneDrawingType },
+    ]);
+  };
+
+  const openCityZoneEditor = () => {
+    if (!selectedCity || !user.isMaster) return;
+    setZoneEditorCityId(selectedCity.id);
+    setZoneDrawingType(null);
+    setZoneEditorError('');
+    setIsCityModalOpen(false);
+    setActiveCategory(null);
+    setIsPlacingCity(false);
+    setIsPlacingRoads(false);
+    setIsDemolitionMode(false);
+  };
+
+  const closeCityZoneEditor = () => {
+    setZoneEditorCityId(null);
+    setZoneDrawingType(null);
+    setZoneEditorError('');
+  };
+
+  const handleCityZoneDelete = (zoneId: string) => {
+    if (!zoneEditorCityId || !user.isMaster) return;
+    const city = visibleCities.find((item) => item.id === zoneEditorCityId);
+    if (!city) return;
+    void saveCityZones(
+      city,
+      city.zones
+        .filter((zone) => zone.id !== zoneId)
+        .map(({ type, minX, minY, maxX, maxY }) => ({ type, minX, minY, maxX, maxY })),
+    );
+  };
+
   const demolishCity = async (city: CityAssembly) => {
     if (
       !window.confirm(
@@ -470,6 +587,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           placementName={cityName}
           roadMode={isPlacingRoads}
           demolitionMode={isDemolitionMode}
+          zoneOverlay={zoneOverlay}
+          zoneEditorCityId={zoneEditorCityId}
+          zoneDrawingType={isSavingZones ? null : zoneDrawingType}
           onCameraChange={setCamera}
           onTileHover={setHoveredTile}
           onTileSelect={setSelectedTile}
@@ -480,6 +600,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           onInvalidRoadPlacement={handleInvalidRoadPlacement}
           onRoadDemolish={(roadsToDemolish) => void demolishRoads(roadsToDemolish)}
           onCityDemolish={(city) => void demolishCity(city)}
+          onCityZoneDraw={handleCityZoneDraw}
         />
         <div className="map-vignette" />
 
@@ -581,6 +702,17 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             </button>
           </div>
         )}
+        {cityZoneEditorCity && (
+          <CityZoneEditor
+            city={cityZoneEditorCity}
+            drawingType={zoneDrawingType}
+            isSaving={isSavingZones}
+            error={zoneEditorError}
+            onDraw={setZoneDrawingType}
+            onDelete={handleCityZoneDelete}
+            onClose={closeCityZoneEditor}
+          />
+        )}
       </section>
       {activeCategory && (
         <section className="construction-drawer" aria-label={CATEGORY_LABELS[activeCategory]}>
@@ -590,6 +722,14 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
               ×
             </button>
           </div>
+          {zoneOverlay && (
+            <p className={`zone-category-hint ${zoneOverlay}`}>
+              Áreas {zoneOverlay === 'urban' ? 'urbanas (azul)' : 'rurais (verde)'} destacadas no mapa
+              {activeZoneCount === 0
+                ? ': nenhuma região foi definida.'
+                : `: ${activeZoneCount === 1 ? '1 região' : `${activeZoneCount} regiões`}.`}
+            </p>
+          )}
           {activeCategory === 'prefeitura' && user.isMaster ? (
             <>
               <button className="construction-card" type="button" onClick={openNewAssembly}>
@@ -614,6 +754,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         productCatalogOpen={isProductCatalogOpen}
         isMaster={user.isMaster}
         onSelect={(category) => {
+          closeCityZoneEditor();
           setIsProductCatalogOpen(false);
           setIsDemolitionMode(false);
           setDemolitionMessage('');
@@ -623,6 +764,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           setActiveCategory((current) => (current === category ? null : category));
         }}
         onToggleProductCatalog={() => {
+          closeCityZoneEditor();
           setActiveCategory(null);
           setIsDemolitionMode(false);
           setDemolitionMessage('');
@@ -632,6 +774,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           setIsProductCatalogOpen((current) => !current);
         }}
         onToggleDemolition={() => {
+          closeCityZoneEditor();
           setIsProductCatalogOpen(false);
           setActiveCategory(null);
           setIsPlacingCity(false);
@@ -659,6 +802,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           }}
           onSave={() => void saveCityName()}
           onChooseLocation={chooseCityLocation}
+          onManageZones={openCityZoneEditor}
         />
       )}
     </main>

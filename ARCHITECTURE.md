@@ -158,7 +158,7 @@ reimplemente as fórmulas separadamente no React e no servidor.
 - As imagens `public/buildings/roads/grass_dirt1.png` a `grass_dirt11.png`
   representam retas horizontal/vertical (1/2), curvas (3/4/5/6), cruzamento
   de quatro vias (7) e junções em T (8/9/10/11, respectivamente, sem ligação
-  norte/sul/leste/oeste). `getRoadAssetIndex` seleciona a peça conforme os
+  sul/norte/leste/oeste). `getRoadAssetIndex` seleciona a peça conforme os
   vizinhos ortogonais; a URL inclui versão de cache para carregar assets novos.
 - Os tiles são persistidos individualmente em `road_tiles`; a chave primária
   garante um único tile de estrada em cada coordenada. Cada tile aponta para a

@@ -63,8 +63,8 @@ export function getRoadAssetIndex(
 
   if (connections === 4) return 7;
   if (connections === 3) {
-    if (!north) return 8;
-    if (!south) return 9;
+    if (!south) return 8;
+    if (!north) return 9;
     if (!east) return 10;
     return 11;
   }

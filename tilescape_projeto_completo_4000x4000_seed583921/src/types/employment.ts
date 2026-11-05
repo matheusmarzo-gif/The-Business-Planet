@@ -113,7 +113,7 @@ export function getPayroll(
   return owed;
 }
 
-// Renda média por morador de cada residência, calculada após a alocação dos empregos.
+// Renda mÃ©dia por morador de cada residÃªncia, calculada apÃ³s a alocaÃ§Ã£o dos empregos.
 export function getAverageIncomes(
   residences: { id: string; occupants: number }[],
   wages: Map<string, number>,
@@ -128,7 +128,7 @@ export function getAverageIncomes(
   );
 }
 
-// Avança uma obra com o trabalho do dia; conclui quando os Work Points chegam ao necessário.
+// AvanÃ§a uma obra com o trabalho do dia; conclui quando os Work Points chegam ao necessÃ¡rio.
 export function advanceConstruction(
   done: number,
   needed: number,

@@ -773,7 +773,7 @@ describe('recursos e ferramentaria', () => {
   });
 });
 
-describe('renda média', () => {
+describe('renda mÃ©dia', () => {
   it('averages wages over occupants after allocation', () => {
     const incomes = getAverageIncomes(
       [{ id: 'h', occupants: 4 }, { id: 'e', occupants: 0 }],
@@ -803,5 +803,15 @@ describe('obras', () => {
       const result = advanceConstruction(definition.workPoints - 1, definition.workPoints, 1, 8, 100, 100);
       assert.equal(result.completed, true, definition.type);
     }
+  });
+});
+
+describe('comandos do master', () => {
+  it('only accepts known time scales and sane grants', async () => {
+    const { isValidTimeScale, parseMasterGrant } = await import('./worldClock');
+    for (const scale of [15, 30, 60, 240]) assert.equal(isValidTimeScale(scale), true);
+    for (const scale of [0, 1, 45, -15, '15', null]) assert.equal(isValidTimeScale(scale), false);
+    assert.equal(parseMasterGrant(500), 500);
+    for (const grant of [0, -5, 1.5, 2_000_000_000, '10', NaN]) assert.equal(parseMasterGrant(grant), null);
   });
 });

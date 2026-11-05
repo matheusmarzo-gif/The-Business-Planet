@@ -377,3 +377,7 @@ em `RegrasGerais.odt` na pasta do projeto. Esta primeira etapa estabelece o mapa
 e a infraestrutura persistente em tempo real, com a assembleia municipal como
 primeira estrutura fundamental e estradas de terra como primeira infraestrutura
 urbana. As demais construções e transações econômicas ainda não estão habilitadas.
+
+## Comandos do Master
+
+A conta Master vê o botão **Master** na barra superior. O painel permite mudar a velocidade do mundo (1:15, 1:30, 1:60 ou 1:240; dias mais rápidos aceleram folha, Work Points e vendas), adicionar C$ à própria conta (de 1 a 1.000.000.000 por vez) e ver os jogadores online conectados.

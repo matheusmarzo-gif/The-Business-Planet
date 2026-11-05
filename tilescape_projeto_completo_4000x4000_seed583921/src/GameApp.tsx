@@ -10,6 +10,7 @@ import ConstructionBar, { ConstructionCategory } from './components/Construction
 import CityZoneEditor from './components/CityZoneEditor';
 import ProductCatalog from './components/ProductCatalog';
 import ResidencePanel from './components/ResidencePanel';
+import MasterPanel, { type OnlinePlayer } from './components/MasterPanel';
 import WarehousePanel from './components/WarehousePanel';
 import ConsumptionPanel, { type ProductConsumption } from './components/ConsumptionPanel';
 import type { WarehouseDemand, WarehouseProductSetting } from './types/warehouse';
@@ -256,6 +257,52 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [showInfluence, setShowInfluence] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const gameTime = useWorldClock(snapshot);
+  const [isMasterPanelOpen, setIsMasterPanelOpen] = useState(false);
+  const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayer[]>([]);
+  const [isLoadingPlayers, setIsLoadingPlayers] = useState(false);
+  const [isMasterBusy, setIsMasterBusy] = useState(false);
+  const [masterError, setMasterError] = useState('');
+  const [masterMessage, setMasterMessage] = useState('');
+
+  const refreshOnlinePlayers = () => {
+    setIsLoadingPlayers(true);
+    cityRequest<{ players: OnlinePlayer[] }>('/api/master/online-players')
+      .then((result) => setOnlinePlayers(result.players))
+      .catch((error: unknown) => setMasterError(error instanceof Error ? error.message : 'Falha ao listar jogadores.'))
+      .finally(() => setIsLoadingPlayers(false));
+  };
+
+  const runMasterCommand = async (action: () => Promise<string>) => {
+    setIsMasterBusy(true);
+    setMasterError('');
+    setMasterMessage('');
+    try {
+      setMasterMessage(await action());
+    } catch (error: unknown) {
+      setMasterError(error instanceof Error ? error.message : 'Não foi possível executar o comando.');
+    } finally {
+      setIsMasterBusy(false);
+    }
+  };
+
+  const changeTimeScale = (timeScale: number) =>
+    void runMasterCommand(async () => {
+      await cityRequest<{ timeScale: number }>('/api/master/time-scale', {
+        method: 'POST',
+        body: JSON.stringify({ timeScale }),
+      });
+      return `Velocidade alterada para 1:${timeScale}.`;
+    });
+
+  const grantMoney = (amount: number) =>
+    void runMasterCommand(async () => {
+      const wallet = await cityRequest<{ balance: number }>('/api/master/grant-money', {
+        method: 'POST',
+        body: JSON.stringify({ amount }),
+      });
+      setBalance(wallet.balance);
+      return `${formatMoney(amount)} adicionados à sua conta.`;
+    });
 
   useEffect(() => {
     let cancelled = false;
@@ -1014,6 +1061,16 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             {balance === null ? 'C$ —' : formatMoney(balance)}
           </div>
           <div className="player-count"><span className="status-dot" />{snapshot?.onlinePlayers ?? '—'} <span>viajantes</span></div>
+          {user.isMaster && (
+            <button
+              type="button"
+              className="master-button"
+              aria-expanded={isMasterPanelOpen}
+              onClick={() => setIsMasterPanelOpen((open) => !open)}
+            >
+              Master
+            </button>
+          )}
           {signOutError && <span className="account-error" role="alert">{signOutError}</span>}
           <div className="account-menu">
             <span title={user.email}>{user.name || user.email}</span>
@@ -1100,6 +1157,20 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
               setLinkingFromId(null);
               setSelectedResidenceId(null);
             }}
+          />
+        )}
+        {user.isMaster && isMasterPanelOpen && (
+          <MasterPanel
+            timeScale={snapshot?.timeScale ?? 15}
+            players={onlinePlayers}
+            isLoadingPlayers={isLoadingPlayers}
+            isBusy={isMasterBusy}
+            error={masterError}
+            message={masterMessage}
+            onSetTimeScale={changeTimeScale}
+            onGrantMoney={grantMoney}
+            onRefreshPlayers={refreshOnlinePlayers}
+            onClose={() => setIsMasterPanelOpen(false)}
           />
         )}
         {selectedResidence && isConsumptionOpen && (

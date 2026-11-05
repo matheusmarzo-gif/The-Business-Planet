@@ -71,6 +71,8 @@ ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS last_payroll_day DATE;
 ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS last_warehouse_trade_slot TEXT;
+ALTER TABLE world_state
+  ADD COLUMN IF NOT EXISTS time_scale DOUBLE PRECISION NOT NULL DEFAULT 15 CHECK (time_scale > 0);
 
 ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS desired_workers INTEGER NOT NULL DEFAULT 0 CHECK (desired_workers >= 0);

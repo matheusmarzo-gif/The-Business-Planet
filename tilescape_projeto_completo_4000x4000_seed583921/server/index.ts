@@ -39,6 +39,7 @@ import {
   type ResidencePlacementError,
 } from '../src/types/residence.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
+import { isValidTimeScale, parseMasterGrant } from '../src/types/worldClock.js';
 import { advanceConstruction, allocateWorkers, getAverageIncomes, getDailyWorkPoints, getPayroll, type JobAssignment } from '../src/types/employment.js';
 import { getShopSalesCapacity, parsePrice, planRiceSales } from '../src/types/commerce.js';
 import { nextEfficiencyPenalty, planProduction, rollToolDemand } from '../src/types/fishing.js';
@@ -70,7 +71,7 @@ loadDotEnv({
 });
 
 const PORT = Number(process.env.PORT ?? 3001);
-const TIME_SCALE = 15;
+const websocketUsers = new WeakMap<object, string>();
 const MAP = {
   width: WORLD_CONFIG.width,
   height: WORLD_CONFIG.height,
@@ -206,11 +207,11 @@ async function getSnapshot() {
     pool.query(
       `SELECT
          world_time + GREATEST(0, EXTRACT(EPOCH FROM (clock_timestamp() - last_real_at)))
-           * $1 * INTERVAL '1 second' AS world_time,
+           * time_scale * INTERVAL '1 second' AS world_time,
+         time_scale,
          clock_timestamp() AS server_time
        FROM world_state
        WHERE id = 1`,
-      [TIME_SCALE],
     ),
     (async () => {
       await redis.zRemRangeByScore(PRESENCE_KEY, '-inf', Date.now());
@@ -223,7 +224,7 @@ async function getSnapshot() {
   return {
     worldTime: new Date(row.world_time).toISOString(),
     serverTime: new Date(row.server_time).toISOString(),
-    timeScale: TIME_SCALE,
+    timeScale: Number(row.time_scale),
     map: MAP,
     onlinePlayers: online,
   };
@@ -922,10 +923,9 @@ async function advanceClock() {
     `UPDATE world_state
      SET world_time = world_time
            + GREATEST(0, EXTRACT(EPOCH FROM (clock_timestamp() - last_real_at)))
-             * $1 * INTERVAL '1 second',
+             * time_scale * INTERVAL '1 second',
          last_real_at = clock_timestamp()
      WHERE id = 1`,
-    [TIME_SCALE],
   );
   const employmentChanged = await runDailyEmployment();
   if ((await runDailyImmigration()) || employmentChanged) {
@@ -2497,6 +2497,81 @@ async function start() {
         response.status(503).json({ error: 'city_demolition_unavailable' });
       });
   });
+  app.get('/api/master/online-players', requireAuth, requireMasterAuth, (_request, response) => {
+    void (async () => {
+      await redis.zRemRangeByScore(PRESENCE_KEY, '-inf', Date.now());
+      const entries = await redis.zRange(PRESENCE_KEY, 0, -1);
+      const connections = new Map<string, number>();
+      for (const entry of entries) {
+        const id = entry.split('|')[0];
+        if (id && id !== 'unknown') connections.set(id, (connections.get(id) ?? 0) + 1);
+      }
+      const { rows } = connections.size
+        ? await pool.query<{ id: string; name: string | null; email: string | null }>(
+            'SELECT id, name, email FROM neon_auth."user" WHERE id = ANY($1::text[])',
+            [[...connections.keys()]],
+          )
+        : { rows: [] };
+      response.json({
+        players: rows
+          .map((row) => ({
+            id: row.id,
+            name: row.name || row.email || row.id,
+            email: row.email ?? '',
+            connections: connections.get(row.id) ?? 1,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      });
+    })().catch((error: unknown) => {
+      console.error('Não foi possível listar os jogadores online:', error);
+      response.status(503).json({ error: 'players_unavailable' });
+    });
+  });
+  app.post('/api/master/time-scale', requireAuth, requireMasterAuth, (request, response) => {
+    const timeScale = (request.body as { timeScale?: unknown } | undefined)?.timeScale;
+    if (!isValidTimeScale(timeScale)) {
+      response.status(400).json({ error: 'invalid_time_scale' });
+      return;
+    }
+    // O mesmo UPDATE avança o relógio com a velocidade antiga antes de gravar a nova.
+    void pool
+      .query(
+        `UPDATE world_state
+         SET world_time = world_time
+               + GREATEST(0, EXTRACT(EPOCH FROM (clock_timestamp() - last_real_at)))
+                 * time_scale * INTERVAL '1 second',
+             last_real_at = clock_timestamp(),
+             time_scale = $1
+         WHERE id = 1`,
+        [timeScale],
+      )
+      .then(() => publishSnapshot())
+      .then(() => response.json({ timeScale }))
+      .catch((error: unknown) => {
+        console.error('Não foi possível alterar a velocidade do mundo:', error);
+        response.status(503).json({ error: 'time_scale_unavailable' });
+      });
+  });
+  app.post('/api/master/grant-money', requireAuth, requireMasterAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const amount = parseMasterGrant((request.body as { amount?: unknown } | undefined)?.amount);
+    if (!userId || amount === null) {
+      response.status(400).json({ error: 'invalid_amount' });
+      return;
+    }
+    void pool
+      .query<{ balance: string }>(
+        `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $2::bigint + $3::bigint)
+         ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $3::bigint
+         RETURNING balance`,
+        [userId, STARTING_BALANCE, amount],
+      )
+      .then(({ rows }) => response.json({ balance: Number(rows[0].balance) }))
+      .catch((error: unknown) => {
+        console.error('Não foi possível adicionar dinheiro:', error);
+        response.status(503).json({ error: 'wallet_unavailable' });
+      });
+  });
   app.get('/api/world', requireAuth, (_request, response) => {
     void getSnapshot()
       .then((snapshot) => response.json(snapshot))
@@ -2519,12 +2594,14 @@ async function start() {
       }
 
       const token = url.searchParams.get('token');
-      if (!token || !(await verifyAccessToken(token, auth))) {
+      const wsUserId = token ? await verifyAccessToken(token, auth) : null;
+      if (!wsUserId) {
         rejectWebSocketUpgrade(socket, 401);
         return;
       }
 
       websocketServer.handleUpgrade(request, socket, head, (websocket) => {
+        websocketUsers.set(websocket, wsUserId);
         websocketServer.emit('connection', websocket, request);
       });
     })().catch((error: unknown) => {
@@ -2535,7 +2612,7 @@ async function start() {
 
   websocketServer.on('connection', (websocket) => {
     clients.add(websocket);
-    const presenceId = randomUUID();
+    const presenceId = `${websocketUsers.get(websocket) ?? 'unknown'}|${randomUUID()}`;
     let presenceTimer: NodeJS.Timeout;
 
     const registerPresence = async () => {

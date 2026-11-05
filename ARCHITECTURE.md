@@ -404,6 +404,9 @@ As rotas do mundo, exceto health check, exigem JWT vÃ¡lido do Neon Auth.
 | `GET /api/me` | Autenticado | Retorna se o usuÃ¡rio Ã© master. |
 | `GET /api/cities` | Autenticado | Retorna cidades persistidas. |
 | `GET /api/wallet` | Autenticado | Cria a carteira do usuÃ¡rio com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
+| `GET /api/master/online-players` | Master | Lista `{ players: [{ id, name, email, connections }] }` a partir da presenÃ§a no Redis (`userId|uuid`) e de `neon_auth."user"`. |
+| `POST /api/master/time-scale` | Master | `{ timeScale }` validado por `isValidTimeScale` (`src/types/worldClock.ts`: 15, 30, 60, 240); avanÃ§a o relÃ³gio com a velocidade antiga, grava `world_state.time_scale` e republica o snapshot. |
+| `POST /api/master/grant-money` | Master | `{ amount }` (inteiro 1 a 1.000.000.000, `parseMasterGrant`) creditado na carteira do prÃ³prio Master; retorna `{ balance }`. |
 | `POST /api/cities` | Master | Valida e cria Assembleia/cidade. |
 | `PATCH /api/cities/:id` | Master | Altera o nome de uma cidade. |
 | `PUT /api/cities/:id/zones` | Master | Valida e substitui as regiÃµes urbanas/rurais da cidade. |
@@ -516,4 +519,4 @@ atualizado.
 - O editor de mapa procedural continua no cÃ³digo, mas nÃ£o estÃ¡ ligado ao fluxo
   de entrada atual.
 
-- Obras e economia diária: às 00:00 o progresso das obras usa dvanceConstruction (employment.ts; conclui quando Work Points >= necessários, para todos os tipos). Vendas, produção e transporte rodam sob um SAVEPOINT (daily_economy): se falharem, folha e obras do dia são preservadas e o erro é registrado.
+- Obras e economia diï¿½ria: ï¿½s 00:00 o progresso das obras usa dvanceConstruction (employment.ts; conclui quando Work Points >= necessï¿½rios, para todos os tipos). Vendas, produï¿½ï¿½o e transporte rodam sob um SAVEPOINT (daily_economy): se falharem, folha e obras do dia sï¿½o preservadas e o erro ï¿½ registrado.

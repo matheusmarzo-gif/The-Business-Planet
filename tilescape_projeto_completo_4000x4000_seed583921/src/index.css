@@ -275,3 +275,17 @@ button { color: inherit; }
   .map-hint { left: auto; right: 14px; bottom: 19px; font-size: 0; }
   .map-hint i, .map-hint .mouse-icon { display: none; }
 }
+
+.master-panel { width: min(460px, calc(100vw - 32px)); overflow-y: auto; }
+.master-heading { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 8px; font-size: 12px; color: #ead9a6; letter-spacing: .06em; }
+.master-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.master-button { padding: 7px 12px; border: 1px solid rgba(219,201,158,.3); border-radius: 6px; color: #ead9a6; background: transparent; cursor: pointer; font-size: 12px; }
+.master-button:hover:not(:disabled) { background: rgba(255,255,255,.08); }
+.master-button.active { background: rgba(226,197,127,.2); }
+.master-button:disabled { opacity: .55; cursor: default; }
+.master-input { width: 150px; padding: 7px 9px; border: 1px solid rgba(219,201,158,.3); border-radius: 6px; color: #eee7d6; background: rgba(0,0,0,.25); font-size: 12px; }
+.master-link { border: 0; background: transparent; color: #b7b19e; cursor: pointer; font-size: 11px; text-decoration: underline; }
+.master-message { margin: 0 0 8px; color: #9fd3a0; font-size: 11px; }
+.master-players { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12px; max-height: 220px; overflow-y: auto; }
+.master-players li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.master-players span, .master-players small { color: #b7b19e; font-size: 11px; }

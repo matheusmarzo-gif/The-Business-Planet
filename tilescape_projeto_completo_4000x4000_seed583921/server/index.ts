@@ -771,6 +771,7 @@ async function runDailyEmployment(): Promise<boolean> {
          WHERE building_type = 'warehouse' AND status = 'completed'`,
       );
       for (const warehouse of warehouseRows) {
+        let transportPhase = 'loading_linked_buildings';
         const warehouseSiteForLog = workplaces.find((row) => row.id === warehouse.id);
         await logProduction(client, warehouse.id, state.day, {
           workPoints:
@@ -796,6 +797,7 @@ async function runDailyEmployment(): Promise<boolean> {
            WHERE warehouse_id = $1 AND status = 'completed'`,
           [warehouse.id],
         );
+        transportPhase = 'loading_stock';
         const warehouseSite = workplaces.find((row) => row.id === warehouse.id);
         const workPoints =
           (workers.get(warehouse.id) ?? 0) *
@@ -817,6 +819,7 @@ async function runDailyEmployment(): Promise<boolean> {
           [warehouse.id],
         );
         const types = new Map(linked.map((row) => [row.id, row.building_type]));
+        transportPhase = 'planning_transfers';
         const { transfers, attempts } = planTransfersDetailed(
           {
             stock: new Map(stockRows.map((row) => [row.product_id, row.quantity])),
@@ -833,6 +836,7 @@ async function runDailyEmployment(): Promise<boolean> {
             ironStock: row.iron_stock,
           })),
         );
+        transportPhase = 'writing_attempts';
         await client.query('SAVEPOINT transport_log');
         try {
           for (const attempt of attempts) {
@@ -862,6 +866,7 @@ async function runDailyEmployment(): Promise<boolean> {
           await client.query('ROLLBACK TO SAVEPOINT transport_log');
           console.error('Não foi possível gravar o histórico do armazém:', logError);
         }
+        transportPhase = 'applying_transfers';
         for (const transfer of transfers) {
           const delta = transfer.direction === 'out' ? transfer.quantity : -transfer.quantity;
           await client.query(
@@ -887,6 +892,7 @@ async function runDailyEmployment(): Promise<boolean> {
           }
           changed = true;
         }
+        transportPhase = 'recording_daily_demand';
         await logWarehouseDemand(
           client,
           warehouse.id,
@@ -896,20 +902,38 @@ async function runDailyEmployment(): Promise<boolean> {
         await client.query('RELEASE SAVEPOINT warehouse_transport');
         } catch (transportError) {
           await client.query('ROLLBACK TO SAVEPOINT warehouse_transport');
-          console.error(`Falha no transporte do armazém ${warehouse.id}:`, transportError);
+          const errorInfo =
+            transportError && typeof transportError === 'object'
+              ? (transportError as Record<string, unknown>)
+              : {};
+          const errorMessage =
+            typeof errorInfo.message === 'string' ? errorInfo.message : String(transportError);
+          const errorMetadata = [
+            typeof errorInfo.code === 'string' ? `SQLSTATE ${errorInfo.code}` : null,
+            typeof errorInfo.constraint === 'string' ? `constraint=${errorInfo.constraint}` : null,
+            typeof errorInfo.column === 'string' ? `column=${errorInfo.column}` : null,
+            typeof errorInfo.detail === 'string' ? errorInfo.detail : null,
+          ].filter((value): value is string => value !== null);
+          const errorDetail =
+            `${transportPhase}: ${errorMessage}${errorMetadata.length ? ` (${errorMetadata.join('; ')})` : ''}`.slice(
+              0,
+              1000,
+            );
+          console.error(`Falha no transporte do armazém ${warehouse.id} (${transportPhase}):`, transportError);
           await client.query('SAVEPOINT transport_error_log');
           try {
             await client.query(
               `INSERT INTO warehouse_transport_log
-                 (warehouse_id, day, linked_id, linked_type, product_id, direction, wanted, moved, reason)
-               VALUES ($1, $2::date, $1, 'warehouse', '', 'out', 0, 0, 'error')`,
-              [warehouse.id, state.day],
+                 (warehouse_id, day, linked_id, linked_type, product_id, direction, wanted, moved, reason, error_detail)
+               VALUES ($1, $2::date, $1, 'system', '', 'out', 0, 0, 'error', $3)`,
+              [warehouse.id, state.day, errorDetail],
             );
             await client.query('RELEASE SAVEPOINT transport_error_log');
           } catch (logError) {
             await client.query('ROLLBACK TO SAVEPOINT transport_error_log');
             console.error('Não foi possível registrar o erro do armazém:', logError);
           }
+          await client.query('RELEASE SAVEPOINT warehouse_transport');
         }
       }
       });
@@ -1826,7 +1850,24 @@ async function start() {
       response.status(400).json({ error: 'invalid_residence' });
       return;
     }
+    const userId = authenticatedUserIds.get(request);
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
     void (async () => {
+      const { rows: owners } = await pool.query<{ created_by: string }>(
+        'SELECT created_by FROM residential_buildings WHERE id = $1 AND building_type = $2',
+        [request.params.id, 'warehouse'],
+      );
+      if (!owners[0]) {
+        response.status(404).json({ error: 'warehouse_not_found' });
+        return;
+      }
+      if (owners[0].created_by !== userId) {
+        response.status(403).json({ error: 'forbidden' });
+        return;
+      }
       const { rows: events } = await pool.query<{
         day: string;
         linked_type: string;
@@ -1835,8 +1876,9 @@ async function start() {
         wanted: number;
         moved: number;
         reason: string | null;
+        error_detail: string | null;
       }>(
-        `SELECT to_char(day, 'YYYY-MM-DD') AS day, linked_type, product_id, direction, wanted, moved, reason
+        `SELECT to_char(day, 'YYYY-MM-DD') AS day, linked_type, product_id, direction, wanted, moved, reason, error_detail
          FROM warehouse_transport_log
          WHERE warehouse_id = $1
          ORDER BY day DESC, id ASC
@@ -1858,6 +1900,7 @@ async function start() {
           wanted: row.wanted,
           moved: row.moved,
           reason: row.reason,
+          errorDetail: row.error_detail,
         })),
       });
     })().catch((error: unknown) => {

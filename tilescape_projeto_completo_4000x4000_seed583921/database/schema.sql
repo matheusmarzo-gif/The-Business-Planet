@@ -161,8 +161,12 @@ CREATE TABLE IF NOT EXISTS warehouse_transport_log (
   direction TEXT NOT NULL CHECK (direction IN ('in', 'out')),
   wanted INTEGER NOT NULL CHECK (wanted >= 0),
   moved INTEGER NOT NULL CHECK (moved >= 0),
-  reason TEXT
+  reason TEXT,
+  error_detail TEXT
 );
+
+ALTER TABLE warehouse_transport_log
+  ADD COLUMN IF NOT EXISTS error_detail TEXT;
 
 CREATE INDEX IF NOT EXISTS warehouse_transport_log_idx ON warehouse_transport_log (warehouse_id, day DESC);
 

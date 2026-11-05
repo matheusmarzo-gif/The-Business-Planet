@@ -9,6 +9,7 @@ export interface WarehouseLogEvent {
   wanted: number;
   moved: number;
   reason: string | null;
+  errorDetail?: string | null;
 }
 
 export interface WarehouseLogDay {
@@ -66,17 +67,26 @@ export default function WarehouseLogPanel({ days, events, isLoading, error, onCl
               .filter((item) => item.day === day)
               .map((item, index) => {
                 const product = PRODUCTS.find((entry) => entry.id === item.productId);
+                const isError = item.reason === 'error';
                 const building = RESIDENCES[item.buildingType as ResidenceType]?.name ?? item.buildingType;
                 return (
                   <div className="log-row" key={`${day}-${index}`}>
                     <span>
-                      {item.direction === 'out' ? `${building} → Armazém` : `Armazém → ${building}`}
+                      {isError
+                        ? 'Falha na rotina de transporte'
+                        : item.direction === 'out'
+                          ? `${building} → Armazém`
+                          : `Armazém → ${building}`}
                     </span>
-                    <span>{product?.name ?? item.productId}</span>
+                    <span>{isError ? '—' : product?.name ?? item.productId}</span>
+                    <span>{isError ? '—' : `${integer.format(item.moved)} de ${integer.format(item.wanted)}`}</span>
                     <span>
-                      {integer.format(item.moved)} de {integer.format(item.wanted)}
+                      {isError
+                        ? item.errorDetail ?? REASONS.error
+                        : item.reason
+                          ? REASONS[item.reason] ?? item.reason
+                          : 'Concluído'}
                     </span>
-                    <span>{item.reason ? REASONS[item.reason] ?? item.reason : 'Concluído'}</span>
                   </div>
                 );
               })}

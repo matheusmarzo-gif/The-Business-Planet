@@ -736,6 +736,16 @@ describe('fishery', () => {
       { buildingId: 'f', productId: 'tools', quantity: 6, direction: 'in' },
     ]);
   });
+
+  it('withdraws fish from warehouse stock to replenish the fish shop', () => {
+    const transfers = planTransfers(
+      { stock: new Map([['fish', 40]]), desired: new Map(), capacityM3: 50, workPoints: 1e6 },
+      [{ buildingId: 'shop', type: 'shop_fish', stock: 0 }],
+    );
+    assert.deepEqual(transfers, [
+      { buildingId: 'shop', productId: 'fish', quantity: 40, direction: 'in' },
+    ]);
+  });
 });
 
 describe('recursos e ferramentaria', () => {
@@ -816,8 +826,8 @@ describe('comandos do master', () => {
   });
 });
 
-describe('histórico de transporte do armazém', () => {
-  it('explica por que a carga não foi transportada', async () => {
+describe('histï¿½rico de transporte do armazï¿½m', () => {
+  it('explica por que a carga nï¿½o foi transportada', async () => {
     const { planTransfersDetailed } = await import('./logistics');
     const link = [{ buildingId: 'a', type: 'fishery' as const, stock: 13, toolStock: 0 }];
     const run = (desired: number, workPoints: number) =>

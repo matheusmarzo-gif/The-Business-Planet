@@ -868,12 +868,26 @@ async function runDailyEmployment(): Promise<boolean> {
         }
         transportPhase = 'applying_transfers';
         for (const transfer of transfers) {
-          const delta = transfer.direction === 'out' ? transfer.quantity : -transfer.quantity;
-          await client.query(
-            `INSERT INTO warehouse_stock (building_id, product_id, quantity) VALUES ($1, $2, $3)
-             ON CONFLICT (building_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3`,
-            [warehouse.id, transfer.productId, delta],
-          );
+          if (transfer.direction === 'out') {
+            await client.query(
+              `INSERT INTO warehouse_stock (building_id, product_id, quantity) VALUES ($1, $2, $3)
+               ON CONFLICT (building_id, product_id) DO UPDATE
+               SET quantity = warehouse_stock.quantity + EXCLUDED.quantity`,
+              [warehouse.id, transfer.productId, transfer.quantity],
+            );
+          } else {
+            const result = await client.query(
+              `UPDATE warehouse_stock
+               SET quantity = quantity - $3
+               WHERE building_id = $1 AND product_id = $2 AND quantity >= $3`,
+              [warehouse.id, transfer.productId, transfer.quantity],
+            );
+            if (result.rowCount !== 1) {
+              throw new Error(
+                `Estoque insuficiente no armazém ${warehouse.id} para ${transfer.productId}: ${transfer.quantity}.`,
+              );
+            }
+          }
           const kind = getResidenceDefinition(types.get(transfer.buildingId) ?? '')?.kind;
           // 'in' em comércios repõe o estoque principal; nas demais construções é um insumo.
           const column =
@@ -885,7 +899,7 @@ async function runDailyEmployment(): Promise<boolean> {
           if (!column) continue;
           await client.query(`UPDATE residential_buildings SET ${column} = ${column} + $2 WHERE id = $1`, [
             transfer.buildingId,
-            -delta,
+            transfer.direction === 'out' ? -transfer.quantity : transfer.quantity,
           ]);
           if (transfer.direction === 'out') {
             await logProduction(client, transfer.buildingId, state.day, { transported: transfer.quantity });

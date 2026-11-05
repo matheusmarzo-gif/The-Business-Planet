@@ -391,7 +391,9 @@ mapeamento e verificar todas as curvas.
   vendas), `planTransfers` move: fazendas → armazém até o estoque desejável e o
   espaço livre (50 m³); armazém → comércios até o estoque máximo. Cada carga
   consome Work Points do armazém (`100 · m³ + 0,125 · kg`; pontos = empregados
-  do armazém × `getDailyWorkPoints`); o que não couber não é transportado, e a
+  do armazém × `getDailyWorkPoints`); envios ao armazém fazem upsert positivo e
+  retiradas decrementam apenas uma linha existente com saldo suficiente, sem
+  tentar inserir estoque negativo. O que não couber não é transportado, e a
   produção para o armazém tem prioridade sobre o abastecimento.
 
 ## API HTTP

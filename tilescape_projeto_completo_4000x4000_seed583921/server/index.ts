@@ -568,7 +568,7 @@ async function getResidentialBuildings(): Promise<WorldResidentialBuilding[]> {
   const { rows } = await pool.query<ResidentialBuildingRow & { created_by: string }>(
     `SELECT ${RESIDENTIAL_COLUMNS}, created_by,
             (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
-             FROM neon_auth."user" player WHERE player.id = residential_buildings.created_by) AS owner_name
+             FROM neon_auth."user" player WHERE player.id::text = residential_buildings.created_by) AS owner_name
      FROM residential_buildings
      ORDER BY started_at, id`,
   );

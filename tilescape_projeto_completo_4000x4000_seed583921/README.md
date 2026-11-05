@@ -381,3 +381,7 @@ urbana. As demais construções e transações econômicas ainda não estão hab
 ## Comandos do Master
 
 A conta Master vê o botão **Master** na barra superior. O painel permite mudar a velocidade do mundo (1:15, 1:30, 1:60 ou 1:240; dias mais rápidos aceleram folha, Work Points e vendas), adicionar C$ à própria conta (de 1 a 1.000.000.000 por vez) e ver os jogadores online conectados.
+
+## Histórico de produção
+
+Fazendas, recursos e construções artesanais concluídas têm o botão **Histórico de produção**, com os últimos 30 dias: Work Points gerados, unidades produzidas, unidades enviadas ao armazém e eficiência (penalidade de Ferramentas ou, nas fazendas, a relação entre os Work Points do dia e os 1.000 necessários).

@@ -29,6 +29,7 @@ interface ResidencePanelProps {
   onSavePrice: (price: number) => void;
   onOpenWarehouse: () => void;
   onOpenConsumption: () => void;
+  onOpenProductionHistory: () => void;
   isLinking: boolean;
   onStartLink: () => void;
   onCancelLink: () => void;
@@ -52,6 +53,7 @@ export default function ResidencePanel({
   onSavePrice,
   onOpenWarehouse,
   onOpenConsumption,
+  onOpenProductionHistory,
   isLinking,
   onStartLink,
   onCancelLink,
@@ -183,6 +185,11 @@ export default function ResidencePanel({
       {definition.kind === 'residence' && building.status === 'completed' && (
         <button type="button" className="warehouse-open" onClick={onOpenConsumption}>
           Ver consumo da casa
+        </button>
+      )}
+      {['farm', 'resource', 'fishery', 'workshop'].includes(definition.kind) && building.status === 'completed' && (
+        <button type="button" className="warehouse-open" onClick={onOpenProductionHistory}>
+          Histórico de produção
         </button>
       )}
       {definition.kind === 'warehouse' && building.status === 'completed' && (

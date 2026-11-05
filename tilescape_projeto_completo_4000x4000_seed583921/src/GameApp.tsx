@@ -13,6 +13,7 @@ import ResidencePanel from './components/ResidencePanel';
 import MasterPanel, { type OnlinePlayer } from './components/MasterPanel';
 import WarehousePanel from './components/WarehousePanel';
 import ConsumptionPanel, { type ProductConsumption } from './components/ConsumptionPanel';
+import ProductionHistoryPanel, { type ProductionDay } from './components/ProductionHistoryPanel';
 import type { WarehouseDemand, WarehouseProductSetting } from './types/warehouse';
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
@@ -250,6 +251,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [warehouseStock, setWarehouseStock] = useState<Map<string, number>>(new Map());
   const [warehouseDemand, setWarehouseDemand] = useState<WarehouseDemand | null>(null);
   const [isConsumptionOpen, setIsConsumptionOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [historyDays, setHistoryDays] = useState<ProductionDay[]>([]);
   const [isConsumptionLoading, setIsConsumptionLoading] = useState(false);
   const [consumptionError, setConsumptionError] = useState('');
   const [consumption, setConsumption] = useState<Map<string, ProductConsumption>>(new Map());
@@ -413,7 +418,26 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setIsConsumptionOpen(false);
     setConsumptionError('');
     setConsumption(new Map());
+    setIsHistoryOpen(false);
+    setHistoryError('');
+    setHistoryDays([]);
   }, [selectedResidenceKey]);
+
+  const openProductionHistory = async (buildingId: string) => {
+    setIsHistoryOpen(true);
+    setIsHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const result = await cityRequest<{ days: ProductionDay[] }>(
+        `/api/residential-buildings/${buildingId}/production-history`,
+      );
+      setHistoryDays(result.days);
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : 'Não foi possível carregar o histórico.');
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
 
   const openConsumption = async (buildingId: string) => {
     setIsConsumptionOpen(true);
@@ -1143,6 +1167,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onSavePrice={(price) => void savePrice(selectedResidence.id, price)}
             onOpenWarehouse={() => void openWarehouse(selectedResidence.id)}
             onOpenConsumption={() => void openConsumption(selectedResidence.id)}
+            onOpenProductionHistory={() => void openProductionHistory(selectedResidence.id)}
             isLinking={linkingFromId === selectedResidence.id}
             onStartLink={() => {
               setWorkSettingsError('');
@@ -1171,6 +1196,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onGrantMoney={grantMoney}
             onRefreshPlayers={refreshOnlinePlayers}
             onClose={() => setIsMasterPanelOpen(false)}
+          />
+        )}
+        {selectedResidence && isHistoryOpen && (
+          <ProductionHistoryPanel
+            title={`Produção: ${RESIDENCES[selectedResidence.type].name}`}
+            days={historyDays}
+            isLoading={isHistoryLoading}
+            error={historyError}
+            onClose={() => setIsHistoryOpen(false)}
           />
         )}
         {selectedResidence && isConsumptionOpen && (

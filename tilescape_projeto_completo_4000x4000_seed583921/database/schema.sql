@@ -141,6 +141,16 @@ CREATE TABLE IF NOT EXISTS warehouse_demand (
   PRIMARY KEY (building_id, day)
 );
 
+CREATE TABLE IF NOT EXISTS production_history (
+  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  day DATE NOT NULL,
+  work_points DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (work_points >= 0),
+  produced DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (produced >= 0),
+  transported DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (transported >= 0),
+  efficiency DOUBLE PRECISION NOT NULL DEFAULT 100 CHECK (efficiency >= 0),
+  PRIMARY KEY (building_id, day)
+);
+
 CREATE TABLE IF NOT EXISTS residence_consumption (
   building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
   product_id TEXT NOT NULL,

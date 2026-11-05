@@ -53,6 +53,7 @@ import {
 } from '../src/types/logistics.js';
 import {
   advanceGrowth,
+  getDailyWorkRatio,
   planHarvest,
   type Crop,
 } from '../src/types/farming.js';
@@ -399,6 +400,32 @@ async function logWarehouseDemand(
   );
 }
 
+// Histórico diário de produção; cada etapa da economia grava só as colunas que conhece.
+async function logProduction(
+  client: { query: (text: string, values: unknown[]) => Promise<unknown> },
+  buildingId: string,
+  day: string,
+  values: { workPoints?: number; produced?: number; transported?: number; efficiency?: number },
+) {
+  await client.query(
+    `INSERT INTO production_history (building_id, day, work_points, produced, transported, efficiency)
+     VALUES ($1, $2, COALESCE($3, 0), COALESCE($4, 0), COALESCE($5, 0), COALESCE($6, 100))
+     ON CONFLICT (building_id, day) DO UPDATE
+     SET work_points = COALESCE($3, production_history.work_points),
+         produced = COALESCE($4, production_history.produced),
+         transported = production_history.transported + COALESCE($5, 0),
+         efficiency = COALESCE($6, production_history.efficiency)`,
+    [
+      buildingId,
+      day,
+      values.workPoints ?? null,
+      values.produced ?? null,
+      values.transported ?? null,
+      values.efficiency ?? null,
+    ],
+  );
+}
+
 // Às 12:00 distribui os trabalhadores e às 00:00 cobra a folha de pagamento dos donos.
 async function runDailyEmployment(): Promise<boolean> {
   const client = await pool.connect();
@@ -621,10 +648,11 @@ async function runDailyEmployment(): Promise<boolean> {
         const penalty = usesTools
           ? nextEfficiencyPenalty(current.efficiency_penalty, demandMet)
           : current.efficiency_penalty;
+        const generatedPoints =
+          count * getDailyWorkPoints(site.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness);
         const result = planProduction(definition.production, {
           progress: current.production_progress,
-          workPoints:
-            count * getDailyWorkPoints(site.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness),
+          workPoints: generatedPoints,
           penalty,
           freeSpace: (definition.stockCapacity ?? 0) - current.stock,
           wood: current.wood_stock,
@@ -650,6 +678,11 @@ async function runDailyEmployment(): Promise<boolean> {
           ],
         );
         changed = true;
+        await logProduction(client, site.id, state.day, {
+          workPoints: generatedPoints,
+          produced: result.units,
+          efficiency: 100 - penalty,
+        });
       }
       });
       await runStage('fazendas', async () => {
@@ -683,6 +716,7 @@ async function runDailyEmployment(): Promise<boolean> {
           yieldUnits: farm.crop_yield,
           harvested: farm.crop_harvested,
         };
+        let farmProduced = 0;
         if (crop.phase === 'growing') {
           const next = advanceGrowth(crop, state.day, farmPoints);
           await client.query(
@@ -694,6 +728,7 @@ async function runDailyEmployment(): Promise<boolean> {
         } else {
           const capacity = RESIDENCES.farm_rice.stockCapacity ?? 0;
           const { units, done } = planHarvest(crop, farmPoints, Math.max(0, capacity - farm.stock));
+          farmProduced = units;
           await client.query(
             `UPDATE residential_buildings
              SET stock = stock + $2,
@@ -707,6 +742,11 @@ async function runDailyEmployment(): Promise<boolean> {
             [farm.id, units, done],
           );
         }
+        await logProduction(client, farm.id, state.day, {
+          workPoints: farmPoints,
+          produced: farmProduced,
+          efficiency: getDailyWorkRatio(farmPoints) * 100,
+        });
         changed = true;
       }
       });
@@ -788,6 +828,9 @@ async function runDailyEmployment(): Promise<boolean> {
             transfer.buildingId,
             -delta,
           ]);
+          if (transfer.direction === 'out') {
+            await logProduction(client, transfer.buildingId, state.day, { transported: transfer.quantity });
+          }
           changed = true;
         }
         await logWarehouseDemand(
@@ -1703,6 +1746,42 @@ async function start() {
       })
       .catch((error: unknown) => {
         console.error('Não foi possível consultar o dono da construção:', error);
+        response.status(503).json({ error: 'residence_unavailable' });
+      });
+  });
+  app.get('/api/residential-buildings/:id/production-history', requireAuth, (request, response) => {
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+    void pool
+      .query<{
+        day: string;
+        work_points: number;
+        produced: number;
+        transported: number;
+        efficiency: number;
+      }>(
+        `SELECT to_char(day, 'YYYY-MM-DD') AS day, work_points, produced, transported, efficiency
+         FROM production_history
+         WHERE building_id = $1
+         ORDER BY day DESC
+         LIMIT 30`,
+        [request.params.id],
+      )
+      .then(({ rows }) => {
+        response.json({
+          days: rows.map((row) => ({
+            day: row.day,
+            workPoints: row.work_points,
+            produced: row.produced,
+            transported: row.transported,
+            efficiency: row.efficiency,
+          })),
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível consultar o histórico de produção:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
   });

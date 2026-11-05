@@ -359,9 +359,9 @@ describe('rice sales', () => {
     assert.equal(getShopSalesCapacity(250), 10);
     assert.equal(parsePrice({ price: 0 }), null);
     assert.equal(parsePrice({ price: 12 }), 12);
-    assert.equal(getPurchaseBenefit(30, 10, 10), 8);
-    assert.equal(getPurchaseBenefit(30, 10, 10, 60), 4);
-    assert.equal(getPurchaseBenefit(30, 10, 10, 0, 2), 1);
+    const benefit = ((50 - 10 * 0.045) / 10) ** 3;
+    assert.equal(getPurchaseBenefit(50, 10, 0, 0.045), benefit);
+    assert.equal(getPurchaseBenefit(50, 10, 60, 0.045), benefit / 2);
     // O fator de preço fica limitado a 0,125 e 4 antes do arredondamento probabilístico.
     assert.equal(getPurchaseQuantity(10, 1000, 1, () => 0.1), 2);
     assert.equal(getPurchaseQuantity(10, 1000, 1, () => 0.5), 1);

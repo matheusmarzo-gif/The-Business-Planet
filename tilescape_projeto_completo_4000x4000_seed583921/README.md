@@ -324,9 +324,9 @@ benefício. A média efetiva da área é calculada com as vendas do dia anterior
 ponderando o preço praticado em cada loja pelas unidades vendidas. Para cada
 loja, calcula-se `quantidade desejada = moradores × 0,03 × max(0,125, min(4,
 média efetiva da área / preço local))`; o benefício é
-`((renda média por morador − preço local × quantidade desejada) / preço local)³
-× (60 / (distância + 60))`, com distância entre centros. A parte fracionária da
-quantidade é a chance de comprar uma unidade adicional. Se não houve vendas na
+`((renda média por morador − preço local × (quantidade desejada / moradores))
+/ preço local)³ × (60 / (distância + 60))`, com distância entre centros. A parte
+fracionária da quantidade é a chance de comprar uma unidade adicional. Se não houve vendas na
 área no dia anterior, usa-se a média simples dos preços atuais das lojas
 próximas. As vendas continuam limitadas pela capacidade diária e estoque
 disponível, e o dono recebe o valor da venda. A loja só vende o estoque que

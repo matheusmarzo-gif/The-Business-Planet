@@ -324,12 +324,12 @@ mapeamento e verificar todas as curvas.
   dos empregados / ocupantes). Para cada loja local, a quantidade desejada é
   `ocupantes · 0,03 · max(0,125, min(4, Vma / Vlocal))` (a parte fracionária é a
   chance de +1 unidade) e o benefício é
-  `((Sm − Vlocal · quantidade desejada)/Vlocal)³ · (60/(distância + 60))`;
-  distância entre centros. Se não houve vendas na área no dia anterior, `Vma`
-  usa a média simples dos preços atuais das lojas próximas. A residência tenta
-  comprar a demanda arredondada probabilisticamente da loja de maior benefício
-  para a menor, limitada por capacidade e estoque. O dono recebe
-  `quantidade × preço`; moradores não são cobrados.
+  `((Sm − Vlocal · (quantidade desejada / ocupantes))/Vlocal)³ ·
+  (60/(distância + 60))`; distância entre centros. Se não houve vendas na área
+  no dia anterior, `Vma` usa a média simples dos preços atuais das lojas
+  próximas. A residência tenta comprar a demanda arredondada probabilisticamente
+  da loja de maior benefício para a menor, limitada por capacidade e estoque. O
+  dono recebe `quantidade × preço`; moradores não são cobrados.
   `employed` em `ResidentialBuilding` é calculado por subquery em
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
   Para cada loja concluída, o job registra em `commerce_history` o salário dos

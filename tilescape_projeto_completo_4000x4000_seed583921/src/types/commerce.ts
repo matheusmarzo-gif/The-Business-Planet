@@ -122,16 +122,15 @@ export function getShopSalesCapacity(dailyWorkPoints: number): number {
   return Math.floor(dailyWorkPoints / 100) * SALES_PER_100_WORK_POINTS;
 }
 
-// Benefício = ((Sm - preço local * quantidade desejada) / preço local)^3
+// Benefício = ((Sm - preço local * (quantidade desejada / moradores)) / preço local)^3
 //            * (60 / (distância + 60)).
 export function getPurchaseBenefit(
   income: number,
-  areaAveragePrice: number,
   price: number,
   distance = 0,
-  desiredQuantity = 1,
+  desiredQuantityPerResident = 0,
 ): number {
-  return ((income - price * desiredQuantity) / price) ** 3 * (60 / (distance + 60));
+  return ((income - price * desiredQuantityPerResident) / price) ** 3 * (60 / (distance + 60));
 }
 
 // Pessoas * 0,03 * max(0,125, min(4, preço médio efetivo da área / preço local)).
@@ -207,10 +206,9 @@ export function planRiceSales(
           shop,
           benefit: getPurchaseBenefit(
             residence.averageIncome,
-            average,
             shop.price,
             getDistanceBetweenBuildings(shop, residence),
-            desiredQuantity,
+            desiredQuantity / residence.occupants,
           ),
         };
       })

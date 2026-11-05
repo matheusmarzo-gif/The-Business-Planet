@@ -1,4 +1,4 @@
-import { isWithinWorkerSearchRadius, type ResidenceType } from './residence.js';
+import { getResidenceDefinition, isWithinWorkerSearchRadius, type ResidenceType } from './residence.js';
 
 export const DEFAULT_SHOP_PRICE = 10;
 export const MIN_SHOP_PRICE = 1;
@@ -6,10 +6,12 @@ export const MAX_SHOP_PRICE = 100000;
 // A cada 100 Work Points gerados no dia, a loja ganha 5 unidades de capacidade de venda.
 export const SALES_PER_100_WORK_POINTS = 5;
 export const PURCHASE_RATE = 0.03;
-export const PURCHASE_MIN_RATIO = 4;
+export const PURCHASE_MIN_RATIO = 0.125;
+export const PURCHASE_MAX_RATIO = 4;
 
 export interface SalesShop {
   id: string;
+  cityId: string;
   type: ResidenceType;
   x: number;
   y: number;
@@ -20,6 +22,7 @@ export interface SalesShop {
 
 export interface SalesResidence {
   id: string;
+  cityId: string;
   type: ResidenceType;
   x: number;
   y: number;
@@ -119,22 +122,49 @@ export function getShopSalesCapacity(dailyWorkPoints: number): number {
   return Math.floor(dailyWorkPoints / 100) * SALES_PER_100_WORK_POINTS;
 }
 
-// Bonificação = ((Sm - Vma) / Vlocal)^3
-export function getPurchaseBenefit(income: number, areaAveragePrice: number, price: number): number {
-  return ((income - areaAveragePrice) / price) ** 3;
+// Benefício = ((Sm - Vma) / Vlocal)^3 * (60 / (distância + 60)).
+export function getPurchaseBenefit(
+  income: number,
+  areaAveragePrice: number,
+  price: number,
+  distance = 0,
+): number {
+  return ((income - areaAveragePrice) / price) ** 3 * (60 / (distance + 60));
 }
 
-// Pessoas * 1 * 0,03 * max(4, Vma / Vlocal); a parte fracionária é a chance de comprar +1 unidade.
+// Pessoas * 0,03 * max(0,125, min(4, preço médio da cidade / preço local)).
 export function getPurchaseQuantity(
   occupants: number,
-  areaAveragePrice: number,
+  cityAveragePrice: number,
   price: number,
   random: () => number,
 ): number {
   const expected =
-    occupants * 1 * PURCHASE_RATE * Math.max(PURCHASE_MIN_RATIO, areaAveragePrice / price);
+    occupants *
+    PURCHASE_RATE *
+    Math.max(PURCHASE_MIN_RATIO, Math.min(PURCHASE_MAX_RATIO, cityAveragePrice / price));
   const whole = Math.floor(expected);
   return whole + (random() < expected - whole ? 1 : 0);
+}
+
+function getDistanceBetweenBuildings(
+  first: Pick<SalesShop, 'type' | 'x' | 'y'>,
+  second: Pick<SalesResidence, 'type' | 'x' | 'y'>,
+): number {
+  const firstDefinition = getResidenceDefinition(first.type);
+  const secondDefinition = getResidenceDefinition(second.type);
+  if (!firstDefinition || !secondDefinition) {
+    throw new RangeError('Tipo de construção inválido ao calcular a distância de compra.');
+  }
+  const dx =
+    first.x +
+    firstDefinition.width / 2 -
+    (second.x + secondDefinition.width / 2);
+  const dy =
+    first.y +
+    firstDefinition.height / 2 -
+    (second.y + secondDefinition.height / 2);
+  return Math.hypot(dx, dy);
 }
 
 /**
@@ -147,6 +177,13 @@ export function planRiceSales(
   random: () => number = Math.random,
 ): RicePurchase[] {
   const remaining = new Map(shops.map((shop) => [shop.id, Math.min(shop.capacity, shop.stock)]));
+  const cityAveragePrices = new Map<string, { total: number; count: number }>();
+  for (const shop of shops) {
+    const cityPrices = cityAveragePrices.get(shop.cityId) ?? { total: 0, count: 0 };
+    cityPrices.total += shop.price;
+    cityPrices.count += 1;
+    cityAveragePrices.set(shop.cityId, cityPrices);
+  }
   const purchases: RicePurchase[] = [];
   const sorted = [...residences].sort((a, b) => a.id.localeCompare(b.id));
 
@@ -157,12 +194,20 @@ export function planRiceSales(
     const ranked = nearby
       .map((shop) => ({
         shop,
-        benefit: getPurchaseBenefit(residence.averageIncome, average, shop.price),
+        benefit: getPurchaseBenefit(
+          residence.averageIncome,
+          average,
+          shop.price,
+          getDistanceBetweenBuildings(shop, residence),
+        ),
       }))
       .sort((a, b) => b.benefit - a.benefit || a.shop.id.localeCompare(b.shop.id));
 
-    // A quantidade desejada depende do preço da loja analisada; consome-se da melhor para a pior.
-    let wanted = getPurchaseQuantity(residence.occupants, average, ranked[0].shop.price, random);
+    const cityPrices = cityAveragePrices.get(residence.cityId);
+    const cityAverage =
+      cityPrices && cityPrices.count > 0 ? cityPrices.total / cityPrices.count : average;
+    // A demanda é calculada pelo preço da loja melhor classificada; o restante tenta outras lojas.
+    let wanted = getPurchaseQuantity(residence.occupants, cityAverage, ranked[0].shop.price, random);
     for (const { shop } of ranked) {
       if (wanted <= 0) break;
       const available = remaining.get(shop.id) ?? 0;

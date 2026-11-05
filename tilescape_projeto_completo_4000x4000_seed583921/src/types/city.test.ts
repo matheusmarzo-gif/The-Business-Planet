@@ -317,6 +317,7 @@ describe('warehouse logistics', () => {
 describe('rice sales', () => {
   const shop = (id: string, x: number, price: number, stock: number, capacity: number) => ({
     id,
+    cityId: 'city-a',
     type: 'shop_rice' as const,
     x,
     y: 0,
@@ -326,6 +327,7 @@ describe('rice sales', () => {
   });
   const home = (id: string, x: number, occupants: number, averageIncome: number) => ({
     id,
+    cityId: 'city-a',
     type: 'house_poor1' as const,
     x,
     y: 0,
@@ -358,12 +360,14 @@ describe('rice sales', () => {
     assert.equal(parsePrice({ price: 0 }), null);
     assert.equal(parsePrice({ price: 12 }), 12);
     assert.equal(getPurchaseBenefit(30, 10, 10), 8);
-    // 10 pessoas * 0,03 * max(4, 1) = 1,2
-    assert.equal(getPurchaseQuantity(10, 10, 10, () => 0.5), 1);
-    assert.equal(getPurchaseQuantity(10, 10, 10, () => 0.1), 2);
-    // 1 pessoa: 0,12 -> 12% de chance de comprar 1 unidade
-    assert.equal(getPurchaseQuantity(1, 10, 10, () => 0.11), 1);
-    assert.equal(getPurchaseQuantity(1, 10, 10, () => 0.13), 0);
+    assert.equal(getPurchaseBenefit(30, 10, 10, 60), 4);
+    // O fator de preço fica limitado a 0,125 e 4 antes do arredondamento probabilístico.
+    assert.equal(getPurchaseQuantity(10, 1000, 1, () => 0.1), 2);
+    assert.equal(getPurchaseQuantity(10, 1000, 1, () => 0.5), 1);
+    assert.equal(getPurchaseQuantity(10, 1, 100, () => 0.03), 1);
+    assert.equal(getPurchaseQuantity(10, 1, 100, () => 0.04), 0);
+    assert.equal(getPurchaseQuantity(10, 10, 10, () => 0.25), 1);
+    assert.equal(getPurchaseQuantity(10, 10, 10, () => 0.35), 0);
   });
 
   it('buys from the best benefit first, within capacity, stock and radius', () => {
@@ -379,6 +383,16 @@ describe('rice sales', () => {
     ]);
     assert.ok(purchases[1].quantity > 0);
     assert.equal(purchases.some((purchase) => purchase.residenceId === 'far'), false);
+  });
+
+  it('uses the city-wide product average to calculate demand', () => {
+    const distantCityShop = { ...shop('distant', 1000, 30, 100, 100) };
+    const purchases = planRiceSales(
+      [home('a', 10, 100, 50)],
+      [shop('near', 0, 10, 100, 100), distantCityShop],
+      () => 0,
+    );
+    assert.deepEqual(purchases, [{ shopId: 'near', residenceId: 'a', quantity: 6 }]);
   });
 });
 

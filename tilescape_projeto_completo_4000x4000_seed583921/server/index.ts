@@ -579,6 +579,7 @@ async function runDailyEmployment(): Promise<boolean> {
       const { rows: workplaces } = await client.query<{
         id: string;
         created_by: string;
+        city_id: string;
         wage: number;
         status: string;
         building_type: ResidenceType;
@@ -590,7 +591,7 @@ async function runDailyEmployment(): Promise<boolean> {
         stock: number;
         occupants: number;
       }>(
-        `SELECT id, created_by, wage, status, building_type, work_hours_per_day, work_points_done,
+        `SELECT id, created_by, city_id, wage, status, building_type, work_hours_per_day, work_points_done,
                 tile_x, tile_y, price, stock, occupants
          FROM residential_buildings`,
       );
@@ -675,6 +676,7 @@ async function runDailyEmployment(): Promise<boolean> {
         .filter((row) => row.status === 'completed' && row.building_type === shopType)
         .map((row) => ({
           id: row.id,
+          cityId: row.city_id,
           type: row.building_type,
           x: row.tile_x,
           y: row.tile_y,
@@ -696,6 +698,7 @@ async function runDailyEmployment(): Promise<boolean> {
         )
         .map((row) => ({
           id: row.id,
+          cityId: row.city_id,
           type: row.building_type,
           x: row.tile_x,
           y: row.tile_y,

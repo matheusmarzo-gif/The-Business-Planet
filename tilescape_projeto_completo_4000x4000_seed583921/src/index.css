@@ -92,7 +92,13 @@ button { color: inherit; }
 .warehouse-error { margin: 0 0 8px; color: #e58b7d; font-size: 11px; }
 .warehouse-list { overflow: auto; display: grid; gap: 4px; }
 .commerce-history-panel .warehouse-list { overflow-x: auto; }
-.commerce-history-row { display: grid; grid-template-columns: repeat(7, minmax(82px, 1fr)); gap: 8px; align-items: center; min-width: 700px; font-size: 11px; }
+.commerce-history-row { display: grid; grid-template-columns: repeat(7, minmax(82px, 1fr)) minmax(150px, 1.5fr); gap: 8px; align-items: center; min-width: 860px; font-size: 11px; }
+.commerce-transaction-details { white-space: normal; }
+.commerce-transaction-details summary { color: #d7bd80; cursor: pointer; }
+.commerce-transaction-details section { margin-top: 8px; padding: 8px; border: 1px solid rgba(219,201,158,.16); border-radius: 6px; }
+.commerce-transaction-details strong { display: block; color: #eee7d6; font-size: 10px; font-weight: 500; line-height: 1.5; }
+.commerce-candidate-list { display: grid; gap: 4px; margin-top: 5px; }
+.commerce-candidate-list p { margin: 0; color: #a6a897; font-size: 10px; line-height: 1.5; }
 .commerce-profit { color: #9fd3a0; }
 .commerce-loss { color: #e58b7d; }
 .warehouse-row { display: grid; grid-template-columns: minmax(130px, 1.6fr) 70px 90px 90px 90px 80px 62px; min-width: 720px; gap: 8px; align-items: center; font-size: 11px; }

@@ -334,10 +334,18 @@ mapeamento e verificar todas as curvas.
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
-  preço unitário de venda; receita e lucro/prejuízo são calculados desses dados.
+  preço unitário de venda, além de `transaction_details` (JSONB): por residência
+  próxima registra renda, moradores, média efetiva da área, demanda esperada e
+  arredondada; para cada loja candidata registra preço, distância, benefício,
+  posição no ranking, estoque/capacidade disponíveis, demanda antes/depois,
+  quantidade comprada e resultado da tentativa. Receita e lucro/prejuízo são
+  calculados dos dados financeiros.
   Como o abastecimento pelo armazém do mesmo dono é uma transferência interna
   sem cobrança, esse movimento registra C$ 0 de gasto com produto. O histórico
-  conserva 30 dias e só o dono consulta pela rota de histórico do comércio.
+  conserva 30 dias e só o dono consulta pela rota de histórico do comércio. A
+  coluna diagnóstica é adicionada com `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
+  para bancos existentes; registros anteriores à implantação ficam sem
+  diagnóstico e os novos detalhes são exibidos no histórico por dia.
 - Produção da fazenda de arroz (`src/types/farming.ts`): `POST
   /api/residential-buildings/:id/plant` (só dono, fazenda concluída; plantar ou
   replantar durante o crescimento zera o contador; bloqueado na colheita)

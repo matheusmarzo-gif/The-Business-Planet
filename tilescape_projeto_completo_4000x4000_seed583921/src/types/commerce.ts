@@ -36,6 +36,37 @@ export interface RicePurchase {
   quantity: number;
 }
 
+export interface ShopTransactionCandidate {
+  shopId: string;
+  price: number;
+  distance: number;
+  desiredQuantity: number;
+  benefit: number;
+  rank: number;
+  stockAvailable: number;
+  capacityAvailable: number;
+  available: number;
+  demandBefore: number;
+  purchased: number;
+  demandAfter: number;
+  outcome: 'purchased' | 'no_stock' | 'no_capacity' | 'no_stock_or_capacity' | 'demand_fulfilled';
+}
+
+export interface ShopResidenceTransaction {
+  residenceId: string;
+  occupants: number;
+  averageIncome: number;
+  areaAveragePrice: number;
+  expectedDemand: number;
+  desiredQuantity: number;
+  candidate: ShopTransactionCandidate;
+}
+
+export interface RiceSalesPlan {
+  purchases: RicePurchase[];
+  transactionsByShop: Map<string, ShopResidenceTransaction[]>;
+}
+
 export interface ShopDailyFinancials {
   employeeExpense: number;
   productExpense: number;
@@ -186,8 +217,20 @@ export function planRiceSales(
   shops: SalesShop[],
   random: () => number = Math.random,
 ): RicePurchase[] {
-  const remaining = new Map(shops.map((shop) => [shop.id, Math.min(shop.capacity, shop.stock)]));
+  return planRiceSalesDetailed(residences, shops, random).purchases;
+}
+
+export function planRiceSalesDetailed(
+  residences: SalesResidence[],
+  shops: SalesShop[],
+  random: () => number = Math.random,
+): RiceSalesPlan {
+  const remainingStock = new Map(shops.map((shop) => [shop.id, shop.stock]));
+  const remainingCapacity = new Map(shops.map((shop) => [shop.id, shop.capacity]));
   const purchases: RicePurchase[] = [];
+  const transactionsByShop = new Map<string, ShopResidenceTransaction[]>(
+    shops.map((shop) => [shop.id, []]),
+  );
   const sorted = [...residences].sort((a, b) => a.id.localeCompare(b.id));
 
   for (const residence of sorted) {
@@ -202,29 +245,87 @@ export function planRiceSales(
     const ranked = nearby
       .map((shop) => {
         const desiredQuantity = getExpectedPurchaseQuantity(residence.occupants, average, shop.price);
+        const distance = getDistanceBetweenBuildings(shop, residence);
         return {
           shop,
+          distance,
+          desiredQuantity,
           benefit: getPurchaseBenefit(
             residence.averageIncome,
             shop.price,
-            getDistanceBetweenBuildings(shop, residence),
+            distance,
             desiredQuantity / residence.occupants,
           ),
         };
       })
       .sort((a, b) => b.benefit - a.benefit || a.shop.id.localeCompare(b.shop.id));
 
-    // Arredonda probabilisticamente a demanda da loja mais bem classificada.
-    let wanted = getPurchaseQuantity(residence.occupants, average, ranked[0].shop.price, random);
-    for (const { shop } of ranked) {
-      if (wanted <= 0) break;
-      const available = remaining.get(shop.id) ?? 0;
+    const expectedDemand = getExpectedPurchaseQuantity(
+      residence.occupants,
+      average,
+      ranked[0].shop.price,
+    );
+    const desiredQuantity = getPurchaseQuantity(
+      residence.occupants,
+      average,
+      ranked[0].shop.price,
+      random,
+    );
+    let wanted = desiredQuantity;
+    const candidates: ShopTransactionCandidate[] = [];
+    for (const [index, { shop, distance, desiredQuantity: candidateDemand, benefit }] of ranked.entries()) {
+      const stockAvailable = remainingStock.get(shop.id) ?? 0;
+      const capacityAvailable = remainingCapacity.get(shop.id) ?? 0;
+      const available = Math.min(stockAvailable, capacityAvailable);
+      const demandBefore = wanted;
       const quantity = Math.min(wanted, available);
-      if (quantity <= 0) continue;
-      remaining.set(shop.id, available - quantity);
       wanted -= quantity;
-      purchases.push({ shopId: shop.id, residenceId: residence.id, quantity });
+      if (quantity > 0) {
+        remainingStock.set(shop.id, stockAvailable - quantity);
+        remainingCapacity.set(shop.id, capacityAvailable - quantity);
+        purchases.push({ shopId: shop.id, residenceId: residence.id, quantity });
+      }
+      candidates.push({
+        shopId: shop.id,
+        price: shop.price,
+        distance,
+        desiredQuantity: candidateDemand,
+        benefit,
+        rank: index + 1,
+        stockAvailable,
+        capacityAvailable,
+        available,
+        demandBefore,
+        purchased: quantity,
+        demandAfter: wanted,
+        outcome:
+          quantity > 0
+            ? 'purchased'
+            : demandBefore <= 0
+              ? 'demand_fulfilled'
+              : stockAvailable <= 0 && capacityAvailable <= 0
+                ? 'no_stock_or_capacity'
+                : stockAvailable <= 0
+                  ? 'no_stock'
+                  : 'no_capacity',
+      });
+    }
+
+    for (const candidate of candidates) {
+      const shopTransactions = transactionsByShop.get(candidate.shopId);
+      if (!shopTransactions) {
+        throw new Error(`Não foi possível associar o diagnóstico à loja ${candidate.shopId}.`);
+      }
+      shopTransactions.push({
+        residenceId: residence.id,
+        occupants: residence.occupants,
+        averageIncome: residence.averageIncome,
+        areaAveragePrice: average,
+        expectedDemand,
+        desiredQuantity,
+        candidate,
+      });
     }
   }
-  return purchases;
+  return { purchases, transactionsByShop };
 }

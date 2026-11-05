@@ -330,7 +330,12 @@ fracionária da quantidade é a chance de comprar uma unidade adicional. Se não
 área no dia anterior, usa-se a média simples dos preços atuais das lojas
 próximas. As vendas continuam limitadas pela capacidade diária e estoque
 disponível, e o dono recebe o valor da venda. A loja só vende o estoque que
-tiver (começa em 0; pode ser abastecida por um armazém ligado). O painel mostra funcionários atuais,
+tiver (começa em 0; pode ser abastecida por um armazém ligado). No histórico do
+comércio, **Ver cálculo** detalha, por residência, renda e população, média
+efetiva da área, demanda, benefício e posição de cada loja, estoque/capacidade
+disponíveis, quanto foi comprado e se faltou estoque ou capacidade. Os detalhes
+começam a ser gravados nos próximos dias; registros antigos não são reconstruídos.
+O painel também mostra funcionários atuais,
 desejados e vagas; nas residências, as pessoas empregadas. Nos painéis de
 construções produtivas, uma descrição antes
 dos dados de funcionários resume os Work Points e os insumos usados por unidade

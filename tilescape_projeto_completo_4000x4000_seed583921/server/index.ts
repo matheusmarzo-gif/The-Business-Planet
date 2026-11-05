@@ -55,7 +55,8 @@ import {
   getShopProfitLoss,
   getShopSalesCapacity,
   parsePrice,
-  planRiceSales,
+  planRiceSalesDetailed,
+  type ShopResidenceTransaction,
 } from '../src/types/commerce.js';
 import { nextEfficiencyPenalty, planProduction, rollToolDemand } from '../src/types/fishing.js';
 import {
@@ -723,7 +724,8 @@ async function runDailyEmployment(): Promise<boolean> {
       const sold = new Map<string, number>();
       const bought = new Map<string, { quantity: number; spent: number }>();
       const shopPrice = new Map(shops.map((shop) => [shop.id, shop.price]));
-      for (const purchase of planRiceSales(homes, shops)) {
+      const salesPlan = planRiceSalesDetailed(homes, shops);
+      for (const purchase of salesPlan.purchases) {
         sold.set(purchase.shopId, (sold.get(purchase.shopId) ?? 0) + purchase.quantity);
         const total = bought.get(purchase.residenceId) ?? { quantity: 0, spent: 0 };
         total.quantity += purchase.quantity;
@@ -768,13 +770,15 @@ async function runDailyEmployment(): Promise<boolean> {
         );
         await client.query(
           `INSERT INTO commerce_history
-             (building_id, day, employee_expense, product_expense, units_sold, sale_price)
-           VALUES ($1, $2::date, $3, $4, $5, $6)
+             (building_id, day, employee_expense, product_expense, units_sold, sale_price,
+              transaction_details)
+           VALUES ($1, $2::date, $3, $4, $5, $6, $7::jsonb)
            ON CONFLICT (building_id, day) DO UPDATE
            SET employee_expense = EXCLUDED.employee_expense,
                product_expense = EXCLUDED.product_expense,
                units_sold = EXCLUDED.units_sold,
-               sale_price = EXCLUDED.sale_price`,
+               sale_price = EXCLUDED.sale_price,
+               transaction_details = EXCLUDED.transaction_details`,
           [
             shop.id,
             state.day,
@@ -782,6 +786,7 @@ async function runDailyEmployment(): Promise<boolean> {
             financials.productExpense,
             financials.unitsSold,
             financials.salePrice,
+            JSON.stringify(salesPlan.transactionsByShop.get(shop.id) ?? []),
           ],
         );
       }
@@ -2231,9 +2236,11 @@ async function start() {
         product_expense: number;
         units_sold: number;
         sale_price: number;
+        transaction_details: ShopResidenceTransaction[] | null;
       }>(
         `SELECT to_char(day, 'YYYY-MM-DD') AS day,
-                employee_expense, product_expense, units_sold, sale_price
+                employee_expense, product_expense, units_sold, sale_price,
+                transaction_details
          FROM commerce_history
          WHERE building_id = $1
          ORDER BY day DESC
@@ -2256,6 +2263,7 @@ async function start() {
             salePrice: row.sale_price,
             revenue,
             profitLoss,
+            transactions: row.transaction_details,
           };
         }),
       });

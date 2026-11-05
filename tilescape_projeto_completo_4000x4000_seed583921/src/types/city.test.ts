@@ -40,6 +40,7 @@ import {
   getShopSalesCapacity,
   parsePrice,
   planRiceSales,
+  planRiceSalesDetailed,
 } from './commerce';
 import {
   canLinkToWarehouse,
@@ -403,6 +404,56 @@ describe('rice sales', () => {
     );
     // Média efetiva na área = (9*10 + 1*20) / 10 = 11; demanda da loja de C$ 10 = 3,3.
     assert.deepEqual(purchases, [{ shopId: 'near', residenceId: 'a', quantity: 4 }]);
+  });
+
+  it('records each residence demand, store benefit, availability and allocation', () => {
+    const homes = [
+      home('a', 4, 150, 10),
+      home('b', 4, 50, 10),
+    ];
+    const shops = [
+      shop('shop-9', 0, 9, 100, 7),
+      shop('shop-10', 4, 10, 0, 100),
+      shop('shop-20', 8, 20, 100, 100),
+    ];
+    const randomValues = [0, 0.99];
+    const plan = planRiceSalesDetailed(homes, shops, () => randomValues.shift() ?? 0);
+
+    assert.deepEqual(plan.purchases, [
+      { shopId: 'shop-9', residenceId: 'a', quantity: 7 },
+      { shopId: 'shop-20', residenceId: 'b', quantity: 2 },
+    ]);
+
+    const secondHomeTransactions = plan.transactionsByShop.get('shop-9')?.find(
+      (transaction) => transaction.residenceId === 'b',
+    );
+    assert.ok(secondHomeTransactions);
+    assert.ok(Math.abs(secondHomeTransactions.expectedDemand - 2.166666666666667) < 1e-12);
+    assert.equal(secondHomeTransactions.desiredQuantity, 2);
+    assert.deepEqual(
+      [
+        secondHomeTransactions,
+        plan.transactionsByShop.get('shop-10')?.find((transaction) => transaction.residenceId === 'b'),
+        plan.transactionsByShop.get('shop-20')?.find((transaction) => transaction.residenceId === 'b'),
+      ].map((transaction) => {
+        assert.ok(transaction);
+        const { candidate } = transaction;
+        return [
+          candidate.shopId,
+          candidate.rank,
+          candidate.demandBefore,
+          candidate.stockAvailable,
+          candidate.capacityAvailable,
+          candidate.purchased,
+          candidate.outcome,
+        ];
+      }),
+      [
+        ['shop-9', 1, 2, 93, 0, 0, 'no_capacity'],
+        ['shop-10', 2, 2, 0, 100, 0, 'no_stock'],
+        ['shop-20', 3, 2, 100, 100, 2, 'purchased'],
+      ],
+    );
   });
 });
 

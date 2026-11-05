@@ -3235,8 +3235,21 @@ async function start() {
   });
 
   const webRoot = resolve(process.cwd(), 'dist');
-  app.use(express.static(webRoot));
-  app.get('*', (_request, response) => response.sendFile(resolve(webRoot, 'index.html')));
+  app.use(
+    express.static(webRoot, {
+      index: false,
+      maxAge: '1d',
+      setHeaders: (response, filePath) => {
+        if (/[\\/]assets[\\/].+-[A-Za-z0-9_-]{8,}\.(?:js|css)$/.test(filePath)) {
+          response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      },
+    }),
+  );
+  app.get('*', (_request, response) => {
+    response.setHeader('Cache-Control', 'no-cache');
+    response.sendFile(resolve(webRoot, 'index.html'));
+  });
 
   server.on('upgrade', (request, socket, head) => {
     void (async () => {

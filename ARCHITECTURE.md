@@ -82,8 +82,10 @@ inicia o servidor de API/WebSocket na porta 3001 e o Vite na porta 3000;
 
 O build do Vite gera `dist/`. `npm start` executa o servidor, que serve `dist/`
 e atende às rotas HTTP e WebSocket na porta definida por `PORT` (padrão local
-3001). O Render pode compilar o cliente e hospedar esse processo como Web
-Service.
+3001). O HTML usa `Cache-Control: no-cache` para revalidar a versão publicada;
+arquivos estáticos públicos usam cache de um dia, e bundles JS/CSS com hash de
+conteúdo do Vite usam cache imutável de um ano. O Render pode compilar o cliente
+e hospedar esse processo como Web Service.
 
 ## Autenticação e autorização
 

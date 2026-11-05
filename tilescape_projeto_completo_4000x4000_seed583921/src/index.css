@@ -92,6 +92,7 @@ button { color: inherit; }
 .warehouse-error { margin: 0 0 8px; color: #e58b7d; font-size: 11px; }
 .warehouse-list { overflow-y: auto; display: grid; gap: 4px; }
 .warehouse-row { display: grid; grid-template-columns: minmax(130px, 1.6fr) 70px 90px 90px 80px 62px; gap: 8px; align-items: center; font-size: 11px; }
+.consumption-row { display: grid; grid-template-columns: minmax(110px, 1.4fr) repeat(4, 1fr); gap: 8px; align-items: center; font-size: 11px; }
 .warehouse-head { position: sticky; top: 0; background: rgba(19,28,23,.98); color: #b29a66; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
 .warehouse-product { display: flex; align-items: center; gap: 7px; }
 .warehouse-product img { width: 26px; height: 26px; object-fit: contain; }

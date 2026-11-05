@@ -1,8 +1,8 @@
 // Produção da fazenda de arroz: plantio, crescimento de 6 meses e colheita.
 export const FARM_DAILY_WORK_POINTS = 1000;
 export const GROWTH_MONTHS = 6;
-export const HARVEST_WORK_POINTS_PER_UNIT = 200;
-export const BASE_YIELD = 100;
+export const HARVEST_WORK_POINTS_PER_UNIT = 20;
+export const BASE_YIELD = 1000;
 
 export type CropPhase = 'growing' | 'harvesting';
 
@@ -71,7 +71,7 @@ export function advanceGrowth(crop: Crop, today: string, workPoints: number): Cr
   };
 }
 
-// Colheita diária: 200 Work Points por unidade, limitada ao espaço livre no estoque.
+// Colheita diária: 20 Work Points por unidade, limitada ao espaço livre no estoque.
 export function planHarvest(
   crop: Crop,
   workPoints: number,

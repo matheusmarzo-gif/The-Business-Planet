@@ -319,11 +319,17 @@ mapeamento e verificar todas as curvas.
   `crop_ratio_sum`, `crop_days`, `crop_yield`, `crop_harvested`. No job das
   00:00 (antes do transporte): em `growing` soma `min(1, WP do dia / 1000)`;
   no dia da colheita (plantio + 6 meses de calendário) a produção vira
-  `floor(100 · fator do mês do plantio · média diária)` (meses 1–3: 100 %,
+  `floor(1000 · fator do mês do plantio · média diária)` (meses 1–3: 100 %,
   4–6: 60 %, 7–9: 40 %, 10–12: 20 %) e a fase passa a `harvesting`; nela,
-  200 WP por unidade colhida, limitado ao espaço livre do estoque (300); ao
+  20 WP por unidade colhida, limitado ao espaço livre do estoque (300); ao
   terminar, o plantio é limpo e um novo pode ser feito. `ResidentialBuilding.crop`
   expõe o estado ao cliente.
+- Consumo das residências: as compras de arroz das 00:00 são gravadas em
+  `residence_consumption (building_id, product_id, day, quantity, spent,
+  occupants)` (cascata). `GET /api/residential-buildings/:id/consumption`
+  devolve por produto o consumo por pessoa no último dia e a média diária por
+  pessoa nos últimos 30 dias, além do preço médio pago (dia e mês). O painel
+  `ConsumptionPanel` abre pelo botão "Ver consumo da casa" (residências concluídas).
 - Comércio entre armazéns (`planWarehouseTrades` em `src/types/logistics.ts`): às
   03:00 e 15:00 (`world_state.last_warehouse_trade_slot`, ex. `2026-01-01T15`,
   garante uma execução por rodada) cada armazém em modo `buy` procura armazéns

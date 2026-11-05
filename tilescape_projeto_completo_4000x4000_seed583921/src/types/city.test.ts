@@ -123,22 +123,22 @@ describe('rice farming', () => {
     assert.equal(getHarvestDay('2026-08-31'), '2027-02-28');
   });
 
-  it('yields 100 units at full productivity and scales with Work Points', () => {
-    assert.equal(grow('2026-01-10', 1000).yieldUnits, 100);
-    assert.equal(grow('2026-01-10', 1500).yieldUnits, 100);
-    assert.equal(grow('2026-01-10', 800).yieldUnits, 80);
-    assert.equal(grow('2026-05-10', 1000).yieldUnits, 60);
-    assert.equal(grow('2026-08-10', 1000).yieldUnits, 40);
-    assert.equal(grow('2026-11-10', 1000).yieldUnits, 20);
+  it('yields 1000 units at full productivity and scales with Work Points', () => {
+    assert.equal(grow('2026-01-10', 1000).yieldUnits, 1000);
+    assert.equal(grow('2026-01-10', 1500).yieldUnits, 1000);
+    assert.equal(grow('2026-01-10', 800).yieldUnits, 800);
+    assert.equal(grow('2026-05-10', 1000).yieldUnits, 600);
+    assert.equal(grow('2026-08-10', 1000).yieldUnits, 400);
+    assert.equal(grow('2026-11-10', 1000).yieldUnits, 200);
     assert.equal(grow('2026-01-10', 0).yieldUnits, 0);
   });
 
-  it('harvests 200 Work Points per unit limited by free stock', () => {
-    const crop: Crop = { phase: 'harvesting', plantedDay: '2026-01-10', ratioSum: 0, days: 0, yieldUnits: 100, harvested: 0 };
-    assert.deepEqual(planHarvest(crop, 5000, 300), { units: 25, done: false });
+  it('harvests 20 Work Points per unit limited by free stock', () => {
+    const crop: Crop = { phase: 'harvesting', plantedDay: '2026-01-10', ratioSum: 0, days: 0, yieldUnits: 1000, harvested: 0 };
+    assert.deepEqual(planHarvest(crop, 5000, 300), { units: 250, done: false });
     assert.deepEqual(planHarvest(crop, 5000, 10), { units: 10, done: false });
-    assert.deepEqual(planHarvest({ ...crop, harvested: 90 }, 99999, 300), { units: 10, done: true });
-    assert.deepEqual(planHarvest(crop, 100, 300), { units: 0, done: false });
+    assert.deepEqual(planHarvest({ ...crop, harvested: 990 }, 99999, 300), { units: 10, done: true });
+    assert.deepEqual(planHarvest(crop, 100, 300), { units: 5, done: false });
   });
 });
 

@@ -28,6 +28,7 @@ interface ResidencePanelProps {
   onSaveRent: (rent: number) => void;
   onSavePrice: (price: number) => void;
   onOpenWarehouse: () => void;
+  onOpenConsumption: () => void;
   isLinking: boolean;
   onStartLink: () => void;
   onCancelLink: () => void;
@@ -50,6 +51,7 @@ export default function ResidencePanel({
   onSaveRent,
   onSavePrice,
   onOpenWarehouse,
+  onOpenConsumption,
   isLinking,
   onStartLink,
   onCancelLink,
@@ -157,6 +159,11 @@ export default function ResidencePanel({
           {showInfluence ? 'Ocultar influência' : 'Ver influência'}
         </button>
       </div>
+      {definition.kind === 'residence' && building.status === 'completed' && (
+        <button type="button" className="warehouse-open" onClick={onOpenConsumption}>
+          Ver consumo da casa
+        </button>
+      )}
       {definition.kind === 'warehouse' && building.status === 'completed' && (
         <button type="button" className="warehouse-open" onClick={onOpenWarehouse}>
           Produtos e estoque

@@ -305,13 +305,17 @@ gasta Work Points de transporte (cada rodada usa metade dos pontos diários).
 os funcionários atuais gerarão no próximo dia, para decidir se é preciso contratar.
 
 **Fazenda de arroz:** o dono usa **Plantar arroz** no painel da fazenda concluída.
-A colheita ocorre 6 meses (de calendário do jogo) depois e rende até 100
+A colheita ocorre 6 meses (de calendário do jogo) depois e rende até 1.000
 unidades. O mês do plantio define a produtividade (meses 1–3: 100 %, 4–6: 60 %,
 7–9: 40 %, 10–12: 20 %). A fazenda precisa de 1.000 Work Points por dia; a
 média diária de `min(1, pontos/1000)` durante o crescimento multiplica a
 produção (800 pontos por dia = −20 %). **Replantar** durante o crescimento zera
-o contador. Na colheita cada unidade custa 200 Work Points, limitados ao espaço
-livre do estoque (300); só depois de colher tudo é possível plantar de novo.
+o contador. Na colheita cada unidade custa 20 Work Points, limitados ao espaço
+livre do estoque (300; ligar a um armazém libera espaço); só depois de colher tudo é possível plantar de novo.
+
+**Consumo da casa:** em residências concluídas, **Ver consumo da casa** abre um
+painel com o consumo de arroz por pessoa no último dia e a média diária por
+pessoa no último mês, além do preço médio pago no dia e no mês.
 
 Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.

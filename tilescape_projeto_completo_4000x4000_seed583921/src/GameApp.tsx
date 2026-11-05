@@ -11,6 +11,7 @@ import CityZoneEditor from './components/CityZoneEditor';
 import ProductCatalog from './components/ProductCatalog';
 import ResidencePanel from './components/ResidencePanel';
 import WarehousePanel from './components/WarehousePanel';
+import ConsumptionPanel, { type ProductConsumption } from './components/ConsumptionPanel';
 import type { WarehouseDemand, WarehouseProductSetting } from './types/warehouse';
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
@@ -244,6 +245,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [warehouseError, setWarehouseError] = useState('');
   const [warehouseStock, setWarehouseStock] = useState<Map<string, number>>(new Map());
   const [warehouseDemand, setWarehouseDemand] = useState<WarehouseDemand | null>(null);
+  const [isConsumptionOpen, setIsConsumptionOpen] = useState(false);
+  const [isConsumptionLoading, setIsConsumptionLoading] = useState(false);
+  const [consumptionError, setConsumptionError] = useState('');
+  const [consumption, setConsumption] = useState<Map<string, ProductConsumption>>(new Map());
   const [linkingFromId, setLinkingFromId] = useState<string | null>(null);
   const [showInfluence, setShowInfluence] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
@@ -355,7 +360,26 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setWarehouseSettings(new Map());
     setWarehouseStock(new Map());
     setWarehouseDemand(null);
+    setIsConsumptionOpen(false);
+    setConsumptionError('');
+    setConsumption(new Map());
   }, [selectedResidenceKey]);
+
+  const openConsumption = async (buildingId: string) => {
+    setIsConsumptionOpen(true);
+    setIsConsumptionLoading(true);
+    setConsumptionError('');
+    try {
+      const result = await cityRequest<{ products: ProductConsumption[] }>(
+        `/api/residential-buildings/${buildingId}/consumption`,
+      );
+      setConsumption(new Map(result.products.map((item) => [item.productId, item])));
+    } catch (error) {
+      setConsumptionError(error instanceof Error ? error.message : 'Não foi possível carregar o consumo.');
+    } finally {
+      setIsConsumptionLoading(false);
+    }
+  };
 
   const openWarehouse = async (buildingId: string) => {
     setIsWarehouseOpen(true);
@@ -1059,6 +1083,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onSaveRent={(rent) => void saveRent(selectedResidence.id, rent)}
             onSavePrice={(price) => void savePrice(selectedResidence.id, price)}
             onOpenWarehouse={() => void openWarehouse(selectedResidence.id)}
+            onOpenConsumption={() => void openConsumption(selectedResidence.id)}
             isLinking={linkingFromId === selectedResidence.id}
             onStartLink={() => {
               setWorkSettingsError('');
@@ -1073,6 +1098,14 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
               setLinkingFromId(null);
               setSelectedResidenceId(null);
             }}
+          />
+        )}
+        {selectedResidence && isConsumptionOpen && (
+          <ConsumptionPanel
+            consumption={consumption}
+            isLoading={isConsumptionLoading}
+            error={consumptionError}
+            onClose={() => setIsConsumptionOpen(false)}
           />
         )}
         {selectedResidence && selectedResidenceKey && isWarehouseOpen && (

@@ -513,8 +513,27 @@ async function runDailyEmployment(): Promise<boolean> {
           averageIncome: (incomeByResidence.get(row.id) ?? 0) / row.occupants,
         }));
       const sold = new Map<string, number>();
+      const bought = new Map<string, { quantity: number; spent: number }>();
+      const shopPrice = new Map(shops.map((shop) => [shop.id, shop.price]));
       for (const purchase of planRiceSales(homes, shops)) {
         sold.set(purchase.shopId, (sold.get(purchase.shopId) ?? 0) + purchase.quantity);
+        const total = bought.get(purchase.residenceId) ?? { quantity: 0, spent: 0 };
+        total.quantity += purchase.quantity;
+        total.spent += purchase.quantity * (shopPrice.get(purchase.shopId) ?? 0);
+        bought.set(purchase.residenceId, total);
+      }
+      for (const home of homes) {
+        const total = bought.get(home.id);
+        if (!total) continue;
+        await client.query(
+          `INSERT INTO residence_consumption (building_id, product_id, day, quantity, spent, occupants)
+           VALUES ($1, 'rice', $2, $3, $4, $5)
+           ON CONFLICT (building_id, product_id, day) DO UPDATE
+           SET quantity = residence_consumption.quantity + $3,
+               spent = residence_consumption.spent + $4,
+               occupants = $5`,
+          [home.id, state.day, total.quantity, total.spent, home.occupants],
+        );
       }
       for (const shop of shops) {
         const quantity = sold.get(shop.id) ?? 0;
@@ -1553,6 +1572,50 @@ async function start() {
       })
       .catch((error: unknown) => {
         console.error('Não foi possível consultar o dono da construção:', error);
+        response.status(503).json({ error: 'residence_unavailable' });
+      });
+  });
+  app.get('/api/residential-buildings/:id/consumption', requireAuth, (request, response) => {
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+    void pool
+      .query<{
+        product_id: string;
+        last_quantity: number;
+        last_spent: number;
+        last_per_person: number;
+        month_quantity: number;
+        month_spent: number;
+        month_per_person: number;
+      }>(
+        `WITH today AS (SELECT (world_time AT TIME ZONE 'UTC')::date AS day FROM world_state WHERE id = 1)
+         SELECT product_id,
+                COALESCE(SUM(quantity) FILTER (WHERE day = (SELECT day FROM today)), 0) AS last_quantity,
+                COALESCE(SUM(spent) FILTER (WHERE day = (SELECT day FROM today)), 0) AS last_spent,
+                COALESCE(SUM(quantity / NULLIF(occupants, 0)) FILTER (WHERE day = (SELECT day FROM today)), 0) AS last_per_person,
+                COALESCE(SUM(quantity), 0) AS month_quantity,
+                COALESCE(SUM(spent), 0) AS month_spent,
+                COALESCE(SUM(quantity / NULLIF(occupants, 0)), 0) / 30 AS month_per_person
+         FROM residence_consumption
+         WHERE building_id = $1 AND day > (SELECT day FROM today) - 30
+         GROUP BY product_id`,
+        [request.params.id],
+      )
+      .then(({ rows }) => {
+        response.json({
+          products: rows.map((row) => ({
+            productId: row.product_id,
+            lastDayPerPerson: row.last_per_person,
+            monthPerPerson: row.month_per_person,
+            lastDayAveragePrice: row.last_quantity > 0 ? row.last_spent / row.last_quantity : null,
+            monthAveragePrice: row.month_quantity > 0 ? row.month_spent / row.month_quantity : null,
+          })),
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível consultar o consumo da residência:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
   });

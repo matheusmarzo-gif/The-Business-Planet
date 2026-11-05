@@ -132,6 +132,16 @@ CREATE TABLE IF NOT EXISTS warehouse_demand (
   PRIMARY KEY (building_id, day)
 );
 
+CREATE TABLE IF NOT EXISTS residence_consumption (
+  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL,
+  day DATE NOT NULL,
+  quantity DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+  spent DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (spent >= 0),
+  occupants INTEGER NOT NULL DEFAULT 0 CHECK (occupants >= 0),
+  PRIMARY KEY (building_id, product_id, day)
+);
+
 CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
   ON residential_buildings (city_id);
 

@@ -915,8 +915,12 @@ async function runDailyEmployment(): Promise<boolean> {
           'SELECT product_id, quantity FROM warehouse_stock WHERE building_id = $1',
           [warehouse.id],
         );
-        const { rows: desiredRows } = await client.query<{ product_id: string; desired_stock: number }>(
-          'SELECT product_id, desired_stock FROM warehouse_product_settings WHERE building_id = $1',
+        const { rows: settingRows } = await client.query<{
+          product_id: string;
+          minimum_stock: number;
+          maximum_stock: number | null;
+        }>(
+          'SELECT product_id, minimum_stock, maximum_stock FROM warehouse_product_settings WHERE building_id = $1',
           [warehouse.id],
         );
         const types = new Map(linked.map((row) => [row.id, row.building_type]));
@@ -924,7 +928,8 @@ async function runDailyEmployment(): Promise<boolean> {
         const { transfers, attempts } = planTransfersDetailed(
           {
             stock: new Map(stockRows.map((row) => [row.product_id, row.quantity])),
-            desired: new Map(desiredRows.map((row) => [row.product_id, row.desired_stock])),
+            minimumStock: new Map(settingRows.map((row) => [row.product_id, row.minimum_stock])),
+            maximumStock: new Map(settingRows.map((row) => [row.product_id, row.maximum_stock])),
             capacityM3: RESIDENCES.warehouse.storageCapacityM3 ?? 0,
             workPoints,
           },
@@ -1124,19 +1129,28 @@ async function runDailyEmployment(): Promise<boolean> {
       const { rows: settingRows } = await client.query<{
         building_id: string;
         product_id: string;
-        desired_stock: number;
+        minimum_stock: number;
+        maximum_stock: number | null;
         price: number;
         mode: 'sell' | 'buy';
-      }>('SELECT building_id, product_id, desired_stock, price, mode FROM warehouse_product_settings');
+      }>('SELECT building_id, product_id, minimum_stock, maximum_stock, price, mode FROM warehouse_product_settings');
       const tradeWarehouses = warehouseRows.map((row) => {
         const stock = new Map<string, number>();
         for (const item of stockRows) {
           if (item.building_id === row.id) stock.set(item.product_id, item.quantity);
         }
-        const settings = new Map<string, { desired: number; price: number; mode: 'sell' | 'buy' }>();
+        const settings = new Map<
+          string,
+          { minimumStock: number; maximumStock: number | null; price: number; mode: 'sell' | 'buy' }
+        >();
         for (const item of settingRows) {
           if (item.building_id === row.id) {
-            settings.set(item.product_id, { desired: item.desired_stock, price: item.price, mode: item.mode });
+            settings.set(item.product_id, {
+              minimumStock: item.minimum_stock,
+              maximumStock: item.maximum_stock,
+              price: item.price,
+              mode: item.mode,
+            });
           }
         }
         return {
@@ -2200,11 +2214,12 @@ async function start() {
         }
         const settings = await pool.query<{
           product_id: string;
-          desired_stock: number;
+          minimum_stock: number;
+          maximum_stock: number | null;
           price: number;
           mode: 'sell' | 'buy';
         }>(
-          `SELECT product_id, desired_stock, price, mode
+          `SELECT product_id, minimum_stock, maximum_stock, price, mode
            FROM warehouse_product_settings WHERE building_id = $1`,
           [request.params.id],
         );
@@ -2226,7 +2241,8 @@ async function start() {
           },
           settings: settings.rows.map((row) => ({
             productId: row.product_id,
-            desiredStock: row.desired_stock,
+            minimumStock: row.minimum_stock,
+            maximumStock: row.maximum_stock,
             price: row.price,
             mode: row.mode,
           })),
@@ -2270,11 +2286,21 @@ async function start() {
           return;
         }
         await pool.query(
-          `INSERT INTO warehouse_product_settings (building_id, product_id, desired_stock, price, mode)
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO warehouse_product_settings
+             (building_id, product_id, minimum_stock, maximum_stock, price, mode)
+           VALUES ($1, $2, $3, $4, $5, $6)
            ON CONFLICT (building_id, product_id)
-           DO UPDATE SET desired_stock = EXCLUDED.desired_stock, price = EXCLUDED.price, mode = EXCLUDED.mode`,
-          [request.params.id, setting.productId, setting.desiredStock, setting.price, setting.mode],
+           DO UPDATE SET minimum_stock = EXCLUDED.minimum_stock,
+                         maximum_stock = EXCLUDED.maximum_stock,
+                         price = EXCLUDED.price, mode = EXCLUDED.mode`,
+          [
+            request.params.id,
+            setting.productId,
+            setting.minimumStock,
+            setting.maximumStock,
+            setting.price,
+            setting.mode,
+          ],
         );
         response.json(setting);
       })

@@ -3,8 +3,9 @@ import { PRODUCTS } from '../types/product';
 import { getDailyWorkPoints } from '../types/employment';
 import { RESIDENCES, RESIDENCE_STATS, type ResidentialBuilding } from '../types/residence';
 import {
-  MAX_WAREHOUSE_DESIRED_STOCK,
+  MAX_WAREHOUSE_STOCK,
   MAX_WAREHOUSE_PRICE,
+  DEFAULT_WAREHOUSE_SETTING,
   type WarehouseDemand,
   type WarehouseProductSetting,
   type WarehouseTradeMode,
@@ -23,7 +24,8 @@ interface WarehousePanelProps {
 }
 
 interface Draft {
-  desiredStock: string;
+  minimumStock: string;
+  maximumStock: string;
   price: string;
   mode: WarehouseTradeMode;
 }
@@ -56,7 +58,8 @@ export default function WarehousePanel({
     const next: Record<string, Draft> = {};
     for (const [productId, setting] of settings) {
       next[productId] = {
-        desiredStock: String(setting.desiredStock),
+        minimumStock: String(setting.minimumStock),
+        maximumStock: setting.maximumStock === null ? 'MAX' : String(setting.maximumStock),
         price: String(setting.price),
         mode: setting.mode,
       };
@@ -65,7 +68,12 @@ export default function WarehousePanel({
   }, [building.id, settings]);
 
   const draftFor = (productId: string): Draft =>
-    drafts[productId] ?? { desiredStock: '0', price: '0', mode: 'sell' };
+    drafts[productId] ?? {
+      minimumStock: String(DEFAULT_WAREHOUSE_SETTING.minimumStock),
+      maximumStock: 'MAX',
+      price: String(DEFAULT_WAREHOUSE_SETTING.price),
+      mode: DEFAULT_WAREHOUSE_SETTING.mode,
+    };
   const update = (productId: string, patch: Partial<Draft>) =>
     setDrafts((current) => ({ ...current, [productId]: { ...draftFor(productId), ...patch } }));
 
@@ -93,7 +101,8 @@ export default function WarehousePanel({
         <div className="warehouse-row warehouse-head">
           <span>Produto</span>
           <span>Estoque</span>
-          <span>Desejável</span>
+          <span>Estoque Máximo Desejável</span>
+          <span>Estoque Mínimo Desejável</span>
           <span>Valor (C$)</span>
           <span>Tipo</span>
           <span />
@@ -108,14 +117,24 @@ export default function WarehousePanel({
               </span>
               <span>{number.format(stock.get(product.id) ?? 0)} {product.unit === 'liter' ? 'L' : 'un.'}</span>
               <input
+                type="text"
+                inputMode="numeric"
+                min={0}
+                max={MAX_WAREHOUSE_STOCK}
+                aria-label={`Estoque máximo desejável de ${product.name}`}
+                value={draft.maximumStock}
+                disabled={!isOwner || isSaving}
+                onChange={(event) => update(product.id, { maximumStock: event.target.value })}
+              />
+              <input
                 type="number"
                 min={0}
-                max={MAX_WAREHOUSE_DESIRED_STOCK}
+                max={MAX_WAREHOUSE_STOCK}
                 step={1}
-                aria-label={`Estoque desejável de ${product.name}`}
-                value={draft.desiredStock}
+                aria-label={`Estoque mínimo desejável de ${product.name}`}
+                value={draft.minimumStock}
                 disabled={!isOwner || isSaving}
-                onChange={(event) => update(product.id, { desiredStock: event.target.value })}
+                onChange={(event) => update(product.id, { minimumStock: event.target.value })}
               />
               <input
                 type="number"
@@ -142,7 +161,11 @@ export default function WarehousePanel({
                 onClick={() =>
                   onSave({
                     productId: product.id,
-                    desiredStock: Number(draft.desiredStock),
+                    minimumStock: Number(draft.minimumStock),
+                    maximumStock:
+                      draft.maximumStock.trim().toUpperCase() === 'MAX'
+                        ? null
+                        : Number(draft.maximumStock),
                     price: Number(draft.price),
                     mode: draft.mode,
                   })

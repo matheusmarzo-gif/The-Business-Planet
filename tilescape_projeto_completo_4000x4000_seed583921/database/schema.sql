@@ -114,11 +114,66 @@ ALTER TABLE residential_buildings
 CREATE TABLE IF NOT EXISTS warehouse_product_settings (
   building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
   product_id TEXT NOT NULL,
-  desired_stock INTEGER NOT NULL DEFAULT 0 CHECK (desired_stock BETWEEN 0 AND 1000000),
+  minimum_stock INTEGER NOT NULL DEFAULT 0 CHECK (minimum_stock BETWEEN 0 AND 1000000),
+  maximum_stock INTEGER CHECK (maximum_stock BETWEEN 0 AND 1000000),
   price INTEGER NOT NULL DEFAULT 0 CHECK (price BETWEEN 0 AND 1000000),
   mode TEXT NOT NULL DEFAULT 'sell' CHECK (mode IN ('sell', 'buy')),
   PRIMARY KEY (building_id, product_id)
 );
+
+DO $$
+DECLARE
+  has_minimum_stock BOOLEAN;
+  has_maximum_stock BOOLEAN;
+  has_legacy_desired_stock BOOLEAN;
+BEGIN
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'warehouse_product_settings'
+      AND column_name = 'minimum_stock'
+  ) INTO has_minimum_stock;
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'warehouse_product_settings'
+      AND column_name = 'maximum_stock'
+  ) INTO has_maximum_stock;
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'warehouse_product_settings'
+      AND column_name = 'desired_stock'
+  ) INTO has_legacy_desired_stock;
+
+  IF NOT has_minimum_stock THEN
+    ALTER TABLE warehouse_product_settings
+      ADD COLUMN minimum_stock INTEGER NOT NULL DEFAULT 0
+      CHECK (minimum_stock BETWEEN 0 AND 1000000);
+    IF has_legacy_desired_stock THEN
+      EXECUTE 'UPDATE warehouse_product_settings SET minimum_stock = desired_stock';
+    END IF;
+  END IF;
+
+  IF NOT has_maximum_stock THEN
+    ALTER TABLE warehouse_product_settings
+      ADD COLUMN maximum_stock INTEGER
+      CHECK (maximum_stock BETWEEN 0 AND 1000000);
+    IF has_legacy_desired_stock THEN
+      EXECUTE 'UPDATE warehouse_product_settings SET maximum_stock = NULLIF(desired_stock, 0)';
+    END IF;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'warehouse_product_settings'::regclass
+      AND conname = 'warehouse_product_settings_stock_range_check'
+  ) THEN
+    ALTER TABLE warehouse_product_settings
+      ADD CONSTRAINT warehouse_product_settings_stock_range_check
+      CHECK (maximum_stock IS NULL OR minimum_stock <= maximum_stock);
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS job_assignments (
   workplace_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,

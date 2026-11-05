@@ -236,9 +236,11 @@ capacidade de 50 m³ para qualquer produto) custa 300 madeiras e 60 pedras e
 exige 20.000 Work Points. Deve ficar em área rural, ao lado de uma estrada. Ao
 clicar em um armazém concluído, use **Produtos e estoque** no painel lateral
 para abrir a lista de todos os produtos com o estoque atual e, para cada um, o
-estoque desejável, o valor e se é de venda ou de compra (somente o dono edita;
-cada linha tem seu botão **Salvar**). O estoque atual ainda é 0, pois o sistema
-de estoque não existe.
+**Estoque Máximo Desejável**, o **Estoque Mínimo Desejável**, o valor e se é de
+venda ou compra (somente o dono edita; cada linha tem seu botão **Salvar**).
+O máximo aceita um número ou **MAX** (padrão), que deixa o limite a cargo do
+espaço natural de 50 m³; o mínimo é o estoque que o armazém preserva ao vender
+ou abastecer suas construções ligadas.
 
 ### Comércio
 
@@ -322,14 +324,16 @@ pessoas empregadas. Nos painéis de construções produtivas, uma descrição an
 dos dados de funcionários resume os Work Points e os insumos usados por unidade
 ou lote; lojas mostram a capacidade de venda e armazéns, o custo de transporte.
 
-**Armazéns e logística:** no painel de uma fazenda ou comércio concluído seu,
-use **Ligar a um armazém** e clique em um armazém seu, concluído, a até 60 tiles
-(ou **Desligar**). Às 00:00 a produção das fazendas vai para o armazém (até o
-estoque desejável e os 50 m³) e o armazém abastece os comércios ligados até o
-estoque máximo. Se o produto não bastar para encher todas as lojas ligadas, as
-unidades disponíveis são repartidas proporcionalmente ao que falta em cada loja;
-por exemplo, 200 peixes para uma demanda total de 400 abastecem cada loja com
-metade do que falta. O transporte custa Work Points do armazém:
+**Armazéns e logística:** no painel de uma construção concluída sua que aceite
+armazém, use **Ligar a um armazém** e clique em um armazém seu, concluído, a até
+60 tiles (ou **Desligar**). Às 00:00 a produção das construções ligadas vai para
+o armazém até o **Estoque Máximo Desejável** e os 50 m³; compras entre
+armazéns também respeitam esse máximo. O armazém abastece comércios e insumos
+das construções ligadas sem depender de a ordem do produto ser Compra ou Venda,
+preservando o **Estoque Mínimo Desejável**. Se o produto
+disponível acima do mínimo não bastar para atender todos, as unidades são
+repartidas proporcionalmente ao que falta em cada construção. O transporte
+custa Work Points do armazém:
 `100 × m³ + 0,125 × kg`; os pontos vêm dos funcionários do armazém e limites de
 espaço ou Work Points podem impedir parte do transporte.
 O painel do armazém mostra o estoque real e o espaço ocupado.
@@ -339,10 +343,12 @@ desenha no mapa o raio de 60 tiles dela.
 
 **Comércio entre armazéns:** às 03:00 e 15:00 os armazéns com produtos em modo
 **Compra** procuram, em até 60 tiles, armazéns de outros jogadores com o produto
-em modo **Venda**. O vendedor oferece só o que passa do estoque desejável dele,
-pelo valor que definiu; o comprador só compra se esse valor for menor que o seu,
-até o seu estoque desejável. As ofertas mais baratas vêm primeiro. O comprador
-gasta Work Points de transporte (cada rodada usa metade dos pontos diários).
+em modo **Venda**. O vendedor oferece apenas o estoque acima do seu **Estoque
+Mínimo Desejável**; o comprador aceita até o **Estoque Máximo Desejável** (ou
+até a capacidade natural em m³ quando estiver em **MAX**). O comprador só compra
+se o valor do vendedor for menor que seu limite. As ofertas mais baratas vêm
+primeiro. O comprador gasta Work Points de transporte (cada rodada usa metade
+dos pontos diários).
 
 **Demanda do armazém:** o painel do armazém mostra a demanda de Work Points do
 último dia, a média do último mês (30 dias de jogo) e a previsão de pontos que
@@ -397,5 +403,5 @@ Fazendas, recursos e construções artesanais concluídas têm o botão **Histó
 
 O dono de uma Loja de Arroz ou Loja de Peixes concluída pode abrir **Histórico do comércio** para consultar os últimos 30 dias por dia: gasto com funcionários, gasto com produtos efetivamente pagos, unidades vendidas, preço unitário de venda, receita e lucro/prejuízo. O abastecimento pelo armazém ligado do mesmo dono é uma transferência interna sem cobrança e aparece com gasto de produto C$ 0.
 
-- **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque desejado atingido, sem espaço, Work Points insuficientes ou armazém sem estoque). Falhas internas são exibidas separadamente, com a etapa e a mensagem do erro.
+- **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque máximo atingido, estoque mínimo preservado, sem espaço, Work Points insuficientes ou armazém sem estoque). Falhas internas são exibidas separadamente, com a etapa e a mensagem do erro.
 - **Validade e espaço de armazenamento:** às 18:00 de cada dia do jogo, a perda esperada de cada produto perecível é `estoque atual / validade em dias`. A parte inteira é removida e a fração vira probabilidade de perder uma unidade adicional (por exemplo, 10 unidades com validade de 100 dias: 0,1 unidade/dia, ou 10% de chance de perder uma). Não há controle por lote ou data de entrada; produtos recém-adicionados seguem a mesma regra sobre o estoque agregado. A regra cobre os estoques principais de fazendas, comércios, construções artesanais e recursos, além dos produtos nos armazéns (indústrias). Produtos sem validade, como madeira, pedra, ferro e Ferramentas, não se deterioram. O espaço ocupado é atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o armazém está selecionado.

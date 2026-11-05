@@ -34,7 +34,8 @@ export type InputProduct = 'tools' | 'wood' | 'iron';
 
 export interface WarehouseLogistics {
   stock: Map<string, number>;
-  desired: Map<string, number>;
+  minimumStock: Map<string, number>;
+  maximumStock: Map<string, number | null>;
   capacityM3: number;
   workPoints: number;
 }
@@ -72,10 +73,9 @@ export function isWithinLinkRadius(
 }
 
 /**
- * Planeja o transporte diário de um armazém. Fazendas enviam sua produção até o
- * estoque desejável e o espaço livre; comércios recebem até encher o estoque
- * máximo. Cada carga consome Work Points do armazém; o que não couber não é
- * transportado. A produção para o armazém tem prioridade sobre o abastecimento.
+ * Planeja o transporte diário de um armazém. Produtores abastecem até o estoque
+ * máximo configurado e o espaço livre; as construções ligadas recebem apenas o
+ * estoque acima do mínimo reservado. Cada carga consome Work Points do armazém.
  */
 export type TransferBlockReason =
   | 'desired_reached'
@@ -161,18 +161,21 @@ export function planTransfersDetailed(
     const unitDemand = getTransportDemand(product.id, 1);
     const affordable = Math.floor(points / unitDemand + 1e-9);
     const wanted = direction === 'out' ? current : Math.max(0, capacity - current);
-    const availableForTransfer = Math.min(inWarehouse, proportionalStockLimit ?? inWarehouse);
-    const stockBlockReason: TransferBlockReason =
-      proportionalStockLimit !== undefined && proportionalStockLimit < wanted
-        ? 'insufficient_stock'
-        : 'warehouse_empty';
+    const availableForTransfer = Math.max(
+      0,
+      inWarehouse - (warehouse.minimumStock.get(product.id) ?? 0),
+    );
+    const stockBlockReason: TransferBlockReason = inWarehouse > 0 ? 'insufficient_stock' : 'warehouse_empty';
     const limits: [number, TransferBlockReason][] =
       direction === 'out'
         ? [
-            [Math.max(0, (warehouse.desired.get(product.id) ?? 0) - inWarehouse), 'desired_reached'],
+            [
+              Math.max(0, (warehouse.maximumStock.get(product.id) ?? Infinity) - inWarehouse),
+              'desired_reached',
+            ],
             [Math.max(0, Math.floor((warehouse.capacityM3 - usedM3()) / product.volumeM3 + 1e-9)), 'no_space'],
           ]
-        : [[availableForTransfer, stockBlockReason]];
+        : [[Math.min(availableForTransfer, proportionalStockLimit ?? availableForTransfer), stockBlockReason]];
     limits.push([affordable, 'no_work_points']);
     if (wanted <= 0) return;
     const [limit, limitReason] = limits.reduce((best, item) => (item[0] < best[0] ? item : best));
@@ -198,29 +201,45 @@ export function planTransfersDetailed(
       move(link, 'out');
     }
   }
-  const shopDemands = new Map<string, { buildingId: string; quantity: number }[]>();
-  for (const link of sorted) {
-    const definition = getResidenceDefinition(link.type);
-    if (definition?.kind !== 'shop' || !definition.stockProductId) continue;
-    const quantity = Math.max(0, (definition.stockCapacity ?? 0) - link.stock);
-    if (quantity === 0) continue;
-    const demands = shopDemands.get(definition.stockProductId) ?? [];
+  const linkedDemands = new Map<string, { buildingId: string; quantity: number }[]>();
+  const addDemand = (link: LogisticsLink, productId: string, quantity: number) => {
+    if (quantity <= 0) return;
+    const demands = linkedDemands.get(productId) ?? [];
     demands.push({ buildingId: link.buildingId, quantity });
-    shopDemands.set(definition.stockProductId, demands);
+    linkedDemands.set(productId, demands);
+  };
+  for (const link of sorted) {
+    const definition = getResidenceDefinition(link.type);
+    if (definition?.kind === 'shop' && definition.stockProductId) {
+      addDemand(link, definition.stockProductId, (definition.stockCapacity ?? 0) - link.stock);
+    }
+    if (definition?.toolCapacity) addDemand(link, 'tools', definition.toolCapacity - (link.toolStock ?? 0));
+    if (definition?.woodCapacity) addDemand(link, 'wood', definition.woodCapacity - (link.woodStock ?? 0));
+    if (definition?.ironCapacity) addDemand(link, 'iron', definition.ironCapacity - (link.ironStock ?? 0));
   }
-  const shopAllocations = new Map<string, number>();
-  for (const [productId, demands] of shopDemands) {
-    const allocation = allocateProportionalStock(stock.get(productId) ?? 0, demands);
-    for (const [buildingId, quantity] of allocation) shopAllocations.set(buildingId, quantity);
+  const linkedAllocations = new Map<string, number>();
+  for (const [productId, demands] of linkedDemands) {
+    const available = Math.max(
+      0,
+      (stock.get(productId) ?? 0) - (warehouse.minimumStock.get(productId) ?? 0),
+    );
+    const keyedDemands = demands.map((item) => ({
+      ...item,
+      buildingId: `${item.buildingId}:${productId}`,
+    }));
+    const allocation = allocateProportionalStock(available, keyedDemands);
+    for (const [buildingId, quantity] of allocation) linkedAllocations.set(buildingId, quantity);
   }
   for (const link of sorted) {
     const definition = getResidenceDefinition(link.type);
-    if (definition?.kind === 'shop') {
-      move(link, 'in', undefined, shopAllocations.get(link.buildingId));
+    const allocationFor = (productId: string | undefined) =>
+      productId ? linkedAllocations.get(`${link.buildingId}:${productId}`) : undefined;
+    if (definition?.kind === 'shop' && definition.stockProductId) {
+      move(link, 'in', undefined, allocationFor(definition.stockProductId));
     }
-    if (definition?.toolCapacity) move(link, 'in', 'tools');
-    if (definition?.woodCapacity) move(link, 'in', 'wood');
-    if (definition?.ironCapacity) move(link, 'in', 'iron');
+    if (definition?.toolCapacity) move(link, 'in', 'tools', allocationFor('tools'));
+    if (definition?.woodCapacity) move(link, 'in', 'wood', allocationFor('wood'));
+    if (definition?.ironCapacity) move(link, 'in', 'iron', allocationFor('iron'));
   }
   return { transfers, attempts };
 }
@@ -236,7 +255,10 @@ export interface TradeWarehouse {
   capacityM3: number;
   workPoints: number;
   stock: Map<string, number>;
-  settings: Map<string, { desired: number; price: number; mode: WarehouseTradeMode }>;
+  settings: Map<
+    string,
+    { minimumStock: number; maximumStock: number | null; price: number; mode: WarehouseTradeMode }
+  >;
 }
 
 export interface WarehouseTrade {
@@ -250,8 +272,9 @@ export interface WarehouseTrade {
 
 /**
  * Compras entre armazéns de donos diferentes em até 60 tiles. O vendedor oferece o que
- * excede seu estoque desejável (modo venda) ao preço dele; o comprador (modo compra) quer
- * chegar ao estoque desejável e só paga se o preço for menor que o seu limite. As ofertas
+ * excede seu estoque mínimo (modo venda) ao preço dele; o comprador (modo compra) quer
+ * chegar ao estoque máximo, limitado pela capacidade natural quando usa MAX, e só paga se
+ * o preço for menor que o seu limite. As ofertas
  * mais baratas são atendidas primeiro entre todos os fornecedores; o comprador gasta Work
  * Points de transporte e espaço livre em m³.
  */
@@ -291,8 +314,10 @@ export function planWarehouseTrades(warehouses: TradeWarehouse[]): WarehouseTrad
     if (!product) continue;
     const sellerStock = stock.get(seller.id)!;
     const buyerStock = stock.get(buyer.id)!;
-    const surplus = (sellerStock.get(productId) ?? 0) - (seller.settings.get(productId)?.desired ?? 0);
-    const need = (buyer.settings.get(productId)?.desired ?? 0) - (buyerStock.get(productId) ?? 0);
+    const surplus =
+      (sellerStock.get(productId) ?? 0) - (seller.settings.get(productId)?.minimumStock ?? 0);
+    const maximumStock = buyer.settings.get(productId)?.maximumStock ?? Infinity;
+    const need = maximumStock - (buyerStock.get(productId) ?? 0);
     const usedM3 = PRODUCTS.reduce((sum, item) => sum + (buyerStock.get(item.id) ?? 0) * item.volumeM3, 0);
     const unitDemand = getTransportDemand(productId, 1);
     const quantity = Math.min(

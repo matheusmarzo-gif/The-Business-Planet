@@ -225,12 +225,15 @@ mapeamento e verificar todas as curvas.
   adjacente) usa o mesmo catálogo/tabela: 4 × 4, até 100 funcionários,
   capacidade de 50 m³ para qualquer produto, 300 madeiras, 60 pedras e 20.000
   Work Points. Sprite `public/buildings/industrial/armazem.png`. As
-  configurações por produto (estoque desejável, valor e tipo venda/compra)
-  ficam em `warehouse_product_settings` (PK `building_id, product_id`, cascata
-  na demolição). `src/types/warehouse.ts` valida os dados no cliente e no
+  configurações por produto (estoque mínimo, estoque máximo numérico ou `MAX`,
+  valor e tipo venda/compra) ficam em `warehouse_product_settings` (PK
+  `building_id, product_id`, cascata na demolição). `MAX` é armazenado como
+  `maximum_stock = NULL` e deixa a capacidade natural em m³ como limite. O
+  schema migra configurações antigas: `desired_stock` positivo vira mínimo e
+  máximo; zero vira mínimo 0 e máximo `MAX`. `src/types/warehouse.ts` valida os dados no cliente e no
   servidor. Rotas: `GET /api/residential-buildings/:id/warehouse` (qualquer
   usuário autenticado) e `PUT` (somente o dono, armazém concluído, um produto
-  por chamada). O estoque atual ainda é fixo em 0 (não há sistema de estoque).
+  por chamada).
 - `shop_rice` (categoria Comerciais, área urbana, `kind: 'shop'`) também usa o
   catálogo e a tabela `residential_buildings`: 2 × 2, até 4 funcionários,
   estoque máximo de 20 de Arroz, 100 madeiras e 20 pedras, 9.000 Work Points.
@@ -373,9 +376,9 @@ mapeamento e verificar todas as curvas.
   03:00 e 15:00 (`world_state.last_warehouse_trade_slot`, ex. `2026-01-01T15`,
   garante uma execução por rodada) cada armazém em modo `buy` procura armazéns
   de outros donos em até 60 tiles em modo `sell`. O vendedor oferece só o que
-  excede seu estoque desejável, ao preço dele; o comprador só compra se esse
-  preço for menor que o seu valor, até o estoque desejável e o espaço livre
-  (50 m³). As ofertas mais baratas são atendidas primeiro entre todos os
+  excede seu estoque mínimo, ao preço dele; o comprador só compra se esse
+  preço for menor que seu valor e recebe até seu estoque máximo numérico ou,
+  em `MAX`, até o espaço livre (50 m³). As ofertas mais baratas são atendidas primeiro entre todos os
   fornecedores. O comprador gasta Work Points de transporte (mesma fórmula; cada
   rodada usa metade dos pontos diários) e paga ao vendedor (carteira pode ficar
   negativa).
@@ -389,20 +392,22 @@ mapeamento e verificar todas as curvas.
 - Câmera: sem botões de zoom/centralizar; zoom pela roda do mouse e movimento
   pelas setas do teclado (`GameApp.tsx`, laço `requestAnimationFrame`, ignorado
   em campos de formulário). (`src/types/logistics.ts`): `residential_buildings.
-  warehouse_id` (FK própria, `ON DELETE SET NULL`) liga uma fazenda ou comércio
-  concluído a um único armazém concluído do mesmo dono, a até 60 tiles
+  warehouse_id` (FK própria, `ON DELETE SET NULL`) liga uma construção
+  produtora ou comércio concluído a um único armazém concluído do mesmo dono, a até 60 tiles
   (`PUT /api/residential-buildings/:id/warehouse-link`, corpo `{warehouseId|null}`,
   validado no servidor). O estoque real do armazém fica em `warehouse_stock`
   (`building_id, product_id, quantity`, cascata) e é devolvido por
   `GET .../warehouse` junto das configurações. No job das 00:00 (depois das
-  vendas), `planTransfers` move: fazendas → armazém até o estoque desejável e o
-  espaço livre (50 m³); armazém → comércios até o estoque máximo. Cada carga
+  vendas), `planTransfers` move: construções produtoras ligadas → armazém até o
+  estoque máximo configurado e o espaço livre (50 m³); armazém → comércios e
+  insumos das construções ligadas usando o saldo acima do estoque mínimo. A
+  ordem Compra/Venda não bloqueia transferências locais. Cada carga
   consome Work Points do armazém (`100 · m³ + 0,125 · kg`; pontos = empregados
   do armazém × `getDailyWorkPoints`); envios ao armazém fazem upsert positivo e
   retiradas decrementam apenas uma linha existente com saldo suficiente, sem
-  tentar inserir estoque negativo. Quando o produto disponível não cobre a
-  soma dos déficits das lojas ligadas, `allocateProportionalStock` divide as
-  unidades proporcionalmente ao que falta em cada loja, com arredondamento
+  tentar inserir estoque negativo. Quando o produto disponível acima do mínimo
+  não cobre a soma dos déficits das construções ligadas, `allocateProportionalStock` divide as
+  unidades proporcionalmente ao que falta em cada uma, com arredondamento
   inteiro determinístico; o histórico informa essa distribuição. O que não
   couber por espaço ou Work Points não é transportado, e a produção para o
   armazém tem prioridade sobre o abastecimento.
@@ -428,7 +433,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities` | Autenticado | Retorna cidades persistidas. |
 | `GET /api/wallet` | Autenticado | Cria a carteira do usuário com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
 | `GET /api/residential-buildings/:id/warehouse-log` | Dono do armazém | Retorna `{ days: [{ day, workPoints }], events: [{ day, buildingType, productId, direction, wanted, moved, reason, errorDetail }] }` do armazém (tabela `warehouse_transport_log`, gravada às 00:00 na etapa de transporte, 30 dias; `reason` = `desired_reached`/`no_space`/`no_work_points`/`warehouse_empty` quando moveu menos que o desejado; erros internos registram etapa e detalhe em `errorDetail`). |
-| `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações e estoque agregado do armazém; espaço ocupado é calculado no cliente a partir dos volumes e quantidades atuais. |
+| `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo) e estoque agregado; espaço ocupado é calculado no cliente. |
 | `GET /api/residential-buildings/:id/production-history` | Autenticado | Retorna `{ days: [{ day, workPoints, produced, transported, efficiency }] }` dos últimos 30 dias (tabela `production_history`, gravada às 00:00 pelas etapas de produção, fazendas e transporte; `transported` conta só envios ao armazém). |
 | `GET /api/residential-buildings/:id/commerce-history` | Dono do comércio | Retorna os últimos 30 dias de `{ day, employeeExpense, productExpense, unitsSold, salePrice, revenue, profitLoss }` da tabela `commerce_history`; o painel abre pelo botão Histórico do comércio. |
 | `GET /api/master/online-players` | Master | Lista `{ players: [{ id, name, email, connections }] }` a partir da presença no Redis (`userId|uuid`) e de `neon_auth."user"`. |

@@ -64,7 +64,7 @@ describe('warehouse trading', () => {
     ownerId: string,
     x: number,
     stock: [string, number][],
-    settings: [string, number, number, 'sell' | 'buy'][],
+    settings: [string, number | null, number, 'sell' | 'buy'][],
     workPoints = 1e6,
   ) => ({
     id,
@@ -75,10 +75,20 @@ describe('warehouse trading', () => {
     capacityM3: 50,
     workPoints,
     stock: new Map(stock),
-    settings: new Map(settings.map(([p, desired, price, mode]) => [p, { desired, price, mode }])),
+    settings: new Map(
+      settings.map(([p, target, price, mode]) => [
+        p,
+        {
+          minimumStock: mode === 'sell' ? target ?? 0 : 0,
+          maximumStock: mode === 'buy' ? target : null,
+          price,
+          mode,
+        },
+      ]),
+    ),
   });
 
-  it('buys the cheapest offers first, only below the buyer limit and above the seller desired stock', () => {
+  it('buys the cheapest offers first, preserving the seller minimum and buyer maximum', () => {
     const trades = planWarehouseTrades([
       warehouse('buyer', 'b', 0, [], [['rice', 30, 10, 'buy']]),
       warehouse('dear', 'c', 10, [['rice', 100]], [['rice', 90, 9, 'sell']]),
@@ -105,6 +115,14 @@ describe('warehouse trading', () => {
     // 20 pontos / 2 por unidade = 10 unidades.
     const limited = planWarehouseTrades([base, warehouse('near', 'a', 10, [['rice', 100]], [['rice', 0, 1, 'sell']])]);
     assert.equal(limited[0].quantity, 10);
+  });
+
+  it('uses natural capacity as the buyer limit when maximum stock is MAX', () => {
+    const trades = planWarehouseTrades([
+      warehouse('buyer', 'b', 0, [['rice', 4990]], [['rice', null, 10, 'buy']]),
+      warehouse('seller', 'a', 10, [['rice', 100]], [['rice', 0, 5, 'sell']]),
+    ]);
+    assert.equal(trades[0].quantity, 10);
   });
 });
 
@@ -178,7 +196,7 @@ describe('warehouse logistics', () => {
 
   it('sends production up to the desired stock and supplies shops, limited by Work Points', () => {
     const transfers = planTransfers(
-      { stock: new Map(), desired: new Map([['rice', 100]]), capacityM3: 50, workPoints: 1000 },
+      { stock: new Map(), minimumStock: new Map(), maximumStock: new Map([['rice', 100]]), capacityM3: 50, workPoints: 1000 },
       [link('farm', 'farm_rice', 300), link('shop', 'shop_rice', 5)],
     );
     // A fazenda envia 100 (desejável) = 200 pontos; a loja recebe 15 (20 - 5) = 30 pontos.
@@ -188,7 +206,7 @@ describe('warehouse logistics', () => {
     ]);
 
     const limited = planTransfers(
-      { stock: new Map(), desired: new Map([['rice', 100]]), capacityM3: 50, workPoints: 50 },
+      { stock: new Map(), minimumStock: new Map(), maximumStock: new Map([['rice', 100]]), capacityM3: 50, workPoints: 50 },
       [link('farm', 'farm_rice', 300), link('shop', 'shop_rice', 0)],
     );
     // 50 pontos => 25 unidades; a produção tem prioridade e a loja fica sem nada.
@@ -197,7 +215,7 @@ describe('warehouse logistics', () => {
     ]);
 
     const none = planTransfers(
-      { stock: new Map(), desired: new Map(), capacityM3: 50, workPoints: 1000 },
+      { stock: new Map(), minimumStock: new Map(), maximumStock: new Map([['rice', 0]]), capacityM3: 50, workPoints: 1000 },
       [link('farm', 'farm_rice', 300)],
     );
     assert.deepEqual(none, []);
@@ -205,16 +223,42 @@ describe('warehouse logistics', () => {
 
   it('respects warehouse space and the shop maximum', () => {
     const full = planTransfers(
-      { stock: new Map([['rice', 4990]]), desired: new Map([['rice', 9999]]), capacityM3: 50, workPoints: 1e6 },
+      { stock: new Map([['rice', 4990]]), minimumStock: new Map(), maximumStock: new Map([['rice', 9999]]), capacityM3: 50, workPoints: 1e6 },
       [link('farm', 'farm_rice', 300)],
     );
     // 50 m³ / 0,01 = 5000 unidades; só cabem mais 10.
     assert.equal(full[0].quantity, 10);
     const supply = planTransfers(
-      { stock: new Map([['rice', 8]]), desired: new Map(), capacityM3: 50, workPoints: 1e6 },
+      { stock: new Map([['rice', 8]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 1e6 },
       [link('shop', 'shop_rice', 0)],
     );
     assert.equal(supply[0].quantity, 8);
+  });
+
+  it('caps producer deliveries at the warehouse maximum and reserves its minimum for linked buildings', () => {
+    const producer = planTransfers(
+      {
+        stock: new Map([['fish', 10]]),
+        minimumStock: new Map([['fish', 20]]),
+        maximumStock: new Map([['fish', 25]]),
+        capacityM3: 50,
+        workPoints: 10000,
+      },
+      [{ buildingId: 'fishery', type: 'fishery', stock: 40 }],
+    );
+    assert.deepEqual(producer, [{ buildingId: 'fishery', productId: 'fish', quantity: 15, direction: 'out' }]);
+
+    const supply = planTransfers(
+      {
+        stock: new Map([['fish', 50]]),
+        minimumStock: new Map([['fish', 20]]),
+        maximumStock: new Map(),
+        capacityM3: 50,
+        workPoints: 10000,
+      },
+      [{ buildingId: 'shop', type: 'shop_fish', stock: 0 }],
+    );
+    assert.deepEqual(supply, [{ buildingId: 'shop', productId: 'fish', quantity: 30, direction: 'in' }]);
   });
 
   it('distributes scarce product stock proportionally across linked shops', () => {
@@ -224,7 +268,7 @@ describe('warehouse logistics', () => {
       stock: 0,
     }));
     const transfers = planTransfers(
-      { stock: new Map([['fish', 200]]), desired: new Map(), capacityM3: 50, workPoints: 10000 },
+      { stock: new Map([['fish', 200]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 10000 },
       shops,
     );
     assert.deepEqual(transfers.map((transfer) => transfer.quantity), Array(10).fill(20));
@@ -232,7 +276,7 @@ describe('warehouse logistics', () => {
 
   it('scales each shop share to its remaining stock need', () => {
     const transfers = planTransfers(
-      { stock: new Map([['fish', 30]]), desired: new Map(), capacityM3: 50, workPoints: 10000 },
+      { stock: new Map([['fish', 30]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 10000 },
       [
         { buildingId: 'shop-a', type: 'shop_fish', stock: 20 },
         { buildingId: 'shop-b', type: 'shop_fish', stock: 0 },
@@ -247,7 +291,7 @@ describe('warehouse logistics', () => {
   it('logs shared stock rationing as proportional distribution', async () => {
     const { planTransfersDetailed } = await import('./logistics');
     const { attempts } = planTransfersDetailed(
-      { stock: new Map([['fish', 40]]), desired: new Map(), capacityM3: 50, workPoints: 10000 },
+      { stock: new Map([['fish', 40]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 10000 },
       [
         { buildingId: 'shop-a', type: 'shop_fish', stock: 0 },
         { buildingId: 'shop-b', type: 'shop_fish', stock: 0 },
@@ -560,11 +604,14 @@ describe('municipal zones', () => {
     });
 
     it('validates warehouse product settings', () => {
-      const valid = { productId: 'rice', desiredStock: 10, price: 5, mode: 'buy' };
+      const valid = { productId: 'rice', minimumStock: 0, maximumStock: 10, price: 5, mode: 'buy' };
       assert.deepEqual(parseWarehouseSetting(valid), valid);
       assert.equal(parseWarehouseSetting({ ...valid, productId: 'unknown' }), null);
       assert.equal(parseWarehouseSetting({ ...valid, price: -1 }), null);
-      assert.equal(parseWarehouseSetting({ ...valid, desiredStock: 1.5 }), null);
+      assert.equal(parseWarehouseSetting({ ...valid, maximumStock: 1.5 }), null);
+      assert.equal(parseWarehouseSetting({ ...valid, minimumStock: 11 }), null);
+      assert.deepEqual(parseWarehouseSetting({ ...valid, maximumStock: null }), { ...valid, maximumStock: null });
+      assert.deepEqual(parseWarehouseSetting({ ...valid, maximumStock: 'MAX' }), { ...valid, maximumStock: null });
       assert.equal(parseWarehouseSetting({ ...valid, mode: 'trade' }), null);
     });
 
@@ -791,7 +838,7 @@ describe('fishery', () => {
 
   it('supplies tools and collects fish through a linked warehouse', () => {
     const transfers = planTransfers(
-      { stock: new Map([['tools', 20]]), desired: new Map([['fish', 100]]), capacityM3: 50, workPoints: 1e6 },
+      { stock: new Map([['tools', 20]]), minimumStock: new Map(), maximumStock: new Map([['fish', 100]]), capacityM3: 50, workPoints: 1e6 },
       [{ buildingId: 'f', type: 'fishery', stock: 30, toolStock: 4 }],
     );
     assert.deepEqual(transfers, [
@@ -802,7 +849,7 @@ describe('fishery', () => {
 
   it('withdraws fish from warehouse stock to replenish the fish shop', () => {
     const transfers = planTransfers(
-      { stock: new Map([['fish', 40]]), desired: new Map(), capacityM3: 50, workPoints: 1e6 },
+      { stock: new Map([['fish', 40]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 1e6 },
       [{ buildingId: 'shop', type: 'shop_fish', stock: 0 }],
     );
     assert.deepEqual(transfers, [
@@ -836,7 +883,7 @@ describe('recursos e ferramentaria', () => {
 
   it('supplies wood and iron to a toolmaker through a warehouse', () => {
     const transfers = planTransfers(
-      { stock: new Map([['wood', 20], ['iron', 3]]), desired: new Map(), capacityM3: 50, workPoints: 1e6 },
+      { stock: new Map([['wood', 20], ['iron', 3]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 1e6 },
       [{ buildingId: 't', type: 'toolmaker', stock: 0, woodStock: 10, ironStock: 1 }],
     );
     assert.deepEqual(
@@ -893,9 +940,9 @@ describe('hist�rico de transporte do armaz�m', () => {
   it('explica por que a carga n�o foi transportada', async () => {
     const { planTransfersDetailed } = await import('./logistics');
     const link = [{ buildingId: 'a', type: 'fishery' as const, stock: 13, toolStock: 0 }];
-    const run = (desired: number, workPoints: number) =>
+    const run = (maximumStock: number, workPoints: number) =>
       planTransfersDetailed(
-        { stock: new Map(), desired: new Map([['fish', desired]]), capacityM3: 50, workPoints },
+        { stock: new Map(), minimumStock: new Map(), maximumStock: new Map([['fish', maximumStock]]), capacityM3: 50, workPoints },
         link,
       ).attempts[0];
     assert.deepEqual(run(1000, 1000), { buildingId: 'a', productId: 'fish', direction: 'out', wanted: 13, moved: 13, reason: null });

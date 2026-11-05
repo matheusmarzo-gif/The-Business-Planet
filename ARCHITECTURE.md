@@ -334,7 +334,16 @@ mapeamento e verificar todas as curvas.
   fornecedores. O comprador gasta Work Points de transporte (mesma fórmula; cada
   rodada usa metade dos pontos diários) e paga ao vendedor (carteira pode ficar
   negativa).
-- Logística de armazém (`src/types/logistics.ts`): `residential_buildings.
+- Demanda de Work Points do armazém: `logWarehouseDemand` (server/index.ts)
+  acumula por dia de jogo, na tabela `warehouse_demand (building_id, day, demand)`
+  (cascata), a demanda das transferências locais (00:00) e das compras entre
+  armazéns (03:00/15:00, armazém comprador). `GET .../warehouse` devolve
+  `demand {lastDay, last, monthAverage}` (média = soma dos últimos 30 dias ÷ 30);
+  a previsão do próximo dia é calculada no cliente (`WarehousePanel`:
+  empregados × `getDailyWorkPoints`).
+- Câmera: sem botões de zoom/centralizar; zoom pela roda do mouse e movimento
+  pelas setas do teclado (`GameApp.tsx`, laço `requestAnimationFrame`, ignorado
+  em campos de formulário). (`src/types/logistics.ts`): `residential_buildings.
   warehouse_id` (FK própria, `ON DELETE SET NULL`) liga uma fazenda ou comércio
   concluído a um único armazém concluído do mesmo dono, a até 60 tiles
   (`PUT /api/residential-buildings/:id/warehouse-link`, corpo `{warehouseId|null}`,

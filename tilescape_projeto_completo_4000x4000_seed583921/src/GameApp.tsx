@@ -1,11 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Clock3,
   Compass,
-  LocateFixed,
   Map as MapIcon,
-  Minus,
-  Plus,
   Radio,
 } from 'lucide-react';
 import CityAssemblyModal from './components/CityAssemblyModal';
@@ -14,7 +11,7 @@ import CityZoneEditor from './components/CityZoneEditor';
 import ProductCatalog from './components/ProductCatalog';
 import ResidencePanel from './components/ResidencePanel';
 import WarehousePanel from './components/WarehousePanel';
-import type { WarehouseProductSetting } from './types/warehouse';
+import type { WarehouseDemand, WarehouseProductSetting } from './types/warehouse';
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
 import { connectToWorld, WorldSnapshot } from './game/worldClient';
@@ -246,6 +243,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [warehouseSettings, setWarehouseSettings] = useState<Map<string, WarehouseProductSetting>>(new Map());
   const [warehouseError, setWarehouseError] = useState('');
   const [warehouseStock, setWarehouseStock] = useState<Map<string, number>>(new Map());
+  const [warehouseDemand, setWarehouseDemand] = useState<WarehouseDemand | null>(null);
   const [linkingFromId, setLinkingFromId] = useState<string | null>(null);
   const [showInfluence, setShowInfluence] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
@@ -356,6 +354,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setWarehouseError('');
     setWarehouseSettings(new Map());
     setWarehouseStock(new Map());
+    setWarehouseDemand(null);
   }, [selectedResidenceKey]);
 
   const openWarehouse = async (buildingId: string) => {
@@ -365,7 +364,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       const result = await cityRequest<{
         settings: WarehouseProductSetting[];
         stock: { productId: string; quantity: number }[];
+        demand: WarehouseDemand;
       }>(`/api/residential-buildings/${buildingId}/warehouse`);
+      setWarehouseDemand(result.demand);
       setWarehouseSettings(new Map(result.settings.map((setting) => [setting.productId, setting])));
       setWarehouseStock(new Map(result.stock.map((item) => [item.productId, item.quantity])));
     } catch (error) {
@@ -488,27 +489,44 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setIsSavingWorkSettings(false);
     }
   };
-  const zoomBy = (factor: number) =>
-    setCamera((current) => {
-      const zoom = Math.min(6, Math.max(0.004, current.zoom * factor));
-      const ratio = zoom / current.zoom;
-      const centerX = viewport.width / 2;
-      const centerY = viewport.height / 2;
-      return {
-        zoom,
-        x: centerX - (centerX - current.x) * ratio,
-        y: centerY - (centerY - current.y) * ratio,
-      };
-    });
-  const centerOnSpawn = () => {
-    const tilePixels = BASE_TILE_SIZE * camera.zoom;
-    const mapViewportWidth = viewport.width;
-    setCamera({
-      ...camera,
-      x: mapViewportWidth / 2 - SPAWN.x * tilePixels,
-      y: viewport.height / 2 - SPAWN.y * tilePixels,
-    });
-  };
+  const cameraKeys = useRef(new Set<string>());
+  useEffect(() => {
+    const arrows = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
+    const isTyping = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      (target.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName));
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!arrows.includes(event.key) || isTyping(event.target)) return;
+      event.preventDefault();
+      cameraKeys.current.add(event.key);
+    };
+    const onKeyUp = (event: KeyboardEvent) => cameraKeys.current.delete(event.key);
+    const onBlur = () => cameraKeys.current.clear();
+    let frame = 0;
+    let last = performance.now();
+    const step = (now: number) => {
+      const seconds = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const keys = cameraKeys.current;
+      const dx = (keys.has('ArrowLeft') ? 1 : 0) - (keys.has('ArrowRight') ? 1 : 0);
+      const dy = (keys.has('ArrowUp') ? 1 : 0) - (keys.has('ArrowDown') ? 1 : 0);
+      if (dx !== 0 || dy !== 0) {
+        const distance = 700 * seconds;
+        setCamera((current) => ({ ...current, x: current.x + dx * distance, y: current.y + dy * distance }));
+      }
+      frame = requestAnimationFrame(step);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    frame = requestAnimationFrame(step);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+      cancelAnimationFrame(frame);
+    };
+  }, []);
 
   const openNewAssembly = () => {
     closeCityZoneEditor();
@@ -1031,13 +1049,6 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           </div>
         </div>
 
-        <div className="map-tools">
-          <button aria-label="Aproximar mapa" onClick={() => zoomBy(1.3)}><Plus size={18} /></button>
-          <button aria-label="Afastar mapa" onClick={() => zoomBy(1 / 1.3)}><Minus size={18} /></button>
-          <span className="tool-divider" />
-          <button aria-label="Centralizar no ponto de partida" onClick={centerOnSpawn}><LocateFixed size={17} /></button>
-        </div>
-
         {selectedResidence && (
           <ResidencePanel
             building={selectedResidence}
@@ -1070,6 +1081,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             isOwner={isResidenceOwner}
             settings={warehouseSettings}
             stock={warehouseStock}
+            demand={warehouseDemand}
             isSaving={isSavingWorkSettings}
             error={warehouseError}
             onSave={(setting) => void saveWarehouseSetting(selectedResidenceKey, setting)}

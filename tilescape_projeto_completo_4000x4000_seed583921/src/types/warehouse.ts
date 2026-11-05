@@ -9,6 +9,12 @@ export interface WarehouseProductSetting {
   mode: WarehouseTradeMode;
 }
 
+export interface WarehouseDemand {
+  lastDay: string | null;
+  last: number;
+  monthAverage: number;
+}
+
 export const MAX_WAREHOUSE_DESIRED_STOCK = 1000000;
 export const MAX_WAREHOUSE_PRICE = 1000000;
 

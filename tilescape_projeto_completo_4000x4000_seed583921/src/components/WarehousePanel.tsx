@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { PRODUCTS } from '../types/product';
-import { RESIDENCES, type ResidentialBuilding } from '../types/residence';
+import { getDailyWorkPoints } from '../types/employment';
+import { RESIDENCES, RESIDENCE_STATS, type ResidentialBuilding } from '../types/residence';
 import {
   MAX_WAREHOUSE_DESIRED_STOCK,
   MAX_WAREHOUSE_PRICE,
+  type WarehouseDemand,
   type WarehouseProductSetting,
   type WarehouseTradeMode,
 } from '../types/warehouse';
@@ -13,6 +15,7 @@ interface WarehousePanelProps {
   isOwner: boolean;
   settings: Map<string, WarehouseProductSetting>;
   stock: Map<string, number>;
+  demand: WarehouseDemand | null;
   isSaving: boolean;
   error: string;
   onSave: (setting: WarehouseProductSetting) => void;
@@ -32,6 +35,7 @@ export default function WarehousePanel({
   isOwner,
   settings,
   stock,
+  demand,
   isSaving,
   error,
   onSave,
@@ -43,6 +47,10 @@ export default function WarehousePanel({
     (total, product) => total + (stock.get(product.id) ?? 0) * product.volumeM3,
     0,
   );
+  const forecast =
+    building.employed *
+    getDailyWorkPoints(building.workHoursPerDay, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness);
+  const wp = (value: number) => number.format(Math.round(value * 10) / 10);
 
   useEffect(() => {
     const next: Record<string, Draft> = {};
@@ -75,6 +83,12 @@ export default function WarehousePanel({
         {!isOwner && ' · Somente o dono pode editar.'}
       </p>
       {error && <p role="alert" className="warehouse-error">{error}</p>}
+      <p className="warehouse-summary">
+        Demanda de Work Points no último dia{demand?.lastDay ? ` (${demand.lastDay})` : ''}: {wp(demand?.last ?? 0)}
+        {' · '}Média do último mês: {wp(demand?.monthAverage ?? 0)}
+        {' · '}Previsão de geração no próximo dia: {wp(forecast)}
+        {demand && forecast < demand.monthAverage && ' · Contrate mais funcionários.'}
+      </p>
       <div className="warehouse-list">
         <div className="warehouse-row warehouse-head">
           <span>Produto</span>

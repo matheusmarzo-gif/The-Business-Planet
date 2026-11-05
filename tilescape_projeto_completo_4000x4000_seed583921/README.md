@@ -300,6 +300,10 @@ pelo valor que definiu; o comprador só compra se esse valor for menor que o seu
 até o seu estoque desejável. As ofertas mais baratas vêm primeiro. O comprador
 gasta Work Points de transporte (cada rodada usa metade dos pontos diários).
 
+**Demanda do armazém:** o painel do armazém mostra a demanda de Work Points do
+último dia, a média do último mês (30 dias de jogo) e a previsão de pontos que
+os funcionários atuais gerarão no próximo dia, para decidir se é preciso contratar.
+
 **Fazenda de arroz:** o dono usa **Plantar arroz** no painel da fazenda concluída.
 A colheita ocorre 6 meses (de calendário do jogo) depois e rende até 100
 unidades. O mês do plantio define a produtividade (meses 1–3: 100 %, 4–6: 60 %,
@@ -322,7 +326,8 @@ O mapa parte do projeto procedural
 `tilescape_projeto_completo_4000x4000_seed583921`. Suas dimensões
 (4.000 × 4.000), semente `583921`, escala de ruído, nível do mar e biomas foram
 mantidos. O renderizador PixiJS adapta o detalhe ao nível de zoom. Arraste para
-explorar, use a roda do mouse para aproximar e clique em um tile para consultar
+explorar, use a roda do mouse para aproximar e as setas do teclado (esquerda,
+direita, cima e baixo) para mover o mapa; clique em um tile para consultar
 suas coordenadas e bioma.
 
 As regras de construções, produção, estoques, trabalho e compra regional estão

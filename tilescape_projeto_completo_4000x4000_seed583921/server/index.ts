@@ -43,6 +43,7 @@ import { allocateWorkers, getDailyWorkPoints, getPayroll, type JobAssignment } f
 import { getShopSalesCapacity, parsePrice, planRiceSales } from '../src/types/commerce.js';
 import {
   canLinkToWarehouse,
+  getTransportDemand,
   isWithinLinkRadius,
   parseWarehouseLink,
   planTransfers,
@@ -368,6 +369,20 @@ async function runDailyImmigration(): Promise<boolean> {
   }
 }
 
+async function logWarehouseDemand(
+  client: { query: (text: string, values: unknown[]) => Promise<unknown> },
+  warehouseId: string,
+  day: string,
+  demand: number,
+) {
+  if (demand <= 0) return;
+  await client.query(
+    `INSERT INTO warehouse_demand (building_id, day, demand) VALUES ($1, $2, $3)
+     ON CONFLICT (building_id, day) DO UPDATE SET demand = warehouse_demand.demand + $3`,
+    [warehouseId, day, demand],
+  );
+}
+
 // Às 12:00 distribui os trabalhadores e às 00:00 cobra a folha de pagamento dos donos.
 async function runDailyEmployment(): Promise<boolean> {
   const client = await pool.connect();
@@ -629,6 +644,12 @@ async function runDailyEmployment(): Promise<boolean> {
           ]);
           changed = true;
         }
+        await logWarehouseDemand(
+          client,
+          warehouse.id,
+          state.day,
+          transfers.reduce((sum, item) => sum + getTransportDemand(item.productId, item.quantity), 0),
+        );
       }
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
     }
@@ -741,6 +762,12 @@ async function runDailyEmployment(): Promise<boolean> {
           }
         }
         changed = true;
+        await logWarehouseDemand(
+          client,
+          trade.buyerId,
+          state.day,
+          getTransportDemand(trade.productId, trade.quantity),
+        );
       }
       await client.query('UPDATE world_state SET last_warehouse_trade_slot = $1 WHERE id = 1', [tradeSlot]);
     }
@@ -1561,7 +1588,18 @@ async function start() {
           'SELECT product_id, quantity FROM warehouse_stock WHERE building_id = $1',
           [request.params.id],
         );
+        const demandRows = await pool.query<{ day: string; demand: number }>(
+          `SELECT to_char(day, 'YYYY-MM-DD') AS day, demand FROM warehouse_demand
+           WHERE building_id = $1 AND day > (SELECT (world_time AT TIME ZONE 'UTC')::date FROM world_state WHERE id = 1) - 30
+           ORDER BY day DESC`,
+          [request.params.id],
+        );
         response.json({
+          demand: {
+            lastDay: demandRows.rows[0]?.day ?? null,
+            last: demandRows.rows[0]?.demand ?? 0,
+            monthAverage: demandRows.rows.reduce((sum, row) => sum + row.demand, 0) / 30,
+          },
           settings: settings.rows.map((row) => ({
             productId: row.product_id,
             desiredStock: row.desired_stock,

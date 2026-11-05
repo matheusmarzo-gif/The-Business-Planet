@@ -39,7 +39,7 @@ import {
   type ResidencePlacementError,
 } from '../src/types/residence.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
-import { allocateWorkers, getDailyWorkPoints, getPayroll, type JobAssignment } from '../src/types/employment.js';
+import { allocateWorkers, getAverageIncomes, getDailyWorkPoints, getPayroll, type JobAssignment } from '../src/types/employment.js';
 import { getShopSalesCapacity, parsePrice, planRiceSales } from '../src/types/commerce.js';
 import { nextEfficiencyPenalty, planProduction, rollToolDemand } from '../src/types/fishing.js';
 import {
@@ -143,13 +143,18 @@ type ResidentialBuildingRow = {
   crop_yield: number;
   crop_harvested: number;
   employed: number;
+  average_income: number;
 };
 
 const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id, tool_stock, wood_stock, iron_stock, efficiency_penalty,
   crop_phase, to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day, crop_ratio_sum, crop_days,
   crop_yield, crop_harvested,
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
-   WHERE j.workplace_id = residential_buildings.id OR j.residence_id = residential_buildings.id) AS employed`;
+   WHERE j.workplace_id = residential_buildings.id OR j.residence_id = residential_buildings.id) AS employed,
+  COALESCE((SELECT SUM(j.count * w.wage) FROM job_assignments j
+            JOIN residential_buildings w ON w.id = j.workplace_id
+            WHERE j.residence_id = residential_buildings.id), 0)::float8
+    / GREATEST(occupants, 1) AS average_income`;
 
 function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuilding {
   return {
@@ -186,6 +191,7 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
           }
         : null,
     employed: row.employed,
+    averageIncome: row.average_income,
   };
 }
 
@@ -485,13 +491,15 @@ async function runDailyEmployment(): Promise<boolean> {
       }
       // Vendas de arroz: capacidade do dia vem dos Work Points gerados pela loja.
       const wageOf = new Map(workplaces.map((row) => [row.id, row.wage]));
-      const incomeByResidence = new Map<string, number>();
-      for (const row of assignmentRows) {
-        incomeByResidence.set(
-          row.residence_id,
-          (incomeByResidence.get(row.residence_id) ?? 0) + row.count * (wageOf.get(row.workplace_id) ?? 0),
-        );
-      }
+      const incomeByResidence = getAverageIncomes(
+        workplaces,
+        wageOf,
+        assignmentRows.map((row) => ({
+          workplaceId: row.workplace_id,
+          residenceId: row.residence_id,
+          count: row.count,
+        })),
+      );
       for (const { shopType, productId } of [
         { shopType: 'shop_rice', productId: 'rice' },
         { shopType: 'shop_fish', productId: 'fish' },
@@ -523,7 +531,7 @@ async function runDailyEmployment(): Promise<boolean> {
           x: row.tile_x,
           y: row.tile_y,
           occupants: row.occupants,
-          averageIncome: (incomeByResidence.get(row.id) ?? 0) / row.occupants,
+          averageIncome: incomeByResidence.get(row.id) ?? 0,
         }));
       const sold = new Map<string, number>();
       const bought = new Map<string, { quantity: number; spent: number }>();

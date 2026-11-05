@@ -266,7 +266,9 @@ mapeamento e verificar todas as curvas.
   construção/demolição, clicar em uma residência abre `ResidencePanel`
   (`onResidenceSelect` em `GameMap`); clicar em outro tile a fecha. Concluída:
   ocupantes 0/capacidade (reais, vindos de `occupants`), técnica 10, saúde 100, felicidade 100 (fixos em
-  `RESIDENCE_STATS`), empregados 0, renda média 0. Em construção: Work Points
+  `RESIDENCE_STATS`), empregados reais e renda média (`averageIncome`: subquery em
+  `RESIDENTIAL_COLUMNS` somando `job_assignments.count × wage` ÷ ocupantes; o mesmo
+  cálculo, `getAverageIncomes` em `employment.ts`, alimenta as vendas às 00:00). Em construção: Work Points
   0/necessários, empregados 0/`maxWorkers`, salário diário (`wage`, C$ por dia
   de trabalho) e carga horária (`workHoursPerDay`, 4–14 h), editáveis só pelo
   criador (`created_by`). O criador também define o aluguel (`rent`, inteiro ≥

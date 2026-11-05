@@ -374,6 +374,7 @@ export interface ResidentialBuilding {
   crop: Crop | null;
   // Funcionários empregados na construção ou, em residências, moradores empregados.
   employed: number;
+  averageIncome: number;
 }
 
 export type ResidencePlacementError =

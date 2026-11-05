@@ -22,7 +22,7 @@ import {
   type ResidentialBuilding,
 } from './residence';
 import { getRoadPlacementError } from './road';
-import { allocateWorkers, getDailyWorkPoints, getHoursFactor, getPayroll, getRestFactor, getWorkBenefit } from './employment';
+import { allocateWorkers, getDailyWorkPoints, getHoursFactor, getPayroll, getRestFactor, getWorkBenefit, getAverageIncomes } from './employment';
 import {
   getPurchaseBenefit,
   getPurchaseQuantity,
@@ -533,6 +533,7 @@ describe('municipal zones', () => {
         toolStock: 0,
         woodStock: 0,
         ironStock: 0,
+        averageIncome: 0,
         efficiencyPenalty: 0,
         crop: null,
         employed: 0,
@@ -580,6 +581,7 @@ describe('municipal zones', () => {
         toolStock: 0,
         woodStock: 0,
         ironStock: 0,
+        averageIncome: 0,
         efficiencyPenalty: 0,
         crop: null,
         employed: 0,
@@ -768,5 +770,20 @@ describe('recursos e ferramentaria', () => {
       transfers.map((t) => [t.productId, t.quantity, t.direction]),
       [['wood', 20, 'in'], ['iron', 3, 'in']].map(([p, q, d]) => [p, Math.min(q as number, p === 'wood' ? 20 : 3), d]),
     );
+  });
+});
+
+describe('renda média', () => {
+  it('averages wages over occupants after allocation', () => {
+    const incomes = getAverageIncomes(
+      [{ id: 'h', occupants: 4 }, { id: 'e', occupants: 0 }],
+      new Map([['a', 100], ['b', 50]]),
+      [
+        { workplaceId: 'a', residenceId: 'h', count: 2 },
+        { workplaceId: 'b', residenceId: 'h', count: 1 },
+      ],
+    );
+    assert.equal(incomes.get('h'), 62.5);
+    assert.equal(incomes.get('e'), 0);
   });
 });

@@ -219,7 +219,8 @@ Não há confirmação; somente o jogador que iniciou a construção pode remov�
 A barra lateral com dados do mundo foi removida. Clique em uma residência (fora
 dos modos de construção e demolição) para abrir o painel lateral: residências
 concluídas mostram ocupantes, capacidade, técnica, saúde, felicidade, empregados
-e renda média (valores fixos por enquanto); obras mostram Work Points, empregados
+e renda média por morador (calculada a partir dos empregos já alocados: soma dos
+salários dos empregos dos moradores ÷ ocupantes); obras mostram Work Points, empregados
 e permitem ao dono editar o salário ofertado (C$ por dia de trabalho) e a carga
 horária por dia (4 a 14 h). O dono também define o aluguel por pessoa (mínimo
 C$ 1) da residência. Todo dia às 00:00 do reino, cidades com menos de 1.000

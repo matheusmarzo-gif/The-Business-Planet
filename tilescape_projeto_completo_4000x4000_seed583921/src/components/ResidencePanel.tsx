@@ -140,7 +140,7 @@ export default function ResidencePanel({
             ['Saúde dos trabalhadores', String(RESIDENCE_STATS.health)],
             ['Felicidade dos trabalhadores', String(RESIDENCE_STATS.happiness)],
             ['Pessoas empregadas', number.format(building.employed)],
-            ['Renda média dos trabalhadores', '0'],
+            ['Renda média dos trabalhadores', `C$ ${building.averageIncome.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}`],
           ];
 
   return (

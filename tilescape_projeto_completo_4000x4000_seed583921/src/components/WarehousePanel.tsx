@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PRODUCTS } from '../types/product';
 import { getDailyWorkPoints } from '../types/employment';
 import { RESIDENCES, RESIDENCE_STATS, type ResidentialBuilding } from '../types/residence';
@@ -16,10 +16,14 @@ interface WarehousePanelProps {
   isOwner: boolean;
   settings: Map<string, WarehouseProductSetting>;
   stock: Map<string, number>;
+  averagePrices: Map<string, number>;
   demand: WarehouseDemand | null;
   isSaving: boolean;
+  isSearchingSuppliers: boolean;
   error: string;
+  supplierMessage: string;
   onSave: (setting: WarehouseProductSetting) => void;
+  onSearchSuppliers: () => void;
   onClose: () => void;
 }
 
@@ -37,14 +41,25 @@ export default function WarehousePanel({
   isOwner,
   settings,
   stock,
+  averagePrices,
   demand,
   isSaving,
+  isSearchingSuppliers,
   error,
+  supplierMessage,
   onSave,
+  onSearchSuppliers,
   onClose,
 }: WarehousePanelProps) {
   const capacity = RESIDENCES[building.type].storageCapacityM3 ?? 0;
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const [search, setSearch] = useState('');
+  const filteredProducts = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase('pt-BR');
+    return query
+      ? PRODUCTS.filter((product) => product.name.toLocaleLowerCase('pt-BR').includes(query))
+      : PRODUCTS;
+  }, [search]);
   const usedM3 = PRODUCTS.reduce(
     (total, product) => total + (stock.get(product.id) ?? 0) * product.volumeM3,
     0,
@@ -97,18 +112,40 @@ export default function WarehousePanel({
         {' · '}Previsão de geração no próximo dia: {wp(forecast)}
         {demand && forecast < demand.monthAverage && ' · Contrate mais funcionários.'}
       </p>
+      <div className="warehouse-actions">
+        <button
+          type="button"
+          className="warehouse-search-suppliers"
+          disabled={!isOwner || isSearchingSuppliers || isSaving}
+          onClick={onSearchSuppliers}
+        >
+          {isSearchingSuppliers ? 'Procurando fornecedores…' : 'Procurar fornecedores'}
+        </button>
+        <label className="warehouse-search">
+          <span>Buscar produto</span>
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Ex.: trigo, leite, madeira"
+          />
+        </label>
+      </div>
+      {supplierMessage && <p role="status" className="warehouse-success">{supplierMessage}</p>}
       <div className="warehouse-list">
         <div className="warehouse-row warehouse-head">
           <span>Produto</span>
           <span>Estoque</span>
+          <span>Preço médio</span>
           <span>Estoque Máximo Desejável</span>
           <span>Estoque Mínimo Desejável</span>
           <span>Valor (C$)</span>
           <span>Tipo</span>
           <span />
         </div>
-        {PRODUCTS.map((product) => {
+        {filteredProducts.map((product) => {
           const draft = draftFor(product.id);
+          const averagePrice = averagePrices.get(product.id);
           return (
             <div className="warehouse-row" key={product.id}>
               <span className="warehouse-product">
@@ -116,6 +153,11 @@ export default function WarehousePanel({
                 {product.name}
               </span>
               <span>{number.format(stock.get(product.id) ?? 0)} {product.unit === 'liter' ? 'L' : 'un.'}</span>
+              <span>
+                {averagePrice !== undefined
+                  ? `C$ ${number.format(averagePrice)}`
+                  : '—'}
+              </span>
               <input
                 type="text"
                 inputMode="numeric"
@@ -176,6 +218,9 @@ export default function WarehousePanel({
             </div>
           );
         })}
+        {filteredProducts.length === 0 && (
+          <p className="warehouse-empty">Nenhum produto encontrado.</p>
+        )}
       </div>
     </section>
   );

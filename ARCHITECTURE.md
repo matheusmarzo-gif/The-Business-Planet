@@ -244,9 +244,15 @@ mapeamento e verificar todas as curvas.
   `maximum_stock = NULL` e deixa a capacidade natural em m³ como limite. O
   schema migra configurações antigas: `desired_stock` positivo vira mínimo e
   máximo; zero vira mínimo 0 e máximo `MAX`. `src/types/warehouse.ts` valida os dados no cliente e no
-  servidor. Rotas: `GET /api/residential-buildings/:id/warehouse` (qualquer
-  usuário autenticado) e `PUT` (somente o dono, armazém concluído, um produto
-  por chamada).
+  servidor. O preço médio local soma apenas o estoque ofertável acima do mínimo
+  dos armazéns concluídos em até 60 tiles, ponderando pelo volume ofertável. O
+  painel filtra produtos e permite uma tentativa imediata de compra pelo mesmo
+  planejador de trocas (sem aguardar a rodada automática), sob o lock transacional
+  do mundo. Rotas: `GET /api/residential-buildings/:id/warehouse` (qualquer
+  usuário autenticado), `PUT` (somente o dono, armazém concluído, um produto por
+  chamada) e `POST /api/residential-buildings/:id/warehouse/suppliers` (somente
+  o dono, compra imediata respeitando ordem, preço, distância, espaço e Work
+  Points).
 - `shop_rice` (categoria Comerciais, área urbana, `kind: 'shop'`) também usa o
   catálogo e a tabela `residential_buildings`: 2 × 2, até 4 funcionários,
   estoque máximo de 20 de Arroz, 100 madeiras e 20 pedras, 9.000 Work Points.
@@ -272,13 +278,19 @@ mapeamento e verificar todas as curvas.
   de 40 litros, custo de 30 madeiras e 10 pedras e 6.000 Work Points. Produto
   `milk`; sprite `public/buildings/commerce/loja_leite.png`.
 - O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
-  área ocupada deve ficar dentro da cidade e de uma zona urbana, em terra, sem
+  área ocupada deve ficar dentro da cidade e da zona exigida pela construção
+  (urbana ou rural), em terra, sem
   sobrepor Assembleia, estrada ou residência, e deve encostar ortogonalmente
   em pelo menos uma estrada. Cliente e servidor compartilham a regra; o
   servidor revalida sob o lock transacional do mundo.
-- Até existir estoque, jogadores comuns recebem `insufficient_materials`; a
-  conta master pode iniciar a obra sem materiais. A obra é persistida com
-  status `under_construction` e usa `public/buildings/em_construcao.png`.
+- O primeiro armazém de cada jogador é gratuito e criado diretamente como
+  concluído, sem aguardar Work Points. `player_warehouse_claims` persiste esse
+  direito mesmo após demolição e é inicializada para jogadores com armazéns
+  existentes. O servidor aplica o limite dentro do lock transacional. Até existir
+  estoque de materiais, jogadores comuns recebem `insufficient_materials` para
+  as demais construções; a conta master pode iniciar obras sem materiais. Uma
+  obra regular é persistida com status `under_construction` e usa
+  `public/buildings/em_construcao.png`.
 - Não há progresso por Work Points nem conclusão automática. A conta master
   pode dar duplo clique na obra para concluí-la instantaneamente; a rota
   verifica a autorização e recusa uma obra já concluída.
@@ -288,6 +300,9 @@ mapeamento e verificar todas as curvas.
   permite a remoção ao autor e publica o novo estado.
 - Capacidade, apreço local, custos e Work Points são metadados; população,
   estoque, consumo e produção ainda não são simulados.
+- `GET /api/player/resources?x=&y=` agrega Madeira e Pedra dos armazéns
+  concluídos do próprio usuário em até 60 tiles do centro da câmera. A barra
+  superior atualiza esses totais quando a área muda e em intervalo regular.
 - A antiga barra lateral com dados do mundo foi removida. Fora dos modos de
   construção/demolição, clicar em uma residência abre `ResidencePanel`
   (`onResidenceSelect` em `GameMap`); clicar em outro tile a fecha. Concluída:
@@ -488,8 +503,10 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo médio por cidadão da cidade e preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira do usuário com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
+| `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
 | `GET /api/residential-buildings/:id/warehouse-log` | Dono do armazém | Retorna `{ days: [{ day, workPoints }], events: [{ day, buildingType, productId, direction, wanted, moved, reason, errorDetail }] }` do armazém (tabela `warehouse_transport_log`, gravada às 00:00 na etapa de transporte, 30 dias; `reason` = `desired_reached`/`no_space`/`no_work_points`/`warehouse_empty` quando moveu menos que o desejado; erros internos registram etapa e detalhe em `errorDetail`). |
-| `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo) e estoque agregado; espaço ocupado é calculado no cliente. |
+| `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo), estoque e preço médio local ponderado por oferta acima do mínimo; espaço ocupado é calculado no cliente. |
+| `POST /api/residential-buildings/:id/warehouse/suppliers` | Dono do armazém | Executa compras imediatas do armazém especificado pelo mesmo planejador das rodadas automáticas. |
 | `GET /api/residential-buildings/:id/production-history` | Autenticado | Retorna `{ days: [{ day, workPoints, produced, transported, efficiency }] }` dos últimos 30 dias (tabela `production_history`, gravada às 00:00 pelas etapas de produção, fazendas e transporte; `transported` conta só envios ao armazém). |
 | `GET /api/residential-buildings/:id/commerce-history` | Dono do comércio | Retorna os últimos 30 dias de dados financeiros de `commerce_history`; o painel combina a resposta com diagnósticos presentes no armazenamento local do navegador. |
 | `GET /api/master/online-players` | Master | Lista `{ players: [{ id, name, email, connections }] }` a partir da presença no Redis (`userId|uuid`) e de `neon_auth."user"`. |
@@ -502,7 +519,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/roads` | Master | Valida e grava um caminho de estrada de até 600 tiles. |
 | `DELETE /api/roads/:x/:y` | Criador do tile | Demole um tile de estrada sem confirmação; publica o novo estado. |
 | `DELETE /api/roads` | Autenticado | Demole os tiles próprios de um caminho de até 600 tiles e publica o novo estado. |
-| `POST /api/residential-buildings` | Master enquanto estoque não existe | Valida e inicia uma residência em construção. |
+| `POST /api/residential-buildings` | Autenticado (primeiro armazém); Master (demais construções) | Valida e cria o primeiro armazém do jogador como concluído e gratuito ou inicia uma obra regular para Master. |
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |

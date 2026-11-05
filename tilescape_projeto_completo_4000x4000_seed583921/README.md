@@ -210,12 +210,14 @@ de uma estrada. Clique para iniciar a obra:
 | Simples 1 | 2 × 2 tiles | 4 pessoas | 50 | 100 madeiras, 30 pedras | 18.000 Work Points |
 | Simples 2 | 3 × 3 tiles | 32 pessoas | 40 | 300 madeiras, 450 pedras | 67.500 Work Points |
 
-O estoque e o sistema de Work Points ainda não estão implementados. Por isso,
-jogadores comuns recebem uma mensagem de indisponibilidade por falta de estoque;
-a conta Master pode iniciar a construção sem materiais. A obra aparece com o
-ícone **Em construção** e não avança automaticamente. A conta Master pode
-concluí-la instantaneamente com duplo clique no ícone da obra. Capacidade,
-apreço e custo são dados informativos; ainda não alteram população ou estoque.
+O estoque de materiais para construção ainda não está implementado. Por isso,
+jogadores comuns ainda não podem construir casas ou outras construções que
+exigem materiais. Cada jogador pode construir um primeiro **Armazém** gratuito,
+que fica pronto imediatamente; esse direito permanece registrado mesmo se o
+armazém for demolido. A conta Master pode iniciar outras construções sem
+materiais. Obras regulares aparecem com o ícone **Em construção** e a conta
+Master pode concluí-las com duplo clique. Capacidade, apreço e custo são dados
+informativos; ainda não alteram população ou estoque.
 Para demolir uma residência, ative **Demolir** e clique em qualquer tile dela.
 Não há confirmação; somente o jogador que iniciou a construção pode removê-la.
 
@@ -236,14 +238,24 @@ o jogo não tem dinheiro dos jogadores. Clique em outro ponto do mapa ou em × p
 
 Na categoria **Indústrias**, o **Armazém** (4 × 4 tiles, até 100 funcionários,
 capacidade de 50 m³ para qualquer produto) custa 300 madeiras e 60 pedras e
-exige 20.000 Work Points. Deve ficar em área rural, ao lado de uma estrada. Ao
-clicar em um armazém concluído, use **Produtos e estoque** no painel lateral
-para abrir a lista de todos os produtos com o estoque atual e, para cada um, o
+exige 20.000 Work Points. Deve ficar em área rural, ao lado de uma estrada.
+O primeiro armazém de cada jogador é gratuito e concluído instantaneamente,
+inclusive para a conta Master; armazéns adicionais seguem as regras normais de
+construção. A autorização do primeiro armazém é persistida no servidor e não
+volta após demolição. Ao clicar em um armazém concluído, use **Produtos e
+estoque** no painel lateral para abrir a lista de todos os produtos com o
+estoque atual e, para cada um, o
 **Estoque Máximo Desejável**, o **Estoque Mínimo Desejável**, o valor e se é de
 venda ou compra (somente o dono edita; cada linha tem seu botão **Salvar**).
 O máximo aceita um número ou **MAX** (padrão), que deixa o limite a cargo do
 espaço natural de 50 m³; o mínimo é o estoque que o armazém preserva ao vender
-ou abastecer suas construções ligadas.
+ou abastecer suas construções ligadas. A busca filtra produtos pelo nome. O
+campo **Preço médio** mostra a média ponderada dos preços de venda em
+armazéns concluídos a até 60 tiles, ponderada pela quantidade que cada um pode
+oferecer acima do próprio mínimo. **Procurar fornecedores** tenta comprar, para
+os produtos configurados como **Compra**, até os estoques desejados, respeitando
+preços, distância, capacidade e Work Points; a ação pode ser repetida sem
+aguardar a rodada automática.
 
 ### Comércio
 
@@ -379,7 +391,9 @@ repartidas proporcionalmente ao que falta em cada construção. O transporte
 custa Work Points do armazém:
 `100 × m³ + 0,125 × kg`; os pontos vêm dos funcionários do armazém e limites de
 espaço ou Work Points podem impedir parte do transporte.
-O painel do armazém mostra o estoque real e o espaço ocupado.
+O painel do armazém mostra o estoque real e o espaço ocupado. A barra superior
+mostra Madeira e Pedra dos armazéns próprios a até 60 tiles do centro da câmera;
+os totais são atualizados ao explorar outra área e periodicamente.
 
 **Influência:** o botão **Ver influência** no painel de qualquer construção
 desenha no mapa o raio de 60 tiles dela.
@@ -391,7 +405,8 @@ Mínimo Desejável**; o comprador aceita até o **Estoque Máximo Desejável** (
 até a capacidade natural em m³ quando estiver em **MAX**). O comprador só compra
 se o valor do vendedor for menor que seu limite. As ofertas mais baratas vêm
 primeiro. O comprador gasta Work Points de transporte (cada rodada usa metade
-dos pontos diários).
+dos pontos diários). O dono também pode usar **Procurar fornecedores** no
+painel para executar uma tentativa imediata com as mesmas regras e limites.
 
 **Demanda do armazém:** o painel do armazém mostra a demanda de Work Points do
 último dia, a média do último mês (30 dias de jogo) e a previsão de pontos que

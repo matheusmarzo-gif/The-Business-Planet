@@ -53,6 +53,17 @@ CREATE TABLE IF NOT EXISTS residential_buildings (
   )
 );
 
+CREATE TABLE IF NOT EXISTS player_warehouse_claims (
+  user_id TEXT PRIMARY KEY,
+  claimed_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+
+INSERT INTO player_warehouse_claims (user_id)
+SELECT DISTINCT created_by
+FROM residential_buildings
+WHERE building_type = 'warehouse'
+ON CONFLICT (user_id) DO NOTHING;
+
 ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS wage INTEGER NOT NULL DEFAULT 10 CHECK (wage BETWEEN 0 AND 100000);
 ALTER TABLE residential_buildings
@@ -249,6 +260,10 @@ CREATE TABLE IF NOT EXISTS residence_consumption (
 
 CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
   ON residential_buildings (city_id);
+CREATE INDEX IF NOT EXISTS residential_buildings_owner_warehouse_idx
+  ON residential_buildings (created_by, building_type, status, tile_x, tile_y);
+CREATE INDEX IF NOT EXISTS residential_warehouse_position_idx
+  ON residential_buildings (building_type, status, tile_x, tile_y);
 
 CREATE TABLE IF NOT EXISTS road_tiles (
   tile_x INTEGER NOT NULL CHECK (tile_x BETWEEN 0 AND 3999),

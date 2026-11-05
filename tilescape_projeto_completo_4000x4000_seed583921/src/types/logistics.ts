@@ -278,7 +278,10 @@ export interface WarehouseTrade {
  * mais baratas são atendidas primeiro entre todos os fornecedores; o comprador gasta Work
  * Points de transporte e espaço livre em m³.
  */
-export function planWarehouseTrades(warehouses: TradeWarehouse[]): WarehouseTrade[] {
+export function planWarehouseTrades(
+  warehouses: TradeWarehouse[],
+  onlyBuyerId?: string,
+): WarehouseTrade[] {
   const stock = new Map(warehouses.map((item) => [item.id, new Map(item.stock)]));
   const points = new Map(warehouses.map((item) => [item.id, item.workPoints]));
   const offers: { seller: TradeWarehouse; buyer: TradeWarehouse; productId: string; price: number }[] = [];
@@ -287,6 +290,7 @@ export function planWarehouseTrades(warehouses: TradeWarehouse[]): WarehouseTrad
     for (const [productId, offer] of seller.settings) {
       if (offer.mode !== 'sell') continue;
       for (const buyer of warehouses) {
+        if (onlyBuyerId && buyer.id !== onlyBuyerId) continue;
         const want = buyer.settings.get(productId);
         if (
           buyer.ownerId === seller.ownerId ||

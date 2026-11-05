@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Clock3,
   Compass,
@@ -150,6 +150,8 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'A residência ou o local escolhido é inválido.';
         } else if (body.error === 'insufficient_materials') {
           error = 'Você não possui materiais suficientes para iniciar essa construção.';
+        } else if (body.error === 'warehouse_already_claimed') {
+          error = 'Seu armazém gratuito já foi utilizado. Outros armazéns exigem materiais.';
         } else if (body.error === 'invalid_work_settings') {
           error = 'Informe funcionários desejados (até o máximo da construção), salário (0 a 100.000) e carga horária de 4 a 14 horas.';
         } else if (body.error === 'harvest_in_progress') {
@@ -244,6 +246,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     };
   });
   const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
+  const worldStageRef = useRef<HTMLElement | null>(null);
+  const localResourceRequestRef = useRef(0);
   const [hoveredTile, setHoveredTile] = useState<TileInfo | null>(null);
   const [selectedTile, setSelectedTile] = useState<TileInfo | null>(null);
   const [selectedResidenceId, setSelectedResidenceId] = useState<string | null>(null);
@@ -256,8 +260,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [warehouseSettings, setWarehouseSettings] = useState<Map<string, WarehouseProductSetting>>(new Map());
   const [warehouseError, setWarehouseError] = useState('');
   const [warehouseStock, setWarehouseStock] = useState<Map<string, number>>(new Map());
+  const [warehouseAveragePrices, setWarehouseAveragePrices] = useState<Map<string, number>>(new Map());
   const [warehouseStockLoaded, setWarehouseStockLoaded] = useState(false);
   const [warehouseDemand, setWarehouseDemand] = useState<WarehouseDemand | null>(null);
+  const [isSearchingSuppliers, setIsSearchingSuppliers] = useState(false);
+  const [warehouseSupplierMessage, setWarehouseSupplierMessage] = useState('');
+  const [localResources, setLocalResources] = useState<{ wood: number; stone: number } | null>(null);
   const [isConsumptionOpen, setIsConsumptionOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -345,6 +353,33 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       window.clearInterval(timer);
     };
   }, []);
+
+  const refreshLocalResources = useCallback(async () => {
+    const requestId = ++localResourceRequestRef.current;
+    const stage = worldStageRef.current;
+    const width = stage?.clientWidth ?? viewport.width;
+    const height = stage?.clientHeight ?? viewport.height;
+    const scale = BASE_TILE_SIZE * camera.zoom;
+    const x = Math.max(0, Math.min(WORLD_CONFIG.width - 1, Math.floor((width / 2 - camera.x) / scale)));
+    const y = Math.max(0, Math.min(WORLD_CONFIG.height - 1, Math.floor((height / 2 - camera.y) / scale)));
+    try {
+      const resources = await cityRequest<{ wood: number; stone: number }>(
+        `/api/player/resources?${new URLSearchParams({ x: String(x), y: String(y) })}`,
+      );
+      if (requestId === localResourceRequestRef.current) setLocalResources(resources);
+    } catch (error) {
+      console.error('Não foi possível carregar madeira e pedra próximas:', error);
+    }
+  }, [camera, viewport]);
+
+  useEffect(() => {
+    const debounce = window.setTimeout(() => void refreshLocalResources(), 300);
+    const interval = window.setInterval(() => void refreshLocalResources(), 30000);
+    return () => {
+      window.clearTimeout(debounce);
+      window.clearInterval(interval);
+    };
+  }, [refreshLocalResources]);
 
   useEffect(() => {
     const resize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
@@ -458,8 +493,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setWarehouseError('');
     setWarehouseSettings(new Map());
     setWarehouseStock(new Map());
+    setWarehouseAveragePrices(new Map());
     setWarehouseStockLoaded(false);
     setWarehouseDemand(null);
+    setWarehouseSupplierMessage('');
     setIsConsumptionOpen(false);
     setConsumptionError('');
     setConsumption(new Map());
@@ -577,11 +614,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
-  const refreshWarehouse = async (buildingId: string, includeSettings = false) => {
+  const refreshWarehouse = async (buildingId: string, includeSettings = false): Promise<boolean> => {
     try {
       const result = await cityRequest<{
         settings: WarehouseProductSetting[];
         stock: { productId: string; quantity: number }[];
+        averagePrices: { productId: string; averagePrice: number }[];
         demand: WarehouseDemand;
       }>(`/api/residential-buildings/${buildingId}/warehouse`);
       setWarehouseDemand(result.demand);
@@ -589,10 +627,46 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         setWarehouseSettings(new Map(result.settings.map((setting) => [setting.productId, setting])));
       }
       setWarehouseStock(new Map(result.stock.map((item) => [item.productId, item.quantity])));
+      setWarehouseAveragePrices(
+        new Map(result.averagePrices.map((item) => [item.productId, item.averagePrice])),
+      );
       setWarehouseStockLoaded(true);
       setWarehouseError('');
+      return true;
     } catch (error) {
       setWarehouseError(error instanceof Error ? error.message : 'Não foi possível carregar o armazém.');
+      return false;
+    }
+  };
+
+  const searchWarehouseSuppliers = async (buildingId: string) => {
+    setIsSearchingSuppliers(true);
+    setWarehouseError('');
+    setWarehouseSupplierMessage('');
+    try {
+      const result = await cityRequest<{
+        trades: { productId: string; quantity: number }[];
+      }>(`/api/residential-buildings/${buildingId}/warehouse/suppliers`, { method: 'POST' });
+      setWarehouseSupplierMessage(
+        result.trades.length
+          ? `${result.trades.length} compra(s) realizada(s); estoque atualizado.`
+          : 'Nenhum fornecedor elegível ou nenhuma necessidade de compra no momento.',
+      );
+      const refreshed = await refreshWarehouse(buildingId);
+      if (!refreshed) {
+        setWarehouseSupplierMessage('Compra processada; não foi possível atualizar o estoque exibido.');
+      }
+      await refreshLocalResources();
+      try {
+        const wallet = await cityRequest<{ balance: number }>('/api/wallet');
+        setBalance(wallet.balance);
+      } catch (error) {
+        console.error('A compra foi concluída, mas não foi possível atualizar o saldo exibido:', error);
+      }
+    } catch (error) {
+      setWarehouseError(error instanceof Error ? error.message : 'Não foi possível procurar fornecedores.');
+    } finally {
+      setIsSearchingSuppliers(false);
     }
   };
 
@@ -618,6 +692,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const openWarehouse = async (buildingId: string) => {
     setIsWarehouseOpen(true);
     setWarehouseError('');
+    setWarehouseSupplierMessage('');
     await refreshWarehouse(buildingId, true);
   };
 
@@ -944,9 +1019,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   };
 
   const handleResidencePlace = async (type: ResidenceType, position: RoadPosition) => {
-    if (!user.isMaster) {
+    if (!user.isMaster && type !== 'warehouse') {
       setResidencePlacementMessage(
-        'Construção indisponível: ainda não há estoque de materiais implementado para conferir madeira e pedra.',
+        'Por enquanto, jogadores comuns podem construir apenas o primeiro armazém, que é gratuito e instantâneo.',
       );
       return;
     }
@@ -1221,10 +1296,6 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             <small>CRÔNICAS DE UM REINO</small>
           </span>
         </a>
-        <div className="world-name">
-          <span className="world-kicker">MUNDO COMPARTILHADO</span>
-          <span className="world-title">As Terras de Valdora <span className="world-seed">#583921</span></span>
-        </div>
         <div className="topbar-status">
           <span className={`connection-pill ${isOnline ? 'connected' : ''}`}>
             <Radio size={14} />
@@ -1232,6 +1303,19 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           </span>
           <div className="player-money" title="Seu dinheiro">
             {balance === null ? 'C$ —' : formatMoney(balance)}
+          </div>
+          <div
+            className="player-resources"
+            aria-label={`Madeira ${localResources?.wood ?? 'indisponível'} e Pedra ${localResources?.stone ?? 'indisponível'} nos armazéns próprios a até 60 tiles da área visível`}
+          >
+            <span title="Madeira nos armazéns próximos">
+              <img src="/products/madeira.png" alt="" />
+              {localResources ? localResources.wood.toLocaleString('pt-BR') : '—'}
+            </span>
+            <span title="Pedra nos armazéns próximos">
+              <img src="/products/pedra.png" alt="" />
+              {localResources ? localResources.stone.toLocaleString('pt-BR') : '—'}
+            </span>
           </div>
           <div className="player-count"><span className="status-dot" />{snapshot?.onlinePlayers ?? '—'} <span>viajantes</span></div>
           {user.isMaster && (
@@ -1252,7 +1336,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         </div>
       </header>
 
-      <section className="world-stage">
+      <section className="world-stage" ref={worldStageRef}>
         <GameMap
           generator={generator}
           camera={camera}
@@ -1394,10 +1478,14 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             isOwner={isResidenceOwner}
             settings={warehouseSettings}
             stock={warehouseStock}
+            averagePrices={warehouseAveragePrices}
             demand={warehouseDemand}
             isSaving={isSavingWorkSettings}
+            isSearchingSuppliers={isSearchingSuppliers}
             error={warehouseError}
+            supplierMessage={warehouseSupplierMessage}
             onSave={(setting) => void saveWarehouseSetting(selectedResidenceKey, setting)}
+            onSearchSuppliers={() => void searchWarehouseSuppliers(selectedResidenceKey)}
             onClose={() => setIsWarehouseOpen(false)}
           />
         )}
@@ -1503,6 +1591,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             activeCategory === 'industrias' ? (
             <>
               {Object.values(RESIDENCES)
+                .filter((residence) => user.isMaster || residence.type === 'warehouse')
                 .filter((residence) => KIND_CATEGORY[residence.kind] === activeCategory)
                 .map((residence) => (
                 <button
@@ -1523,15 +1612,18 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                         : `Capacidade ${residence.capacity} pessoas`}
                     </small>
                     <small>
-                      Custo: {residence.cost.wood} madeira · {residence.cost.stone} pedra
+                      {residence.type === 'warehouse'
+                        ? `Primeiro armazém gratuito e instantâneo · seguintes: ${residence.cost.wood} madeira, ${residence.cost.stone} pedra`
+                        : `Custo: ${residence.cost.wood} madeira · ${residence.cost.stone} pedra`}
                     </small>
                     <small>
-                      {residence.kind === 'residence' && `Apreço local ${residence.localAppeal} · `}
-                      {residence.workPoints.toLocaleString('pt-BR')} Work Points
+                      {residence.type === 'warehouse'
+                        ? `Primeiro armazém: sem espera · seguintes: ${residence.workPoints.toLocaleString('pt-BR')} Work Points`
+                        : `${residence.kind === 'residence' ? `Apreço local ${residence.localAppeal} · ` : ''}${residence.workPoints.toLocaleString('pt-BR')} Work Points`}
                     </small>
                     {residencePlacementType === residence.type && (
                       <small className="construction-selected-hint">
-                        Clique no mapa para posicionar · Master pode concluir a obra com duplo clique
+                        Clique no mapa para posicionar
                       </small>
                     )}
                   </span>
@@ -1539,7 +1631,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
               ))}
               {!user.isMaster && (
                 <p className="construction-empty">
-                  O estoque ainda não está disponível. Jogadores comuns não podem iniciar obras até madeira e pedra serem implementadas.
+                  Seu primeiro armazém é gratuito e concluído na hora. As demais construções estarão disponíveis quando o estoque de materiais for implementado.
                 </p>
               )}
             </>

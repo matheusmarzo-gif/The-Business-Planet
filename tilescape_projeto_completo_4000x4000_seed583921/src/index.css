@@ -30,6 +30,9 @@ button { color: inherit; }
 .world-title { font: 600 13px 'Manrope', sans-serif; color: #eee8d8; }
 .world-seed { margin-left: 7px; color: #a4a48f; font: 500 10px 'DM Sans', sans-serif; }
 .player-money { color: #e2c57f; font: 600 13px 'Manrope', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.player-resources { display: flex; align-items: center; gap: 10px; color: #eee8d8; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.player-resources span { display: flex; align-items: center; gap: 4px; }
+.player-resources img { width: 18px; height: 18px; object-fit: contain; }
 .topbar-status { margin-left: auto; display: flex; align-items: center; gap: 21px; }
 .account-menu { display: flex; align-items: center; gap: 10px; color: #b7b19e; font-size: 10px; }
 .account-menu span { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -87,9 +90,16 @@ button { color: inherit; }
 .warehouse-link p, .crop-panel p { margin: 0; color: #e6dfce; }
 .warehouse-link button, .crop-panel button { padding: 9px; border: 1px solid rgba(207,178,116,.4); border-radius: 8px; background: rgba(193,162,100,.15); color: #e6dfce; cursor: pointer; }
 .warehouse-link button:disabled, .crop-panel button:disabled { opacity: .5; cursor: default; }
-.warehouse-panel { position: fixed; left: 50%; top: 50%; z-index: 8; width: min(760px, calc(100vw - 32px)); max-height: min(78vh, 760px); display: flex; flex-direction: column; overflow: hidden; padding: 18px; transform: translate(-50%, -50%); border: 1px solid rgba(219,201,158,.2); border-radius: 13px; background: rgba(19,28,23,.98); box-shadow: 0 18px 50px rgba(0,0,0,.42); color: #eee7d6; }
+.warehouse-panel { position: fixed; left: 50%; top: 50%; z-index: 8; width: min(1180px, calc(100vw - 32px)); max-height: min(82vh, 820px); display: flex; flex-direction: column; overflow: hidden; padding: 18px; transform: translate(-50%, -50%); border: 1px solid rgba(219,201,158,.2); border-radius: 13px; background: rgba(19,28,23,.98); box-shadow: 0 18px 50px rgba(0,0,0,.42); color: #eee7d6; }
 .warehouse-summary { margin: 10px 0; color: #a6a897; font-size: 11px; }
 .warehouse-error { margin: 0 0 8px; color: #e58b7d; font-size: 11px; }
+.warehouse-actions { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin: 5px 0 8px; }
+.warehouse-search { display: grid; gap: 4px; width: min(320px, 100%); color: #a6a897; font-size: 10px; }
+.warehouse-search input { width: 100%; padding: 7px 9px; border: 1px solid rgba(219,201,158,.2); border-radius: 7px; color: #eee7d6; background: rgba(255,255,255,.04); font: 500 11px 'DM Sans', sans-serif; }
+.warehouse-search-suppliers { min-height: 32px; padding: 7px 10px; border: 1px solid rgba(207,178,116,.4); border-radius: 7px; color: #e6dfce; background: rgba(193,162,100,.15); cursor: pointer; font-size: 11px; }
+.warehouse-search-suppliers:disabled { opacity: .5; cursor: default; }
+.warehouse-success { margin: 0 0 8px; color: #9fd3a0; font-size: 11px; }
+.warehouse-empty { grid-column: 1 / -1; margin: 8px 0; color: #a6a897; font-size: 11px; }
 .warehouse-list { overflow: auto; display: grid; gap: 4px; }
 .commerce-history-panel .warehouse-list { overflow-x: auto; }
 .commerce-history-row { display: grid; grid-template-columns: repeat(7, minmax(82px, 1fr)) minmax(150px, 1.5fr); gap: 8px; align-items: center; min-width: 860px; font-size: 11px; }
@@ -101,7 +111,7 @@ button { color: inherit; }
 .commerce-candidate-list p { margin: 0; color: #a6a897; font-size: 10px; line-height: 1.5; }
 .commerce-profit { color: #9fd3a0; }
 .commerce-loss { color: #e58b7d; }
-.warehouse-row { display: grid; grid-template-columns: minmax(130px, 1.6fr) 70px 90px 90px 90px 80px 62px; min-width: 720px; gap: 8px; align-items: center; font-size: 11px; }
+.warehouse-row { display: grid; grid-template-columns: minmax(130px, 1.6fr) 62px 82px minmax(100px, 1fr) minmax(100px, 1fr) 74px 68px 64px; min-width: 730px; gap: 7px; align-items: center; font-size: 11px; }
 .consumption-row { display: grid; grid-template-columns: minmax(110px, 1.4fr) repeat(4, 1fr); gap: 8px; align-items: center; font-size: 11px; }
 .warehouse-head { position: sticky; top: 0; background: rgba(19,28,23,.98); color: #b29a66; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
 .warehouse-product { display: flex; align-items: center; gap: 7px; }
@@ -247,6 +257,8 @@ button { color: inherit; }
   .topbar { padding: 0 17px; gap: 15px; }
   .brand { min-width: 0; }
   .world-name { padding-left: 15px; }
+  .player-resources { gap: 6px; font-size: 10px; }
+  .player-resources img { width: 16px; height: 16px; }
   .time-card { right: 18px; top: 82px; min-width: 0; }
   .realm-panel { width: 300px; padding: 28px 20px 18px; }
   .map-hint { left: 45%; }
@@ -259,6 +271,8 @@ button { color: inherit; }
   .brand-copy small { font-size: 6px; }
   .world-name { display: none; }
   .topbar-status { gap: 11px; }
+  .player-resources { gap: 5px; font-size: 9px; }
+  .player-resources img { width: 15px; height: 15px; }
   .account-menu span { display: none; }
   .account-menu button { padding: 5px 7px; }
   .connection-pill { font-size: 0; }
@@ -282,9 +296,19 @@ button { color: inherit; }
   .time-icon { display: none; }
   .time-copy strong { font-size: 10px; }
   .time-copy small { font-size: 8px; }
+  .warehouse-panel { width: calc(100vw - 20px); max-height: 82vh; padding: 13px; }
+  .warehouse-actions { align-items: stretch; flex-direction: column-reverse; gap: 8px; }
+  .warehouse-search { width: 100%; }
   .map-coordinates { left: 14px; bottom: 19px; }
   .map-hint { left: auto; right: 14px; bottom: 19px; font-size: 0; }
   .map-hint i, .map-hint .mouse-icon { display: none; }
+}
+@media (max-width: 420px) {
+  .topbar { gap: 6px; padding: 0 8px; }
+  .brand-copy { display: none; }
+  .topbar-status { gap: 7px; }
+  .connection-pill { display: none; }
+  .player-count>span:last-child { display: none; }
 }
 
 .master-panel { width: min(460px, calc(100vw - 32px)); overflow-y: auto; }

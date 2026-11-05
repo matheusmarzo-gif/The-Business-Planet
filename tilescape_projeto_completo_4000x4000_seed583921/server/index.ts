@@ -69,6 +69,8 @@ import {
   parseWarehouseLink,
   planTransfersDetailed,
   planWarehouseTrades,
+  type TradeWarehouse,
+  type WarehouseTrade,
 } from '../src/types/logistics.js';
 import {
   advanceGrowth,
@@ -545,6 +547,127 @@ async function logWarehouseDemand(
      ON CONFLICT (building_id, day) DO UPDATE SET demand = warehouse_demand.demand + $3`,
     [warehouseId, day, demand],
   );
+}
+
+interface WarehouseTradeBuildingRow {
+  id: string;
+  created_by: string;
+  building_type: ResidenceType;
+  tile_x: number;
+  tile_y: number;
+  work_hours_per_day: number;
+  workers: number;
+}
+
+interface WarehouseTradeStockRow {
+  building_id: string;
+  product_id: string;
+  quantity: number;
+}
+
+interface WarehouseTradeSettingRow {
+  building_id: string;
+  product_id: string;
+  minimum_stock: number;
+  maximum_stock: number | null;
+  price: number;
+  mode: 'sell' | 'buy';
+}
+
+function mapWarehouseTradeWarehouses(
+  buildings: WarehouseTradeBuildingRow[],
+  stockRows: WarehouseTradeStockRow[],
+  settingRows: WarehouseTradeSettingRow[],
+): TradeWarehouse[] {
+  const stockByBuilding = new Map<string, Map<string, number>>();
+  const settingsByBuilding = new Map<
+    string,
+    Map<string, { minimumStock: number; maximumStock: number | null; price: number; mode: 'sell' | 'buy' }>
+  >();
+
+  for (const building of buildings) {
+    stockByBuilding.set(building.id, new Map());
+    settingsByBuilding.set(building.id, new Map());
+  }
+  for (const item of stockRows) {
+    const stock = stockByBuilding.get(item.building_id);
+    if (!stock) throw new Error('O estoque consultado pertence a um armazém desconhecido.');
+    stock.set(item.product_id, item.quantity);
+  }
+  for (const item of settingRows) {
+    const settings = settingsByBuilding.get(item.building_id);
+    if (!settings) throw new Error('A configuração consultada pertence a um armazém desconhecido.');
+    settings.set(item.product_id, {
+      minimumStock: item.minimum_stock,
+      maximumStock: item.maximum_stock,
+      price: item.price,
+      mode: item.mode,
+    });
+  }
+
+  return buildings.map((building) => {
+    const stock = stockByBuilding.get(building.id);
+    const settings = settingsByBuilding.get(building.id);
+    if (!stock || !settings) throw new Error('Não foi possível montar os dados do armazém.');
+    return {
+      id: building.id,
+      ownerId: building.created_by,
+      type: building.building_type,
+      x: building.tile_x,
+      y: building.tile_y,
+      capacityM3: RESIDENCES.warehouse.storageCapacityM3 ?? 0,
+      workPoints:
+        (building.workers *
+          getDailyWorkPoints(
+            building.work_hours_per_day,
+            RESIDENCE_STATS.health,
+            RESIDENCE_STATS.happiness,
+          )) /
+        2,
+      stock,
+      settings,
+    };
+  });
+}
+
+async function applyWarehouseTrades(
+  client: PoolClient,
+  trades: WarehouseTrade[],
+  ownerOf: Map<string, string>,
+  day: string,
+): Promise<void> {
+  for (const trade of trades) {
+    const buyer = ownerOf.get(trade.buyerId);
+    const seller = ownerOf.get(trade.sellerId);
+    if (!buyer || !seller) throw new Error('Uma troca de armazém não tem comprador ou vendedor válido.');
+
+    const cost = trade.quantity * trade.price;
+    await client.query(
+      'UPDATE warehouse_stock SET quantity = quantity - $3 WHERE building_id = $1 AND product_id = $2',
+      [trade.sellerId, trade.productId, trade.quantity],
+    );
+    await client.query(
+      `INSERT INTO warehouse_stock (building_id, product_id, quantity) VALUES ($1, $2, $3)
+       ON CONFLICT (building_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3`,
+      [trade.buyerId, trade.productId, trade.quantity],
+    );
+    for (const [userId, delta] of [
+      [buyer, -cost],
+      [seller, cost],
+    ] as const) {
+      await client.query(
+        `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::bigint + $2::bigint)
+         ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::bigint`,
+        [userId, delta, STARTING_BALANCE],
+      );
+    }
+    await logWarehouseDemand(
+      client,
+      trade.buyerId,
+      day,
+      getTransportDemand(trade.productId, trade.quantity),
+    );
+  }
 }
 
 // Histórico diário de produção; cada etapa da economia grava só as colunas que conhece.
@@ -1225,100 +1348,23 @@ async function runDailyEmployment(): Promise<boolean> {
     // Às 03:00 e 15:00 os armazéns compram de armazéns de outros donos em até 60 tiles.
     const tradeSlot = state.hour >= 15 ? `${state.day}T15` : state.hour >= 3 ? `${state.day}T03` : null;
     if (tradeSlot && (state.last_trade === null || state.last_trade < tradeSlot)) {
-      const { rows: warehouseRows } = await client.query<{
-        id: string;
-        created_by: string;
-        building_type: ResidenceType;
-        tile_x: number;
-        tile_y: number;
-        work_hours_per_day: number;
-        workers: number;
-      }>(
+      const { rows: warehouseRows } = await client.query<WarehouseTradeBuildingRow>(
         `SELECT b.id, b.created_by, b.building_type, b.tile_x, b.tile_y, b.work_hours_per_day,
                 COALESCE((SELECT SUM(count) FROM job_assignments j WHERE j.workplace_id = b.id), 0)::int AS workers
          FROM residential_buildings b
          WHERE b.building_type = 'warehouse' AND b.status = 'completed'`,
       );
-      const { rows: stockRows } = await client.query<{ building_id: string; product_id: string; quantity: number }>(
+      const { rows: stockRows } = await client.query<WarehouseTradeStockRow>(
         'SELECT building_id, product_id, quantity FROM warehouse_stock',
       );
-      const { rows: settingRows } = await client.query<{
-        building_id: string;
-        product_id: string;
-        minimum_stock: number;
-        maximum_stock: number | null;
-        price: number;
-        mode: 'sell' | 'buy';
-      }>('SELECT building_id, product_id, minimum_stock, maximum_stock, price, mode FROM warehouse_product_settings');
-      const tradeWarehouses = warehouseRows.map((row) => {
-        const stock = new Map<string, number>();
-        for (const item of stockRows) {
-          if (item.building_id === row.id) stock.set(item.product_id, item.quantity);
-        }
-        const settings = new Map<
-          string,
-          { minimumStock: number; maximumStock: number | null; price: number; mode: 'sell' | 'buy' }
-        >();
-        for (const item of settingRows) {
-          if (item.building_id === row.id) {
-            settings.set(item.product_id, {
-              minimumStock: item.minimum_stock,
-              maximumStock: item.maximum_stock,
-              price: item.price,
-              mode: item.mode,
-            });
-          }
-        }
-        return {
-          id: row.id,
-          ownerId: row.created_by,
-          type: row.building_type,
-          x: row.tile_x,
-          y: row.tile_y,
-          capacityM3: RESIDENCES.warehouse.storageCapacityM3 ?? 0,
-          // Cada rodada usa metade dos Work Points diários do armazém.
-          workPoints:
-            (row.workers *
-              getDailyWorkPoints(row.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness)) /
-            2,
-          stock,
-          settings,
-        };
-      });
+      const { rows: settingRows } = await client.query<WarehouseTradeSettingRow>(
+        'SELECT building_id, product_id, minimum_stock, maximum_stock, price, mode FROM warehouse_product_settings',
+      );
+      const tradeWarehouses = mapWarehouseTradeWarehouses(warehouseRows, stockRows, settingRows);
       const ownerOf = new Map(warehouseRows.map((row) => [row.id, row.created_by]));
-      for (const trade of planWarehouseTrades(tradeWarehouses)) {
-        const cost = trade.quantity * trade.price;
-        await client.query(
-          'UPDATE warehouse_stock SET quantity = quantity - $3 WHERE building_id = $1 AND product_id = $2',
-          [trade.sellerId, trade.productId, trade.quantity],
-        );
-        await client.query(
-          `INSERT INTO warehouse_stock (building_id, product_id, quantity) VALUES ($1, $2, $3)
-           ON CONFLICT (building_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3`,
-          [trade.buyerId, trade.productId, trade.quantity],
-        );
-        const buyer = ownerOf.get(trade.buyerId);
-        const seller = ownerOf.get(trade.sellerId);
-        if (buyer && seller) {
-          for (const [userId, delta] of [
-            [buyer, -cost],
-            [seller, cost],
-          ] as const) {
-            await client.query(
-              `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::bigint + $2::bigint)
-               ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::bigint`,
-              [userId, delta, STARTING_BALANCE],
-            );
-          }
-        }
-        changed = true;
-        await logWarehouseDemand(
-          client,
-          trade.buyerId,
-          state.day,
-          getTransportDemand(trade.productId, trade.quantity),
-        );
-      }
+      const trades = planWarehouseTrades(tradeWarehouses);
+      await applyWarehouseTrades(client, trades, ownerOf, state.day);
+      if (trades.length > 0) changed = true;
       await client.query('UPDATE world_state SET last_warehouse_trade_slot = $1 WHERE id = 1', [tradeSlot]);
     }
 
@@ -1787,11 +1833,34 @@ async function createResidentialBuilding(
   type: ResidenceType,
   position: RoadPosition,
   userId: string,
-): Promise<{ building: ResidentialBuilding | null; error: ResidencePlacementError | 'insufficient_materials' | null }> {
+  isMaster: boolean,
+): Promise<{
+  building: ResidentialBuilding | null;
+  error: ResidencePlacementError | 'insufficient_materials' | 'warehouse_already_claimed' | null;
+}> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    let isFirstWarehouse = false;
+    if (type === 'warehouse') {
+      const { rows: warehouseRows } = await client.query<{ has_warehouse: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM player_warehouse_claims WHERE user_id = $1
+         ) OR EXISTS (
+           SELECT 1 FROM residential_buildings WHERE building_type = 'warehouse' AND created_by = $1
+         ) AS has_warehouse`,
+        [userId],
+      );
+      isFirstWarehouse = !warehouseRows[0]?.has_warehouse;
+      if (!isMaster && !isFirstWarehouse) {
+        await client.query('ROLLBACK');
+        return { building: null, error: 'warehouse_already_claimed' };
+      }
+    } else if (!isMaster) {
+      await client.query('ROLLBACK');
+      return { building: null, error: 'insufficient_materials' };
+    }
 
     const { rows: cityRows } = await client.query<{
       id: string;
@@ -1868,12 +1937,27 @@ async function createResidentialBuilding(
       return { building: null, error: 'outside_municipality' };
     }
 
+    if (type === 'warehouse') {
+      await client.query(
+        'INSERT INTO player_warehouse_claims (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING',
+        [userId],
+      );
+    }
+
     const { rows } = await client.query<ResidentialBuildingRow>(
       `INSERT INTO residential_buildings
-         (id, building_type, tile_x, tile_y, city_id, status, created_by)
-       VALUES ($1, $2, $3, $4, $5, 'under_construction', $6)
+         (id, building_type, tile_x, tile_y, city_id, status, completed_at, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 = 'completed' THEN clock_timestamp() ELSE NULL END, $7)
        RETURNING ${RESIDENTIAL_COLUMNS}`,
-      [randomUUID(), type, position.x, position.y, city.id, userId],
+      [
+        randomUUID(),
+        type,
+        position.x,
+        position.y,
+        city.id,
+        isFirstWarehouse ? 'completed' : 'under_construction',
+        userId,
+      ],
     );
     await client.query('COMMIT');
     return { building: mapResidentialBuilding(rows[0]), error: null };
@@ -2004,6 +2088,45 @@ async function start() {
         response.status(503).json({ error: 'wallet_unavailable' });
       });
   });
+  app.get('/api/player/resources', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const x = Number(request.query.x);
+    const y = Number(request.query.y);
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    if (
+      !Number.isInteger(x) ||
+      x < 0 ||
+      x >= WORLD_CONFIG.width ||
+      !Number.isInteger(y) ||
+      y < 0 ||
+      y >= WORLD_CONFIG.height
+    ) {
+      response.status(400).json({ error: 'invalid_area' });
+      return;
+    }
+    void pool
+      .query<{ wood: number; stone: number }>(
+        `SELECT
+           COALESCE(SUM(stock.quantity) FILTER (WHERE stock.product_id = 'wood'), 0)::int AS wood,
+           COALESCE(SUM(stock.quantity) FILTER (WHERE stock.product_id = 'stone'), 0)::int AS stone
+         FROM residential_buildings AS warehouse
+         LEFT JOIN warehouse_stock AS stock ON stock.building_id = warehouse.id
+         WHERE warehouse.building_type = 'warehouse'
+           AND warehouse.status = 'completed'
+           AND warehouse.created_by = $1
+           AND POWER(warehouse.tile_x + $4 - $2, 2)
+             + POWER(warehouse.tile_y + $4 - $3, 2) <= 3600`,
+        [userId, x, y, RESIDENCES.warehouse.width / 2],
+      )
+      .then(({ rows }) => response.json({ wood: rows[0].wood, stone: rows[0].stone }))
+      .catch((error: unknown) => {
+        console.error('Não foi possível consultar os recursos próximos do jogador:', error);
+        response.status(503).json({ error: 'resources_unavailable' });
+      });
+  });
   app.get('/api/cities', requireAuth, (_request, response) => {
     void getCities()
       .then((cities) => response.json(cities))
@@ -2099,7 +2222,11 @@ async function start() {
           response.status(409).json({ error: 'insufficient_materials' });
           return;
         }
-        return createResidentialBuilding(definition.type, { x, y }, userId)
+        if (!isMaster && definition.type !== 'warehouse') {
+          response.status(409).json({ error: 'insufficient_materials' });
+          return;
+        }
+        return createResidentialBuilding(definition.type, { x, y }, userId, isMaster)
           .then(({ building, error }) => {
             if (!building) {
               response.status(409).json({ error });
@@ -2395,8 +2522,8 @@ async function start() {
     }
 
     void pool
-      .query<{ building_type: string }>(
-        'SELECT building_type FROM residential_buildings WHERE id = $1',
+      .query<{ building_type: string; tile_x: number; tile_y: number }>(
+        'SELECT building_type, tile_x, tile_y FROM residential_buildings WHERE id = $1',
         [request.params.id],
       )
       .then(async ({ rows }) => {
@@ -2429,6 +2556,23 @@ async function start() {
            ORDER BY day DESC`,
           [request.params.id],
         );
+        const averagePriceRows = await pool.query<{ product_id: string; average_price: number }>(
+          `SELECT setting.product_id,
+                  SUM(setting.price::numeric * GREATEST(COALESCE(stock.quantity, 0) - setting.minimum_stock, 0))
+                    / NULLIF(SUM(GREATEST(COALESCE(stock.quantity, 0) - setting.minimum_stock, 0)), 0)
+                    AS average_price
+           FROM residential_buildings AS seller
+           JOIN warehouse_product_settings AS setting ON setting.building_id = seller.id
+           LEFT JOIN warehouse_stock AS stock
+             ON stock.building_id = seller.id AND stock.product_id = setting.product_id
+           WHERE seller.building_type = 'warehouse'
+             AND seller.status = 'completed'
+             AND setting.mode = 'sell'
+             AND POWER(seller.tile_x - $1, 2) + POWER(seller.tile_y - $2, 2) <= 3600
+           GROUP BY setting.product_id
+           HAVING SUM(GREATEST(COALESCE(stock.quantity, 0) - setting.minimum_stock, 0)) > 0`,
+          [rows[0].tile_x, rows[0].tile_y],
+        );
         response.json({
           demand: {
             lastDay: demandRows.rows[0]?.day ?? null,
@@ -2443,12 +2587,103 @@ async function start() {
             mode: row.mode,
           })),
           stock: stockRows.rows.map((row) => ({ productId: row.product_id, quantity: row.quantity })),
+          averagePrices: averagePriceRows.rows.map((row) => ({
+            productId: row.product_id,
+            averagePrice: Number(row.average_price),
+          })),
         });
       })
       .catch((error: unknown) => {
         console.error('Não foi possível consultar o armazém:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
+  });
+  app.post('/api/residential-buildings/:id/warehouse/suppliers', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const { rows: targetRows } = await client.query<WarehouseTradeBuildingRow & { status: string }>(
+          `SELECT b.id, b.building_type, b.created_by, b.status, b.tile_x, b.tile_y,
+                  b.work_hours_per_day,
+                  COALESCE((SELECT SUM(count) FROM job_assignments j WHERE j.workplace_id = b.id), 0)::int AS workers
+           FROM residential_buildings b WHERE b.id = $1`,
+          [request.params.id],
+        );
+        const target = targetRows[0];
+        if (!target || target.building_type !== 'warehouse') {
+          await client.query('ROLLBACK');
+          response.status(404).json({ error: 'warehouse_not_found' });
+          return;
+        }
+        if (target.created_by !== userId) {
+          await client.query('ROLLBACK');
+          response.status(403).json({ error: 'residence_not_owned' });
+          return;
+        }
+        if (target.status !== 'completed') {
+          await client.query('ROLLBACK');
+          response.status(409).json({ error: 'warehouse_not_completed' });
+          return;
+        }
+
+        const { rows: warehouseRows } = await client.query<WarehouseTradeBuildingRow>(
+          `SELECT b.id, b.created_by, b.building_type, b.tile_x, b.tile_y, b.work_hours_per_day,
+                  COALESCE((SELECT SUM(count) FROM job_assignments j WHERE j.workplace_id = b.id), 0)::int AS workers
+           FROM residential_buildings b
+           WHERE b.building_type = 'warehouse' AND b.status = 'completed'
+             AND (b.id = $1 OR (ABS(b.tile_x - $2) <= 60 AND ABS(b.tile_y - $3) <= 60))`,
+          [target.id, target.tile_x, target.tile_y],
+        );
+        const warehouseIds = warehouseRows.map((row) => row.id);
+        const { rows: stockRows } = await client.query<WarehouseTradeStockRow>(
+          'SELECT building_id, product_id, quantity FROM warehouse_stock WHERE building_id = ANY($1::uuid[])',
+          [warehouseIds],
+        );
+        const { rows: settingRows } = await client.query<WarehouseTradeSettingRow>(
+          'SELECT building_id, product_id, minimum_stock, maximum_stock, price, mode FROM warehouse_product_settings WHERE building_id = ANY($1::uuid[])',
+          [warehouseIds],
+        );
+        const tradeWarehouses = mapWarehouseTradeWarehouses(warehouseRows, stockRows, settingRows);
+        const trades = planWarehouseTrades(tradeWarehouses, target.id);
+        const ownerOf = new Map(warehouseRows.map((row) => [row.id, row.created_by]));
+        const day =
+          trades.length > 0
+            ? (
+                await client.query<{ day: string }>(
+                  "SELECT (world_time AT TIME ZONE 'UTC')::date::text AS day FROM world_state WHERE id = 1",
+                )
+              ).rows[0]?.day ?? null
+            : null;
+        if (trades.length > 0 && day === null) {
+          throw new Error('O relógio do mundo não está disponível para registrar a compra.');
+        }
+        if (day !== null) await applyWarehouseTrades(client, trades, ownerOf, day);
+        await client.query('COMMIT');
+        response.json({ trades });
+      } catch (error) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter a busca de fornecedores:', rollbackError);
+        });
+        throw error;
+      } finally {
+        client.release();
+      }
+    })().catch((error: unknown) => {
+      console.error('Não foi possível procurar fornecedores para o armazém:', error);
+      response.status(503).json({ error: 'warehouse_purchase_unavailable' });
+    });
   });
   app.put('/api/residential-buildings/:id/warehouse', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);

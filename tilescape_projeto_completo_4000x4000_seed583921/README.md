@@ -345,8 +345,11 @@ colheita da fazenda de arroz abaixo.
 ### Empregos e salários
 
 Em obras, fazendas, comércios e indústrias o dono define **funcionários
-desejados** (0 até o máximo da construção; padrão 0), **salário por dia** e
-**carga horária** (4 a 14 h). Todo dia às 12:00 (horário do mundo) os moradores
+desejados**, **salário por dia** e **carga horária** (4 a 14 h). Durante a obra,
+é possível definir até 100 funcionários, independentemente do limite final do
+edifício; ao concluir, o número desejado e os empregados são reduzidos ao máximo
+definitivo da construção (por exemplo, 4 na Loja de Leite). Em construções
+concluídas vale o limite do catálogo. Todo dia às 12:00 (horário do mundo) os moradores
 são distribuídos: cada construção com vagas tem um *benefício*
 `vagas × F_H² × salário / carga horária`, com `F_H = 1 − 0,5·(|H−8|/6)²`, e as
 residências empregam seus moradores (dentro de 60 tiles) do maior benefício para

@@ -49,6 +49,7 @@ import {
   getAverageIncomes,
   getDailyWorkPoints,
   getEmploymentSummary,
+  getMaxDesiredWorkers,
   getPayroll,
   type EmploymentSummaryWorkplace,
   type JobAssignment,
@@ -673,6 +674,34 @@ async function applyWarehouseTrades(
   }
 }
 
+async function limitJobAssignments(
+  client: PoolClient,
+  workplaceId: string,
+  maximumWorkers: number,
+): Promise<void> {
+  const { rows } = await client.query<{ residence_id: string; count: number }>(
+    'SELECT residence_id, count FROM job_assignments WHERE workplace_id = $1 ORDER BY residence_id',
+    [workplaceId],
+  );
+  let remaining = maximumWorkers;
+  for (const assignment of rows) {
+    const retained = Math.min(assignment.count, remaining);
+    remaining -= retained;
+    if (retained === assignment.count) continue;
+    if (retained === 0) {
+      await client.query(
+        'DELETE FROM job_assignments WHERE workplace_id = $1 AND residence_id = $2',
+        [workplaceId, assignment.residence_id],
+      );
+    } else {
+      await client.query(
+        'UPDATE job_assignments SET count = $3 WHERE workplace_id = $1 AND residence_id = $2',
+        [workplaceId, assignment.residence_id, retained],
+      );
+    }
+  }
+}
+
 // Histórico diário de produção; cada etapa da economia grava só as colunas que conhece.
 // Roda em savepoint próprio: uma falha no histórico nunca pode desfazer a produção ou o transporte.
 async function logProduction(
@@ -801,10 +830,17 @@ async function runDailyEmployment(): Promise<boolean> {
           `UPDATE residential_buildings
            SET work_points_done = $2::double precision,
                status = CASE WHEN $3::boolean THEN 'completed' ELSE status END,
-               completed_at = CASE WHEN $3::boolean THEN clock_timestamp() ELSE completed_at END
+               completed_at = CASE WHEN $3::boolean THEN clock_timestamp() ELSE completed_at END,
+               desired_workers = CASE
+                 WHEN $3::boolean THEN LEAST(desired_workers, $4)
+                 ELSE desired_workers
+               END
            WHERE id = $1`,
-          [site.id, progress.done, progress.completed],
+          [site.id, progress.done, progress.completed, RESIDENCES[site.building_type].maxWorkers],
         );
+        if (progress.completed) {
+          await limitJobAssignments(client, site.id, RESIDENCES[site.building_type].maxWorkers);
+        }
         changed = true;
       }
       // Falhas na economia (vendas, produção, transporte) não devem desfazer folha e obras do dia.
@@ -2026,24 +2062,34 @@ async function completeResidentialBuilding(
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
-    const { rows } = await client.query<ResidentialBuildingRow>(
-      `UPDATE residential_buildings
-       SET status = 'completed', completed_at = clock_timestamp()
-       WHERE id = $1 AND status = 'under_construction'
-       RETURNING ${RESIDENTIAL_COLUMNS}`,
+    const { rows: existingRows } = await client.query<{
+      building_type: string;
+      status: ResidentialBuilding['status'];
+    }>(
+      'SELECT building_type, status FROM residential_buildings WHERE id = $1 FOR UPDATE',
       [id],
     );
-    if (!rows[0]) {
-      const existing = await client.query(
-        'SELECT 1 FROM residential_buildings WHERE id = $1',
-        [id],
-      );
+    if (!existingRows[0]) {
       await client.query('COMMIT');
-      return {
-        building: null,
-        error: existing.rowCount ? 'building_already_complete' : 'building_not_found',
-      };
+      return { building: null, error: 'building_not_found' };
     }
+    if (existingRows[0].status !== 'under_construction') {
+      await client.query('COMMIT');
+      return { building: null, error: 'building_already_complete' };
+    }
+    const definition = getResidenceDefinition(existingRows[0].building_type);
+    if (!definition) throw new Error(`Tipo de construção inválido: ${existingRows[0].building_type}`);
+    const { rows } = await client.query<ResidentialBuildingRow>(
+      `UPDATE residential_buildings
+       SET status = 'completed',
+           completed_at = clock_timestamp(),
+           desired_workers = LEAST(desired_workers, $2)
+       WHERE id = $1 AND status = 'under_construction'
+       RETURNING ${RESIDENTIAL_COLUMNS}`,
+      [id, definition.maxWorkers],
+    );
+    if (!rows[0]) throw new Error(`A obra ${id} mudou durante a conclusão.`);
+    await limitJobAssignments(client, id, definition.maxWorkers);
     await client.query('COMMIT');
     return { building: mapResidentialBuilding(rows[0]), error: null };
   } catch (error) {
@@ -2796,16 +2842,38 @@ async function start() {
     void (async () => {
       const client = await pool.connect();
       try {
-        const { rows: typeRows } = await client.query<{ building_type: string }>(
-          'SELECT building_type FROM residential_buildings WHERE id = $1',
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const { rows: buildingRows } = await client.query<{
+          building_type: string;
+          status: ResidentialBuilding['status'];
+          created_by: string;
+        }>(
+          'SELECT building_type, status, created_by FROM residential_buildings WHERE id = $1 FOR UPDATE',
           [request.params.id],
         );
-        const definition = getResidenceDefinition(typeRows[0]?.building_type ?? '');
-        if (definition && settings.desiredWorkers > definition.maxWorkers) {
+        const building = buildingRows[0];
+        if (!building) {
+          await client.query('ROLLBACK');
+          response.status(404).json({ error: 'residence_not_found' });
+          return;
+        }
+        if (building.created_by !== userId) {
+          await client.query('ROLLBACK');
+          response.status(403).json({ error: 'residence_not_owned' });
+          return;
+        }
+        const definition = getResidenceDefinition(building.building_type);
+        const isResidence = definition?.kind === 'residence';
+        if (
+          !definition ||
+          (isResidence && building.status !== 'under_construction') ||
+          settings.desiredWorkers > getMaxDesiredWorkers(building.building_type, building.status)
+        ) {
+          await client.query('ROLLBACK');
           response.status(400).json({ error: 'invalid_work_settings' });
           return;
         }
-        await client.query('BEGIN');
         const { rows } = await client.query<ResidentialBuildingRow>(
           `UPDATE residential_buildings
            SET wage = $3, work_hours_per_day = $4, desired_workers = $5
@@ -2822,42 +2890,10 @@ async function start() {
         );
         if (!rows[0]) {
           await client.query('ROLLBACK');
-          const { rows: existing } = await pool.query<{ created_by: string }>(
-            'SELECT created_by FROM residential_buildings WHERE id = $1',
-            [request.params.id],
-          );
-          if (!existing[0]) {
-            response.status(404).json({ error: 'residence_not_found' });
-          } else if (existing[0].created_by !== userId) {
-            response.status(403).json({ error: 'residence_not_owned' });
-          } else {
-            response.status(400).json({ error: 'invalid_work_settings' });
-          }
-          return;
+          throw new Error(`A construção ${request.params.id} mudou durante a atualização.`);
         }
 
-        // Reduz os empregados quando o novo limite desejado é menor que o atual.
-        const { rows: jobs } = await client.query<{ residence_id: string; count: number }>(
-          'SELECT residence_id, count FROM job_assignments WHERE workplace_id = $1 ORDER BY residence_id',
-          [request.params.id],
-        );
-        let remaining = settings.desiredWorkers;
-        for (const job of jobs) {
-          const kept = Math.min(job.count, remaining);
-          remaining -= kept;
-          if (kept === job.count) continue;
-          if (kept === 0) {
-            await client.query(
-              'DELETE FROM job_assignments WHERE workplace_id = $1 AND residence_id = $2',
-              [request.params.id, job.residence_id],
-            );
-          } else {
-            await client.query(
-              'UPDATE job_assignments SET count = $3 WHERE workplace_id = $1 AND residence_id = $2',
-              [request.params.id, job.residence_id, kept],
-            );
-          }
-        }
+        await limitJobAssignments(client, request.params.id, settings.desiredWorkers);
         const { rows: updated } = await client.query<ResidentialBuildingRow>(
           `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings WHERE id = $1`,
           [request.params.id],

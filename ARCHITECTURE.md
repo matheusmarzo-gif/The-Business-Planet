@@ -301,7 +301,9 @@ mapeamento e verificar todas as curvas.
 - Os funcionários atribuídos a uma obra geram Work Points diários e a conclusão
   ocorre automaticamente ao atingir o requisito. A conta master também pode
   dar duplo clique na obra para concluí-la instantaneamente; a rota protege essa
-  operação e recusa uma obra já concluída.
+  operação e recusa uma obra já concluída. Durante a obra, o limite de vagas é
+  100; na conclusão, o servidor reduz atomicamente `desired_workers` e as
+  atribuições existentes ao máximo definitivo do tipo de construção.
 - Estradas também consultam os footprints residenciais para impedir que um
   traçado posterior cubra uma casa. No modo Demolir, clicar em qualquer tile
   do footprint de uma residência a remove sem confirmação; o servidor só
@@ -319,7 +321,7 @@ mapeamento e verificar todas as curvas.
   `RESIDENCE_STATS`), empregados reais e renda média (`averageIncome`: subquery em
   `RESIDENTIAL_COLUMNS` somando `job_assignments.count × wage` ÷ ocupantes; o mesmo
   cálculo, `getAverageIncomes` em `employment.ts`, alimenta as vendas às 00:00). Em construção: Work Points
-  0/necessários, empregados 0/`maxWorkers`, salário diário (`wage`, C$ por dia
+  0/necessários, empregados 0/até 100, salário diário (`wage`, C$ por dia
   de trabalho) e carga horária (`workHoursPerDay`, 4–14 h), editáveis só pelo
   criador (`created_by`). O criador também define o aluguel (`rent`, inteiro ≥
   C$ 1, por pessoa) em qualquer status. O
@@ -336,8 +338,9 @@ mapeamento e verificar todas as curvas.
   (calculada em SQL em `getCities`; `city_assemblies.population` não é mais
   usada). A cobrança diária do aluguel ainda não existe.
 - Emprego (`src/types/employment.ts`): obras e construções concluídas que não
-  são residências têm `desired_workers` (0 até `maxWorkers`; padrão 0), `wage` e
-  `work_hours_per_day`. `runDailyEmployment` (mesmo lock `583921303`, chamada em
+  são residências têm `desired_workers` (0 até 100 durante a obra e 0 até
+  `maxWorkers` após a conclusão; padrão 0), `wage` e `work_hours_per_day`.
+  `runDailyEmployment` (mesmo lock `583921303`, chamada em
   `advanceClock`) às 12:00 do mundo recalcula do zero `job_assignments`
   (`workplace_id`, `residence_id`, `count`): `allocateWorkers` percorre as
   residências por id e emprega os moradores nas construções dentro do raio de
@@ -533,7 +536,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |
-| `PATCH /api/residential-buildings/:id/work-settings` | Criador; obras e construções não residenciais concluídas | Valida e grava funcionários desejados (0–máximo), salário diário e carga horária (4–14 h); reduz empregados excedentes. |
+| `PATCH /api/residential-buildings/:id/work-settings` | Criador; obras e construções não residenciais concluídas | Valida funcionários desejados (0–100 em obras ou 0–máximo após concluídas), salário diário e carga horária (4–14 h); reduz empregados excedentes. |
 | `PATCH /api/residential-buildings/:id/rent` | Criador | Valida e grava o aluguel por pessoa (≥ C$ 1). |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |
 

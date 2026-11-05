@@ -34,6 +34,7 @@ import {
   getAverageIncomes,
   getEmploymentSummary,
   advanceConstruction,
+  getMaxDesiredWorkers,
 } from './employment';
 import {
   getShopDailyFinancials,
@@ -623,6 +624,37 @@ describe('fazenda leiteira e demanda configurável', () => {
 });
 
 describe('work settings', () => {
+  it('allows up to 100 workers during construction and applies the building limit on completion', () => {
+    assert.equal(getMaxDesiredWorkers('shop_milk', 'under_construction'), 100);
+    assert.equal(getMaxDesiredWorkers('shop_milk', 'completed'), 4);
+
+    const homes = [{ id: 'home', type: 'house_poor2' as const, x: 0, y: 0, occupants: 100 }];
+    const workplace = {
+      id: 'dairy-shop',
+      type: 'shop_milk' as const,
+      x: 1,
+      y: 0,
+      wage: 10,
+      workHoursPerDay: 8,
+      desiredWorkers: 100,
+    };
+
+    assert.deepEqual(
+      allocateWorkers(homes, [{ ...workplace, status: 'under_construction' }]),
+      [{ workplaceId: 'dairy-shop', residenceId: 'home', count: 100 }],
+    );
+    assert.deepEqual(
+      allocateWorkers(homes, [{ ...workplace, status: 'completed' }]),
+      [{ workplaceId: 'dairy-shop', residenceId: 'home', count: 4 }],
+    );
+    assert.deepEqual(
+      getEmploymentSummary([
+        { type: 'shop_milk', status: 'completed', wage: 10, desiredWorkers: 100, employed: 4 },
+      ]),
+      { employed: 4, jobOffers: 0, averageWage: 10 },
+    );
+  });
+
   it('summarizes employed people, open job offers, and the employed-weighted daily wage', () => {
     assert.deepEqual(
       getEmploymentSummary([

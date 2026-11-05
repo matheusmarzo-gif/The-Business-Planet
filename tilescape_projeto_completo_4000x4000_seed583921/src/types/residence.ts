@@ -103,6 +103,7 @@ export const MAX_WORK_HOURS = 14;
 export const DEFAULT_RENT = 10;
 export const MIN_RENT = 1;
 export const MAX_RENT = 100000;
+export const MAX_CONSTRUCTION_WORKERS = 100;
 export const RESIDENCE_STATS = { skill: 10, health: 100, happiness: 100 } as const;
 // Raio (em tiles) em que uma obra ou fazenda procura trabalhadores.
 export const WORKER_SEARCH_RADIUS = 60;

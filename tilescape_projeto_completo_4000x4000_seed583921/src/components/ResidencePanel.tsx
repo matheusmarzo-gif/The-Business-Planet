@@ -8,9 +8,10 @@ import {
   RESIDENCE_STATS,
   WORKER_SEARCH_RADIUS,
   RESIDENCES,
-  ResidentialBuilding,
-  ResidenceType,
+  type ResidentialBuilding,
+  type ResidenceType,
 } from '../types/residence';
+import { getMaxDesiredWorkers } from '../types/employment';
 import { canLinkToWarehouse } from '../types/logistics';
 import { PRODUCTS } from '../types/product';
 import {
@@ -135,12 +136,13 @@ export default function ResidencePanel({
   const isResidence = definition.kind === 'residence';
   const isFarm = !isResidence;
   const productionDescription = getProductionDescription(building.type);
-  const openJobs = Math.max(0, Math.min(building.desiredWorkers, definition.maxWorkers) - building.employed);
+  const maxDesiredWorkers = getMaxDesiredWorkers(building.type, building.status);
+  const openJobs = Math.max(0, Math.min(building.desiredWorkers, maxDesiredWorkers) - building.employed);
   const jobRows: [string, string][] = [
     ['Funcionários atuais', number.format(building.employed)],
     ['Funcionários desejados', number.format(building.desiredWorkers)],
     ['Vagas ofertadas', number.format(openJobs)],
-    ['Máximo de funcionários', number.format(definition.maxWorkers)],
+    ['Máximo de funcionários', number.format(maxDesiredWorkers)],
     ['Raio de busca de trabalhadores', `${WORKER_SEARCH_RADIUS} tiles`],
   ];
   const warehouseUsedM3 = PRODUCTS.reduce(
@@ -304,11 +306,11 @@ export default function ResidencePanel({
       {(building.status === 'under_construction' || isFarm) && (
         <form className="work-settings" onSubmit={submit}>
           <label>
-            Funcionários desejados (0 a {definition.maxWorkers})
+            Funcionários desejados (0 a {maxDesiredWorkers})
             <input
               type="number"
               min={0}
-              max={definition.maxWorkers}
+              max={maxDesiredWorkers}
               step={1}
               value={desired}
               disabled={!isOwner || isSaving}

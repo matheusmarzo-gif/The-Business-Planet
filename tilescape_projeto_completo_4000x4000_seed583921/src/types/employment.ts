@@ -1,5 +1,9 @@
-import type { ResidenceType } from './residence.js';
-import { getResidenceDefinition, isWithinWorkerSearchRadius } from './residence.js';
+import type { ResidenceType, ResidentialBuildingStatus } from './residence.js';
+import {
+  getResidenceDefinition,
+  isWithinWorkerSearchRadius,
+  MAX_CONSTRUCTION_WORKERS,
+} from './residence.js';
 
 export interface EmploymentResidence {
   id: string;
@@ -17,6 +21,7 @@ export interface EmploymentWorkplace {
   wage: number;
   workHoursPerDay: number;
   desiredWorkers: number;
+  status?: ResidentialBuildingStatus;
 }
 
 export interface EmploymentSummaryWorkplace {
@@ -62,7 +67,11 @@ export function getWorkBenefit(openJobs: number, wage: number, hours: number): n
   return (openJobs * factor * factor * wage) / hours;
 }
 
-export function getMaxDesiredWorkers(type: string): number {
+export function getMaxDesiredWorkers(
+  type: string,
+  status: ResidentialBuildingStatus = 'completed',
+): number {
+  if (status === 'under_construction') return MAX_CONSTRUCTION_WORKERS;
   return getResidenceDefinition(type)?.maxWorkers ?? 0;
 }
 
@@ -80,7 +89,10 @@ export function getEmploymentSummary(workplaces: EmploymentSummaryWorkplace[]): 
     employed += workplaceEmployees;
     wageTotal += workplaceEmployees * workplace.wage;
 
-    const desired = Math.min(workplace.desiredWorkers, definition.maxWorkers);
+    const desired = Math.min(
+      workplace.desiredWorkers,
+      getMaxDesiredWorkers(workplace.type, workplace.status),
+    );
     jobOffers += Math.max(0, desired - workplaceEmployees);
   }
 
@@ -102,7 +114,10 @@ export function allocateWorkers(
 ): JobAssignment[] {
   const openJobs = new Map<string, number>();
   for (const workplace of workplaces) {
-    const jobs = Math.min(workplace.desiredWorkers, getMaxDesiredWorkers(workplace.type));
+    const jobs = Math.min(
+      workplace.desiredWorkers,
+      getMaxDesiredWorkers(workplace.type, workplace.status),
+    );
     if (jobs > 0) openJobs.set(workplace.id, jobs);
   }
 

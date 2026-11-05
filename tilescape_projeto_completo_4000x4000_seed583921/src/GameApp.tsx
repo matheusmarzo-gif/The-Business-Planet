@@ -118,7 +118,9 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'city_not_owned') {
           error = 'Você só pode demolir construções que criou.';
         } else if (body.error === 'city_not_found') {
-          error = 'Essa construção não existe mais.';
+          error = 'Essa cidade não existe mais.';
+        } else if (body.error === 'invalid_city') {
+          error = 'Essa cidade é inválida.';
         } else if (body.error === 'invalid_zones') {
           error = 'As regiões enviadas são inválidas.';
         } else if (body.error === 'zone_outside_municipality') {
@@ -270,6 +272,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isConsumptionLoading, setIsConsumptionLoading] = useState(false);
   const [consumptionError, setConsumptionError] = useState('');
   const [consumption, setConsumption] = useState<Map<string, ProductConsumption>>(new Map());
+  const [consumptionScope, setConsumptionScope] = useState<'RESIDÊNCIA' | 'CIDADE'>('RESIDÊNCIA');
+  const [consumptionTitle, setConsumptionTitle] = useState('Consumo da casa');
+  const [returnToCityAfterConsumption, setReturnToCityAfterConsumption] = useState(false);
   const [linkingFromId, setLinkingFromId] = useState<string | null>(null);
   const [showInfluence, setShowInfluence] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
@@ -362,6 +367,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
     return [...byPosition.values()];
   }, [cities, pendingCities]);
+  useEffect(() => {
+    if (!selectedCity) return;
+    const updatedCity = cities.find((city) => city.id === selectedCity.id);
+    if (updatedCity) setSelectedCity(updatedCity);
+  }, [cities, selectedCity?.id]);
   const cityZoneEditorCity = zoneEditorCityId
     ? visibleCities.find((city) => city.id === zoneEditorCityId) ?? null
     : null;
@@ -493,6 +503,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   };
 
   const openConsumption = async (buildingId: string) => {
+    setReturnToCityAfterConsumption(false);
+    setConsumptionScope('RESIDÊNCIA');
+    setConsumptionTitle('Consumo da casa');
     setIsConsumptionOpen(true);
     setIsConsumptionLoading(true);
     setConsumptionError('');
@@ -505,6 +518,34 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setConsumptionError(error instanceof Error ? error.message : 'Não foi possível carregar o consumo.');
     } finally {
       setIsConsumptionLoading(false);
+    }
+  };
+
+  const openCityConsumption = async (city: CityAssembly) => {
+    setIsCityModalOpen(false);
+    setReturnToCityAfterConsumption(true);
+    setConsumptionScope('CIDADE');
+    setConsumptionTitle(`Consumo médio: ${city.name}`);
+    setIsConsumptionOpen(true);
+    setIsConsumptionLoading(true);
+    setConsumptionError('');
+    try {
+      const result = await cityRequest<{ products: ProductConsumption[] }>(
+        `/api/cities/${city.id}/consumption`,
+      );
+      setConsumption(new Map(result.products.map((item) => [item.productId, item])));
+    } catch (error) {
+      setConsumptionError(error instanceof Error ? error.message : 'Não foi possível carregar o consumo da cidade.');
+    } finally {
+      setIsConsumptionLoading(false);
+    }
+  };
+
+  const closeConsumption = () => {
+    setIsConsumptionOpen(false);
+    if (returnToCityAfterConsumption) {
+      setIsCityModalOpen(true);
+      setReturnToCityAfterConsumption(false);
     }
   };
 
@@ -1309,12 +1350,14 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onClose={() => setIsCommerceHistoryOpen(false)}
           />
         )}
-        {selectedResidence && isConsumptionOpen && (
+        {isConsumptionOpen && (
           <ConsumptionPanel
             consumption={consumption}
             isLoading={isConsumptionLoading}
             error={consumptionError}
-            onClose={() => setIsConsumptionOpen(false)}
+            scope={consumptionScope}
+            title={consumptionTitle}
+            onClose={closeConsumption}
           />
         )}
         {selectedResidence && selectedResidenceKey && isWarehouseOpen && (
@@ -1540,6 +1583,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           onSave={() => void saveCityName()}
           onChooseLocation={chooseCityLocation}
           onManageZones={openCityZoneEditor}
+          onOpenConsumption={() => {
+            if (selectedCity) void openCityConsumption(selectedCity);
+          }}
         />
       )}
     </main>

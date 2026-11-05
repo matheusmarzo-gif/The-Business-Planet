@@ -27,6 +27,9 @@ function isCityAssembly(value: unknown): value is CityAssembly {
     Number.isInteger(city.population) &&
     Number.isInteger(city.wellbeing) &&
     Number.isInteger(city.economy) &&
+    (city.employed === undefined || Number.isInteger(city.employed)) &&
+    (city.jobOffers === undefined || Number.isInteger(city.jobOffers)) &&
+    (city.averageWage === undefined || Number.isFinite(city.averageWage)) &&
     (city.zones === undefined || (Array.isArray(city.zones) && city.zones.every(isCityZone)))
   );
 }

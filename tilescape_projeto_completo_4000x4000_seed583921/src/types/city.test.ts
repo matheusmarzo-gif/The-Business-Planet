@@ -22,7 +22,17 @@ import {
   type ResidentialBuilding,
 } from './residence';
 import { getRoadPlacementError } from './road';
-import { allocateWorkers, getDailyWorkPoints, getHoursFactor, getPayroll, getRestFactor, getWorkBenefit, getAverageIncomes, advanceConstruction } from './employment';
+import {
+  allocateWorkers,
+  getDailyWorkPoints,
+  getHoursFactor,
+  getPayroll,
+  getRestFactor,
+  getWorkBenefit,
+  getAverageIncomes,
+  getEmploymentSummary,
+  advanceConstruction,
+} from './employment';
 import {
   getShopDailyFinancials,
   getPurchaseBenefit,
@@ -373,6 +383,18 @@ describe('rice sales', () => {
 });
 
 describe('work settings', () => {
+  it('summarizes employed people, open job offers, and the employed-weighted daily wage', () => {
+    assert.deepEqual(
+      getEmploymentSummary([
+        { type: 'shop_rice', status: 'completed', wage: 100, desiredWorkers: 4, employed: 2 },
+        { type: 'warehouse', status: 'completed', wage: 50, desiredWorkers: 150, employed: 10 },
+        { type: 'house_poor1', status: 'completed', wage: 25, desiredWorkers: 6, employed: 3 },
+        { type: 'house_poor1', status: 'under_construction', wage: 25, desiredWorkers: 2, employed: 0 },
+      ]),
+      { employed: 12, jobOffers: 94, averageWage: 700 / 12 },
+    );
+  });
+
   it('accepts valid wage and hours and rejects invalid values', () => {
     assert.deepEqual(parseWorkSettings({ wage: 15, workHoursPerDay: 8, desiredWorkers: 3 }), {
       wage: 15,

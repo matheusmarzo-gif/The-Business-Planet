@@ -40,7 +40,16 @@ import {
 } from '../src/types/residence.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
 import { isValidTimeScale, parseMasterGrant } from '../src/types/worldClock.js';
-import { advanceConstruction, allocateWorkers, getAverageIncomes, getDailyWorkPoints, getPayroll, type JobAssignment } from '../src/types/employment.js';
+import {
+  advanceConstruction,
+  allocateWorkers,
+  getAverageIncomes,
+  getDailyWorkPoints,
+  getEmploymentSummary,
+  getPayroll,
+  type EmploymentSummaryWorkplace,
+  type JobAssignment,
+} from '../src/types/employment.js';
 import {
   getShopDailyFinancials,
   getShopProfitLoss,
@@ -314,17 +323,18 @@ async function publishSnapshot() {
 }
 
 async function getCities(): Promise<CityAssembly[]> {
-  const { rows } = await pool.query<{
-    id: string;
-    name: string;
-    center_x: number;
-    center_y: number;
-    population: number;
-    wellbeing: number;
-    economy: number;
-    zones: CityZone[];
-  }>(
-    `SELECT city.id, city.name, city.center_x, city.center_y,
+  const [{ rows }, { rows: workplaceRows }] = await Promise.all([
+    pool.query<{
+      id: string;
+      name: string;
+      center_x: number;
+      center_y: number;
+      population: number;
+      wellbeing: number;
+      economy: number;
+      zones: CityZone[];
+    }>(
+      `SELECT city.id, city.name, city.center_x, city.center_y,
             COALESCE((
               SELECT SUM(home.occupants)::integer
               FROM residential_buildings AS home
@@ -348,8 +358,36 @@ async function getCities(): Promise<CityAssembly[]> {
      LEFT JOIN city_zones AS zone ON zone.city_id = city.id
      GROUP BY city.id
      ORDER BY city.created_at, city.id`,
-  );
+    ),
+    pool.query<{
+      city_id: string;
+      building_type: ResidenceType;
+      status: ResidentialBuilding['status'];
+      wage: number;
+      desired_workers: number;
+      employed: number;
+    }>(
+      `SELECT b.city_id, b.building_type, b.status, b.wage, b.desired_workers,
+              COALESCE(SUM(j.count), 0)::int AS employed
+       FROM residential_buildings b
+       LEFT JOIN job_assignments j ON j.workplace_id = b.id
+       GROUP BY b.id`,
+    ),
+  ]);
+  const workplacesByCity = new Map<string, EmploymentSummaryWorkplace[]>();
+  for (const row of workplaceRows) {
+    const workplaces = workplacesByCity.get(row.city_id) ?? [];
+    workplaces.push({
+      type: row.building_type,
+      status: row.status,
+      wage: row.wage,
+      desiredWorkers: row.desired_workers,
+      employed: row.employed,
+    });
+    workplacesByCity.set(row.city_id, workplaces);
+  }
   return rows.map((row) => ({
+    ...getEmploymentSummary(workplacesByCity.get(row.id) ?? []),
     id: row.id,
     name: row.name,
     centerX: row.center_x,
@@ -1876,6 +1914,66 @@ async function start() {
         console.error('Não foi possível consultar as cidades:', error);
         response.status(503).json({ error: 'cities_unavailable' });
       });
+  });
+  app.get('/api/cities/:id/consumption', requireAuth, (request, response) => {
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_city' });
+      return;
+    }
+
+    void (async () => {
+      const { rows: cityRows } = await pool.query<{ population: number }>(
+        `SELECT COALESCE(SUM(building.occupants), 0)::int AS population
+         FROM city_assemblies city
+         LEFT JOIN residential_buildings building ON building.city_id = city.id
+         WHERE city.id = $1
+         GROUP BY city.id`,
+        [request.params.id],
+      );
+      if (!cityRows[0]) {
+        response.status(404).json({ error: 'city_not_found' });
+        return;
+      }
+
+      const { rows } = await pool.query<{
+        product_id: string;
+        last_quantity: number;
+        last_spent: number;
+        month_quantity: number;
+        month_spent: number;
+      }>(
+        `WITH today AS (
+           SELECT (world_time AT TIME ZONE 'UTC')::date AS day
+           FROM world_state WHERE id = 1
+         )
+         SELECT consumption.product_id,
+                COALESCE(SUM(consumption.quantity)
+                  FILTER (WHERE consumption.day = (SELECT day FROM today)), 0)::float8 AS last_quantity,
+                COALESCE(SUM(consumption.spent)
+                  FILTER (WHERE consumption.day = (SELECT day FROM today)), 0)::float8 AS last_spent,
+                COALESCE(SUM(consumption.quantity), 0)::float8 AS month_quantity,
+                COALESCE(SUM(consumption.spent), 0)::float8 AS month_spent
+         FROM residence_consumption consumption
+         JOIN residential_buildings building ON building.id = consumption.building_id
+         WHERE building.city_id = $1
+           AND consumption.day > (SELECT day FROM today) - 30
+         GROUP BY consumption.product_id`,
+        [request.params.id],
+      );
+      const population = cityRows[0].population;
+      response.json({
+        products: rows.map((row) => ({
+          productId: row.product_id,
+          lastDayPerPerson: population > 0 ? row.last_quantity / population : 0,
+          monthPerPerson: population > 0 ? row.month_quantity / population / 30 : 0,
+          lastDayAveragePrice: row.last_quantity > 0 ? row.last_spent / row.last_quantity : null,
+          monthAveragePrice: row.month_quantity > 0 ? row.month_spent / row.month_quantity : null,
+        })),
+      });
+    })().catch((error: unknown) => {
+      console.error('Não foi possível consultar o consumo da cidade:', error);
+      response.status(503).json({ error: 'city_unavailable' });
+    });
   });
   app.post('/api/residential-buildings', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);

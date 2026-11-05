@@ -2,6 +2,7 @@ import { FormEvent } from 'react';
 import { X } from 'lucide-react';
 import { CityAssembly } from '../types/city';
 
+const money = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 interface CityAssemblyModalProps {
   city: CityAssembly | null;
   name: string;
@@ -14,6 +15,7 @@ interface CityAssemblyModalProps {
   onSave: () => void;
   onChooseLocation: () => void;
   onManageZones: () => void;
+  onOpenConsumption: () => void;
 }
 
 export default function CityAssemblyModal({
@@ -28,6 +30,7 @@ export default function CityAssemblyModal({
   onSave,
   onChooseLocation,
   onManageZones,
+  onOpenConsumption,
 }: CityAssemblyModalProps) {
   const canEditName = isMaster && (isCreating || city !== null);
   const nameChanged = city !== null && name.trim() !== city.name;
@@ -81,7 +84,16 @@ export default function CityAssemblyModal({
             <div><dt>POPULAÇÃO</dt><dd>{city?.population ?? 0}</dd></div>
             <div><dt>BEM-ESTAR</dt><dd>{city?.wellbeing ?? 0}</dd></div>
             <div><dt>ECONOMIA</dt><dd>{city?.economy ?? 0}</dd></div>
+            <div><dt>PESSOAS EMPREGADAS</dt><dd>{city?.employed ?? 0}</dd></div>
+            <div><dt>OFERTAS DE EMPREGO</dt><dd>{city?.jobOffers ?? 0}</dd></div>
+            <div><dt>SALÁRIO MÉDIO DIÁRIO</dt><dd>C$ {money.format(city?.averageWage ?? 0)}</dd></div>
           </dl>
+
+          {city && (
+            <button className="auth-submit city-consumption-button" type="button" onClick={onOpenConsumption}>
+              Consumo
+            </button>
+          )}
 
           {isMaster && (
             <button className="auth-submit" type="submit" disabled={isBusy}>

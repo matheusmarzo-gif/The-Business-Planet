@@ -159,8 +159,16 @@ das cidades legíveis em tamanho fixo na tela.
   Este mapeamento é uma regra compartilhada preparada para posicionamento
   futuro para as demais categorias; duas residências estão habilitadas conforme
   as regras abaixo.
-- Qualquer jogador pode consultar cidades autenticado; os dados demográficos e
-  econômicos são atualmente inicializados em zero.
+- Qualquer jogador autenticado pode consultar cidades. `getCities` calcula a
+  população, empregados nos estabelecimentos da cidade, vagas ainda abertas e
+  salário diário médio ponderado por empregados; bem-estar e economia são
+  inicializados em zero. As cidades são republicadas após mudanças diárias de
+  emprego/população.
+- O botão **Consumo** da Assembleia abre `GET /api/cities/:id/consumption`.
+  A rota agrega as compras das residências da cidade, divide as quantidades pela
+  população total para obter consumo por cidadão e calcula preço médio
+  ponderado por unidades compradas, no último dia e nos últimos 30 dias. O
+  painel reaproveita `ConsumptionPanel`.
 - Demolir uma Assembleia usa a propriedade `created_by`. Chaves estrangeiras
   removem estradas e residências municipais quando a respectiva cidade é
   apagada.
@@ -342,6 +350,9 @@ mapeamento e verificar todas as curvas.
   devolve por produto o consumo por pessoa no último dia e a média diária por
   pessoa nos últimos 30 dias, além do preço médio pago (dia e mês). O painel
   `ConsumptionPanel` abre pelo botão "Ver consumo da casa" (residências concluídas).
+  A rota da cidade agrega os mesmos registros para todas as casas municipais,
+  divide pelo total atual de moradores para obter a média diária por cidadão e
+  pondera os preços pelas unidades compradas.
 - Pesqueiro e Loja de Peixes (`fishery`, `shop_fish`): `src/types/fishing.ts`
   concentra as regras puras. O Pesqueiro (categoria Artesanais, `kind: 'fishery'`,
   2 × 2, 10 funcionários, estoque de 300 peixes e 10 Ferramentas) precisa de área
@@ -430,7 +441,8 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | --- | --- | --- |
 | `GET /api/health` | Público | Verifica conectividade com PostgreSQL e Redis. |
 | `GET /api/me` | Autenticado | Retorna se o usuário é master. |
-| `GET /api/cities` | Autenticado | Retorna cidades persistidas. |
+| `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
+| `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo médio por cidadão da cidade e preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira do usuário com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
 | `GET /api/residential-buildings/:id/warehouse-log` | Dono do armazém | Retorna `{ days: [{ day, workPoints }], events: [{ day, buildingType, productId, direction, wanted, moved, reason, errorDetail }] }` do armazém (tabela `warehouse_transport_log`, gravada às 00:00 na etapa de transporte, 30 dias; `reason` = `desired_reached`/`no_space`/`no_work_points`/`warehouse_empty` quando moveu menos que o desejado; erros internos registram etapa e detalhe em `errorDetail`). |
 | `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo) e estoque agregado; espaço ocupado é calculado no cliente. |

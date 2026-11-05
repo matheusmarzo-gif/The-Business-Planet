@@ -157,8 +157,11 @@ municipal incompatível. Clique para selecionar o centro. A Assembleia ocupa
 ocupa 303 × 303 tiles. Áreas municipais não podem se sobrepor nem ultrapassar
 os limites do mapa, e o servidor valida essas regras antes de salvar.
 Clique na Assembleia para consultar os dados da cidade; a conta master também
-pode editar o nome. O rótulo da cidade mantém tamanho legível mesmo ao mudar o
-zoom. População, bem-estar e economia começam em zero.
+pode editar o nome. O painel mostra população, pessoas empregadas, vagas de
+emprego ainda abertas e salário médio diário dos empregados. O botão **Consumo**
+abre o consumo médio por cidadão no último dia e nos últimos 30 dias, com o
+preço médio pago por produto. O rótulo da cidade mantém tamanho legível mesmo
+ao mudar o zoom. Bem-estar e economia começam em zero.
 Na janela da Assembleia, a conta master pode abrir **Configurar áreas urbanas
 e rurais** e arrastar no mapa para desenhar vários retângulos por tipo. Cada
 região precisa ficar dentro dos 303 × 303 tiles municipais e as áreas não
@@ -363,9 +366,12 @@ produção (800 pontos por dia = −20 %). **Replantar** durante o crescimento z
 o contador. Na colheita cada unidade custa 20 Work Points, limitados ao espaço
 livre do estoque (300; ligar a um armazém libera espaço); só depois de colher tudo é possível plantar de novo.
 
-**Consumo da casa:** em residências concluídas, **Ver consumo da casa** abre um
-painel com o consumo de arroz por pessoa no último dia e a média diária por
-pessoa no último mês, além do preço médio pago no dia e no mês.
+**Consumo:** em residências concluídas, **Ver consumo da casa** mostra o consumo
+por pessoa de arroz e peixe no último dia e a média diária por pessoa nos últimos
+30 dias, além do preço médio pago no dia e no mês. No painel da cidade, **Consumo**
+mostra esses mesmos dados agregados para todos os cidadãos: as quantidades
+compradas pelas residências da cidade são divididas pela população total, e os
+preços médios são ponderados pelas unidades compradas.
 
 Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.

@@ -19,6 +19,20 @@ export interface EmploymentWorkplace {
   desiredWorkers: number;
 }
 
+export interface EmploymentSummaryWorkplace {
+  type: ResidenceType;
+  wage: number;
+  desiredWorkers: number;
+  status: 'under_construction' | 'completed';
+  employed: number;
+}
+
+export interface EmploymentSummary {
+  employed: number;
+  jobOffers: number;
+  averageWage: number;
+}
+
 export interface JobAssignment {
   workplaceId: string;
   residenceId: string;
@@ -50,6 +64,31 @@ export function getWorkBenefit(openJobs: number, wage: number, hours: number): n
 
 export function getMaxDesiredWorkers(type: string): number {
   return getResidenceDefinition(type)?.maxWorkers ?? 0;
+}
+
+export function getEmploymentSummary(workplaces: EmploymentSummaryWorkplace[]): EmploymentSummary {
+  let employed = 0;
+  let jobOffers = 0;
+  let wageTotal = 0;
+
+  for (const workplace of workplaces) {
+    const definition = getResidenceDefinition(workplace.type);
+    if (!definition) continue;
+    if (definition.kind === 'residence' && workplace.status !== 'under_construction') continue;
+
+    const workplaceEmployees = Math.max(0, workplace.employed);
+    employed += workplaceEmployees;
+    wageTotal += workplaceEmployees * workplace.wage;
+
+    const desired = Math.min(workplace.desiredWorkers, definition.maxWorkers);
+    jobOffers += Math.max(0, desired - workplaceEmployees);
+  }
+
+  return {
+    employed,
+    jobOffers,
+    averageWage: employed > 0 ? wageTotal / employed : 0,
+  };
 }
 
 /**

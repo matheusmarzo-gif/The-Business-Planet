@@ -43,6 +43,9 @@ export interface CityAssembly {
   population: number;
   wellbeing: number;
   economy: number;
+  employed?: number;
+  jobOffers?: number;
+  averageWage?: number;
   zones: CityZone[];
 }
 

@@ -16,24 +16,33 @@ interface ConsumptionPanelProps {
   consumption: Map<string, ProductConsumption>;
   isLoading: boolean;
   error: string;
+  scope?: 'RESIDÊNCIA' | 'CIDADE';
+  title?: string;
   onClose: () => void;
 }
 
 const decimal = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 const price = (value: number | null) => (value === null ? '—' : formatMoney(value));
 
-export default function ConsumptionPanel({ consumption, isLoading, error, onClose }: ConsumptionPanelProps) {
+export default function ConsumptionPanel({
+  consumption,
+  isLoading,
+  error,
+  scope = 'RESIDÊNCIA',
+  title = 'Consumo da casa',
+  onClose,
+}: ConsumptionPanelProps) {
   return (
-    <section className="warehouse-panel" aria-label="Consumo da residência">
+    <section className="warehouse-panel" aria-label={`Consumo ${scope.toLocaleLowerCase('pt-BR')}`}>
       <div className="panel-title">
-        <div className="eyebrow">RESIDÊNCIA</div>
-        <h1>Consumo da casa</h1>
+        <div className="eyebrow">{scope}</div>
+        <h1>{title}</h1>
         <button type="button" className="panel-close" aria-label="Fechar consumo" onClick={onClose}>
           ×
         </button>
       </div>
       <p className="warehouse-summary">
-        Consumo por pessoa por dia. A média do último mês considera os últimos 30 dias de jogo.
+        Consumo médio por pessoa por dia. A média considera os últimos 30 dias de jogo.
         {isLoading && ' Carregando…'}
       </p>
       {error && <p role="alert" className="warehouse-error">{error}</p>}

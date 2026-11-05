@@ -672,23 +672,39 @@ async function runDailyEmployment(): Promise<boolean> {
         { shopType: 'shop_rice', productId: 'rice' },
         { shopType: 'shop_fish', productId: 'fish' },
       ] as const) {
+      const { rows: previousSalesRows } = await client.query<{
+        building_id: string;
+        units_sold: number;
+        sale_price: number;
+      }>(
+        `SELECT history.building_id, history.units_sold, history.sale_price
+         FROM commerce_history history
+         JOIN residential_buildings shop ON shop.id = history.building_id
+         WHERE history.day = $1::date - 1 AND shop.building_type = $2`,
+        [state.day, shopType],
+      );
+      const previousSales = new Map(previousSalesRows.map((row) => [row.building_id, row]));
       const shops = workplaces
         .filter((row) => row.status === 'completed' && row.building_type === shopType)
-        .map((row) => ({
-          id: row.id,
-          cityId: row.city_id,
-          type: row.building_type,
-          x: row.tile_x,
-          y: row.tile_y,
-          price: row.price,
-          stock: row.stock,
-          wage: row.wage,
-          workers: workers.get(row.id) ?? 0,
-          capacity: getShopSalesCapacity(
-            (workers.get(row.id) ?? 0) *
-              getDailyWorkPoints(row.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness),
-          ),
-        }));
+        .map((row) => {
+          const previousSalesForShop = previousSales.get(row.id);
+          return {
+            id: row.id,
+            type: row.building_type,
+            x: row.tile_x,
+            y: row.tile_y,
+            price: row.price,
+            unitsSoldLastDay: previousSalesForShop?.units_sold ?? 0,
+            lastDaySalePrice: previousSalesForShop?.sale_price ?? row.price,
+            stock: row.stock,
+            wage: row.wage,
+            workers: workers.get(row.id) ?? 0,
+            capacity: getShopSalesCapacity(
+              (workers.get(row.id) ?? 0) *
+                getDailyWorkPoints(row.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness),
+            ),
+          };
+        });
       const homes = workplaces
         .filter(
           (row) =>
@@ -698,7 +714,6 @@ async function runDailyEmployment(): Promise<boolean> {
         )
         .map((row) => ({
           id: row.id,
-          cityId: row.city_id,
           type: row.building_type,
           x: row.tile_x,
           y: row.tile_y,

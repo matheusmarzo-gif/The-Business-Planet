@@ -320,15 +320,17 @@ necessário. Saúde e felicidade ainda são fixas em 100.
 Na **Loja de Arroz**, o dono define o preço do arroz (C$ 1 ou mais). Às 00:00 cada
 100 Work Points gerados pelos funcionários no dia somam 5 unidades de capacidade
 de venda. As residências compram primeiro das lojas em até 60 tiles com maior
-benefício: `((Sm − Vma)/Vlocal)³ × (60/(distância + 60))`, usando a distância
-entre os centros da loja e da residência. A quantidade desejada é
-`moradores × 0,03 × max(0,125, min(4, preço médio do produto na cidade / preço
-da loja melhor classificada))`; a parte fracionária é a chance de comprar uma
-unidade adicional. A média da cidade considera todas as lojas daquele produto
-na cidade; se não houver nenhuma, usa-se a média das lojas próximas. As vendas
-continuam limitadas pela capacidade diária e estoque disponível, e o dono recebe
-o valor da venda. A loja só vende o estoque que tiver (começa em 0; pode ser
-abastecida por um armazém ligado). O painel mostra funcionários atuais,
+benefício. A média efetiva da área é calculada com as vendas do dia anterior,
+ponderando o preço praticado em cada loja pelas unidades vendidas. Para cada
+loja, calcula-se `quantidade desejada = moradores × 0,03 × max(0,125, min(4,
+média efetiva da área / preço local))`; o benefício é
+`((renda média por morador − preço local × quantidade desejada) / preço local)³
+× (60 / (distância + 60))`, com distância entre centros. A parte fracionária da
+quantidade é a chance de comprar uma unidade adicional. Se não houve vendas na
+área no dia anterior, usa-se a média simples dos preços atuais das lojas
+próximas. As vendas continuam limitadas pela capacidade diária e estoque
+disponível, e o dono recebe o valor da venda. A loja só vende o estoque que
+tiver (começa em 0; pode ser abastecida por um armazém ligado). O painel mostra funcionários atuais,
 desejados e vagas; nas residências, as pessoas empregadas. Nos painéis de
 construções produtivas, uma descrição antes
 dos dados de funcionários resume os Work Points e os insumos usados por unidade

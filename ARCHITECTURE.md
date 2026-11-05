@@ -318,16 +318,18 @@ mapeamento e verificar todas as curvas.
   armazém ligado do mesmo dono. No job das 00:00 a capacidade de venda do dia é
   `floor(WP gerados no dia / 100) · 5`
   (WP = empregados × `getDailyWorkPoints`). `planRiceSales` percorre as
-  residências por id: `Vma` = preço médio das lojas do produto em 60 tiles,
-  `Sm` = salário médio por morador (soma dos salários dos empregados / ocupantes),
-  benefício `((Sm − Vma)/Vlocal)³ · (60/(distância + 60))`, em que a distância
-  é entre os centros da residência e da loja, e quantidade
-  `ocupantes · 0,03 · max(0,125, min(4, preço médio do produto na cidade / Vlocal))`
-  (a parte fracionária é a chance de +1 unidade). A média da cidade inclui
-  todas as lojas do produto naquela cidade; se ela não tiver lojas desse tipo,
-  usa-se a média local disponível. Compra-se da loja de maior benefício para a
-  menor, limitada por capacidade e estoque. O dono recebe `quantidade × preço`;
-  moradores não são cobrados.
+  residências por id: `Vma` = preço médio efetivamente pago nas lojas do produto
+  em 60 tiles no dia anterior (`Σ(unidades vendidas × preço praticado) /
+  Σ(unidades vendidas)`); `Sm` = salário médio por morador (soma dos salários
+  dos empregados / ocupantes). Para cada loja local, a quantidade desejada é
+  `ocupantes · 0,03 · max(0,125, min(4, Vma / Vlocal))` (a parte fracionária é a
+  chance de +1 unidade) e o benefício é
+  `((Sm − Vlocal · quantidade desejada)/Vlocal)³ · (60/(distância + 60))`;
+  distância entre centros. Se não houve vendas na área no dia anterior, `Vma`
+  usa a média simples dos preços atuais das lojas próximas. A residência tenta
+  comprar a demanda arredondada probabilisticamente da loja de maior benefício
+  para a menor, limitada por capacidade e estoque. O dono recebe
+  `quantidade × preço`; moradores não são cobrados.
   `employed` em `ResidentialBuilding` é calculado por subquery em
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
   Para cada loja concluída, o job registra em `commerce_history` o salário dos

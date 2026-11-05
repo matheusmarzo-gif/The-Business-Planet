@@ -317,17 +317,17 @@ describe('warehouse logistics', () => {
 describe('rice sales', () => {
   const shop = (id: string, x: number, price: number, stock: number, capacity: number) => ({
     id,
-    cityId: 'city-a',
     type: 'shop_rice' as const,
     x,
     y: 0,
     price,
+    unitsSoldLastDay: 0,
+    lastDaySalePrice: price,
     stock,
     capacity,
   });
   const home = (id: string, x: number, occupants: number, averageIncome: number) => ({
     id,
-    cityId: 'city-a',
     type: 'house_poor1' as const,
     x,
     y: 0,
@@ -361,6 +361,7 @@ describe('rice sales', () => {
     assert.equal(parsePrice({ price: 12 }), 12);
     assert.equal(getPurchaseBenefit(30, 10, 10), 8);
     assert.equal(getPurchaseBenefit(30, 10, 10, 60), 4);
+    assert.equal(getPurchaseBenefit(30, 10, 10, 0, 2), 1);
     // O fator de preço fica limitado a 0,125 e 4 antes do arredondamento probabilístico.
     assert.equal(getPurchaseQuantity(10, 1000, 1, () => 0.1), 2);
     assert.equal(getPurchaseQuantity(10, 1000, 1, () => 0.5), 1);
@@ -376,7 +377,7 @@ describe('rice sales', () => {
       [shop('cheap', 0, 5, 100, 4), shop('dear', 4, 20, 100, 100), shop('empty', 8, 1, 0, 100)],
       () => 0,
     );
-    // Vma = (5+20+1)/3; "cheap" tem o maior benefício, mas só vende 4 (capacidade); o resto vem de "dear".
+    // Sem vendas no dia anterior, usa a média simples dos preços atuais da área.
     assert.deepEqual(purchases, [
       { shopId: 'cheap', residenceId: 'a', quantity: 4 },
       { shopId: 'dear', residenceId: 'a', quantity: purchases[1].quantity },
@@ -385,14 +386,23 @@ describe('rice sales', () => {
     assert.equal(purchases.some((purchase) => purchase.residenceId === 'far'), false);
   });
 
-  it('uses the city-wide product average to calculate demand', () => {
-    const distantCityShop = { ...shop('distant', 1000, 30, 100, 100) };
+  it('uses yesterday weighted sales price only within the residence area', () => {
+    const distantShop = {
+      ...shop('distant', 1000, 100, 100, 100),
+      unitsSoldLastDay: 100,
+      lastDaySalePrice: 100,
+    };
     const purchases = planRiceSales(
       [home('a', 10, 100, 50)],
-      [shop('near', 0, 10, 100, 100), distantCityShop],
+      [
+        { ...shop('near', 0, 10, 100, 100), unitsSoldLastDay: 9, lastDaySalePrice: 10 },
+        { ...shop('also-near', 4, 20, 100, 100), unitsSoldLastDay: 1, lastDaySalePrice: 20 },
+        distantShop,
+      ],
       () => 0,
     );
-    assert.deepEqual(purchases, [{ shopId: 'near', residenceId: 'a', quantity: 6 }]);
+    // Média efetiva na área = (9*10 + 1*20) / 10 = 11; demanda da loja de C$ 10 = 3,3.
+    assert.deepEqual(purchases, [{ shopId: 'near', residenceId: 'a', quantity: 4 }]);
   });
 });
 

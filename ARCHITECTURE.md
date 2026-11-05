@@ -19,10 +19,10 @@ oferece a Assembleia e a Estrada de Terra. A conta master pode dividir cada
 área municipal em regiões urbanas e rurais persistentes. Duas residências
 podem ser colocadas em áreas urbanas ao lado de estradas; elas ficam em
 construção até a master concluí-las instantaneamente. O jogo também possui um
-catálogo estático de produtos com atributos padrão; estoques, produção e
-deterioração ainda não estão implementados. População, bem-estar e economia
-são dados da cidade, mas ainda não existe simulação econômica ou de crescimento
-que os altere.
+catálogo de produtos, estoques persistentes e produção para as construções
+habilitadas; estoques perecíveis sofrem deterioração diária conforme a validade.
+População, bem-estar e economia são dados da cidade, mas ainda não existe
+simulação econômica ou de crescimento que os altere.
 
 ## Estrutura do repositório
 
@@ -206,9 +206,8 @@ reimplemente as fórmulas separadamente no React e no servidor.
   e usa o ícone correspondente em `public/products/`.
 - A lista contém os produtos especificados pelo usuário. Ícones adicionais sem
   atributos não são tratados como produtos.
-- Esta etapa é somente o catálogo: não há estoque persistido nem deterioração
-  diária às 06h. A validade está disponível como dado de produto para essa
-  implementação futura; variações de validade por método de fabricação ainda
+- O catálogo também fornece os parâmetros usados pela deterioração diária dos
+  estoques persistidos; variações de validade por método de fabricação ainda
   não são modeladas.
 
 As regras, o caminho ortogonal e o mapeamento de imagens estão em
@@ -395,14 +394,13 @@ mapeamento e verificar todas as curvas.
   retiradas decrementam apenas uma linha existente com saldo suficiente, sem
   tentar inserir estoque negativo. O que não couber não é transportado, e a
   produção para o armazém tem prioridade sobre o abastecimento.
-- Validade de estoques: cada entrada perecível gera um lote em
-  `inventory_batches (building_id, product_id, quantity, received_day)`.
-  Produção, vendas e transporte atualizam os lotes, preservando a data de
-  recebimento quando mercadorias mudam de construção. Às 18:00 do dia do jogo,
-  `spoilExpiredInventory` remove lotes cuja idade em dias alcançou
-  `PRODUCTS.shelfLifeDays` e reduz o estoque agregado do armazém ou construção.
-  `world_state.last_spoilage_day` garante execução única por dia; estoques
-  existentes no primeiro deploy são inicializados com a data atual do mundo.
+- Validade de estoques: não há lotes nem datas de entrada. Às 18:00 do dia do
+  jogo, `applyDailySpoilage` calcula para cada estoque perecível a perda
+  esperada `quantidade / PRODUCTS.shelfLifeDays`; a parte inteira é removida
+  sempre e a fração arredondada estocasticamente para uma unidade. A rotina
+  atualiza estoque agregado de construções e armazéns, e
+  `world_state.last_spoilage_day` garante execução única por dia. Estoques
+  iniciam a mesma regra imediatamente, sem backfill.
 
 ## API HTTP
 

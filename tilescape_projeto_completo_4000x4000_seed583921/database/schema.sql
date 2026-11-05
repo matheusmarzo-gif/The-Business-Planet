@@ -136,19 +136,6 @@ CREATE TABLE IF NOT EXISTS warehouse_stock (
   PRIMARY KEY (building_id, product_id)
 );
 
-CREATE TABLE IF NOT EXISTS inventory_batches (
-  id BIGSERIAL PRIMARY KEY,
-  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
-  product_id TEXT NOT NULL,
-  quantity INTEGER NOT NULL CHECK (quantity > 0),
-  received_day DATE NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS inventory_batches_fifo_idx
-  ON inventory_batches (building_id, product_id, received_day, id);
-CREATE INDEX IF NOT EXISTS inventory_batches_expiry_idx
-  ON inventory_batches (product_id, received_day);
-
 CREATE TABLE IF NOT EXISTS warehouse_demand (
   building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
   day DATE NOT NULL,

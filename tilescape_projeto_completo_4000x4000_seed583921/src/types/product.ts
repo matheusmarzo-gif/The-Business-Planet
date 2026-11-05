@@ -77,11 +77,19 @@ export function formatShelfLife(days: number | null): string {
   return `${days} ${days === 1 ? 'dia' : 'dias'}`;
 }
 
-export function isProductExpired(productId: string, receivedDay: string, currentDay: string): boolean {
-  const shelfLifeDays = PRODUCTS.find((item) => item.id === productId)?.shelfLifeDays;
-  if (shelfLifeDays === null || shelfLifeDays === undefined) return false;
+export function planDailySpoilage(
+  quantity: number,
+  shelfLifeDays: number,
+  random: () => number = Math.random,
+): number {
+  if (!Number.isInteger(quantity) || quantity <= 0) return 0;
+  if (!Number.isFinite(shelfLifeDays) || shelfLifeDays <= 0) {
+    throw new RangeError('A validade precisa ser um número positivo de dias.');
+  }
 
-  const received = Date.parse(`${receivedDay}T00:00:00Z`);
-  const current = Date.parse(`${currentDay}T00:00:00Z`);
-  return Number.isFinite(received) && Number.isFinite(current) && current - received >= shelfLifeDays * 86_400_000;
+  const expectedLoss = quantity / shelfLifeDays;
+  const wholeLoss = Math.floor(expectedLoss);
+  const fractionalLoss = expectedLoss - wholeLoss;
+  const randomLoss = fractionalLoss > 0 && random() < fractionalLoss ? 1 : 0;
+  return Math.min(quantity, wholeLoss + randomLoss);
 }

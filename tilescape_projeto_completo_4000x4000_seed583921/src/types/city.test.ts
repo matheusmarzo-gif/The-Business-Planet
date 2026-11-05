@@ -46,7 +46,7 @@ import {
   type Crop,
 } from './farming';
 import { parseWarehouseSetting } from './warehouse';
-import { isProductExpired } from './product';
+import { planDailySpoilage } from './product';
 
 const city = { centerX: 1000, centerY: 1000 };
 
@@ -846,11 +846,12 @@ describe('hist�rico de transporte do armaz�m', () => {
 });
 
 describe('validade dos produtos', () => {
-  it('expira no fim do dia após a validade em dias de jogo', () => {
-    assert.equal(isProductExpired('fish', '1100-01-01', '1100-01-02'), false);
-    assert.equal(isProductExpired('fish', '1100-01-01', '1100-01-03'), true);
-    assert.equal(isProductExpired('rice', '1100-01-01', '1101-12-31'), false);
-    assert.equal(isProductExpired('rice', '1100-01-01', '1102-01-01'), true);
-    assert.equal(isProductExpired('wood', '1100-01-01', '1200-01-01'), false);
+  it('perde a fração diária do estoque e sorteia unidades indivisíveis', () => {
+    assert.equal(planDailySpoilage(10, 10, () => 0.99), 1);
+    assert.equal(planDailySpoilage(10, 100, () => 0.05), 1);
+    assert.equal(planDailySpoilage(10, 100, () => 0.5), 0);
+    assert.equal(planDailySpoilage(200, 100, () => 0.99), 2);
+    assert.equal(planDailySpoilage(10, 1, () => 0.99), 10);
+    assert.equal(planDailySpoilage(0, 10, () => 0), 0);
   });
 });

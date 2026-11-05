@@ -58,7 +58,7 @@ import {
   type Crop,
 } from '../src/types/farming.js';
 import { parseWarehouseSetting } from '../src/types/warehouse.js';
-import { isProductExpired, PRODUCTS } from '../src/types/product.js';
+import { planDailySpoilage, PRODUCTS, type ProductDefinition } from '../src/types/product.js';
 import {
   allocateImmigrants,
   getCityPopulation,
@@ -198,204 +198,68 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
   };
 }
 
-async function ensureInventoryBatchCoverage(
-  client: PoolClient,
-  buildingId: string,
-  productId: string,
-  stockQuantity: number,
-  receivedDay: string,
-) {
-  const product = PRODUCTS.find((item) => item.id === productId);
-  if (!product?.shelfLifeDays || stockQuantity <= 0) return;
-  const { rows } = await client.query<{ quantity: number }>(
-    `SELECT COALESCE(SUM(quantity), 0)::int AS quantity
-     FROM inventory_batches WHERE building_id = $1 AND product_id = $2`,
-    [buildingId, productId],
-  );
-  const missing = stockQuantity - rows[0].quantity;
-  if (missing > 0) {
-    await client.query(
-      `INSERT INTO inventory_batches (building_id, product_id, quantity, received_day)
-       VALUES ($1, $2, $3, $4::date)`,
-      [buildingId, productId, missing, receivedDay],
-    );
-  }
-}
-
-async function addInventoryBatch(
-  client: PoolClient,
-  buildingId: string,
-  productId: string,
-  quantity: number,
-  receivedDay: string,
-) {
-  if (quantity <= 0 || !PRODUCTS.find((item) => item.id === productId)?.shelfLifeDays) return;
-  await client.query(
-    `INSERT INTO inventory_batches (building_id, product_id, quantity, received_day)
-     VALUES ($1, $2, $3, $4::date)`,
-    [buildingId, productId, quantity, receivedDay],
-  );
-}
-
-async function moveInventoryBatches(
-  client: PoolClient,
-  sourceId: string,
-  targetId: string | null,
-  productId: string,
-  quantity: number,
-  sourceQuantity: number,
-  currentDay: string,
-) {
-  if (quantity <= 0 || !PRODUCTS.find((item) => item.id === productId)?.shelfLifeDays) return;
-  await ensureInventoryBatchCoverage(client, sourceId, productId, sourceQuantity, currentDay);
-  const { rows } = await client.query<{
-    id: string;
-    quantity: number;
-    received_day: string;
-  }>(
-    `SELECT id::text, quantity, to_char(received_day, 'YYYY-MM-DD') AS received_day
-     FROM inventory_batches
-     WHERE building_id = $1 AND product_id = $2 AND quantity > 0
-     ORDER BY received_day, id
-     FOR UPDATE`,
-    [sourceId, productId],
-  );
-  let remaining = quantity;
-  for (const batch of rows) {
-    if (remaining <= 0) break;
-    const moved = Math.min(batch.quantity, remaining);
-    if (moved === batch.quantity) {
-      await client.query('DELETE FROM inventory_batches WHERE id = $1::bigint', [batch.id]);
-    } else {
-      await client.query('UPDATE inventory_batches SET quantity = quantity - $2 WHERE id = $1::bigint', [
-        batch.id,
-        moved,
-      ]);
-    }
-    if (targetId) {
-      await client.query(
-        `INSERT INTO inventory_batches (building_id, product_id, quantity, received_day)
-         VALUES ($1, $2, $3, $4::date)`,
-        [targetId, productId, moved, batch.received_day],
-      );
-    }
-    remaining -= moved;
-  }
-  if (remaining > 0) {
-    throw new Error(`Lotes insuficientes para mover ${quantity} unidades de ${productId} em ${sourceId}.`);
-  }
-}
-
-async function backfillPerishableInventory(receivedDay: string) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
-    const { rows: buildings } = await client.query<{
-      id: string;
-      building_type: ResidenceType;
-      stock: number;
-    }>(
-      `SELECT id, building_type, stock
-       FROM residential_buildings
-       WHERE stock > 0`,
-    );
-    for (const building of buildings) {
-      const productId = getResidenceDefinition(building.building_type)?.stockProductId;
-      if (productId) {
-        await ensureInventoryBatchCoverage(client, building.id, productId, building.stock, receivedDay);
-      }
-    }
-    const { rows: warehouseStock } = await client.query<{
-      building_id: string;
-      product_id: string;
-      quantity: number;
-    }>('SELECT building_id, product_id, quantity FROM warehouse_stock WHERE quantity > 0');
-    for (const item of warehouseStock) {
-      await ensureInventoryBatchCoverage(
-        client,
-        item.building_id,
-        item.product_id,
-        item.quantity,
-        receivedDay,
-      );
-    }
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
-      console.error('Não foi possível reverter a inicialização dos lotes de estoque:', rollbackError);
-    });
-    throw error;
-  } finally {
-    client.release();
-  }
-}
-
-async function spoilExpiredInventory(client: PoolClient, currentDay: string): Promise<boolean> {
+async function applyDailySpoilage(client: PoolClient): Promise<boolean> {
   const perishableProducts = PRODUCTS.filter(
-    (product): product is typeof product & { shelfLifeDays: number } => product.shelfLifeDays !== null,
+    (product): product is ProductDefinition & { shelfLifeDays: number } => product.shelfLifeDays !== null,
   );
-  const { rows } = await client.query<{
+  const shelfLifeByProduct = new Map(
+    perishableProducts.map((product) => [product.id, product.shelfLifeDays]),
+  );
+  const perishableBuildingTypes = Object.entries(RESIDENCES)
+    .filter(([_, definition]) => {
+      const productId = definition.stockProductId;
+      return productId !== undefined && shelfLifeByProduct.has(productId);
+    })
+    .map(([type]) => type);
+  let changed = false;
+
+  const { rows: buildingStocks } = await client.query<{
     id: string;
-    building_id: string;
     building_type: ResidenceType;
+    stock: number;
+  }>(
+    `SELECT id, building_type, stock
+     FROM residential_buildings
+     WHERE building_type = ANY($1::text[]) AND stock > 0
+     FOR UPDATE`,
+    [perishableBuildingTypes],
+  );
+  for (const building of buildingStocks) {
+    const productId = getResidenceDefinition(building.building_type)?.stockProductId;
+    const shelfLifeDays = productId ? shelfLifeByProduct.get(productId) : undefined;
+    if (!productId || shelfLifeDays === undefined) continue;
+    const quantity = planDailySpoilage(building.stock, shelfLifeDays);
+    if (quantity === 0) continue;
+    await client.query('UPDATE residential_buildings SET stock = stock - $2 WHERE id = $1', [
+      building.id,
+      quantity,
+    ]);
+    changed = true;
+  }
+
+  const { rows: warehouseStocks } = await client.query<{
+    building_id: string;
     product_id: string;
     quantity: number;
-    received_day: string;
   }>(
-    `SELECT batches.id::text, batches.building_id, buildings.building_type, batches.product_id,
-            batches.quantity, to_char(batches.received_day, 'YYYY-MM-DD') AS received_day
-     FROM inventory_batches AS batches
-     JOIN residential_buildings AS buildings ON buildings.id = batches.building_id
-     JOIN unnest($1::text[], $2::int[]) AS validity(product_id, shelf_life_days)
-       ON validity.product_id = batches.product_id
-     WHERE batches.received_day <= $3::date - validity.shelf_life_days
-     ORDER BY batches.building_id, batches.product_id, batches.received_day, batches.id
-     FOR UPDATE OF batches`,
-    [perishableProducts.map((product) => product.id), perishableProducts.map((product) => product.shelfLifeDays), currentDay],
+    `SELECT building_id, product_id, quantity
+     FROM warehouse_stock
+     WHERE quantity > 0 AND product_id = ANY($1::text[])
+     FOR UPDATE`,
+    [perishableProducts.map((product) => product.id)],
   );
-  const expired = rows.filter((batch) =>
-    isProductExpired(batch.product_id, batch.received_day, currentDay),
-  );
-  if (expired.length === 0) return false;
-
-  await client.query('DELETE FROM inventory_batches WHERE id = ANY($1::bigint[])', [
-    expired.map((batch) => batch.id),
-  ]);
-  const byStock = new Map<string, { buildingId: string; type: ResidenceType; productId: string; quantity: number }>();
-  for (const batch of expired) {
-    const key = `${batch.building_id}|${batch.product_id}`;
-    const item = byStock.get(key) ?? {
-      buildingId: batch.building_id,
-      type: batch.building_type,
-      productId: batch.product_id,
-      quantity: 0,
-    };
-    item.quantity += batch.quantity;
-    byStock.set(key, item);
+  for (const stock of warehouseStocks) {
+    const shelfLifeDays = shelfLifeByProduct.get(stock.product_id);
+    if (shelfLifeDays === undefined) continue;
+    const quantity = planDailySpoilage(stock.quantity, shelfLifeDays);
+    if (quantity === 0) continue;
+    await client.query(
+      'UPDATE warehouse_stock SET quantity = quantity - $3 WHERE building_id = $1 AND product_id = $2',
+      [stock.building_id, stock.product_id, quantity],
+    );
+    changed = true;
   }
-
-  for (const item of byStock.values()) {
-    const result =
-      item.type === 'warehouse'
-        ? await client.query(
-            `UPDATE warehouse_stock SET quantity = quantity - $3
-             WHERE building_id = $1 AND product_id = $2 AND quantity >= $3`,
-            [item.buildingId, item.productId, item.quantity],
-          )
-        : getResidenceDefinition(item.type)?.stockProductId === item.productId
-          ? await client.query(
-              'UPDATE residential_buildings SET stock = stock - $2 WHERE id = $1 AND stock >= $2',
-              [item.buildingId, item.quantity],
-            )
-          : null;
-    if (!result || result.rowCount !== 1) {
-      throw new Error(
-        `Estoque agregado não corresponde aos lotes vencidos: ${item.buildingId}/${item.productId} (${item.quantity}).`,
-      );
-    }
-  }
-  return true;
+  return changed;
 }
 
 const authenticatedUserIds = new WeakMap<express.Request, string>();
@@ -819,7 +683,6 @@ async function runDailyEmployment(): Promise<boolean> {
         const quantity = sold.get(shop.id) ?? 0;
         if (quantity <= 0) continue;
         const owner = workplaces.find((row) => row.id === shop.id)?.created_by;
-        await moveInventoryBatches(client, shop.id, null, productId, quantity, shop.stock, state.day);
         await client.query('UPDATE residential_buildings SET stock = stock - $2 WHERE id = $1', [
           shop.id,
           quantity,
@@ -890,9 +753,6 @@ async function runDailyEmployment(): Promise<boolean> {
             result.ironUsed,
           ],
         );
-        if (definition.stockProductId) {
-          await addInventoryBatch(client, site.id, definition.stockProductId, result.units, state.day);
-        }
         changed = true;
         await logProduction(client, site.id, state.day, {
           workPoints: generatedPoints,
@@ -957,7 +817,6 @@ async function runDailyEmployment(): Promise<boolean> {
              WHERE id = $1`,
             [farm.id, units, done],
           );
-          await addInventoryBatch(client, farm.id, 'rice', units, state.day);
         }
         await logProduction(client, farm.id, state.day, {
           workPoints: farmPoints,
@@ -1027,7 +886,6 @@ async function runDailyEmployment(): Promise<boolean> {
           [warehouse.id],
         );
         const types = new Map(linked.map((row) => [row.id, row.building_type]));
-        const warehouseBatchStock = new Map(stockRows.map((row) => [row.product_id, row.quantity]));
         transportPhase = 'planning_transfers';
         const { transfers, attempts } = planTransfersDetailed(
           {
@@ -1077,21 +935,6 @@ async function runDailyEmployment(): Promise<boolean> {
         }
         transportPhase = 'applying_transfers';
         for (const transfer of transfers) {
-          const localStock = linked.find((row) => row.id === transfer.buildingId)?.stock ?? 0;
-          const availableInWarehouse = warehouseBatchStock.get(transfer.productId) ?? 0;
-          await moveInventoryBatches(
-            client,
-            transfer.direction === 'out' ? transfer.buildingId : warehouse.id,
-            transfer.direction === 'out' ? warehouse.id : transfer.buildingId,
-            transfer.productId,
-            transfer.quantity,
-            transfer.direction === 'out' ? localStock : availableInWarehouse,
-            state.day,
-          );
-          warehouseBatchStock.set(
-            transfer.productId,
-            availableInWarehouse + (transfer.direction === 'out' ? transfer.quantity : -transfer.quantity),
-          );
           if (transfer.direction === 'out') {
             await client.query(
               `INSERT INTO warehouse_stock (building_id, product_id, quantity) VALUES ($1, $2, $3)
@@ -1185,7 +1028,7 @@ async function runDailyEmployment(): Promise<boolean> {
     if (state.hour >= 18 && (state.last_spoilage === null || state.last_spoilage < state.day)) {
       await client.query('SAVEPOINT inventory_spoilage');
       try {
-        const spoiled = await spoilExpiredInventory(client, state.day);
+        const spoiled = await applyDailySpoilage(client);
         await client.query('UPDATE world_state SET last_spoilage_day = $1::date WHERE id = 1', [state.day]);
         await client.query('RELEASE SAVEPOINT inventory_spoilage');
         if (spoiled) changed = true;
@@ -1244,9 +1087,6 @@ async function runDailyEmployment(): Promise<boolean> {
       const { rows: stockRows } = await client.query<{ building_id: string; product_id: string; quantity: number }>(
         'SELECT building_id, product_id, quantity FROM warehouse_stock',
       );
-      const tradeBatchStock = new Map(
-        stockRows.map((row) => [`${row.building_id}|${row.product_id}`, row.quantity]),
-      );
       const { rows: settingRows } = await client.query<{
         building_id: string;
         product_id: string;
@@ -1284,20 +1124,6 @@ async function runDailyEmployment(): Promise<boolean> {
       const ownerOf = new Map(warehouseRows.map((row) => [row.id, row.created_by]));
       for (const trade of planWarehouseTrades(tradeWarehouses)) {
         const cost = trade.quantity * trade.price;
-        const sellerKey = `${trade.sellerId}|${trade.productId}`;
-        const buyerKey = `${trade.buyerId}|${trade.productId}`;
-        const sellerStock = tradeBatchStock.get(sellerKey) ?? 0;
-        await moveInventoryBatches(
-          client,
-          trade.sellerId,
-          trade.buyerId,
-          trade.productId,
-          trade.quantity,
-          sellerStock,
-          state.day,
-        );
-        tradeBatchStock.set(sellerKey, sellerStock - trade.quantity);
-        tradeBatchStock.set(buyerKey, (tradeBatchStock.get(buyerKey) ?? 0) + trade.quantity);
         await client.query(
           'UPDATE warehouse_stock SET quantity = quantity - $3 WHERE building_id = $1 AND product_id = $2',
           [trade.sellerId, trade.productId, trade.quantity],
@@ -1943,13 +1769,6 @@ async function start() {
      VALUES (1, TIMESTAMPTZ '1100-01-01 06:00:00+00', clock_timestamp())
      ON CONFLICT (id) DO NOTHING`,
   );
-  const { rows: worldRows } = await pool.query<{ day: string }>(
-    `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
-     FROM world_state WHERE id = 1`,
-  );
-  if (!worldRows[0]) throw new Error('O relógio persistente do mundo não foi inicializado.');
-  await backfillPerishableInventory(worldRows[0].day);
-
   await Promise.all([
     subscriber.subscribe(SNAPSHOT_CHANNEL, (message) => broadcast(message)),
     subscriber.subscribe(CITIES_CHANNEL, (message) => broadcast(message)),

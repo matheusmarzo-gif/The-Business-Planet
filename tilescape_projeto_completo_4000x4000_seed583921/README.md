@@ -358,9 +358,10 @@ pessoa no último mês, além do preço médio pago no dia e no mês.
 Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.
 Validades informadas em anos são convertidas para dias considerando 365 dias
-por ano; produtos sem deterioração aparecem com validade infinita. Por enquanto,
-o catálogo é informativo: estoques e perda diária às 6h ainda não estão
-habilitados. Produtos cujos atributos ainda não foram definidos não aparecem.
+por ano; produtos sem deterioração aparecem com validade infinita. A validade
+também é usada para calcular a perda diária dos estoques às 18:00, conforme
+descrito em **Validade e espaço de armazenamento**. Produtos cujos atributos
+ainda não foram definidos não aparecem.
 
 ## Sobre o jogo
 
@@ -387,4 +388,4 @@ A conta Master vê o botão **Master** na barra superior. O painel permite mudar
 Fazendas, recursos e construções artesanais concluídas têm o botão **Histórico de produção**, com os últimos 30 dias: Work Points gerados, unidades produzidas, unidades enviadas ao armazém e eficiência (penalidade de Ferramentas ou, nas fazendas, a relação entre os Work Points do dia e os 1.000 necessários).
 
 - **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque desejado atingido, sem espaço, Work Points insuficientes ou armazém sem estoque). Falhas internas são exibidas separadamente, com a etapa e a mensagem do erro.
-- **Validade e espaço de armazenamento:** produtos com validade são controlados por lotes, desde a produção ou entrada no estoque. Todos os estoques perecíveis vencem às 18:00 do dia do jogo em que completam a validade indicada no catálogo; ao vencer, as unidades são removidas do estoque da construção ou do armazém. Mercadorias transferidas preservam sua idade. Estoques que já existiam no deploy começam a contar a validade a partir da data atual do mundo. O espaço ocupado do armazém é calculado pelas quantidades atuais, atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o painel estiver aberto.
+- **Validade e espaço de armazenamento:** às 18:00 de cada dia do jogo, a perda esperada de cada produto perecível é `estoque atual / validade em dias`. A parte inteira é removida e a fração vira probabilidade de perder uma unidade adicional (por exemplo, 10 unidades com validade de 100 dias: 0,1 unidade/dia, ou 10% de chance de perder uma). Não há controle por lote ou data de entrada; produtos recém-adicionados seguem a mesma regra sobre o estoque agregado. A perda reduz estoques em construções e armazéns, e o espaço ocupado é atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o armazém está selecionado.

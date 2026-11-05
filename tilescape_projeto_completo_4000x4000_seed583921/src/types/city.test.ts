@@ -815,3 +815,20 @@ describe('comandos do master', () => {
     for (const grant of [0, -5, 1.5, 2_000_000_000, '10', NaN]) assert.equal(parseMasterGrant(grant), null);
   });
 });
+
+describe('histórico de transporte do armazém', () => {
+  it('explica por que a carga não foi transportada', async () => {
+    const { planTransfersDetailed } = await import('./logistics');
+    const link = [{ buildingId: 'a', type: 'fishery' as const, stock: 13, toolStock: 0 }];
+    const run = (desired: number, workPoints: number) =>
+      planTransfersDetailed(
+        { stock: new Map(), desired: new Map([['fish', desired]]), capacityM3: 50, workPoints },
+        link,
+      ).attempts[0];
+    assert.deepEqual(run(1000, 1000), { buildingId: 'a', productId: 'fish', direction: 'out', wanted: 13, moved: 13, reason: null });
+    assert.equal(run(1000, 0).reason, 'no_work_points');
+    assert.equal(run(1000, 0).moved, 0);
+    assert.equal(run(0, 1000).reason, 'desired_reached');
+    assert.equal(run(5, 1000).moved, 5);
+  });
+});

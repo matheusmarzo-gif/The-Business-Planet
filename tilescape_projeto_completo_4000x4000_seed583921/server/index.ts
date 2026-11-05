@@ -48,7 +48,7 @@ import {
   getTransportDemand,
   isWithinLinkRadius,
   parseWarehouseLink,
-  planTransfers,
+  planTransfersDetailed,
   planWarehouseTrades,
 } from '../src/types/logistics.js';
 import {
@@ -783,7 +783,6 @@ async function runDailyEmployment(): Promise<boolean> {
            WHERE warehouse_id = $1 AND status = 'completed'`,
           [warehouse.id],
         );
-        if (linked.length === 0) continue;
         const warehouseSite = workplaces.find((row) => row.id === warehouse.id);
         const workPoints =
           (workers.get(warehouse.id) ?? 0) *
@@ -792,6 +791,8 @@ async function runDailyEmployment(): Promise<boolean> {
             RESIDENCE_STATS.health,
             RESIDENCE_STATS.happiness,
           );
+        await logProduction(client, warehouse.id, state.day, { workPoints });
+        if (linked.length === 0) continue;
         const { rows: stockRows } = await client.query<{ product_id: string; quantity: number }>(
           'SELECT product_id, quantity FROM warehouse_stock WHERE building_id = $1',
           [warehouse.id],
@@ -801,7 +802,7 @@ async function runDailyEmployment(): Promise<boolean> {
           [warehouse.id],
         );
         const types = new Map(linked.map((row) => [row.id, row.building_type]));
-        const transfers = planTransfers(
+        const { transfers, attempts } = planTransfersDetailed(
           {
             stock: new Map(stockRows.map((row) => [row.product_id, row.quantity])),
             desired: new Map(desiredRows.map((row) => [row.product_id, row.desired_stock])),
@@ -817,10 +818,34 @@ async function runDailyEmployment(): Promise<boolean> {
             ironStock: row.iron_stock,
           })),
         );
-        if (transfers.length === 0 && linked.some((row) => row.stock > 0)) {
-          console.warn(
-            `Armazém ${warehouse.id}: nada transportado (Work Points do dia: ${workPoints}, funcionários: ${workers.get(warehouse.id) ?? 0}, ligados: ${linked.length}).`,
+        await client.query('SAVEPOINT transport_log');
+        try {
+          for (const attempt of attempts) {
+            await client.query(
+              `INSERT INTO warehouse_transport_log
+                 (warehouse_id, day, linked_id, linked_type, product_id, direction, wanted, moved, reason)
+               VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8, $9)`,
+              [
+                warehouse.id,
+                state.day,
+                attempt.buildingId,
+                types.get(attempt.buildingId) ?? '',
+                attempt.productId,
+                attempt.direction,
+                attempt.wanted,
+                attempt.moved,
+                attempt.reason,
+              ],
+            );
+          }
+          await client.query(
+            `DELETE FROM warehouse_transport_log WHERE warehouse_id = $1 AND day < $2::date - 30`,
+            [warehouse.id, state.day],
           );
+          await client.query('RELEASE SAVEPOINT transport_log');
+        } catch (logError) {
+          await client.query('ROLLBACK TO SAVEPOINT transport_log');
+          console.error('Não foi possível gravar o histórico do armazém:', logError);
         }
         for (const transfer of transfers) {
           const delta = transfer.direction === 'out' ? transfer.quantity : -transfer.quantity;
@@ -1762,6 +1787,50 @@ async function start() {
         console.error('Não foi possível consultar o dono da construção:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
+  });
+  app.get('/api/residential-buildings/:id/warehouse-log', requireAuth, (request, response) => {
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+    void (async () => {
+      const { rows: events } = await pool.query<{
+        day: string;
+        linked_type: string;
+        product_id: string;
+        direction: string;
+        wanted: number;
+        moved: number;
+        reason: string | null;
+      }>(
+        `SELECT to_char(day, 'YYYY-MM-DD') AS day, linked_type, product_id, direction, wanted, moved, reason
+         FROM warehouse_transport_log
+         WHERE warehouse_id = $1
+         ORDER BY day DESC, id ASC
+         LIMIT 300`,
+        [request.params.id],
+      );
+      const { rows: days } = await pool.query<{ day: string; work_points: number }>(
+        `SELECT to_char(day, 'YYYY-MM-DD') AS day, work_points
+         FROM production_history WHERE building_id = $1 ORDER BY day DESC LIMIT 30`,
+        [request.params.id],
+      );
+      response.json({
+        days: days.map((row) => ({ day: row.day, workPoints: row.work_points })),
+        events: events.map((row) => ({
+          day: row.day,
+          buildingType: row.linked_type,
+          productId: row.product_id,
+          direction: row.direction,
+          wanted: row.wanted,
+          moved: row.moved,
+          reason: row.reason,
+        })),
+      });
+    })().catch((error: unknown) => {
+      console.error('Não foi possível consultar o histórico do armazém:', error);
+      response.status(503).json({ error: 'residence_unavailable' });
+    });
   });
   app.get('/api/residential-buildings/:id/production-history', requireAuth, (request, response) => {
     if (!residenceIdPattern.test(request.params.id)) {

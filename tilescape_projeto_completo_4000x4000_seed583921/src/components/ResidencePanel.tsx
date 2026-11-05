@@ -30,6 +30,7 @@ interface ResidencePanelProps {
   onOpenWarehouse: () => void;
   onOpenConsumption: () => void;
   onOpenProductionHistory: () => void;
+  onOpenWarehouseLog: () => void;
   isLinking: boolean;
   onStartLink: () => void;
   onCancelLink: () => void;
@@ -54,6 +55,7 @@ export default function ResidencePanel({
   onOpenWarehouse,
   onOpenConsumption,
   onOpenProductionHistory,
+  onOpenWarehouseLog,
   isLinking,
   onStartLink,
   onCancelLink,
@@ -195,6 +197,11 @@ export default function ResidencePanel({
       {definition.kind === 'warehouse' && building.status === 'completed' && (
         <button type="button" className="warehouse-open" onClick={onOpenWarehouse}>
           Produtos e estoque
+        </button>
+      )}
+      {definition.kind === 'warehouse' && building.status === 'completed' && (
+        <button type="button" className="warehouse-open" onClick={onOpenWarehouseLog}>
+          Histórico do armazém
         </button>
       )}
       {building.type === 'farm_rice' && building.status === 'completed' && (

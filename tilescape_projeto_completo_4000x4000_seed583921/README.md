@@ -385,3 +385,5 @@ A conta Master vê o botão **Master** na barra superior. O painel permite mudar
 ## Histórico de produção
 
 Fazendas, recursos e construções artesanais concluídas têm o botão **Histórico de produção**, com os últimos 30 dias: Work Points gerados, unidades produzidas, unidades enviadas ao armazém e eficiência (penalidade de Ferramentas ou, nas fazendas, a relação entre os Work Points do dia e os 1.000 necessários).
+
+- **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque desejado atingido, sem espaço, Work Points insuficientes ou armazém sem estoque).

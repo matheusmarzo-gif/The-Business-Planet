@@ -14,6 +14,7 @@ import MasterPanel, { type OnlinePlayer } from './components/MasterPanel';
 import WarehousePanel from './components/WarehousePanel';
 import ConsumptionPanel, { type ProductConsumption } from './components/ConsumptionPanel';
 import ProductionHistoryPanel, { type ProductionDay } from './components/ProductionHistoryPanel';
+import WarehouseLogPanel, { type WarehouseLogDay, type WarehouseLogEvent } from './components/WarehouseLogPanel';
 import type { WarehouseDemand, WarehouseProductSetting } from './types/warehouse';
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
@@ -255,6 +256,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
   const [historyDays, setHistoryDays] = useState<ProductionDay[]>([]);
+  const [isWarehouseLogOpen, setIsWarehouseLogOpen] = useState(false);
+  const [isWarehouseLogLoading, setIsWarehouseLogLoading] = useState(false);
+  const [warehouseLogError, setWarehouseLogError] = useState('');
+  const [warehouseLogDays, setWarehouseLogDays] = useState<WarehouseLogDay[]>([]);
+  const [warehouseLogEvents, setWarehouseLogEvents] = useState<WarehouseLogEvent[]>([]);
   const [isConsumptionLoading, setIsConsumptionLoading] = useState(false);
   const [consumptionError, setConsumptionError] = useState('');
   const [consumption, setConsumption] = useState<Map<string, ProductConsumption>>(new Map());
@@ -421,7 +427,28 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setIsHistoryOpen(false);
     setHistoryError('');
     setHistoryDays([]);
+    setIsWarehouseLogOpen(false);
+    setWarehouseLogError('');
+    setWarehouseLogDays([]);
+    setWarehouseLogEvents([]);
   }, [selectedResidenceKey]);
+
+  const openWarehouseLog = async (buildingId: string) => {
+    setIsWarehouseLogOpen(true);
+    setIsWarehouseLogLoading(true);
+    setWarehouseLogError('');
+    try {
+      const result = await cityRequest<{ days: WarehouseLogDay[]; events: WarehouseLogEvent[] }>(
+        `/api/residential-buildings/${buildingId}/warehouse-log`,
+      );
+      setWarehouseLogDays(result.days);
+      setWarehouseLogEvents(result.events);
+    } catch (error) {
+      setWarehouseLogError(error instanceof Error ? error.message : 'Não foi possível carregar o histórico.');
+    } finally {
+      setIsWarehouseLogLoading(false);
+    }
+  };
 
   const openProductionHistory = async (buildingId: string) => {
     setIsHistoryOpen(true);
@@ -1168,6 +1195,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onOpenWarehouse={() => void openWarehouse(selectedResidence.id)}
             onOpenConsumption={() => void openConsumption(selectedResidence.id)}
             onOpenProductionHistory={() => void openProductionHistory(selectedResidence.id)}
+            onOpenWarehouseLog={() => void openWarehouseLog(selectedResidence.id)}
             isLinking={linkingFromId === selectedResidence.id}
             onStartLink={() => {
               setWorkSettingsError('');
@@ -1196,6 +1224,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onGrantMoney={grantMoney}
             onRefreshPlayers={refreshOnlinePlayers}
             onClose={() => setIsMasterPanelOpen(false)}
+          />
+        )}
+        {selectedResidence && isWarehouseLogOpen && (
+          <WarehouseLogPanel
+            days={warehouseLogDays}
+            events={warehouseLogEvents}
+            isLoading={isWarehouseLogLoading}
+            error={warehouseLogError}
+            onClose={() => setIsWarehouseLogOpen(false)}
           />
         )}
         {selectedResidence && isHistoryOpen && (

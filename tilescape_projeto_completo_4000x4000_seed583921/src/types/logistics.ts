@@ -77,10 +77,30 @@ export function isWithinLinkRadius(
  * máximo. Cada carga consome Work Points do armazém; o que não couber não é
  * transportado. A produção para o armazém tem prioridade sobre o abastecimento.
  */
+export type TransferBlockReason = 'desired_reached' | 'no_space' | 'no_work_points' | 'warehouse_empty';
+
+export interface TransferAttempt {
+  buildingId: string;
+  productId: string;
+  direction: TransferDirection;
+  wanted: number;
+  moved: number;
+  // Preenchido só quando moved < wanted: o limite que impediu o restante.
+  reason: TransferBlockReason | null;
+}
+
 export function planTransfers(warehouse: WarehouseLogistics, links: LogisticsLink[]): Transfer[] {
+  return planTransfersDetailed(warehouse, links).transfers;
+}
+
+export function planTransfersDetailed(
+  warehouse: WarehouseLogistics,
+  links: LogisticsLink[],
+): { transfers: Transfer[]; attempts: TransferAttempt[] } {
   const stock = new Map(warehouse.stock);
   let points = warehouse.workPoints;
   const transfers: Transfer[] = [];
+  const attempts: TransferAttempt[] = [];
   const sorted = [...links].sort((a, b) => a.buildingId.localeCompare(b.buildingId));
   const usedM3 = () =>
     PRODUCTS.reduce((sum, product) => sum + (stock.get(product.id) ?? 0) * product.volumeM3, 0);
@@ -98,15 +118,26 @@ export function planTransfers(warehouse: WarehouseLogistics, links: LogisticsLin
     const inWarehouse = stock.get(product.id) ?? 0;
     const unitDemand = getTransportDemand(product.id, 1);
     const affordable = Math.floor(points / unitDemand + 1e-9);
-    const possible =
+    const limits: [number, TransferBlockReason][] =
       direction === 'out'
-        ? Math.min(
-            current,
-            Math.max(0, (warehouse.desired.get(product.id) ?? 0) - inWarehouse),
-            Math.floor((warehouse.capacityM3 - usedM3()) / product.volumeM3 + 1e-9),
-          )
-        : Math.min(inWarehouse, Math.max(0, capacity - current));
-    const quantity = Math.min(possible, affordable);
+        ? [
+            [Math.max(0, (warehouse.desired.get(product.id) ?? 0) - inWarehouse), 'desired_reached'],
+            [Math.max(0, Math.floor((warehouse.capacityM3 - usedM3()) / product.volumeM3 + 1e-9)), 'no_space'],
+          ]
+        : [[inWarehouse, 'warehouse_empty']];
+    limits.push([affordable, 'no_work_points']);
+    const wanted = direction === 'out' ? current : Math.max(0, capacity - current);
+    if (wanted <= 0) return;
+    const [limit, limitReason] = limits.reduce((best, item) => (item[0] < best[0] ? item : best));
+    const quantity = Math.min(wanted, limit);
+    attempts.push({
+      buildingId: link.buildingId,
+      productId: product.id,
+      direction,
+      wanted,
+      moved: quantity,
+      reason: quantity < wanted ? limitReason : null,
+    });
     if (quantity <= 0) return;
     points -= quantity * unitDemand;
     stock.set(product.id, inWarehouse + (direction === 'out' ? quantity : -quantity));
@@ -127,7 +158,7 @@ export function planTransfers(warehouse: WarehouseLogistics, links: LogisticsLin
     if (definition?.woodCapacity) move(link, 'in', 'wood');
     if (definition?.ironCapacity) move(link, 'in', 'iron');
   }
-  return transfers;
+  return { transfers, attempts };
 }
 
 export type WarehouseTradeMode = 'sell' | 'buy';

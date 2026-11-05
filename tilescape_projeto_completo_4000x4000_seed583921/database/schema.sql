@@ -151,6 +151,21 @@ CREATE TABLE IF NOT EXISTS production_history (
   PRIMARY KEY (building_id, day)
 );
 
+CREATE TABLE IF NOT EXISTS warehouse_transport_log (
+  id BIGSERIAL PRIMARY KEY,
+  warehouse_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  day DATE NOT NULL,
+  linked_id UUID NOT NULL,
+  linked_type TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  direction TEXT NOT NULL CHECK (direction IN ('in', 'out')),
+  wanted INTEGER NOT NULL CHECK (wanted >= 0),
+  moved INTEGER NOT NULL CHECK (moved >= 0),
+  reason TEXT
+);
+
+CREATE INDEX IF NOT EXISTS warehouse_transport_log_idx ON warehouse_transport_log (warehouse_id, day DESC);
+
 CREATE TABLE IF NOT EXISTS residence_consumption (
   building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
   product_id TEXT NOT NULL,

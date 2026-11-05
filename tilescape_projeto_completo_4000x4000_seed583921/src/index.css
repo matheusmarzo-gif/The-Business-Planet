@@ -290,3 +290,4 @@ button { color: inherit; }
 .master-players li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
 .master-players span, .master-players small { color: #b7b19e; font-size: 11px; }
 .history-row { display: grid; grid-template-columns: 1.2fr repeat(4, 1fr); gap: 8px; align-items: center; font-size: 11px; }
+.log-row { display: grid; grid-template-columns: 1.6fr 1fr 0.8fr 1.8fr; gap: 8px; font-size: 11px; padding: 2px 0; }

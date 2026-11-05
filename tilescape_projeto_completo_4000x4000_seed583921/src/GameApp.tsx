@@ -94,6 +94,8 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
             : 'A área municipal precisa caber inteira dentro do mapa.';
         } else if (body.error === 'water') {
           error = 'A construção só pode ser colocada em terra.';
+        } else if (body.error === 'not_on_water') {
+          error = 'O Pesqueiro precisa ter pelo menos um tile sobre a água.';
         } else if (body.error === 'building_overlap') {
           error = 'Esse local já está ocupado por outra construção.';
         } else if (body.error === 'municipal_area_overlap') {
@@ -702,6 +704,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       {
         farm: 'fazendas',
         shop: 'comerciais',
+        fishery: 'artesanais',
         residence: 'residencias',
         warehouse: 'industrias',
       }[RESIDENCES[type].kind] as ConstructionCategory,
@@ -719,6 +722,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       outside_urban_zone: 'A residência precisa ficar inteiramente dentro de uma área urbana.',
       outside_rural_zone: 'A construção precisa ficar inteiramente dentro de uma área rural.',
       water: 'A residência só pode ser construída em terra.',
+      not_on_water: 'O Pesqueiro precisa ter pelo menos um tile sobre a água.',
       building_overlap: 'A residência não pode ocupar o espaço de outra construção.',
       road_overlap: 'A residência não pode ocupar o espaço de uma estrada.',
       not_adjacent_to_road: 'A residência precisa ficar ao lado de uma estrada.',
@@ -752,6 +756,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       price: DEFAULT_SHOP_PRICE,
       stock: 0,
       warehouseId: null,
+      toolStock: 0,
+      efficiencyPenalty: 0,
       crop: null,
       employed: 0,
     };
@@ -1216,6 +1222,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
               </button>
             </>
           ) : activeCategory === 'residencias' ||
+            activeCategory === 'artesanais' ||
             activeCategory === 'fazendas' ||
             activeCategory === 'comerciais' ||
             activeCategory === 'industrias' ? (
@@ -1224,7 +1231,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                 .filter(
                   (residence) =>
                     residence.kind ===
-                    { fazendas: 'farm', comerciais: 'shop', industrias: 'warehouse', residencias: 'residence' }[
+                    { artesanais: 'fishery', fazendas: 'farm', comerciais: 'shop', industrias: 'warehouse', residencias: 'residence' }[
                       activeCategory
                     ],
                 )
@@ -1243,7 +1250,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                       {residence.kind === 'warehouse'
                         ? `Até ${residence.maxWorkers} funcionários · Capacidade ${residence.storageCapacityM3} m³ de qualquer produto`
                         : residence.kind !== 'residence'
-                        ? `Até ${residence.maxWorkers} funcionários · Estoque máx. ${residence.stockCapacity} ${residence.stockProduct}`
+                        ? `Até ${residence.maxWorkers} funcionários · Estoque máx. ${residence.stockCapacity} ${residence.stockProduct}${residence.toolCapacity ? ` · ${residence.toolCapacity} Ferramentas` : ''}`
                         : `Capacidade ${residence.capacity} pessoas`}
                     </small>
                     <small>

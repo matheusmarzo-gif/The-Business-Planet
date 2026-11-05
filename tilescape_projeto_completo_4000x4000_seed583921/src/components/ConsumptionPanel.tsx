@@ -9,8 +9,8 @@ export interface ProductConsumption {
   monthAveragePrice: number | null;
 }
 
-// Produtos consumidos pelas residências; por enquanto apenas arroz.
-export const CONSUMED_PRODUCT_IDS = ['rice'];
+// Produtos consumidos pelas residências (mesma fórmula de compra para todos).
+export const CONSUMED_PRODUCT_IDS = ['rice', 'fish'];
 
 interface ConsumptionPanelProps {
   consumption: Map<string, ProductConsumption>;

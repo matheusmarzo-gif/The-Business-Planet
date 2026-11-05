@@ -25,6 +25,7 @@ export interface LogisticsLink {
   buildingId: string;
   type: ResidenceType;
   stock: number;
+  toolStock?: number;
 }
 
 export interface WarehouseLogistics {
@@ -52,7 +53,7 @@ export function parseWarehouseLink(value: unknown): { warehouseId: string | null
 
 export function canLinkToWarehouse(type: string): boolean {
   const kind = getResidenceDefinition(type)?.kind;
-  return kind === 'farm' || kind === 'shop';
+  return kind === 'farm' || kind === 'shop' || kind === 'fishery';
 }
 
 export function isWithinLinkRadius(
@@ -80,21 +81,24 @@ export function planTransfers(warehouse: WarehouseLogistics, links: LogisticsLin
   const usedM3 = () =>
     PRODUCTS.reduce((sum, product) => sum + (stock.get(product.id) ?? 0) * product.volumeM3, 0);
 
-  const move = (link: LogisticsLink, direction: TransferDirection) => {
+  const move = (link: LogisticsLink, direction: TransferDirection, productId?: string) => {
     const definition = getResidenceDefinition(link.type);
-    const product = PRODUCTS.find((item) => item.name === definition?.stockProduct);
+    const product = PRODUCTS.find((item) => item.id === (productId ?? definition?.stockProductId));
     if (!definition || !product) return;
+    const isTool = product.id === 'tools';
+    const current = isTool ? (link.toolStock ?? 0) : link.stock;
+    const capacity = isTool ? (definition.toolCapacity ?? 0) : (definition.stockCapacity ?? 0);
     const inWarehouse = stock.get(product.id) ?? 0;
     const unitDemand = getTransportDemand(product.id, 1);
     const affordable = Math.floor(points / unitDemand + 1e-9);
     const possible =
       direction === 'out'
         ? Math.min(
-            link.stock,
+            current,
             Math.max(0, (warehouse.desired.get(product.id) ?? 0) - inWarehouse),
             Math.floor((warehouse.capacityM3 - usedM3()) / product.volumeM3 + 1e-9),
           )
-        : Math.min(inWarehouse, Math.max(0, (definition.stockCapacity ?? 0) - link.stock));
+        : Math.min(inWarehouse, Math.max(0, capacity - current));
     const quantity = Math.min(possible, affordable);
     if (quantity <= 0) return;
     points -= quantity * unitDemand;
@@ -103,10 +107,13 @@ export function planTransfers(warehouse: WarehouseLogistics, links: LogisticsLin
   };
 
   for (const link of sorted) {
-    if (getResidenceDefinition(link.type)?.kind === 'farm') move(link, 'out');
+    const kind = getResidenceDefinition(link.type)?.kind;
+    if (kind === 'farm' || kind === 'fishery') move(link, 'out');
   }
   for (const link of sorted) {
-    if (getResidenceDefinition(link.type)?.kind === 'shop') move(link, 'in');
+    const kind = getResidenceDefinition(link.type)?.kind;
+    if (kind === 'shop') move(link, 'in');
+    if (kind === 'fishery') move(link, 'in', 'tools');
   }
   return transfers;
 }

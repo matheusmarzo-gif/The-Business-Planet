@@ -92,13 +92,18 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS crop_yield INTEGER NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS crop_harvested INTEGER NOT NULL DEFAULT 0;
 
+ALTER TABLE residential_buildings
+  ADD COLUMN IF NOT EXISTS tool_stock INTEGER NOT NULL DEFAULT 0 CHECK (tool_stock >= 0),
+  ADD COLUMN IF NOT EXISTS efficiency_penalty INTEGER NOT NULL DEFAULT 0 CHECK (efficiency_penalty BETWEEN 0 AND 90),
+  ADD COLUMN IF NOT EXISTS production_progress DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (production_progress >= 0);
+
 -- O caixa dos jogadores pode ficar negativo (folha de pagamento).
 ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_check;
 
 ALTER TABLE residential_buildings
   DROP CONSTRAINT IF EXISTS residential_buildings_building_type_check,
   ADD CONSTRAINT residential_buildings_building_type_check
-    CHECK (building_type IN ('house_poor1', 'house_poor2', 'farm_rice', 'shop_rice', 'warehouse'));
+    CHECK (building_type IN ('house_poor1', 'house_poor2', 'farm_rice', 'shop_rice', 'warehouse', 'fishery', 'shop_fish'));
 
 CREATE TABLE IF NOT EXISTS warehouse_product_settings (
   building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,

@@ -64,7 +64,9 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
       building.type === 'house_poor2' ||
       building.type === 'farm_rice' ||
       building.type === 'shop_rice' ||
-      building.type === 'warehouse') &&
+      building.type === 'warehouse' ||
+      building.type === 'fishery' ||
+      building.type === 'shop_fish') &&
     Number.isInteger(building.x) &&
     Number.isInteger(building.y) &&
     typeof building.cityId === 'string' &&

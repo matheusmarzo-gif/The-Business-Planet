@@ -248,6 +248,23 @@ sem sobrepor outras construções. O fluxo (prévia, obra, demolição, painel
 lateral com raio de busca de 60 tiles) é o mesmo das fazendas; venda e estoque
 ainda não estão implementados.
 
+### Pesqueiro e Loja de Peixes
+
+Na categoria **Construções Artesanais**, o **Pesqueiro** (2 × 2 tiles, até 10
+funcionários, estoque máximo de 300 peixes e 10 Ferramentas) custa 60 madeiras e
+10 pedras e exige 12.000 Work Points. Deve ficar em área urbana, ao lado de uma
+estrada e com pelo menos um tile sobre a água (o resto pode ser terra). Produz
+diariamente (00:00) 1 peixe a cada 100 Work Points. Consome Ferramentas: 0,05 por
+funcionário/dia (valores abaixo de 1 são probabilidade). Sem Ferramentas, a
+eficiência cai 30% e a penalidade sobe 10% por dia até 90%; ao suprir, ela cai 10%
+por dia até zerar. Ferramentas (5 kg, 0,01 m³, sem validade) chegam por armazém
+ligado.
+
+Na categoria **Comerciais**, a **Loja de Peixes** (2 × 2, 4 funcionários, estoque
+máximo de 40 peixes) custa 30 madeiras e 10 pedras e exige 6.000 Work Points. As
+vendas e o consumo das residências seguem a mesma fórmula do arroz; o consumo de
+peixe aparece em "Ver consumo da casa".
+
 ### Fazendas
 
 Na categoria **Fazendas**, a **Fazenda de arroz** (4 × 4 tiles, até 30 funcionários,

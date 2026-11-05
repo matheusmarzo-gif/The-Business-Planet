@@ -330,6 +330,24 @@ mapeamento e verificar todas as curvas.
   devolve por produto o consumo por pessoa no último dia e a média diária por
   pessoa nos últimos 30 dias, além do preço médio pago (dia e mês). O painel
   `ConsumptionPanel` abre pelo botão "Ver consumo da casa" (residências concluídas).
+- Pesqueiro e Loja de Peixes (`fishery`, `shop_fish`): `src/types/fishing.ts`
+  concentra as regras puras. O Pesqueiro (categoria Artesanais, `kind: 'fishery'`,
+  2 × 2, 10 funcionários, estoque de 300 peixes e 10 Ferramentas) precisa de área
+  urbana, ao lado de estrada e com pelo menos 1 tile sobre água (`requiresWater`;
+  erro `not_on_water`; demais tiles podem ser terra). Colunas
+  `tool_stock`, `efficiency_penalty` (0–90) e `production_progress` em
+  `residential_buildings` (migração aditiva em `schema.sql`, que também amplia o
+  CHECK de `building_type`). Às 00:00 (`runDailyEmployment`): demanda de
+  Ferramentas = 0,05 por funcionário (fração = probabilidade de 1 unidade,
+  `rollToolDemand`); atendida se `tool_stock` cobre a demanda (consome), senão a
+  penalidade vai a 30% e sobe 10 pontos/dia até 90%; atendida, cai 10/dia
+  (`nextEfficiencyPenalty`). Produção: 100 Work Points por peixe, reduzidos pela
+  penalidade, com o resto acumulado (`planFishing`). A Loja de Peixes reutiliza as
+  vendas/benefício do arroz (`planRiceSales`, loop por `shopType`/`productId`) e
+  grava consumo `fish`. Ferramentas (`tools`) é um produto novo (5 kg, 0,01 m³,
+  validade infinita); `planTransfers` leva peixe do Pesqueiro ao armazém e
+  Ferramentas do armazém ao Pesqueiro (`Transfer.productId === 'tools'` grava em
+  `tool_stock`). A rota de preço vale para `shop_rice` e `shop_fish`.
 - Comércio entre armazéns (`planWarehouseTrades` em `src/types/logistics.ts`): às
   03:00 e 15:00 (`world_state.last_warehouse_trade_slot`, ex. `2026-01-01T15`,
   garante uma execução por rodada) cada armazém em modo `buy` procura armazéns

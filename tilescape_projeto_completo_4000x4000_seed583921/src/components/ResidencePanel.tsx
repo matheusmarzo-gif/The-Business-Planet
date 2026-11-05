@@ -11,6 +11,7 @@ import {
   ResidentialBuilding,
 } from '../types/residence';
 import { canLinkToWarehouse } from '../types/logistics';
+import { TOOL_DEMAND_PER_WORKER } from '../types/fishing';
 import {
   FARM_DAILY_WORK_POINTS,
   getHarvestDay,
@@ -115,6 +116,13 @@ export default function ResidencePanel({
             definition.kind === 'warehouse'
               ? ['Espaço ocupado', `0 / ${number.format(definition.storageCapacityM3 ?? 0)} m³`]
               : [`Estoque de ${definition.stockProduct}`, `${number.format(building.stock)} / ${number.format(definition.stockCapacity ?? 0)}`],
+            ...(definition.kind === 'fishery'
+              ? ([
+                  ['Estoque de Ferramentas', `${number.format(building.toolStock)} / ${number.format(definition.toolCapacity ?? 0)}`],
+                  ['Demanda de Ferramentas por dia', `${(building.employed * TOOL_DEMAND_PER_WORKER).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}`],
+                  ['Penalidade de eficiência', `${building.efficiencyPenalty}%`],
+                ] as [string, string][])
+              : []),
           ]
         : [
             ['Ocupantes atuais', number.format(building.occupants)],
@@ -134,7 +142,9 @@ export default function ResidencePanel({
             ? 'EM CONSTRUÇÃO'
             : definition.kind === 'farm'
               ? 'FAZENDA'
-              : definition.kind === 'shop'
+              : definition.kind === 'fishery'
+                ? 'CONSTRUÇÃO ARTESANAL'
+                : definition.kind === 'shop'
                 ? 'COMÉRCIO'
                 : definition.kind === 'warehouse'
                   ? 'INDÚSTRIA'
@@ -262,7 +272,7 @@ export default function ResidencePanel({
           {error && <p role="alert">{error}</p>}
         </form>
       )}
-      {building.type === 'shop_rice' && (
+      {(building.type === 'shop_rice' || building.type === 'shop_fish') && (
         <form
           className="work-settings"
           onSubmit={(event) => {
@@ -271,7 +281,7 @@ export default function ResidencePanel({
           }}
         >
           <label>
-            Preço do arroz (C$ por unidade)
+            Preço do {building.type === 'shop_fish' ? 'peixe' : 'arroz'} (C$ por unidade)
             <input
               type="number"
               min={1}

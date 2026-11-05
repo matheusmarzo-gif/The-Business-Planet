@@ -7,6 +7,7 @@ import {
   type CityZone,
 } from './city';
 import { STARTING_BALANCE, formatMoney } from './wallet';
+import { nextEfficiencyPenalty, planFishing, rollToolDemand } from './fishing';
 import {
   allocateImmigrants,
   getCityPopulation,
@@ -529,6 +530,8 @@ describe('municipal zones', () => {
         price: 10,
         stock: 0,
         warehouseId: null,
+        toolStock: 0,
+        efficiencyPenalty: 0,
         crop: null,
         employed: 0,
       };
@@ -572,6 +575,8 @@ describe('municipal zones', () => {
         price: 10,
         stock: 0,
         warehouseId: null,
+        toolStock: 0,
+        efficiencyPenalty: 0,
         crop: null,
         employed: 0,
       };
@@ -650,5 +655,79 @@ describe('municipal zones', () => {
       isFootprintInCityZone([...footprint, { minX: 21, minY: 11, maxX: 21, maxY: 11 }], [urban], 'urban'),
       false,
     );
+  });
+});
+
+describe('fishery', () => {
+  const city = {
+    id: 'c',
+    name: 'c',
+    centerX: 100,
+    centerY: 100,
+    population: 0,
+    wellbeing: 0,
+    economy: 0,
+    zones: [{ id: 'u', cityId: 'c', type: 'urban' as const, minX: 0, minY: 0, maxX: 300, maxY: 300 }],
+  };
+  const map = { width: 4000, height: 4000 };
+  const road = [{ x: 19, y: 20 }];
+
+  it('requires at least one water tile, urban zone and a road', () => {
+    const waterAt = (x: number, y: number) => !(x === 20 && y === 20);
+    assert.equal(getResidencePlacementError('fishery', { x: 20, y: 20 }, [city], [], road, waterAt, map), null);
+    assert.equal(
+      getResidencePlacementError('fishery', { x: 20, y: 20 }, [city], [], road, () => true, map),
+      'not_on_water',
+    );
+    assert.equal(
+      getResidencePlacementError('fishery', { x: 20, y: 20 }, [city], [], [], waterAt, map),
+      'not_adjacent_to_road',
+    );
+    assert.equal(
+      getResidencePlacementError('shop_fish', { x: 20, y: 20 }, [city], [], road, waterAt, map),
+      'water',
+    );
+  });
+
+  it('rolls tool demand as a probability below one', () => {
+    assert.equal(rollToolDemand(10, () => 0.4), 1);
+    assert.equal(rollToolDemand(10, () => 0.6), 0);
+    assert.equal(rollToolDemand(40, () => 0.99), 2);
+    assert.equal(rollToolDemand(0, () => 0), 0);
+  });
+
+  it('raises the penalty from 30% by 10 points up to 90% and recovers 10 per day', () => {
+    let penalty = 0;
+    const steps = [];
+    for (let day = 0; day < 8; day += 1) {
+      penalty = nextEfficiencyPenalty(penalty, false);
+      steps.push(penalty);
+    }
+    assert.deepEqual(steps, [30, 40, 50, 60, 70, 80, 90, 90]);
+    assert.equal(nextEfficiencyPenalty(90, true), 80);
+    assert.equal(nextEfficiencyPenalty(5, true), 0);
+  });
+
+  it('produces one fish per 100 Work Points, reduced by the penalty and limited by space', () => {
+    assert.deepEqual(planFishing({ progress: 0, workPoints: 1000, penalty: 0, freeSpace: 300 }), {
+      fish: 10,
+      progress: 0,
+    });
+    assert.deepEqual(planFishing({ progress: 50, workPoints: 1000, penalty: 30, freeSpace: 300 }), {
+      fish: 7,
+      progress: 50,
+    });
+    assert.equal(planFishing({ progress: 0, workPoints: 1000, penalty: 0, freeSpace: 4 }).fish, 4);
+  });
+
+  it('supplies tools and collects fish through a linked warehouse', () => {
+    const transfers = planTransfers(
+      { stock: new Map([['tools', 20]]), desired: new Map([['fish', 100]]), capacityM3: 50, workPoints: 1e6 },
+      [{ buildingId: 'f', type: 'fishery', stock: 30, toolStock: 4 }],
+    );
+    assert.deepEqual(transfers, [
+      { buildingId: 'f', productId: 'fish', quantity: 30, direction: 'out' },
+      { buildingId: 'f', productId: 'tools', quantity: 6, direction: 'in' },
+    ]);
   });
 });

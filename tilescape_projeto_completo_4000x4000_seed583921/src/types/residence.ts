@@ -3,8 +3,15 @@ import type { Crop } from './farming.js';
 import { ASSEMBLY_SIZE, isFootprintInCityZone, MUNICIPAL_AREA_RADIUS } from './city.js';
 import type { RoadTile } from './road.js';
 
-export type ResidenceType = 'house_poor1' | 'house_poor2' | 'farm_rice' | 'shop_rice' | 'warehouse';
-export type BuildingKind = 'residence' | 'farm' | 'shop' | 'warehouse';
+export type ResidenceType =
+  | 'house_poor1'
+  | 'house_poor2'
+  | 'farm_rice'
+  | 'shop_rice'
+  | 'warehouse'
+  | 'fishery'
+  | 'shop_fish';
+export type BuildingKind = 'residence' | 'farm' | 'shop' | 'warehouse' | 'fishery';
 export type ResidentialBuildingStatus = 'under_construction' | 'completed';
 
 export interface ResidenceCost {
@@ -27,7 +34,12 @@ export interface ResidenceDefinition {
   workPoints: number;
   maxWorkers: number;
   stockProduct?: string;
+  stockProductId?: string;
   stockCapacity?: number;
+  // Estoque máximo de Ferramentas consumidas pela construção (Pesqueiro).
+  toolCapacity?: number;
+  // Exige pelo menos um tile sobre água (o restante pode ser terra).
+  requiresWater?: boolean;
   storageCapacityM3?: number;
 }
 
@@ -132,6 +144,7 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     workPoints: 12000,
     maxWorkers: 30,
     stockProduct: 'Arroz',
+    stockProductId: 'rice',
     stockCapacity: 300,
   },
   shop_rice: {
@@ -149,7 +162,46 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     workPoints: 9000,
     maxWorkers: 4,
     stockProduct: 'Arroz',
+    stockProductId: 'rice',
     stockCapacity: 20,
+  },
+  fishery: {
+    type: 'fishery',
+    kind: 'fishery',
+    requiredZone: 'urban',
+    requiresRoad: true,
+    name: 'Pesqueiro',
+    asset: '/buildings/artisan/pesqueiro.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 60, stone: 10 },
+    workPoints: 12000,
+    maxWorkers: 10,
+    stockProduct: 'Peixe',
+    stockProductId: 'fish',
+    stockCapacity: 300,
+    toolCapacity: 10,
+    requiresWater: true,
+  },
+  shop_fish: {
+    type: 'shop_fish',
+    kind: 'shop',
+    requiredZone: 'urban',
+    requiresRoad: true,
+    name: 'Loja de Peixes',
+    asset: '/buildings/commerce/loja_peixe.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 30, stone: 10 },
+    workPoints: 6000,
+    maxWorkers: 4,
+    stockProduct: 'Peixe',
+    stockProductId: 'fish',
+    stockCapacity: 40,
   },
   warehouse: {
     type: 'warehouse',
@@ -189,6 +241,9 @@ export interface ResidentialBuilding {
   price: number;
   stock: number;
   warehouseId: string | null;
+  // Pesqueiro: Ferramentas em estoque e penalidade de eficiência (0–90, em %).
+  toolStock: number;
+  efficiencyPenalty: number;
   // Plantação da fazenda de arroz; null quando não há plantio.
   crop: Crop | null;
   // Funcionários empregados na construção ou, em residências, moradores empregados.
@@ -202,6 +257,7 @@ export type ResidencePlacementError =
   | 'outside_urban_zone'
   | 'outside_rural_zone'
   | 'water'
+  | 'not_on_water'
   | 'building_overlap'
   | 'road_overlap'
   | 'not_adjacent_to_road';
@@ -212,7 +268,9 @@ export function getResidenceDefinition(type: string): ResidenceDefinition | null
     type === 'house_poor2' ||
     type === 'farm_rice' ||
     type === 'shop_rice' ||
-    type === 'warehouse'
+    type === 'warehouse' ||
+    type === 'fishery' ||
+    type === 'shop_fish'
   ) {
     return RESIDENCES[type];
   }
@@ -276,9 +334,13 @@ export function getResidencePlacementError(
 
   const roadKeys = new Set(roads.map((road) => `${road.x},${road.y}`));
   let adjacentToRoad = false;
+  let hasWater = false;
   for (let y = position.y; y <= maxY; y += 1) {
     for (let x = position.x; x <= maxX; x += 1) {
-      if (!isLandAt(x, y)) return 'water';
+      if (!isLandAt(x, y)) {
+        if (!definition.requiresWater) return 'water';
+        hasWater = true;
+      }
 
       const assemblyOffset = Math.floor(ASSEMBLY_SIZE / 2);
       if (
@@ -317,5 +379,6 @@ export function getResidencePlacementError(
     }
   }
 
+  if (definition.requiresWater && !hasWater) return 'not_on_water';
   return adjacentToRoad || !definition.requiresRoad ? null : 'not_adjacent_to_road';
 }

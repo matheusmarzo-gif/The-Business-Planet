@@ -29,6 +29,7 @@ const REASONS: Record<string, string> = {
   no_space: 'Sem espaço livre no armazém (m³)',
   no_work_points: 'Work Points de transporte insuficientes',
   warehouse_empty: 'Armazém sem estoque do produto',
+  error: 'Erro interno ao processar o transporte deste armazém',
 };
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });

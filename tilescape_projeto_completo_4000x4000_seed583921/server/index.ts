@@ -771,6 +771,19 @@ async function runDailyEmployment(): Promise<boolean> {
          WHERE building_type = 'warehouse' AND status = 'completed'`,
       );
       for (const warehouse of warehouseRows) {
+        const warehouseSiteForLog = workplaces.find((row) => row.id === warehouse.id);
+        await logProduction(client, warehouse.id, state.day, {
+          workPoints:
+            (workers.get(warehouse.id) ?? 0) *
+            getDailyWorkPoints(
+              warehouseSiteForLog?.work_hours_per_day ?? 8,
+              RESIDENCE_STATS.health,
+              RESIDENCE_STATS.happiness,
+            ),
+        });
+        // Uma falha em um armazém não pode desfazer o histórico nem o transporte dos demais.
+        await client.query('SAVEPOINT warehouse_transport');
+        try {
         const { rows: linked } = await client.query<{
           id: string;
           building_type: ResidenceType;
@@ -791,8 +804,10 @@ async function runDailyEmployment(): Promise<boolean> {
             RESIDENCE_STATS.health,
             RESIDENCE_STATS.happiness,
           );
-        await logProduction(client, warehouse.id, state.day, { workPoints });
-        if (linked.length === 0) continue;
+        if (linked.length === 0) {
+          await client.query('RELEASE SAVEPOINT warehouse_transport');
+          continue;
+        }
         const { rows: stockRows } = await client.query<{ product_id: string; quantity: number }>(
           'SELECT product_id, quantity FROM warehouse_stock WHERE building_id = $1',
           [warehouse.id],
@@ -878,6 +893,24 @@ async function runDailyEmployment(): Promise<boolean> {
           state.day,
           transfers.reduce((sum, item) => sum + getTransportDemand(item.productId, item.quantity), 0),
         );
+        await client.query('RELEASE SAVEPOINT warehouse_transport');
+        } catch (transportError) {
+          await client.query('ROLLBACK TO SAVEPOINT warehouse_transport');
+          console.error(`Falha no transporte do armazém ${warehouse.id}:`, transportError);
+          await client.query('SAVEPOINT transport_error_log');
+          try {
+            await client.query(
+              `INSERT INTO warehouse_transport_log
+                 (warehouse_id, day, linked_id, linked_type, product_id, direction, wanted, moved, reason)
+               VALUES ($1, $2::date, $1, 'warehouse', '', 'out', 0, 0, 'error')`,
+              [warehouse.id, state.day],
+            );
+            await client.query('RELEASE SAVEPOINT transport_error_log');
+          } catch (logError) {
+            await client.query('ROLLBACK TO SAVEPOINT transport_error_log');
+            console.error('Não foi possível registrar o erro do armazém:', logError);
+          }
+        }
       }
       });
       } catch (economyError) {

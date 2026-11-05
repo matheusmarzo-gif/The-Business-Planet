@@ -30,6 +30,7 @@ import {
 import {
   getResidenceDefinition,
   getResidencePlacementError,
+  canStartResidenceConstruction,
   parseRent,
   parseWorkSettings,
   RESIDENCES,
@@ -2218,11 +2219,7 @@ async function start() {
 
     void isMasterUser(userId)
       .then((isMaster) => {
-        if (!isMaster) {
-          response.status(409).json({ error: 'insufficient_materials' });
-          return;
-        }
-        if (!isMaster && definition.type !== 'warehouse') {
+        if (!canStartResidenceConstruction(definition.type, isMaster)) {
           response.status(409).json({ error: 'insufficient_materials' });
           return;
         }

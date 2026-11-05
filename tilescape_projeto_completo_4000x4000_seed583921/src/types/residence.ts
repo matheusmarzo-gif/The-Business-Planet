@@ -429,6 +429,8 @@ export const UNDER_CONSTRUCTION_ASSET = '/buildings/em_construcao.png';
 
 export interface ResidentialBuilding {
   id: string;
+  ownerName?: string;
+  isOwnedByCurrentUser?: boolean;
   type: ResidenceType;
   x: number;
   y: number;

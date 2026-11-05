@@ -149,7 +149,7 @@ export default function ResidencePanel({
     (total, product) => total + (warehouseStock.get(product.id) ?? 0) * product.volumeM3,
     0,
   );
-  const rows: [string, string][] =
+  const detailRows: [string, string][] =
     building.status === 'under_construction'
       ? [
           ['Work Points completados', number.format(Math.floor(building.workPointsDone))],
@@ -194,6 +194,10 @@ export default function ResidencePanel({
             ['Pessoas empregadas', number.format(building.employed)],
             ['Renda média dos trabalhadores', `C$ ${building.averageIncome.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}`],
           ];
+  const rows: [string, string][] = [
+    ['Proprietário', building.ownerName || 'Jogador'],
+    ...detailRows,
+  ];
 
   return (
     <aside className="realm-panel">

@@ -109,6 +109,9 @@ Para verificar a conexão com PostgreSQL e Redis, abra
 `https://<endereco-do-servico>/api/health`. A resposta esperada é
 `{"status":"ok"}`. O mapa e o WebSocket `/ws` exigem uma sessão Neon Auth
 válida; as rotas do mundo verificam os tokens no servidor.
+As construções mostram o nome do proprietário no painel de detalhes. No mapa,
+a etiqueta com esse nome aparece somente para o próprio jogador, acima das
+construções que ele criou.
 
 Cada push para a branch conectada ao Render pode iniciar uma nova publicação.
 O relógio global e sua persistência ficam no PostgreSQL; o Redis gerencia a

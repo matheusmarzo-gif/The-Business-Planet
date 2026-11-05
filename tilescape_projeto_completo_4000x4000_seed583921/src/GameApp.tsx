@@ -761,7 +761,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         { method: 'PATCH', body: JSON.stringify(settings) },
       );
       setResidentialBuildings((current) =>
-        current.map((item) => (item.id === building.id ? building : item)),
+        current.map((item) =>
+          item.id === building.id
+            ? {
+                ...building,
+                ownerName: building.ownerName ?? item.ownerName,
+                isOwnedByCurrentUser: item.isOwnedByCurrentUser,
+              }
+            : item,
+        ),
       );
     } catch (error) {
       setWorkSettingsError(
@@ -780,7 +788,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         { method: 'PATCH', body: JSON.stringify({ rent }) },
       );
       setResidentialBuildings((current) =>
-        current.map((item) => (item.id === building.id ? building : item)),
+        current.map((item) =>
+          item.id === building.id
+            ? {
+                ...building,
+                ownerName: building.ownerName ?? item.ownerName,
+                isOwnedByCurrentUser: item.isOwnedByCurrentUser,
+              }
+            : item,
+        ),
       );
     } catch (error) {
       setWorkSettingsError(
@@ -799,7 +815,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         { method: 'PATCH', body: JSON.stringify({ price }) },
       );
       setResidentialBuildings((current) =>
-        current.map((item) => (item.id === building.id ? building : item)),
+        current.map((item) =>
+          item.id === building.id
+            ? {
+                ...building,
+                ownerName: building.ownerName ?? item.ownerName,
+                isOwnedByCurrentUser: item.isOwnedByCurrentUser,
+              }
+            : item,
+        ),
       );
     } catch (error) {
       setWorkSettingsError(
@@ -1042,6 +1066,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       efficiencyPenalty: 0,
       crop: null,
       employed: 0,
+      ownerName: user.name || user.email,
+      isOwnedByCurrentUser: true,
     };
     setPendingResidentialBuildings((current) => [...current, pending]);
     setResidencePlacementMessage('');
@@ -1053,7 +1079,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       });
       setResidentialBuildings((current) => [
         ...current.filter((item) => item.id !== building.id),
-        building,
+        {
+          ...building,
+          ownerName: user.name || user.email,
+          isOwnedByCurrentUser: true,
+        },
       ]);
       setPendingResidentialBuildings((current) =>
         current.filter((item) => item.id !== pending.id),
@@ -1077,7 +1107,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         { method: 'POST' },
       );
       setResidentialBuildings((current) =>
-        current.map((item) => (item.id === building.id ? building : item)),
+        current.map((item) =>
+          item.id === building.id
+            ? {
+                ...building,
+                ownerName: building.ownerName ?? item.ownerName,
+                isOwnedByCurrentUser: item.isOwnedByCurrentUser,
+              }
+            : item,
+        ),
       );
       setConstructionMessage('Residência concluída instantaneamente pela conta Master.');
     } catch (error) {

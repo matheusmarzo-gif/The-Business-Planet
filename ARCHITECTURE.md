@@ -592,6 +592,10 @@ completa desse estado para todos os jogadores conectados. `last_full_world_sync_
 em `world_state` registra a publicação por dia; o lock transacional da linha
 evita duplicatas entre instâncias e a marcação só é gravada após o Pub/Sub ter
 aceitado a mensagem.
+O nome do criador é obtido de `neon_auth."user"` e aparece no painel de detalhes.
+O servidor envia a cada socket apenas um booleano de propriedade para controlar
+a etiqueta sobre as construções do próprio jogador; o ID interno do proprietário
+é removido antes da transmissão ao navegador.
 
 ## Variáveis de ambiente
 

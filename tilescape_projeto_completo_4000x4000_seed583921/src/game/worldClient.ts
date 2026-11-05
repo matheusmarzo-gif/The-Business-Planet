@@ -64,6 +64,9 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
   const building = value as Record<string, unknown>;
   return (
     typeof building.id === 'string' &&
+    (building.ownerName === undefined || typeof building.ownerName === 'string') &&
+    (building.isOwnedByCurrentUser === undefined ||
+      typeof building.isOwnedByCurrentUser === 'boolean') &&
     typeof building.type === 'string' &&
     getResidenceDefinition(building.type) !== null &&
     Number.isInteger(building.x) &&

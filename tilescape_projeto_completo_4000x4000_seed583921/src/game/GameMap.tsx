@@ -383,6 +383,17 @@ export function GameMap({
         ),
       );
     }
+    for (const building of residentialBuildings) {
+      if (!building.isOwnedByCurrentUser || !building.ownerName) continue;
+      const { width } = RESIDENCES[building.type];
+      labelsLayer.addChild(
+        createCityLabel(
+          building.ownerName,
+          camera.x + (building.x + width / 2) * tilePixels,
+          camera.y + (building.y - 0.35) * tilePixels,
+        ),
+      );
+    }
     if (zonePreview) {
       const bounds = {
         minX: Math.min(zonePreview.minX, zonePreview.maxX),

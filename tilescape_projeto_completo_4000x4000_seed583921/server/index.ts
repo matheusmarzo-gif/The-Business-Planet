@@ -182,6 +182,8 @@ type ResidentialBuildingRow = {
   crop_harvested: number;
   employed: number;
   average_income: number;
+  owner_name?: string | null;
+  created_by?: string;
 };
 
 const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id, tool_stock, wood_stock, iron_stock, efficiency_penalty,
@@ -197,6 +199,7 @@ const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status,
 function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuilding {
   return {
     id: row.id,
+    ownerName: row.owner_name ?? undefined,
     type: row.building_type,
     x: row.tile_x,
     y: row.tile_y,
@@ -334,6 +337,65 @@ async function getSnapshot() {
 function broadcast(payload: string) {
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN) client.send(payload);
+  }
+}
+
+type WorldResidentialBuilding = ResidentialBuilding & { ownerId: string };
+
+function createPlayerWorldUpdate(
+  update: { type: 'cities'; cities: CityAssembly[]; roads: RoadTile[]; buildings: WorldResidentialBuilding[] },
+  userId: string | undefined,
+) {
+  return {
+    ...update,
+    buildings: update.buildings.map(({ ownerId, ...building }) => ({
+      ...building,
+      isOwnedByCurrentUser: ownerId === userId,
+    })),
+  };
+}
+
+function deliverCities(message: string) {
+  let update: unknown;
+  try {
+    update = JSON.parse(message);
+  } catch (error) {
+    console.error('Não foi possível interpretar a atualização de cidades do Redis:', error);
+    return;
+  }
+  if (
+    typeof update !== 'object' ||
+    update === null ||
+    !('type' in update) ||
+    update.type !== 'cities' ||
+    !('cities' in update) ||
+    !Array.isArray(update.cities) ||
+    !('roads' in update) ||
+    !Array.isArray(update.roads) ||
+    !('buildings' in update) ||
+    !Array.isArray(update.buildings) ||
+    !update.buildings.every(
+      (building) =>
+        typeof building === 'object' &&
+        building !== null &&
+        'ownerId' in building &&
+        typeof building.ownerId === 'string',
+    )
+  ) {
+    console.error('O Redis publicou uma atualização de cidades inválida.');
+    return;
+  }
+
+  const typedUpdate = update as {
+    type: 'cities';
+    cities: CityAssembly[];
+    roads: RoadTile[];
+    buildings: WorldResidentialBuilding[];
+  };
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(createPlayerWorldUpdate(typedUpdate, websocketUsers.get(client))));
+    }
   }
 }
 
@@ -502,13 +564,18 @@ async function getRoadTiles(): Promise<RoadTile[]> {
   }));
 }
 
-async function getResidentialBuildings(): Promise<ResidentialBuilding[]> {
-  const { rows } = await pool.query<ResidentialBuildingRow>(
-    `SELECT ${RESIDENTIAL_COLUMNS}
+async function getResidentialBuildings(): Promise<WorldResidentialBuilding[]> {
+  const { rows } = await pool.query<ResidentialBuildingRow & { created_by: string }>(
+    `SELECT ${RESIDENTIAL_COLUMNS}, created_by,
+            (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
+             FROM neon_auth."user" player WHERE player.id = residential_buildings.created_by) AS owner_name
      FROM residential_buildings
      ORDER BY started_at, id`,
   );
-  return rows.map(mapResidentialBuilding);
+  return rows.map((row) => ({
+    ...mapResidentialBuilding(row),
+    ownerId: row.created_by,
+  }));
 }
 
 async function publishCities() {
@@ -517,10 +584,7 @@ async function publishCities() {
     getRoadTiles(),
     getResidentialBuildings(),
   ]);
-  await redis.publish(
-    CITIES_CHANNEL,
-    JSON.stringify({ type: 'cities', cities, roads, buildings }),
-  );
+  await redis.publish(CITIES_CHANNEL, JSON.stringify({ type: 'cities', cities, roads, buildings }));
 }
 
 async function runDailyImmigration(): Promise<boolean> {
@@ -2182,7 +2246,7 @@ async function start() {
   );
   await Promise.all([
     subscriber.subscribe(SNAPSHOT_CHANNEL, (message) => broadcast(message)),
-    subscriber.subscribe(CITIES_CHANNEL, (message) => broadcast(message)),
+    subscriber.subscribe(CITIES_CHANNEL, deliverCities),
     subscriber.subscribe(COMMERCE_DIAGNOSTICS_CHANNEL, deliverCommerceDiagnostics),
   ]);
 
@@ -3670,12 +3734,17 @@ async function start() {
     void registerPresence()
       .then(async () => {
         websocket.send(JSON.stringify(await getSnapshot()));
-            const [cities, roads, buildings] = await Promise.all([
-              getCities(),
-              getRoadTiles(),
-              getResidentialBuildings(),
-            ]);
-            websocket.send(JSON.stringify({ type: 'cities', cities, roads, buildings }));
+        const [cities, roads, buildings] = await Promise.all([
+          getCities(),
+          getRoadTiles(),
+          getResidentialBuildings(),
+        ]);
+        websocket.send(JSON.stringify(
+          createPlayerWorldUpdate(
+            { type: 'cities', cities, roads, buildings },
+            websocketUsers.get(websocket),
+          ),
+        ));
         await publishSnapshot();
         presenceTimer = setInterval(() => {
           void registerPresence().catch((error: unknown) => {

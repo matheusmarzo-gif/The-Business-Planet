@@ -127,3 +127,16 @@ export function getAverageIncomes(
     residences.map((home) => [home.id, home.occupants > 0 ? (totals.get(home.id) ?? 0) / home.occupants : 0]),
   );
 }
+
+// Avança uma obra com o trabalho do dia; conclui quando os Work Points chegam ao necessário.
+export function advanceConstruction(
+  done: number,
+  needed: number,
+  workers: number,
+  hours: number,
+  health: number,
+  happiness: number,
+): { done: number; completed: boolean } {
+  const total = done + workers * getDailyWorkPoints(hours, health, happiness);
+  return { done: Math.min(total, needed), completed: total >= needed };
+}

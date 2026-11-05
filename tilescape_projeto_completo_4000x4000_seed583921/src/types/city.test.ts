@@ -22,7 +22,7 @@ import {
   type ResidentialBuilding,
 } from './residence';
 import { getRoadPlacementError } from './road';
-import { allocateWorkers, getDailyWorkPoints, getHoursFactor, getPayroll, getRestFactor, getWorkBenefit, getAverageIncomes } from './employment';
+import { allocateWorkers, getDailyWorkPoints, getHoursFactor, getPayroll, getRestFactor, getWorkBenefit, getAverageIncomes, advanceConstruction } from './employment';
 import {
   getPurchaseBenefit,
   getPurchaseQuantity,
@@ -785,5 +785,23 @@ describe('renda média', () => {
     );
     assert.equal(incomes.get('h'), 62.5);
     assert.equal(incomes.get('e'), 0);
+  });
+});
+
+describe('obras', () => {
+  it('accumulates Work Points and completes at the required amount', () => {
+    const day = getDailyWorkPoints(8, 100, 100);
+    const partial = advanceConstruction(0, 6000, 2, 8, 100, 100);
+    assert.equal(partial.done, 2 * day);
+    assert.equal(partial.completed, false);
+    const finished = advanceConstruction(5900, 6000, 1, 8, 100, 100);
+    assert.deepEqual(finished, { done: 6000, completed: true });
+  });
+
+  it('can complete every building type from its own requirement', () => {
+    for (const definition of Object.values(RESIDENCES)) {
+      const result = advanceConstruction(definition.workPoints - 1, definition.workPoints, 1, 8, 100, 100);
+      assert.equal(result.completed, true, definition.type);
+    }
   });
 });

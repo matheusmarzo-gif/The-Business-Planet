@@ -515,3 +515,5 @@ atualizado.
   atualizaÃ§Ãµes incrementais.
 - O editor de mapa procedural continua no cÃ³digo, mas nÃ£o estÃ¡ ligado ao fluxo
   de entrada atual.
+
+- Obras e economia diária: às 00:00 o progresso das obras usa dvanceConstruction (employment.ts; conclui quando Work Points >= necessários, para todos os tipos). Vendas, produção e transporte rodam sob um SAVEPOINT (daily_economy): se falharem, folha e obras do dia são preservadas e o erro é registrado.

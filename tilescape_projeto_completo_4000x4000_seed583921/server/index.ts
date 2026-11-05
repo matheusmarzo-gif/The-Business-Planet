@@ -39,7 +39,7 @@ import {
   type ResidencePlacementError,
 } from '../src/types/residence.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
-import { allocateWorkers, getAverageIncomes, getDailyWorkPoints, getPayroll, type JobAssignment } from '../src/types/employment.js';
+import { advanceConstruction, allocateWorkers, getAverageIncomes, getDailyWorkPoints, getPayroll, type JobAssignment } from '../src/types/employment.js';
 import { getShopSalesCapacity, parsePrice, planRiceSales } from '../src/types/commerce.js';
 import { nextEfficiencyPenalty, planProduction, rollToolDemand } from '../src/types/fishing.js';
 import {
@@ -474,21 +474,28 @@ async function runDailyEmployment(): Promise<boolean> {
       for (const site of workplaces) {
         const count = workers.get(site.id) ?? 0;
         if (site.status !== 'under_construction' || count === 0) continue;
-        const total =
-          site.work_points_done +
-          count * getDailyWorkPoints(site.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness);
         const needed = RESIDENCES[site.building_type].workPoints;
+        const progress = advanceConstruction(
+          site.work_points_done,
+          needed,
+          count,
+          site.work_hours_per_day,
+          RESIDENCE_STATS.health,
+          RESIDENCE_STATS.happiness,
+        );
         await client.query(
           `UPDATE residential_buildings
-           SET work_points_done = LEAST($2::double precision, $3::double precision),
-               status = CASE WHEN $2::double precision >= $3::double precision THEN 'completed' ELSE status END,
-               completed_at = CASE WHEN $2::double precision >= $3::double precision
-                                   THEN clock_timestamp() ELSE completed_at END
+           SET work_points_done = $2::double precision,
+               status = CASE WHEN $3::boolean THEN 'completed' ELSE status END,
+               completed_at = CASE WHEN $3::boolean THEN clock_timestamp() ELSE completed_at END
            WHERE id = $1`,
-          [site.id, total, needed],
+          [site.id, progress.done, progress.completed],
         );
         changed = true;
       }
+      // Falhas na economia (vendas, produção, transporte) não devem desfazer folha e obras do dia.
+      await client.query('SAVEPOINT daily_economy');
+      try {
       // Vendas de arroz: capacidade do dia vem dos Work Points gerados pela loja.
       const wageOf = new Map(workplaces.map((row) => [row.id, row.wage]));
       const incomeByResidence = getAverageIncomes(
@@ -770,6 +777,10 @@ async function runDailyEmployment(): Promise<boolean> {
           state.day,
           transfers.reduce((sum, item) => sum + getTransportDemand(item.productId, item.quantity), 0),
         );
+      }
+      } catch (economyError) {
+        await client.query('ROLLBACK TO SAVEPOINT daily_economy');
+        console.error('Falha na economia diária (folha e obras foram preservadas):', economyError);
       }
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
     }

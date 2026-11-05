@@ -43,6 +43,7 @@ import {
 import type { RoadPlacementError, RoadPosition, RoadTile } from './types/road';
 import { TileInfo } from './types/map';
 import { formatMoney } from './types/wallet';
+import { loadCommerceDiagnostics, saveCommerceDiagnostics } from './utils/commerceDiagnosticsStorage';
 import { createMapGenerator } from './utils/mapGenerator';
 import { DEFAULT_TILE_LIST } from './utils/tileAssets';
 import { WORLD_CONFIG } from './utils/worldConfig';
@@ -246,6 +247,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [hoveredTile, setHoveredTile] = useState<TileInfo | null>(null);
   const [selectedTile, setSelectedTile] = useState<TileInfo | null>(null);
   const [selectedResidenceId, setSelectedResidenceId] = useState<string | null>(null);
+  const selectedResidenceIdRef = useRef(selectedResidenceId);
+  selectedResidenceIdRef.current = selectedResidenceId;
   const [isResidenceOwner, setIsResidenceOwner] = useState(false);
   const [isSavingWorkSettings, setIsSavingWorkSettings] = useState(false);
   const [workSettingsError, setWorkSettingsError] = useState('');
@@ -263,6 +266,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isCommerceHistoryOpen, setIsCommerceHistoryOpen] = useState(false);
   const [isCommerceHistoryLoading, setIsCommerceHistoryLoading] = useState(false);
   const [commerceHistoryError, setCommerceHistoryError] = useState('');
+  const [commerceDiagnosticsStorageError, setCommerceDiagnosticsStorageError] = useState('');
   const [commerceHistoryDays, setCommerceHistoryDays] = useState<CommerceDay[]>([]);
   const [isWarehouseLogOpen, setIsWarehouseLogOpen] = useState(false);
   const [isWarehouseLogLoading, setIsWarehouseLogLoading] = useState(false);
@@ -355,8 +359,26 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setCities,
       setRoads,
       setResidentialBuildings,
+      (update) => {
+        try {
+          saveCommerceDiagnostics(window.localStorage, user.email, update);
+          setCommerceDiagnosticsStorageError('');
+          setCommerceHistoryDays((current) =>
+            current.map((item) =>
+              item.day === update.day && selectedResidenceIdRef.current === update.buildingId
+                ? { ...item, transactions: update.transactions }
+                : item,
+            ),
+          );
+        } catch (error) {
+          console.error('Não foi possível salvar o cálculo da demanda neste navegador:', error);
+          setCommerceDiagnosticsStorageError(
+            'Não foi possível salvar o cálculo da demanda neste navegador. Verifique o espaço disponível.',
+          );
+        }
+      },
     );
-  }, []);
+  }, [user.email]);
 
   const visibleCities = useMemo(() => {
     const byPosition = new Map(
@@ -494,7 +516,13 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       const result = await cityRequest<{ days: CommerceDay[] }>(
         `/api/residential-buildings/${buildingId}/commerce-history`,
       );
-      setCommerceHistoryDays(result.days);
+      const localDiagnostics = loadCommerceDiagnostics(window.localStorage, user.email, buildingId);
+      setCommerceHistoryDays(
+        result.days.map((item) => ({
+          ...item,
+          transactions: localDiagnostics.get(item.day) ?? item.transactions,
+        })),
+      );
     } catch (error) {
       setCommerceHistoryError(error instanceof Error ? error.message : 'Não foi possível carregar o histórico.');
     } finally {
@@ -1346,7 +1374,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             title={`Histórico: ${RESIDENCES[selectedResidence.type].name}`}
             days={commerceHistoryDays}
             isLoading={isCommerceHistoryLoading}
-            error={commerceHistoryError}
+            error={commerceHistoryError || commerceDiagnosticsStorageError}
             onClose={() => setIsCommerceHistoryOpen(false)}
           />
         )}

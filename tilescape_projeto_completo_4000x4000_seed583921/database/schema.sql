@@ -215,12 +215,8 @@ CREATE TABLE IF NOT EXISTS commerce_history (
   product_expense INTEGER NOT NULL DEFAULT 0 CHECK (product_expense >= 0),
   units_sold INTEGER NOT NULL DEFAULT 0 CHECK (units_sold >= 0),
   sale_price INTEGER NOT NULL CHECK (sale_price >= 1),
-  transaction_details JSONB,
   PRIMARY KEY (building_id, day)
 );
-
-ALTER TABLE commerce_history
-  ADD COLUMN IF NOT EXISTS transaction_details JSONB;
 
 CREATE TABLE IF NOT EXISTS warehouse_transport_log (
   id BIGSERIAL PRIMARY KEY,

@@ -51,7 +51,8 @@ export default function CommerceHistoryPanel({
       </div>
       <p className="warehouse-summary">
         Últimos 30 dias. Gastos com produtos consideram apenas pagamentos realizados; reposição interna pelo
-        armazém do mesmo dono não gera cobrança.
+        armazém do mesmo dono não gera cobrança. O cálculo da demanda fica salvo somente neste navegador;
+        ele precisa estar conectado quando as vendas do dia forem processadas.
         {isLoading && ' Carregando…'}
       </p>
       {error && <p role="alert" className="warehouse-error">{error}</p>}
@@ -85,7 +86,10 @@ export default function CommerceHistoryPanel({
                 {item.transactions === null ? 'Ver cálculo' : `Ver cálculo (${item.transactions.length})`}
               </summary>
               {item.transactions === null ? (
-                <p>Diagnóstico indisponível para esta data; será gravado nos próximos dias.</p>
+                <p>
+                  Cálculo indisponível neste navegador. Ele precisava estar conectado quando as vendas
+                  deste dia foram processadas.
+                </p>
               ) : item.transactions.length === 0 ? (
                 <p>Sem residências no raio de compra nesta data.</p>
               ) : (

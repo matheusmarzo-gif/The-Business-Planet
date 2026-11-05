@@ -1,4 +1,5 @@
 import { getAccessToken } from '../auth/authClient';
+import { isCommerceDiagnosticsUpdate, type CommerceDiagnosticsUpdate } from '../types/commerce';
 import type { CityAssembly } from '../types/city';
 import type { CityZone } from '../types/city';
 import type { RoadTile } from '../types/road';
@@ -92,6 +93,7 @@ export function connectToWorld(
   onCitiesChange: (cities: CityAssembly[]) => void,
   onRoadsChange: (roads: RoadTile[]) => void,
   onResidentialBuildingsChange: (buildings: ResidentialBuilding[]) => void,
+  onCommerceDiagnostics: (update: CommerceDiagnosticsUpdate) => void,
 ): () => void {
   let socket: WebSocket | null = null;
   let reconnectTimer: number | undefined;
@@ -131,6 +133,10 @@ export function connectToWorld(
     socket.addEventListener('message', (event) => {
       try {
         const message: unknown = JSON.parse(String(event.data));
+        if (isCommerceDiagnosticsUpdate(message)) {
+          onCommerceDiagnostics(message);
+          return;
+        }
         if (
           typeof message === 'object' &&
           message !== null &&

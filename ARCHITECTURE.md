@@ -335,18 +335,22 @@ mapeamento e verificar todas as curvas.
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
-  preço unitário de venda, além de `transaction_details` (JSONB): por residência
-  próxima registra renda, moradores, média efetiva da área, demanda esperada e
-  arredondada; para cada loja candidata registra preço, distância, benefício,
-  posição no ranking, estoque/capacidade disponíveis, demanda antes/depois,
-  quantidade comprada e resultado da tentativa. Receita e lucro/prejuízo são
-  calculados dos dados financeiros.
+  preço unitário de venda. Os detalhes do cálculo da demanda (renda, moradores,
+  média efetiva da área, demanda esperada e arredondada; preço, distância,
+  benefício, posição no ranking, estoque/capacidade disponíveis, demanda
+  antes/depois, quantidade comprada e resultado da tentativa por loja candidata)
+  são encaminhados via Redis apenas aos WebSockets autenticados do proprietário
+  e ficam somente no `localStorage` do navegador. O navegador precisa estar conectado
+  durante o processamento das vendas para capturar esse diagnóstico; clientes
+  offline não o recebem. A API do histórico retorna somente os dados financeiros,
+  e os diagnósticos locais são combinados no cliente.
+  Receita e lucro/prejuízo são calculados dos dados financeiros.
   Como o abastecimento pelo armazém do mesmo dono é uma transferência interna
   sem cobrança, esse movimento registra C$ 0 de gasto com produto. O histórico
-  conserva 30 dias e só o dono consulta pela rota de histórico do comércio. A
-  coluna diagnóstica é adicionada com `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`
-  para bancos existentes; registros anteriores à implantação ficam sem
-  diagnóstico e os novos detalhes são exibidos no histórico por dia.
+  financeiro conserva 30 dias e só o dono consulta pela rota de histórico do
+  comércio. Os diagnósticos locais também conservam até 30 dias. A coluna
+  `transaction_details` de instalações anteriores não é mais lida ou atualizada;
+  os registros existentes expiram junto com o histórico financeiro.
 - Produção da fazenda de arroz (`src/types/farming.ts`): `POST
   /api/residential-buildings/:id/plant` (só dono, fazenda concluída; plantar ou
   replantar durante o crescimento zera o contador; bloqueado na colheita)
@@ -462,7 +466,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/residential-buildings/:id/warehouse-log` | Dono do armazém | Retorna `{ days: [{ day, workPoints }], events: [{ day, buildingType, productId, direction, wanted, moved, reason, errorDetail }] }` do armazém (tabela `warehouse_transport_log`, gravada às 00:00 na etapa de transporte, 30 dias; `reason` = `desired_reached`/`no_space`/`no_work_points`/`warehouse_empty` quando moveu menos que o desejado; erros internos registram etapa e detalhe em `errorDetail`). |
 | `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo) e estoque agregado; espaço ocupado é calculado no cliente. |
 | `GET /api/residential-buildings/:id/production-history` | Autenticado | Retorna `{ days: [{ day, workPoints, produced, transported, efficiency }] }` dos últimos 30 dias (tabela `production_history`, gravada às 00:00 pelas etapas de produção, fazendas e transporte; `transported` conta só envios ao armazém). |
-| `GET /api/residential-buildings/:id/commerce-history` | Dono do comércio | Retorna os últimos 30 dias de `{ day, employeeExpense, productExpense, unitsSold, salePrice, revenue, profitLoss }` da tabela `commerce_history`; o painel abre pelo botão Histórico do comércio. |
+| `GET /api/residential-buildings/:id/commerce-history` | Dono do comércio | Retorna os últimos 30 dias de dados financeiros de `commerce_history`; o painel combina a resposta com diagnósticos presentes no armazenamento local do navegador. |
 | `GET /api/master/online-players` | Master | Lista `{ players: [{ id, name, email, connections }] }` a partir da presença no Redis (`userId|uuid`) e de `neon_auth."user"`. |
 | `POST /api/master/time-scale` | Master | `{ timeScale }` validado por `isValidTimeScale` (`src/types/worldClock.ts`: 15, 30, 60, 240); avança o relógio com a velocidade antiga, grava `world_state.time_scale` e republica o snapshot. |
 | `POST /api/master/grant-money` | Master | `{ amount }` (inteiro 1 a 1.000.000.000, `parseMasterGrant`) creditado na carteira do próprio Master; retorna `{ balance }`. |

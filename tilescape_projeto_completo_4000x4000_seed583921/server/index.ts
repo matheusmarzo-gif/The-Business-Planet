@@ -51,12 +51,13 @@ import {
   type JobAssignment,
 } from '../src/types/employment.js';
 import {
+  isCommerceDiagnosticsUpdate,
   getShopDailyFinancials,
   getShopProfitLoss,
   getShopSalesCapacity,
   parsePrice,
   planRiceSalesDetailed,
-  type ShopResidenceTransaction,
+  type CommerceDiagnosticsUpdate,
 } from '../src/types/commerce.js';
 import { nextEfficiencyPenalty, planProduction, rollToolDemand } from '../src/types/fishing.js';
 import {
@@ -103,6 +104,7 @@ const CLOCK_LEADER_KEY = 'valdora:clock:leader';
 const PRESENCE_KEY = 'valdora:presence';
 const SNAPSHOT_CHANNEL = 'valdora:world:snapshots';
 const CITIES_CHANNEL = 'valdora:world:cities';
+const COMMERCE_DIAGNOSTICS_CHANNEL = 'valdora:world:commerce-diagnostics';
 const INSTANCE_ID = randomUUID();
 const PRESENCE_TTL_MS = 35_000;
 const pool = new Pool({
@@ -119,6 +121,10 @@ const websocketServer = new WebSocketServer({ noServer: true });
 interface AuthConfig {
   jwks: ReturnType<typeof createRemoteJWKSet>;
   issuer: string;
+}
+
+interface PendingCommerceDiagnostics extends CommerceDiagnosticsUpdate {
+  ownerId: string;
 }
 
 interface CityAssembly {
@@ -315,6 +321,34 @@ async function getSnapshot() {
 function broadcast(payload: string) {
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN) client.send(payload);
+  }
+}
+
+function deliverCommerceDiagnostics(message: string) {
+  let update: unknown;
+  try {
+    update = JSON.parse(message);
+  } catch (error) {
+    console.error('Não foi possível interpretar o cálculo da demanda recebido pelo Redis:', error);
+    return;
+  }
+  if (
+    typeof update !== 'object' ||
+    update === null ||
+    !isCommerceDiagnosticsUpdate(update) ||
+    !('ownerId' in update) ||
+    typeof update.ownerId !== 'string'
+  ) {
+    console.error('O Redis publicou um cálculo da demanda inválido.');
+    return;
+  }
+
+  const { ownerId, ...diagnostics } = update as PendingCommerceDiagnostics;
+  const payload = JSON.stringify(diagnostics);
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN && websocketUsers.get(client) === ownerId) {
+      client.send(payload);
+    }
   }
 }
 
@@ -548,6 +582,7 @@ async function logProduction(
 // Às 12:00 distribui os trabalhadores e às 00:00 cobra a folha de pagamento dos donos.
 async function runDailyEmployment(): Promise<boolean> {
   const client = await pool.connect();
+  const pendingCommerceDiagnostics: PendingCommerceDiagnostics[] = [];
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
@@ -646,18 +681,21 @@ async function runDailyEmployment(): Promise<boolean> {
       // Falhas na economia (vendas, produção, transporte) não devem desfazer folha e obras do dia.
       await client.query('SAVEPOINT daily_economy');
       // Cada etapa tem seu próprio savepoint: uma falha nas vendas ou no transporte não desfaz a produção.
-      const runStage = async (name: string, stage: () => Promise<void>) => {
+      const runStage = async (name: string, stage: () => Promise<void>): Promise<boolean> => {
         await client.query('SAVEPOINT economy_stage');
         try {
           await stage();
           await client.query('RELEASE SAVEPOINT economy_stage');
+          return true;
         } catch (stageError) {
           await client.query('ROLLBACK TO SAVEPOINT economy_stage');
           console.error(`Falha na economia diária (${name}):`, stageError);
+          return false;
         }
       };
       try {
-      await runStage('vendas', async () => {
+      const salesDiagnostics: PendingCommerceDiagnostics[] = [];
+      const salesStageSucceeded = await runStage('vendas', async () => {
       // Vendas de arroz: capacidade do dia vem dos Work Points gerados pela loja.
       const wageOf = new Map(workplaces.map((row) => [row.id, row.wage]));
       const incomeByResidence = getAverageIncomes(
@@ -691,6 +729,7 @@ async function runDailyEmployment(): Promise<boolean> {
           const previousSalesForShop = previousSales.get(row.id);
           return {
             id: row.id,
+            ownerId: row.created_by,
             type: row.building_type,
             x: row.tile_x,
             y: row.tile_y,
@@ -770,15 +809,13 @@ async function runDailyEmployment(): Promise<boolean> {
         );
         await client.query(
           `INSERT INTO commerce_history
-             (building_id, day, employee_expense, product_expense, units_sold, sale_price,
-              transaction_details)
-           VALUES ($1, $2::date, $3, $4, $5, $6, $7::jsonb)
+             (building_id, day, employee_expense, product_expense, units_sold, sale_price)
+           VALUES ($1, $2::date, $3, $4, $5, $6)
            ON CONFLICT (building_id, day) DO UPDATE
            SET employee_expense = EXCLUDED.employee_expense,
                product_expense = EXCLUDED.product_expense,
                units_sold = EXCLUDED.units_sold,
-               sale_price = EXCLUDED.sale_price,
-               transaction_details = EXCLUDED.transaction_details`,
+               sale_price = EXCLUDED.sale_price`,
           [
             shop.id,
             state.day,
@@ -786,13 +823,20 @@ async function runDailyEmployment(): Promise<boolean> {
             financials.productExpense,
             financials.unitsSold,
             financials.salePrice,
-            JSON.stringify(salesPlan.transactionsByShop.get(shop.id) ?? []),
           ],
         );
+        salesDiagnostics.push({
+          ownerId: shop.ownerId,
+          type: 'commerce_diagnostics',
+          buildingId: shop.id,
+          day: state.day,
+          transactions: salesPlan.transactionsByShop.get(shop.id) ?? [],
+        });
       }
       await client.query('DELETE FROM commerce_history WHERE day < $1::date - 30', [state.day]);
       }
       });
+      if (salesStageSucceeded) pendingCommerceDiagnostics.push(...salesDiagnostics);
       await runStage('produção', async () => {
       // Construções produtivas: demanda de Ferramentas, penalidade de eficiência e produção diária.
       for (const site of workplaces) {
@@ -1268,6 +1312,19 @@ async function runDailyEmployment(): Promise<boolean> {
     }
 
     await client.query('COMMIT');
+    for (const { ownerId, ...diagnostics } of pendingCommerceDiagnostics) {
+      await redis
+        .publish(
+          COMMERCE_DIAGNOSTICS_CHANNEL,
+          JSON.stringify({ ownerId, ...diagnostics }),
+        )
+        .catch((error: unknown) => {
+          console.error(
+            `Não foi possível enviar o cálculo da demanda da loja ${diagnostics.buildingId} ao navegador:`,
+            error,
+          );
+        });
+    }
     return changed;
   } catch (error) {
     await client.query('ROLLBACK').catch((rollbackError: unknown) => {
@@ -1881,6 +1938,7 @@ async function start() {
   await Promise.all([
     subscriber.subscribe(SNAPSHOT_CHANNEL, (message) => broadcast(message)),
     subscriber.subscribe(CITIES_CHANNEL, (message) => broadcast(message)),
+    subscriber.subscribe(COMMERCE_DIAGNOSTICS_CHANNEL, deliverCommerceDiagnostics),
   ]);
 
   app.use(express.json({ limit: '16kb' }));
@@ -2236,11 +2294,9 @@ async function start() {
         product_expense: number;
         units_sold: number;
         sale_price: number;
-        transaction_details: ShopResidenceTransaction[] | null;
       }>(
         `SELECT to_char(day, 'YYYY-MM-DD') AS day,
-                employee_expense, product_expense, units_sold, sale_price,
-                transaction_details
+                employee_expense, product_expense, units_sold, sale_price
          FROM commerce_history
          WHERE building_id = $1
          ORDER BY day DESC
@@ -2263,7 +2319,7 @@ async function start() {
             salePrice: row.sale_price,
             revenue,
             profitLoss,
-            transactions: row.transaction_details,
+            transactions: null,
           };
         }),
       });

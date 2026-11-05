@@ -334,8 +334,12 @@ disponível, e o dono recebe o valor da venda. A loja só vende o estoque que
 tiver (começa em 0; pode ser abastecida por um armazém ligado). No histórico do
 comércio, **Ver cálculo** detalha, por residência, renda e população, média
 efetiva da área, demanda, benefício e posição de cada loja, estoque/capacidade
-disponíveis, quanto foi comprado e se faltou estoque ou capacidade. Os detalhes
-começam a ser gravados nos próximos dias; registros antigos não são reconstruídos.
+disponíveis, quanto foi comprado e se faltou estoque ou capacidade. Esse cálculo
+é enviado ao dono em tempo real e salvo somente no armazenamento local do
+navegador por até 30 dias; o navegador precisa estar conectado quando as vendas
+do dia forem processadas. Se estiver offline, o cálculo daquele dia não será
+salvo nesse navegador. Os detalhes antigos permanecem apenas até a retenção
+atual do histórico removê-los e não são reconstruídos.
 O painel também mostra funcionários atuais,
 desejados e vagas; nas residências, as pessoas empregadas. Nos painéis de
 construções produtivas, uma descrição antes

@@ -68,6 +68,85 @@ export interface ShopResidenceTransaction {
   candidate: ShopTransactionCandidate;
 }
 
+export interface CommerceDiagnosticsUpdate {
+  type: 'commerce_diagnostics';
+  buildingId: string;
+  day: string;
+  transactions: ShopResidenceTransaction[];
+}
+
+const SHOP_TRANSACTION_OUTCOMES = new Set<ShopTransactionCandidate['outcome']>([
+  'purchased',
+  'negative_benefit',
+  'no_stock',
+  'no_capacity',
+  'no_stock_or_capacity',
+  'demand_fulfilled',
+]);
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function isNonNegativeNumber(value: unknown): value is number {
+  return isFiniteNumber(value) && value >= 0;
+}
+
+export function isShopResidenceTransaction(value: unknown): value is ShopResidenceTransaction {
+  if (typeof value !== 'object' || value === null) return false;
+  const transaction = value as Record<string, unknown>;
+  if (
+    typeof transaction.residenceId !== 'string' ||
+    !isNonNegativeInteger(transaction.occupants) ||
+    !isNonNegativeNumber(transaction.averageIncome) ||
+    !isNonNegativeNumber(transaction.areaAveragePrice) ||
+    !isNonNegativeNumber(transaction.expectedDemand) ||
+    !isNonNegativeNumber(transaction.desiredQuantity) ||
+    typeof transaction.candidate !== 'object' ||
+    transaction.candidate === null
+  ) {
+    return false;
+  }
+
+  const candidate = transaction.candidate as Record<string, unknown>;
+  return (
+    typeof candidate.shopId === 'string' &&
+    isPositiveInteger(candidate.price) &&
+    isNonNegativeNumber(candidate.distance) &&
+    isNonNegativeNumber(candidate.desiredQuantity) &&
+    isFiniteNumber(candidate.benefit) &&
+    isPositiveInteger(candidate.rank) &&
+    isNonNegativeInteger(candidate.stockAvailable) &&
+    isNonNegativeInteger(candidate.capacityAvailable) &&
+    isNonNegativeInteger(candidate.available) &&
+    isNonNegativeInteger(candidate.demandBefore) &&
+    isNonNegativeInteger(candidate.purchased) &&
+    isNonNegativeInteger(candidate.demandAfter) &&
+    typeof candidate.outcome === 'string' &&
+    SHOP_TRANSACTION_OUTCOMES.has(candidate.outcome as ShopTransactionCandidate['outcome'])
+  );
+}
+
+export function isCommerceDiagnosticsUpdate(value: unknown): value is CommerceDiagnosticsUpdate {
+  if (typeof value !== 'object' || value === null) return false;
+  const update = value as Record<string, unknown>;
+  return (
+    update.type === 'commerce_diagnostics' &&
+    typeof update.buildingId === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(String(update.day)) &&
+    Array.isArray(update.transactions) &&
+    update.transactions.every(isShopResidenceTransaction)
+  );
+}
+
 export interface RiceSalesPlan {
   purchases: RicePurchase[];
   transactionsByShop: Map<string, ShopResidenceTransaction[]>;

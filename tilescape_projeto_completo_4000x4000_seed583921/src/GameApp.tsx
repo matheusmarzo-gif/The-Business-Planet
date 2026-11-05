@@ -247,6 +247,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [warehouseError, setWarehouseError] = useState('');
   const [warehouseStock, setWarehouseStock] = useState<Map<string, number>>(new Map());
   const [linkingFromId, setLinkingFromId] = useState<string | null>(null);
+  const [showInfluence, setShowInfluence] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const gameTime = useWorldClock(snapshot);
 
@@ -988,7 +989,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           roadMode={isPlacingRoads}
           demolitionMode={isDemolitionMode}
           zoneOverlay={zoneOverlay}
-          zoneEditorCityId={zoneEditorCityId}
+          influenceBuilding={showInfluence ? selectedResidence : null}          zoneEditorCityId={zoneEditorCityId}
           zoneDrawingType={isSavingZones ? null : zoneDrawingType}
           residentialBuildings={visibleResidentialBuildings}
           residencePlacementType={residencePlacementType}
@@ -1055,6 +1056,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onCancelLink={() => setLinkingFromId(null)}
             onUnlink={() => void linkWarehouse(selectedResidence.id, null)}
             onPlant={() => void plantCrop(selectedResidence.id)}
+            showInfluence={showInfluence}
+            onToggleInfluence={() => setShowInfluence((current) => !current)}
             onClose={() => {
               setLinkingFromId(null);
               setSelectedResidenceId(null);

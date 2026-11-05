@@ -324,6 +324,16 @@ mapeamento e verificar todas as curvas.
   200 WP por unidade colhida, limitado ao espaço livre do estoque (300); ao
   terminar, o plantio é limpo e um novo pode ser feito. `ResidentialBuilding.crop`
   expõe o estado ao cliente.
+- Comércio entre armazéns (`planWarehouseTrades` em `src/types/logistics.ts`): às
+  03:00 e 15:00 (`world_state.last_warehouse_trade_slot`, ex. `2026-01-01T15`,
+  garante uma execução por rodada) cada armazém em modo `buy` procura armazéns
+  de outros donos em até 60 tiles em modo `sell`. O vendedor oferece só o que
+  excede seu estoque desejável, ao preço dele; o comprador só compra se esse
+  preço for menor que o seu valor, até o estoque desejável e o espaço livre
+  (50 m³). As ofertas mais baratas são atendidas primeiro entre todos os
+  fornecedores. O comprador gasta Work Points de transporte (mesma fórmula; cada
+  rodada usa metade dos pontos diários) e paga ao vendedor (carteira pode ficar
+  negativa).
 - Logística de armazém (`src/types/logistics.ts`): `residential_buildings.
   warehouse_id` (FK própria, `ON DELETE SET NULL`) liga uma fazenda ou comércio
   concluído a um único armazém concluído do mesmo dono, a até 60 tiles

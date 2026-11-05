@@ -110,3 +110,89 @@ export function planTransfers(warehouse: WarehouseLogistics, links: LogisticsLin
   }
   return transfers;
 }
+
+export type WarehouseTradeMode = 'sell' | 'buy';
+
+export interface TradeWarehouse {
+  id: string;
+  ownerId: string;
+  type: ResidenceType;
+  x: number;
+  y: number;
+  capacityM3: number;
+  workPoints: number;
+  stock: Map<string, number>;
+  settings: Map<string, { desired: number; price: number; mode: WarehouseTradeMode }>;
+}
+
+export interface WarehouseTrade {
+  buyerId: string;
+  sellerId: string;
+  productId: string;
+  quantity: number;
+  // Valor unitário definido pelo vendedor.
+  price: number;
+}
+
+/**
+ * Compras entre armazéns de donos diferentes em até 60 tiles. O vendedor oferece o que
+ * excede seu estoque desejável (modo venda) ao preço dele; o comprador (modo compra) quer
+ * chegar ao estoque desejável e só paga se o preço for menor que o seu limite. As ofertas
+ * mais baratas são atendidas primeiro entre todos os fornecedores; o comprador gasta Work
+ * Points de transporte e espaço livre em m³.
+ */
+export function planWarehouseTrades(warehouses: TradeWarehouse[]): WarehouseTrade[] {
+  const stock = new Map(warehouses.map((item) => [item.id, new Map(item.stock)]));
+  const points = new Map(warehouses.map((item) => [item.id, item.workPoints]));
+  const offers: { seller: TradeWarehouse; buyer: TradeWarehouse; productId: string; price: number }[] = [];
+
+  for (const seller of warehouses) {
+    for (const [productId, offer] of seller.settings) {
+      if (offer.mode !== 'sell') continue;
+      for (const buyer of warehouses) {
+        const want = buyer.settings.get(productId);
+        if (
+          buyer.ownerId === seller.ownerId ||
+          want?.mode !== 'buy' ||
+          offer.price >= want.price ||
+          !isWithinLinkRadius(buyer, seller)
+        ) {
+          continue;
+        }
+        offers.push({ seller, buyer, productId, price: offer.price });
+      }
+    }
+  }
+  offers.sort(
+    (a, b) =>
+      a.price - b.price ||
+      a.seller.id.localeCompare(b.seller.id) ||
+      a.buyer.id.localeCompare(b.buyer.id) ||
+      a.productId.localeCompare(b.productId),
+  );
+
+  const trades: WarehouseTrade[] = [];
+  for (const { seller, buyer, productId, price } of offers) {
+    const product = PRODUCTS.find((item) => item.id === productId);
+    if (!product) continue;
+    const sellerStock = stock.get(seller.id)!;
+    const buyerStock = stock.get(buyer.id)!;
+    const surplus = (sellerStock.get(productId) ?? 0) - (seller.settings.get(productId)?.desired ?? 0);
+    const need = (buyer.settings.get(productId)?.desired ?? 0) - (buyerStock.get(productId) ?? 0);
+    const usedM3 = PRODUCTS.reduce((sum, item) => sum + (buyerStock.get(item.id) ?? 0) * item.volumeM3, 0);
+    const unitDemand = getTransportDemand(productId, 1);
+    const quantity = Math.min(
+      surplus,
+      need,
+      Math.floor((buyer.capacityM3 - usedM3) / product.volumeM3 + 1e-9),
+      Math.floor((points.get(buyer.id) ?? 0) / unitDemand + 1e-9),
+    );
+    if (quantity <= 0) continue;
+    sellerStock.set(productId, (sellerStock.get(productId) ?? 0) - quantity);
+    buyerStock.set(productId, (buyerStock.get(productId) ?? 0) + quantity);
+    points.set(buyer.id, (points.get(buyer.id) ?? 0) - quantity * unitDemand);
+    trades.push({ buyerId: buyer.id, sellerId: seller.id, productId, quantity, price });
+  }
+  return trades;
+}
+

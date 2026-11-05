@@ -46,6 +46,7 @@ import {
   isWithinLinkRadius,
   parseWarehouseLink,
   planTransfers,
+  planWarehouseTrades,
 } from '../src/types/logistics.js';
 import {
   advanceGrowth,
@@ -378,11 +379,13 @@ async function runDailyEmployment(): Promise<boolean> {
       hour: number;
       last_alloc: string | null;
       last_payroll: string | null;
+      last_trade: string | null;
     }>(
       `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
               EXTRACT(HOUR FROM world_time AT TIME ZONE 'UTC')::int AS hour,
               to_char(last_job_allocation_day, 'YYYY-MM-DD') AS last_alloc,
-              to_char(last_payroll_day, 'YYYY-MM-DD') AS last_payroll
+              to_char(last_payroll_day, 'YYYY-MM-DD') AS last_payroll,
+              last_warehouse_trade_slot AS last_trade
        FROM world_state WHERE id = 1 FOR UPDATE`,
     );
     const state = stateRows[0];
@@ -655,6 +658,91 @@ async function runDailyEmployment(): Promise<boolean> {
       }
       await client.query('UPDATE world_state SET last_job_allocation_day = $1 WHERE id = 1', [state.day]);
       changed = true;
+    }
+
+    // Às 03:00 e 15:00 os armazéns compram de armazéns de outros donos em até 60 tiles.
+    const tradeSlot = state.hour >= 15 ? `${state.day}T15` : state.hour >= 3 ? `${state.day}T03` : null;
+    if (tradeSlot && (state.last_trade === null || state.last_trade < tradeSlot)) {
+      const { rows: warehouseRows } = await client.query<{
+        id: string;
+        created_by: string;
+        building_type: ResidenceType;
+        tile_x: number;
+        tile_y: number;
+        work_hours_per_day: number;
+        workers: number;
+      }>(
+        `SELECT b.id, b.created_by, b.building_type, b.tile_x, b.tile_y, b.work_hours_per_day,
+                COALESCE((SELECT SUM(count) FROM job_assignments j WHERE j.workplace_id = b.id), 0)::int AS workers
+         FROM residential_buildings b
+         WHERE b.building_type = 'warehouse' AND b.status = 'completed'`,
+      );
+      const { rows: stockRows } = await client.query<{ building_id: string; product_id: string; quantity: number }>(
+        'SELECT building_id, product_id, quantity FROM warehouse_stock',
+      );
+      const { rows: settingRows } = await client.query<{
+        building_id: string;
+        product_id: string;
+        desired_stock: number;
+        price: number;
+        mode: 'sell' | 'buy';
+      }>('SELECT building_id, product_id, desired_stock, price, mode FROM warehouse_product_settings');
+      const tradeWarehouses = warehouseRows.map((row) => {
+        const stock = new Map<string, number>();
+        for (const item of stockRows) {
+          if (item.building_id === row.id) stock.set(item.product_id, item.quantity);
+        }
+        const settings = new Map<string, { desired: number; price: number; mode: 'sell' | 'buy' }>();
+        for (const item of settingRows) {
+          if (item.building_id === row.id) {
+            settings.set(item.product_id, { desired: item.desired_stock, price: item.price, mode: item.mode });
+          }
+        }
+        return {
+          id: row.id,
+          ownerId: row.created_by,
+          type: row.building_type,
+          x: row.tile_x,
+          y: row.tile_y,
+          capacityM3: RESIDENCES.warehouse.storageCapacityM3 ?? 0,
+          // Cada rodada usa metade dos Work Points diários do armazém.
+          workPoints:
+            (row.workers *
+              getDailyWorkPoints(row.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness)) /
+            2,
+          stock,
+          settings,
+        };
+      });
+      const ownerOf = new Map(warehouseRows.map((row) => [row.id, row.created_by]));
+      for (const trade of planWarehouseTrades(tradeWarehouses)) {
+        const cost = trade.quantity * trade.price;
+        await client.query(
+          'UPDATE warehouse_stock SET quantity = quantity - $3 WHERE building_id = $1 AND product_id = $2',
+          [trade.sellerId, trade.productId, trade.quantity],
+        );
+        await client.query(
+          `INSERT INTO warehouse_stock (building_id, product_id, quantity) VALUES ($1, $2, $3)
+           ON CONFLICT (building_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3`,
+          [trade.buyerId, trade.productId, trade.quantity],
+        );
+        const buyer = ownerOf.get(trade.buyerId);
+        const seller = ownerOf.get(trade.sellerId);
+        if (buyer && seller) {
+          for (const [userId, delta] of [
+            [buyer, -cost],
+            [seller, cost],
+          ] as const) {
+            await client.query(
+              `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::bigint + $2::bigint)
+               ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::bigint`,
+              [userId, delta, STARTING_BALANCE],
+            );
+          }
+        }
+        changed = true;
+      }
+      await client.query('UPDATE world_state SET last_warehouse_trade_slot = $1 WHERE id = 1', [tradeSlot]);
     }
 
     await client.query('COMMIT');

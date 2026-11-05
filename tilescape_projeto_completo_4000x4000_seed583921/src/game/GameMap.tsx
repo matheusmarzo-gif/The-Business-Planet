@@ -29,6 +29,7 @@ import {
   ResidencePlacementError,
   ResidenceType,
   UNDER_CONSTRUCTION_ASSET,
+  WORKER_SEARCH_RADIUS,
 } from '../types/residence';
 
 const BASE_TILE_SIZE = 24;
@@ -90,6 +91,7 @@ interface GameMapProps {
   residentialBuildings: ResidentialBuilding[];
   residencePlacementType: ResidenceType | null;
   isMaster: boolean;
+  influenceBuilding: ResidentialBuilding | null;
   onCitySelect: (city: CityAssembly) => void;
   onCityPlace: (center: { x: number; y: number }) => void;
   onInvalidCityPlacement: (reason: CityPlacementError) => void;
@@ -123,6 +125,7 @@ export function GameMap({
   residentialBuildings,
   residencePlacementType,
   isMaster,
+  influenceBuilding,
   onCitySelect,
   onCityPlace,
   onInvalidCityPlacement,
@@ -302,6 +305,20 @@ export function GameMap({
       layer.addChild(zoneGraphics);
     }
 
+    if (influenceBuilding) {
+      const definition = RESIDENCES[influenceBuilding.type];
+      const influence = new PIXI.Graphics();
+      influence.lineStyle(2 / tilePixels, 0xf2d27a, 0.95);
+      influence.beginFill(0xf2d27a, 0.12);
+      influence.drawCircle(
+        influenceBuilding.x + definition.width / 2,
+        influenceBuilding.y + definition.height / 2,
+        WORKER_SEARCH_RADIUS,
+      );
+      influence.endFill();
+      layer.addChild(influence);
+    }
+
     const border = new PIXI.Graphics();
     border.lineStyle(2 / tilePixels, 0xd5c08b, 0.8);
     border.drawRect(0, 0, generator.config.width, generator.config.height);
@@ -335,7 +352,7 @@ export function GameMap({
       }
     }
 
-  }, [camera, cities, generator, roads, residentialBuildings, zoneEditorCityId, zoneOverlay]);
+  }, [camera, cities, generator, roads, residentialBuildings, zoneEditorCityId, zoneOverlay, influenceBuilding]);
 
   useEffect(() => {
     renderMap();

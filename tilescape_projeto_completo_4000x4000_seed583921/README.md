@@ -290,6 +290,16 @@ estoque máximo. O transporte custa Work Points do armazém: `100 × m³ + 0,125
 os pontos vêm dos funcionários do armazém e o que não couber não é transportado.
 O painel do armazém mostra o estoque real e o espaço ocupado.
 
+**Influência:** o botão **Ver influência** no painel de qualquer construção
+desenha no mapa o raio de 60 tiles dela.
+
+**Comércio entre armazéns:** às 03:00 e 15:00 os armazéns com produtos em modo
+**Compra** procuram, em até 60 tiles, armazéns de outros jogadores com o produto
+em modo **Venda**. O vendedor oferece só o que passa do estoque desejável dele,
+pelo valor que definiu; o comprador só compra se esse valor for menor que o seu,
+até o seu estoque desejável. As ofertas mais baratas vêm primeiro. O comprador
+gasta Work Points de transporte (cada rodada usa metade dos pontos diários).
+
 **Fazenda de arroz:** o dono usa **Plantar arroz** no painel da fazenda concluída.
 A colheita ocorre 6 meses (de calendário do jogo) depois e rende até 100
 unidades. O mês do plantio define a produtividade (meses 1–3: 100 %, 4–6: 60 %,

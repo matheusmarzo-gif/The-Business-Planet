@@ -35,6 +35,7 @@ import {
   isWithinLinkRadius,
   parseWarehouseLink,
   planTransfers,
+  planWarehouseTrades,
 } from './logistics';
 import {
   advanceGrowth,
@@ -51,6 +52,56 @@ describe('wallet', () => {
   it('starts with C$ 10.000 and formats money in Brazilian style', () => {
     assert.equal(STARTING_BALANCE, 10000);
     assert.equal(formatMoney(STARTING_BALANCE).replace(/\u00a0/g, ' '), 'C$ 10.000');
+  });
+});
+
+describe('warehouse trading', () => {
+  const warehouse = (
+    id: string,
+    ownerId: string,
+    x: number,
+    stock: [string, number][],
+    settings: [string, number, number, 'sell' | 'buy'][],
+    workPoints = 1e6,
+  ) => ({
+    id,
+    ownerId,
+    type: 'warehouse' as const,
+    x,
+    y: 0,
+    capacityM3: 50,
+    workPoints,
+    stock: new Map(stock),
+    settings: new Map(settings.map(([p, desired, price, mode]) => [p, { desired, price, mode }])),
+  });
+
+  it('buys the cheapest offers first, only below the buyer limit and above the seller desired stock', () => {
+    const trades = planWarehouseTrades([
+      warehouse('buyer', 'b', 0, [], [['rice', 30, 10, 'buy']]),
+      warehouse('dear', 'c', 10, [['rice', 100]], [['rice', 90, 9, 'sell']]),
+      warehouse('cheap', 'a', 20, [['rice', 100]], [['rice', 80, 5, 'sell']]),
+      warehouse('toodear', 'd', 30, [['rice', 100]], [['rice', 0, 10, 'sell']]),
+    ]);
+    // cheap oferece 20 (>80), dear oferece 10 (>90); toodear não é menor que o limite 10.
+    assert.deepEqual(trades, [
+      { buyerId: 'buyer', sellerId: 'cheap', productId: 'rice', quantity: 20, price: 5 },
+      { buyerId: 'buyer', sellerId: 'dear', productId: 'rice', quantity: 10, price: 9 },
+    ]);
+  });
+
+  it('ignores same owner, out of range and limits by Work Points', () => {
+    const base = warehouse('buyer', 'b', 0, [], [['rice', 30, 10, 'buy']], 20);
+    assert.deepEqual(
+      planWarehouseTrades([base, warehouse('same', 'b', 10, [['rice', 100]], [['rice', 0, 1, 'sell']])]),
+      [],
+    );
+    assert.deepEqual(
+      planWarehouseTrades([base, warehouse('far', 'a', 100, [['rice', 100]], [['rice', 0, 1, 'sell']])]),
+      [],
+    );
+    // 20 pontos / 2 por unidade = 10 unidades.
+    const limited = planWarehouseTrades([base, warehouse('near', 'a', 10, [['rice', 100]], [['rice', 0, 1, 'sell']])]);
+    assert.equal(limited[0].quantity, 10);
   });
 });
 

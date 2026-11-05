@@ -33,6 +33,8 @@ interface ResidencePanelProps {
   onCancelLink: () => void;
   onUnlink: () => void;
   onPlant: () => void;
+  showInfluence: boolean;
+  onToggleInfluence: () => void;
   onClose: () => void;
 }
 
@@ -53,6 +55,8 @@ export default function ResidencePanel({
   onCancelLink,
   onUnlink,
   onPlant,
+  showInfluence,
+  onToggleInfluence,
   onClose,
 }: ResidencePanelProps) {
   const definition = RESIDENCES[building.type];
@@ -148,6 +152,11 @@ export default function ResidencePanel({
           </div>
         ))}
       </dl>
+      <div className="crop-panel">
+        <button type="button" aria-pressed={showInfluence} onClick={onToggleInfluence}>
+          {showInfluence ? 'Ocultar influência' : 'Ver influência'}
+        </button>
+      </div>
       {definition.kind === 'warehouse' && building.status === 'completed' && (
         <button type="button" className="warehouse-open" onClick={onOpenWarehouse}>
           Produtos e estoque

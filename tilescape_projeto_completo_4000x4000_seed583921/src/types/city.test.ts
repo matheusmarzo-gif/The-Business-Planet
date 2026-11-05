@@ -216,6 +216,48 @@ describe('warehouse logistics', () => {
     );
     assert.equal(supply[0].quantity, 8);
   });
+
+  it('distributes scarce product stock proportionally across linked shops', () => {
+    const shops = Array.from({ length: 10 }, (_, index) => ({
+      buildingId: `shop-${String(index).padStart(2, '0')}`,
+      type: 'shop_fish' as const,
+      stock: 0,
+    }));
+    const transfers = planTransfers(
+      { stock: new Map([['fish', 200]]), desired: new Map(), capacityM3: 50, workPoints: 10000 },
+      shops,
+    );
+    assert.deepEqual(transfers.map((transfer) => transfer.quantity), Array(10).fill(20));
+  });
+
+  it('scales each shop share to its remaining stock need', () => {
+    const transfers = planTransfers(
+      { stock: new Map([['fish', 30]]), desired: new Map(), capacityM3: 50, workPoints: 10000 },
+      [
+        { buildingId: 'shop-a', type: 'shop_fish', stock: 20 },
+        { buildingId: 'shop-b', type: 'shop_fish', stock: 0 },
+      ],
+    );
+    assert.deepEqual(
+      transfers.map(({ buildingId, quantity }) => [buildingId, quantity]),
+      [['shop-a', 10], ['shop-b', 20]],
+    );
+  });
+
+  it('logs shared stock rationing as proportional distribution', async () => {
+    const { planTransfersDetailed } = await import('./logistics');
+    const { attempts } = planTransfersDetailed(
+      { stock: new Map([['fish', 40]]), desired: new Map(), capacityM3: 50, workPoints: 10000 },
+      [
+        { buildingId: 'shop-a', type: 'shop_fish', stock: 0 },
+        { buildingId: 'shop-b', type: 'shop_fish', stock: 0 },
+      ],
+    );
+    assert.deepEqual(attempts.map(({ wanted, moved, reason }) => [wanted, moved, reason]), [
+      [40, 20, 'insufficient_stock'],
+      [40, 20, 'insufficient_stock'],
+    ]);
+  });
 });
 
 describe('rice sales', () => {

@@ -400,15 +400,22 @@ mapeamento e verificar todas as curvas.
   consome Work Points do armazém (`100 · m³ + 0,125 · kg`; pontos = empregados
   do armazém × `getDailyWorkPoints`); envios ao armazém fazem upsert positivo e
   retiradas decrementam apenas uma linha existente com saldo suficiente, sem
-  tentar inserir estoque negativo. O que não couber não é transportado, e a
-  produção para o armazém tem prioridade sobre o abastecimento.
+  tentar inserir estoque negativo. Quando o produto disponível não cobre a
+  soma dos déficits das lojas ligadas, `allocateProportionalStock` divide as
+  unidades proporcionalmente ao que falta em cada loja, com arredondamento
+  inteiro determinístico; o histórico informa essa distribuição. O que não
+  couber por espaço ou Work Points não é transportado, e a produção para o
+  armazém tem prioridade sobre o abastecimento.
 - Validade de estoques: não há lotes nem datas de entrada. Às 18:00 do dia do
   jogo, `applyDailySpoilage` calcula para cada estoque perecível a perda
   esperada `quantidade / PRODUCTS.shelfLifeDays`; a parte inteira é removida
   sempre e a fração arredondada estocasticamente para uma unidade. A rotina
-  atualiza estoque agregado de construções e armazéns, e
+  varre o estoque principal de todas as construções que produzem ou vendem um
+  produto perecível (fazendas, comércios, construções artesanais e recursos) e
+  os produtos perecíveis em `warehouse_stock` (armazéns/indústrias).
   `world_state.last_spoilage_day` garante execução única por dia. Estoques
-  iniciam a mesma regra imediatamente, sem backfill.
+  iniciam a mesma regra imediatamente, sem backfill; produtos de validade
+  infinita, como madeira, pedra, ferro e ferramentas, não se deterioram.
 
 ## API HTTP
 

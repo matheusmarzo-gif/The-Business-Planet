@@ -326,8 +326,12 @@ ou lote; lojas mostram a capacidade de venda e armazéns, o custo de transporte.
 use **Ligar a um armazém** e clique em um armazém seu, concluído, a até 60 tiles
 (ou **Desligar**). Às 00:00 a produção das fazendas vai para o armazém (até o
 estoque desejável e os 50 m³) e o armazém abastece os comércios ligados até o
-estoque máximo. O transporte custa Work Points do armazém: `100 × m³ + 0,125 × kg`;
-os pontos vêm dos funcionários do armazém e o que não couber não é transportado.
+estoque máximo. Se o produto não bastar para encher todas as lojas ligadas, as
+unidades disponíveis são repartidas proporcionalmente ao que falta em cada loja;
+por exemplo, 200 peixes para uma demanda total de 400 abastecem cada loja com
+metade do que falta. O transporte custa Work Points do armazém:
+`100 × m³ + 0,125 × kg`; os pontos vêm dos funcionários do armazém e limites de
+espaço ou Work Points podem impedir parte do transporte.
 O painel do armazém mostra o estoque real e o espaço ocupado.
 
 **Influência:** o botão **Ver influência** no painel de qualquer construção
@@ -394,4 +398,4 @@ Fazendas, recursos e construções artesanais concluídas têm o botão **Histó
 O dono de uma Loja de Arroz ou Loja de Peixes concluída pode abrir **Histórico do comércio** para consultar os últimos 30 dias por dia: gasto com funcionários, gasto com produtos efetivamente pagos, unidades vendidas, preço unitário de venda, receita e lucro/prejuízo. O abastecimento pelo armazém ligado do mesmo dono é uma transferência interna sem cobrança e aparece com gasto de produto C$ 0.
 
 - **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque desejado atingido, sem espaço, Work Points insuficientes ou armazém sem estoque). Falhas internas são exibidas separadamente, com a etapa e a mensagem do erro.
-- **Validade e espaço de armazenamento:** às 18:00 de cada dia do jogo, a perda esperada de cada produto perecível é `estoque atual / validade em dias`. A parte inteira é removida e a fração vira probabilidade de perder uma unidade adicional (por exemplo, 10 unidades com validade de 100 dias: 0,1 unidade/dia, ou 10% de chance de perder uma). Não há controle por lote ou data de entrada; produtos recém-adicionados seguem a mesma regra sobre o estoque agregado. A perda reduz estoques em construções e armazéns, e o espaço ocupado é atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o armazém está selecionado.
+- **Validade e espaço de armazenamento:** às 18:00 de cada dia do jogo, a perda esperada de cada produto perecível é `estoque atual / validade em dias`. A parte inteira é removida e a fração vira probabilidade de perder uma unidade adicional (por exemplo, 10 unidades com validade de 100 dias: 0,1 unidade/dia, ou 10% de chance de perder uma). Não há controle por lote ou data de entrada; produtos recém-adicionados seguem a mesma regra sobre o estoque agregado. A regra cobre os estoques principais de fazendas, comércios, construções artesanais e recursos, além dos produtos nos armazéns (indústrias). Produtos sem validade, como madeira, pedra, ferro e Ferramentas, não se deterioram. O espaço ocupado é atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o armazém está selecionado.

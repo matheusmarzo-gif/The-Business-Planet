@@ -30,6 +30,7 @@ const REASONS: Record<string, string> = {
   no_space: 'Sem espaço livre no armazém (m³)',
   no_work_points: 'Work Points de transporte insuficientes',
   warehouse_empty: 'Armazém sem estoque do produto',
+  insufficient_stock: 'Estoque insuficiente no armazém; unidades repartidas proporcionalmente entre os comércios',
   error: 'Erro interno ao processar o transporte deste armazém',
 };
 

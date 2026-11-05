@@ -187,6 +187,7 @@ export interface ResidentialBuilding {
   workPointsDone: number;
   price: number;
   stock: number;
+  warehouseId: string | null;
   // Funcionários empregados na construção ou, em residências, moradores empregados.
   employed: number;
 }

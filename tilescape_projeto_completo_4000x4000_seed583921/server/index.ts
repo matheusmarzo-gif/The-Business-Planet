@@ -41,6 +41,12 @@ import {
 import { STARTING_BALANCE } from '../src/types/wallet.js';
 import { allocateWorkers, getDailyWorkPoints, getPayroll, type JobAssignment } from '../src/types/employment.js';
 import { getShopSalesCapacity, parsePrice, planRiceSales } from '../src/types/commerce.js';
+import {
+  canLinkToWarehouse,
+  isWithinLinkRadius,
+  parseWarehouseLink,
+  planTransfers,
+} from '../src/types/logistics.js';
 import { parseWarehouseSetting } from '../src/types/warehouse.js';
 import {
   allocateImmigrants,
@@ -117,10 +123,11 @@ type ResidentialBuildingRow = {
   work_points_done: number;
   price: number;
   stock: number;
+  warehouse_id: string | null;
   employed: number;
 };
 
-const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock,
+const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id,
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
    WHERE j.workplace_id = residential_buildings.id OR j.residence_id = residential_buildings.id) AS employed`;
 
@@ -142,6 +149,7 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     workPointsDone: row.work_points_done,
     price: row.price,
     stock: row.stock,
+    warehouseId: row.warehouse_id,
     employed: row.employed,
   };
 }
@@ -482,6 +490,62 @@ async function runDailyEmployment(): Promise<boolean> {
           );
         }
         changed = true;
+      }
+      // Transporte entre armazéns e construções ligadas; consome Work Points do armazém.
+      const { rows: warehouseRows } = await client.query<{
+        id: string;
+        tile_x: number;
+        tile_y: number;
+        building_type: ResidenceType;
+      }>(
+        `SELECT id, tile_x, tile_y, building_type FROM residential_buildings
+         WHERE building_type = 'warehouse' AND status = 'completed'`,
+      );
+      for (const warehouse of warehouseRows) {
+        const { rows: linked } = await client.query<{ id: string; building_type: ResidenceType; stock: number }>(
+          `SELECT id, building_type, stock FROM residential_buildings
+           WHERE warehouse_id = $1 AND status = 'completed'`,
+          [warehouse.id],
+        );
+        if (linked.length === 0) continue;
+        const warehouseSite = workplaces.find((row) => row.id === warehouse.id);
+        const workPoints =
+          (workers.get(warehouse.id) ?? 0) *
+          getDailyWorkPoints(
+            warehouseSite?.work_hours_per_day ?? 8,
+            RESIDENCE_STATS.health,
+            RESIDENCE_STATS.happiness,
+          );
+        const { rows: stockRows } = await client.query<{ product_id: string; quantity: number }>(
+          'SELECT product_id, quantity FROM warehouse_stock WHERE building_id = $1',
+          [warehouse.id],
+        );
+        const { rows: desiredRows } = await client.query<{ product_id: string; desired_stock: number }>(
+          'SELECT product_id, desired_stock FROM warehouse_product_settings WHERE building_id = $1',
+          [warehouse.id],
+        );
+        const transfers = planTransfers(
+          {
+            stock: new Map(stockRows.map((row) => [row.product_id, row.quantity])),
+            desired: new Map(desiredRows.map((row) => [row.product_id, row.desired_stock])),
+            capacityM3: RESIDENCES.warehouse.storageCapacityM3 ?? 0,
+            workPoints,
+          },
+          linked.map((row) => ({ buildingId: row.id, type: row.building_type, stock: row.stock })),
+        );
+        for (const transfer of transfers) {
+          const delta = transfer.direction === 'out' ? transfer.quantity : -transfer.quantity;
+          await client.query(
+            `INSERT INTO warehouse_stock (building_id, product_id, quantity) VALUES ($1, $2, $3)
+             ON CONFLICT (building_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3`,
+            [warehouse.id, transfer.productId, delta],
+          );
+          await client.query('UPDATE residential_buildings SET stock = stock + $2 WHERE id = $1', [
+            transfer.buildingId,
+            -delta,
+          ]);
+          changed = true;
+        }
       }
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
     }
@@ -1325,6 +1389,10 @@ async function start() {
            FROM warehouse_product_settings WHERE building_id = $1`,
           [request.params.id],
         );
+        const stockRows = await pool.query<{ product_id: string; quantity: number }>(
+          'SELECT product_id, quantity FROM warehouse_stock WHERE building_id = $1',
+          [request.params.id],
+        );
         response.json({
           settings: settings.rows.map((row) => ({
             productId: row.product_id,
@@ -1332,6 +1400,7 @@ async function start() {
             price: row.price,
             mode: row.mode,
           })),
+          stock: stockRows.rows.map((row) => ({ productId: row.product_id, quantity: row.quantity })),
         });
       })
       .catch((error: unknown) => {
@@ -1562,6 +1631,90 @@ async function start() {
         console.error('Não foi possível atualizar o preço:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
+  });
+  app.put('/api/residential-buildings/:id/warehouse-link', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const link = parseWarehouseLink(request.body);
+    if (
+      !residenceIdPattern.test(request.params.id) ||
+      !link ||
+      (link.warehouseId !== null && !residenceIdPattern.test(link.warehouseId))
+    ) {
+      response.status(400).json({ error: 'invalid_warehouse_link' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void (async () => {
+      const { rows: sources } = await pool.query<{
+        building_type: ResidenceType;
+        status: string;
+        created_by: string;
+        tile_x: number;
+        tile_y: number;
+      }>(
+        'SELECT building_type, status, created_by, tile_x, tile_y FROM residential_buildings WHERE id = $1',
+        [request.params.id],
+      );
+      const source = sources[0];
+      if (!source) {
+        response.status(404).json({ error: 'residence_not_found' });
+        return;
+      }
+      if (source.created_by !== userId) {
+        response.status(403).json({ error: 'residence_not_owned' });
+        return;
+      }
+      if (!canLinkToWarehouse(source.building_type) || source.status !== 'completed') {
+        response.status(400).json({ error: 'invalid_warehouse_link' });
+        return;
+      }
+      if (link.warehouseId !== null) {
+        const { rows: targets } = await pool.query<{
+          building_type: ResidenceType;
+          status: string;
+          created_by: string;
+          tile_x: number;
+          tile_y: number;
+        }>(
+          'SELECT building_type, status, created_by, tile_x, tile_y FROM residential_buildings WHERE id = $1',
+          [link.warehouseId],
+        );
+        const target = targets[0];
+        if (!target || target.building_type !== 'warehouse' || target.status !== 'completed') {
+          response.status(400).json({ error: 'invalid_warehouse_link' });
+          return;
+        }
+        if (target.created_by !== userId) {
+          response.status(403).json({ error: 'warehouse_not_owned' });
+          return;
+        }
+        if (
+          !isWithinLinkRadius(
+            { type: source.building_type, x: source.tile_x, y: source.tile_y },
+            { type: target.building_type, x: target.tile_x, y: target.tile_y },
+          )
+        ) {
+          response.status(400).json({ error: 'warehouse_out_of_range' });
+          return;
+        }
+      }
+      const { rows } = await pool.query<ResidentialBuildingRow>(
+        `UPDATE residential_buildings SET warehouse_id = $2 WHERE id = $1
+         RETURNING ${RESIDENTIAL_COLUMNS}`,
+        [request.params.id, link.warehouseId],
+      );
+      response.json(mapResidentialBuilding(rows[0]));
+      void publishCities().catch((error: unknown) => {
+        console.error('O vínculo foi atualizado, mas a atualização do mundo falhou:', error);
+      });
+    })().catch((error: unknown) => {
+      console.error('Não foi possível atualizar o vínculo:', error);
+      response.status(503).json({ error: 'residence_unavailable' });
+    });
   });
   app.delete('/api/residential-buildings/:id', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);

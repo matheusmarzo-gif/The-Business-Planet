@@ -312,6 +312,18 @@ mapeamento e verificar todas as curvas.
   `quantidade × preço`; moradores não são cobrados.
   `employed` em `ResidentialBuilding` é calculado por subquery em
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
+- Logística de armazém (`src/types/logistics.ts`): `residential_buildings.
+  warehouse_id` (FK própria, `ON DELETE SET NULL`) liga uma fazenda ou comércio
+  concluído a um único armazém concluído do mesmo dono, a até 60 tiles
+  (`PUT /api/residential-buildings/:id/warehouse-link`, corpo `{warehouseId|null}`,
+  validado no servidor). O estoque real do armazém fica em `warehouse_stock`
+  (`building_id, product_id, quantity`, cascata) e é devolvido por
+  `GET .../warehouse` junto das configurações. No job das 00:00 (depois das
+  vendas), `planTransfers` move: fazendas → armazém até o estoque desejável e o
+  espaço livre (50 m³); armazém → comércios até o estoque máximo. Cada carga
+  consome Work Points do armazém (`100 · m³ + 0,125 · kg`; pontos = empregados
+  do armazém × `getDailyWorkPoints`); o que não couber não é transportado, e a
+  produção para o armazém tem prioridade sobre o abastecimento.
 
 ## API HTTP
 

@@ -29,6 +29,13 @@ import {
   parsePrice,
   planRiceSales,
 } from './commerce';
+import {
+  canLinkToWarehouse,
+  getTransportDemand,
+  isWithinLinkRadius,
+  parseWarehouseLink,
+  planTransfers,
+} from './logistics';
 import { parseWarehouseSetting } from './warehouse';
 
 const city = { centerX: 1000, centerY: 1000 };
@@ -37,6 +44,79 @@ describe('wallet', () => {
   it('starts with C$ 10.000 and formats money in Brazilian style', () => {
     assert.equal(STARTING_BALANCE, 10000);
     assert.equal(formatMoney(STARTING_BALANCE).replace(/\u00a0/g, ' '), 'C$ 10.000');
+  });
+});
+
+describe('warehouse logistics', () => {
+  const link = (buildingId: string, type: 'farm_rice' | 'shop_rice', stock: number) => ({
+    buildingId,
+    type,
+    stock,
+  });
+
+  it('charges 100 Work Points per m³ and 0.125 per kg', () => {
+    // arroz: 0,01 m³ e 8 kg => 1 + 1 = 2 por unidade
+    assert.equal(getTransportDemand('rice', 10), 20);
+    assert.equal(canLinkToWarehouse('farm_rice'), true);
+    assert.equal(canLinkToWarehouse('warehouse'), false);
+    assert.equal(canLinkToWarehouse('house_poor1'), false);
+    assert.deepEqual(parseWarehouseLink({ warehouseId: null }), { warehouseId: null });
+    assert.equal(parseWarehouseLink({}), null);
+    assert.equal(
+      isWithinLinkRadius(
+        { type: 'farm_rice', x: 0, y: 0 },
+        { type: 'warehouse', x: 50, y: 0 },
+      ),
+      true,
+    );
+    assert.equal(
+      isWithinLinkRadius(
+        { type: 'farm_rice', x: 0, y: 0 },
+        { type: 'warehouse', x: 70, y: 0 },
+      ),
+      false,
+    );
+  });
+
+  it('sends production up to the desired stock and supplies shops, limited by Work Points', () => {
+    const transfers = planTransfers(
+      { stock: new Map(), desired: new Map([['rice', 100]]), capacityM3: 50, workPoints: 1000 },
+      [link('farm', 'farm_rice', 300), link('shop', 'shop_rice', 5)],
+    );
+    // A fazenda envia 100 (desejável) = 200 pontos; a loja recebe 15 (20 - 5) = 30 pontos.
+    assert.deepEqual(transfers, [
+      { buildingId: 'farm', productId: 'rice', quantity: 100, direction: 'out' },
+      { buildingId: 'shop', productId: 'rice', quantity: 15, direction: 'in' },
+    ]);
+
+    const limited = planTransfers(
+      { stock: new Map(), desired: new Map([['rice', 100]]), capacityM3: 50, workPoints: 50 },
+      [link('farm', 'farm_rice', 300), link('shop', 'shop_rice', 0)],
+    );
+    // 50 pontos => 25 unidades; a produção tem prioridade e a loja fica sem nada.
+    assert.deepEqual(limited, [
+      { buildingId: 'farm', productId: 'rice', quantity: 25, direction: 'out' },
+    ]);
+
+    const none = planTransfers(
+      { stock: new Map(), desired: new Map(), capacityM3: 50, workPoints: 1000 },
+      [link('farm', 'farm_rice', 300)],
+    );
+    assert.deepEqual(none, []);
+  });
+
+  it('respects warehouse space and the shop maximum', () => {
+    const full = planTransfers(
+      { stock: new Map([['rice', 4990]]), desired: new Map([['rice', 9999]]), capacityM3: 50, workPoints: 1e6 },
+      [link('farm', 'farm_rice', 300)],
+    );
+    // 50 m³ / 0,01 = 5000 unidades; só cabem mais 10.
+    assert.equal(full[0].quantity, 10);
+    const supply = planTransfers(
+      { stock: new Map([['rice', 8]]), desired: new Map(), capacityM3: 50, workPoints: 1e6 },
+      [link('shop', 'shop_rice', 0)],
+    );
+    assert.equal(supply[0].quantity, 8);
   });
 });
 
@@ -353,6 +433,7 @@ describe('municipal zones', () => {
         workPointsDone: 0,
         price: 10,
         stock: 0,
+        warehouseId: null,
         employed: 0,
       };
 
@@ -394,6 +475,7 @@ describe('municipal zones', () => {
         workPointsDone: 0,
         price: 10,
         stock: 0,
+        warehouseId: null,
         employed: 0,
       };
       assert.equal(

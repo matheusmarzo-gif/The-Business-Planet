@@ -80,6 +80,8 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS price INTEGER NOT NULL DEFAULT 10 CHECK (price BETWEEN 1 AND 100000);
 ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0);
+ALTER TABLE residential_buildings
+  ADD COLUMN IF NOT EXISTS warehouse_id UUID REFERENCES residential_buildings (id) ON DELETE SET NULL;
 
 -- O caixa dos jogadores pode ficar negativo (folha de pagamento).
 ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_check;
@@ -106,6 +108,13 @@ CREATE TABLE IF NOT EXISTS job_assignments (
 );
 
 CREATE INDEX IF NOT EXISTS job_assignments_residence_id_idx ON job_assignments (residence_id);
+
+CREATE TABLE IF NOT EXISTS warehouse_stock (
+  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL,
+  quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+  PRIMARY KEY (building_id, product_id)
+);
 
 CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
   ON residential_buildings (city_id);

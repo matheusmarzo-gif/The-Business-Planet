@@ -12,6 +12,7 @@ interface WarehousePanelProps {
   building: ResidentialBuilding;
   isOwner: boolean;
   settings: Map<string, WarehouseProductSetting>;
+  stock: Map<string, number>;
   isSaving: boolean;
   error: string;
   onSave: (setting: WarehouseProductSetting) => void;
@@ -30,6 +31,7 @@ export default function WarehousePanel({
   building,
   isOwner,
   settings,
+  stock,
   isSaving,
   error,
   onSave,
@@ -37,6 +39,10 @@ export default function WarehousePanel({
 }: WarehousePanelProps) {
   const capacity = RESIDENCES[building.type].storageCapacityM3 ?? 0;
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+  const usedM3 = PRODUCTS.reduce(
+    (total, product) => total + (stock.get(product.id) ?? 0) * product.volumeM3,
+    0,
+  );
 
   useEffect(() => {
     const next: Record<string, Draft> = {};
@@ -65,7 +71,7 @@ export default function WarehousePanel({
         </button>
       </div>
       <p className="warehouse-summary">
-        Espaço ocupado: 0 / {number.format(capacity)} m³
+        Espaço ocupado: {number.format(Math.round(usedM3 * 1000) / 1000)} / {number.format(capacity)} m³
         {!isOwner && ' · Somente o dono pode editar.'}
       </p>
       {error && <p role="alert" className="warehouse-error">{error}</p>}
@@ -86,7 +92,7 @@ export default function WarehousePanel({
                 <img src={product.icon} alt="" />
                 {product.name}
               </span>
-              <span>0 {product.unit === 'liter' ? 'L' : 'un.'}</span>
+              <span>{number.format(stock.get(product.id) ?? 0)} {product.unit === 'liter' ? 'L' : 'un.'}</span>
               <input
                 type="number"
                 min={0}

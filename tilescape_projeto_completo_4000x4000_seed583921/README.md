@@ -278,9 +278,18 @@ Na **Loja de Arroz**, o dono define o preço do arroz (C$ 1 ou mais). Às 00:00 
 100 Work Points gerados pelos funcionários no dia somam 5 unidades de capacidade
 de venda. As residências em 60 tiles compram das lojas de maior benefício para a
 menor, `((Sm − Vma)/Vlocal)³`, e o dono recebe o valor da venda. A loja só vende
-o estoque que tiver (começa em 0; o abastecimento ainda não existe). O
+o estoque que tiver (começa em 0; pode ser abastecida por um armazém ligado). O
 painel mostra funcionários atuais, desejados e vagas; nas residências, as
 pessoas empregadas.
+
+**Armazéns e logística:** no painel de uma fazenda ou comércio concluído seu,
+use **Ligar a um armazém** e clique em um armazém seu, concluído, a até 60 tiles
+(ou **Desligar**). Às 00:00 a produção das fazendas vai para o armazém (até o
+estoque desejável e os 50 m³) e o armazém abastece os comércios ligados até o
+estoque máximo. O transporte custa Work Points do armazém: `100 × m³ + 0,125 × kg`;
+os pontos vêm dos funcionários do armazém e o que não couber não é transportado.
+O painel do armazém mostra o estoque real e o espaço ocupado. As fazendas ainda
+não produzem sozinhas.
 
 Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.

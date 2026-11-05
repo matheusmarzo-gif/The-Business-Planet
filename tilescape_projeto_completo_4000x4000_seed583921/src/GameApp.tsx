@@ -144,6 +144,12 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Você não possui materiais suficientes para iniciar essa construção.';
         } else if (body.error === 'invalid_work_settings') {
           error = 'Informe funcionários desejados (até o máximo da construção), salário (0 a 100.000) e carga horária de 4 a 14 horas.';
+        } else if (body.error === 'invalid_warehouse_link') {
+          error = 'Essa construção não pode ser ligada a esse destino.';
+        } else if (body.error === 'warehouse_out_of_range') {
+          error = 'O armazém precisa estar a até 60 tiles da construção.';
+        } else if (body.error === 'warehouse_not_owned') {
+          error = 'Você só pode ligar a armazéns que construiu.';
         } else if (body.error === 'invalid_price') {
           error = 'O preço deve ser um número inteiro de C$ 1 a C$ 100.000.';
         } else if (body.error === 'invalid_rent') {
@@ -235,6 +241,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isWarehouseOpen, setIsWarehouseOpen] = useState(false);
   const [warehouseSettings, setWarehouseSettings] = useState<Map<string, WarehouseProductSetting>>(new Map());
   const [warehouseError, setWarehouseError] = useState('');
+  const [warehouseStock, setWarehouseStock] = useState<Map<string, number>>(new Map());
+  const [linkingFromId, setLinkingFromId] = useState<string | null>(null);
   const [balance, setBalance] = useState<number | null>(null);
   const gameTime = useWorldClock(snapshot);
 
@@ -342,16 +350,19 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setIsWarehouseOpen(false);
     setWarehouseError('');
     setWarehouseSettings(new Map());
+    setWarehouseStock(new Map());
   }, [selectedResidenceKey]);
 
   const openWarehouse = async (buildingId: string) => {
     setIsWarehouseOpen(true);
     setWarehouseError('');
     try {
-      const result = await cityRequest<{ settings: WarehouseProductSetting[] }>(
-        `/api/residential-buildings/${buildingId}/warehouse`,
-      );
+      const result = await cityRequest<{
+        settings: WarehouseProductSetting[];
+        stock: { productId: string; quantity: number }[];
+      }>(`/api/residential-buildings/${buildingId}/warehouse`);
       setWarehouseSettings(new Map(result.settings.map((setting) => [setting.productId, setting])));
+      setWarehouseStock(new Map(result.stock.map((item) => [item.productId, item.quantity])));
     } catch (error) {
       setWarehouseError(error instanceof Error ? error.message : 'Não foi possível carregar o armazém.');
     }
@@ -371,6 +382,31 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     } finally {
       setIsSavingWorkSettings(false);
     }
+  };
+
+  const linkWarehouse = async (buildingId: string, warehouseId: string | null) => {
+    setIsSavingWorkSettings(true);
+    setWorkSettingsError('');
+    try {
+      await cityRequest<ResidentialBuilding>(`/api/residential-buildings/${buildingId}/warehouse-link`, {
+        method: 'PUT',
+        body: JSON.stringify({ warehouseId }),
+      });
+    } catch (error) {
+      setWorkSettingsError(error instanceof Error ? error.message : 'Não foi possível atualizar o vínculo.');
+    } finally {
+      setLinkingFromId(null);
+      setIsSavingWorkSettings(false);
+    }
+  };
+
+  const handleResidenceSelect = (building: ResidentialBuilding) => {
+    if (linkingFromId && linkingFromId !== building.id) {
+      void linkWarehouse(linkingFromId, building.id);
+      return;
+    }
+    setLinkingFromId(null);
+    setSelectedResidenceId(building.id);
   };
 
   const saveWorkSettings = async (
@@ -654,6 +690,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       workPointsDone: 0,
       price: DEFAULT_SHOP_PRICE,
       stock: 0,
+      warehouseId: null,
       employed: 0,
     };
     setPendingResidentialBuildings((current) => [...current, pending]);
@@ -955,7 +992,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           onResidenceDemolish={(building) => void demolishResidence(building)}
           onInvalidResidencePlacement={handleInvalidResidencePlacement}
           onResidenceComplete={(buildingId) => void completeResidence(buildingId)}
-          onResidenceSelect={(building) => setSelectedResidenceId(building.id)}
+          onResidenceSelect={handleResidenceSelect}
         />
         <div className="map-vignette" />
 
@@ -991,7 +1028,17 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onSaveRent={(rent) => void saveRent(selectedResidence.id, rent)}
             onSavePrice={(price) => void savePrice(selectedResidence.id, price)}
             onOpenWarehouse={() => void openWarehouse(selectedResidence.id)}
-            onClose={() => setSelectedResidenceId(null)}
+            isLinking={linkingFromId === selectedResidence.id}
+            onStartLink={() => {
+              setWorkSettingsError('');
+              setLinkingFromId(selectedResidence.id);
+            }}
+            onCancelLink={() => setLinkingFromId(null)}
+            onUnlink={() => void linkWarehouse(selectedResidence.id, null)}
+            onClose={() => {
+              setLinkingFromId(null);
+              setSelectedResidenceId(null);
+            }}
           />
         )}
         {selectedResidence && selectedResidenceKey && isWarehouseOpen && (
@@ -999,6 +1046,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             building={selectedResidence}
             isOwner={isResidenceOwner}
             settings={warehouseSettings}
+            stock={warehouseStock}
             isSaving={isSavingWorkSettings}
             error={warehouseError}
             onSave={(setting) => void saveWarehouseSetting(selectedResidenceKey, setting)}

@@ -10,6 +10,7 @@ import {
   RESIDENCES,
   ResidentialBuilding,
 } from '../types/residence';
+import { canLinkToWarehouse } from '../types/logistics';
 
 interface ResidencePanelProps {
   building: ResidentialBuilding;
@@ -20,6 +21,10 @@ interface ResidencePanelProps {
   onSaveRent: (rent: number) => void;
   onSavePrice: (price: number) => void;
   onOpenWarehouse: () => void;
+  isLinking: boolean;
+  onStartLink: () => void;
+  onCancelLink: () => void;
+  onUnlink: () => void;
   onClose: () => void;
 }
 
@@ -34,6 +39,10 @@ export default function ResidencePanel({
   onSaveRent,
   onSavePrice,
   onOpenWarehouse,
+  isLinking,
+  onStartLink,
+  onCancelLink,
+  onUnlink,
   onClose,
 }: ResidencePanelProps) {
   const definition = RESIDENCES[building.type];
@@ -133,6 +142,25 @@ export default function ResidencePanel({
         <button type="button" className="warehouse-open" onClick={onOpenWarehouse}>
           Produtos e estoque
         </button>
+      )}
+      {isOwner && building.status === 'completed' && canLinkToWarehouse(building.type) && (
+        <div className="warehouse-link">
+          <p>{building.warehouseId ? 'Ligado a um armazém.' : 'Sem armazém ligado.'}</p>
+          {isLinking ? (
+            <button type="button" onClick={onCancelLink}>
+              Cancelar: clique em um armazém no mapa…
+            </button>
+          ) : (
+            <button type="button" disabled={isSaving} onClick={onStartLink}>
+              Ligar a um armazém
+            </button>
+          )}
+          {building.warehouseId && !isLinking && (
+            <button type="button" disabled={isSaving} onClick={onUnlink}>
+              Desligar
+            </button>
+          )}
+        </div>
       )}
       {(building.status === 'under_construction' || isFarm) && (
         <form className="work-settings" onSubmit={submit}>

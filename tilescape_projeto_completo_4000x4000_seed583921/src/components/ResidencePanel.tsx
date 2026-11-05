@@ -11,6 +11,7 @@ import {
   ResidentialBuilding,
 } from '../types/residence';
 import { canLinkToWarehouse } from '../types/logistics';
+import { PRODUCTS } from '../types/product';
 import {
   FARM_DAILY_WORK_POINTS,
   getHarvestDay,
@@ -28,6 +29,8 @@ interface ResidencePanelProps {
   onSaveRent: (rent: number) => void;
   onSavePrice: (price: number) => void;
   onOpenWarehouse: () => void;
+  warehouseStock: ReadonlyMap<string, number>;
+  warehouseStockLoaded: boolean;
   onOpenConsumption: () => void;
   onOpenProductionHistory: () => void;
   onOpenWarehouseLog: () => void;
@@ -53,6 +56,8 @@ export default function ResidencePanel({
   onSaveRent,
   onSavePrice,
   onOpenWarehouse,
+  warehouseStock,
+  warehouseStockLoaded,
   onOpenConsumption,
   onOpenProductionHistory,
   onOpenWarehouseLog,
@@ -106,6 +111,10 @@ export default function ResidencePanel({
     ['Máximo de funcionários', number.format(definition.maxWorkers)],
     ['Raio de busca de trabalhadores', `${WORKER_SEARCH_RADIUS} tiles`],
   ];
+  const warehouseUsedM3 = PRODUCTS.reduce(
+    (total, product) => total + (warehouseStock.get(product.id) ?? 0) * product.volumeM3,
+    0,
+  );
   const rows: [string, string][] =
     building.status === 'under_construction'
       ? [
@@ -117,7 +126,12 @@ export default function ResidencePanel({
         ? [
             ...jobRows,
             definition.kind === 'warehouse'
-              ? ['Espaço ocupado', `0 / ${number.format(definition.storageCapacityM3 ?? 0)} m³`]
+              ? [
+                  'Espaço ocupado',
+                  warehouseStockLoaded
+                    ? `${number.format(Math.round(warehouseUsedM3 * 1000) / 1000)} / ${number.format(definition.storageCapacityM3 ?? 0)} m³`
+                    : 'Consulte em Produtos e estoque',
+                ]
               : [`Estoque de ${definition.stockProduct}`, `${number.format(building.stock)} / ${number.format(definition.stockCapacity ?? 0)}`],
             ...(definition.toolCapacity
               ? ([

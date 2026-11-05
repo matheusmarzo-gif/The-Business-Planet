@@ -395,6 +395,14 @@ mapeamento e verificar todas as curvas.
   retiradas decrementam apenas uma linha existente com saldo suficiente, sem
   tentar inserir estoque negativo. O que não couber não é transportado, e a
   produção para o armazém tem prioridade sobre o abastecimento.
+- Validade de estoques: cada entrada perecível gera um lote em
+  `inventory_batches (building_id, product_id, quantity, received_day)`.
+  Produção, vendas e transporte atualizam os lotes, preservando a data de
+  recebimento quando mercadorias mudam de construção. Às 18:00 do dia do jogo,
+  `spoilExpiredInventory` remove lotes cuja idade em dias alcançou
+  `PRODUCTS.shelfLifeDays` e reduz o estoque agregado do armazém ou construção.
+  `world_state.last_spoilage_day` garante execução única por dia; estoques
+  existentes no primeiro deploy são inicializados com a data atual do mundo.
 
 ## API HTTP
 
@@ -407,6 +415,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities` | Autenticado | Retorna cidades persistidas. |
 | `GET /api/wallet` | Autenticado | Cria a carteira do usuário com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
 | `GET /api/residential-buildings/:id/warehouse-log` | Dono do armazém | Retorna `{ days: [{ day, workPoints }], events: [{ day, buildingType, productId, direction, wanted, moved, reason, errorDetail }] }` do armazém (tabela `warehouse_transport_log`, gravada às 00:00 na etapa de transporte, 30 dias; `reason` = `desired_reached`/`no_space`/`no_work_points`/`warehouse_empty` quando moveu menos que o desejado; erros internos registram etapa e detalhe em `errorDetail`). |
+| `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações e estoque agregado do armazém; espaço ocupado é calculado no cliente a partir dos volumes e quantidades atuais. |
 | `GET /api/residential-buildings/:id/production-history` | Autenticado | Retorna `{ days: [{ day, workPoints, produced, transported, efficiency }] }` dos últimos 30 dias (tabela `production_history`, gravada às 00:00 pelas etapas de produção, fazendas e transporte; `transported` conta só envios ao armazém). |
 | `GET /api/master/online-players` | Master | Lista `{ players: [{ id, name, email, connections }] }` a partir da presença no Redis (`userId|uuid`) e de `neon_auth."user"`. |
 | `POST /api/master/time-scale` | Master | `{ timeScale }` validado por `isValidTimeScale` (`src/types/worldClock.ts`: 15, 30, 60, 240); avança o relógio com a velocidade antiga, grava `world_state.time_scale` e republica o snapshot. |

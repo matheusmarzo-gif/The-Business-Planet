@@ -250,6 +250,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [warehouseSettings, setWarehouseSettings] = useState<Map<string, WarehouseProductSetting>>(new Map());
   const [warehouseError, setWarehouseError] = useState('');
   const [warehouseStock, setWarehouseStock] = useState<Map<string, number>>(new Map());
+  const [warehouseStockLoaded, setWarehouseStockLoaded] = useState(false);
   const [warehouseDemand, setWarehouseDemand] = useState<WarehouseDemand | null>(null);
   const [isConsumptionOpen, setIsConsumptionOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -420,6 +421,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setWarehouseError('');
     setWarehouseSettings(new Map());
     setWarehouseStock(new Map());
+    setWarehouseStockLoaded(false);
     setWarehouseDemand(null);
     setIsConsumptionOpen(false);
     setConsumptionError('');
@@ -482,9 +484,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
-  const openWarehouse = async (buildingId: string) => {
-    setIsWarehouseOpen(true);
-    setWarehouseError('');
+  const refreshWarehouse = async (buildingId: string, includeSettings = false) => {
     try {
       const result = await cityRequest<{
         settings: WarehouseProductSetting[];
@@ -492,11 +492,40 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         demand: WarehouseDemand;
       }>(`/api/residential-buildings/${buildingId}/warehouse`);
       setWarehouseDemand(result.demand);
-      setWarehouseSettings(new Map(result.settings.map((setting) => [setting.productId, setting])));
+      if (includeSettings) {
+        setWarehouseSettings(new Map(result.settings.map((setting) => [setting.productId, setting])));
+      }
       setWarehouseStock(new Map(result.stock.map((item) => [item.productId, item.quantity])));
+      setWarehouseStockLoaded(true);
+      setWarehouseError('');
     } catch (error) {
       setWarehouseError(error instanceof Error ? error.message : 'Não foi possível carregar o armazém.');
     }
+  };
+
+  const refreshWarehouseRef = useRef(refreshWarehouse);
+  useEffect(() => {
+    refreshWarehouseRef.current = refreshWarehouse;
+  }, [refreshWarehouse]);
+
+  useEffect(() => {
+    if (selectedResidenceKey && selectedResidence?.type === 'warehouse') {
+      void refreshWarehouseRef.current(selectedResidenceKey);
+    }
+  }, [selectedResidenceKey, selectedResidence?.type]);
+
+  useEffect(() => {
+    if (!selectedResidenceKey || selectedResidence?.type !== 'warehouse' || !warehouseStockLoaded) return;
+    const timer = window.setInterval(() => {
+      void refreshWarehouseRef.current(selectedResidenceKey);
+    }, 10_000);
+    return () => window.clearInterval(timer);
+  }, [selectedResidenceKey, selectedResidence?.type, warehouseStockLoaded]);
+
+  const openWarehouse = async (buildingId: string) => {
+    setIsWarehouseOpen(true);
+    setWarehouseError('');
+    await refreshWarehouse(buildingId, true);
   };
 
   const saveWarehouseSetting = async (buildingId: string, setting: WarehouseProductSetting) => {
@@ -1193,6 +1222,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onSaveRent={(rent) => void saveRent(selectedResidence.id, rent)}
             onSavePrice={(price) => void savePrice(selectedResidence.id, price)}
             onOpenWarehouse={() => void openWarehouse(selectedResidence.id)}
+            warehouseStock={warehouseStock}
+            warehouseStockLoaded={warehouseStockLoaded}
             onOpenConsumption={() => void openConsumption(selectedResidence.id)}
             onOpenProductionHistory={() => void openProductionHistory(selectedResidence.id)}
             onOpenWarehouseLog={() => void openWarehouseLog(selectedResidence.id)}

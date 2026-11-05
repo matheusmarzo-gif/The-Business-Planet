@@ -46,6 +46,7 @@ import {
   type Crop,
 } from './farming';
 import { parseWarehouseSetting } from './warehouse';
+import { isProductExpired } from './product';
 
 const city = { centerX: 1000, centerY: 1000 };
 
@@ -840,5 +841,16 @@ describe('hist�rico de transporte do armaz�m', () => {
     assert.equal(run(1000, 0).moved, 0);
     assert.equal(run(0, 1000).reason, 'desired_reached');
     assert.equal(run(5, 1000).moved, 5);
+  });
+
+});
+
+describe('validade dos produtos', () => {
+  it('expira no fim do dia após a validade em dias de jogo', () => {
+    assert.equal(isProductExpired('fish', '1100-01-01', '1100-01-02'), false);
+    assert.equal(isProductExpired('fish', '1100-01-01', '1100-01-03'), true);
+    assert.equal(isProductExpired('rice', '1100-01-01', '1101-12-31'), false);
+    assert.equal(isProductExpired('rice', '1100-01-01', '1102-01-01'), true);
+    assert.equal(isProductExpired('wood', '1100-01-01', '1200-01-01'), false);
   });
 });

@@ -72,6 +72,8 @@ ALTER TABLE world_state
 ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS last_warehouse_trade_slot TEXT;
 ALTER TABLE world_state
+  ADD COLUMN IF NOT EXISTS last_spoilage_day DATE;
+ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS time_scale DOUBLE PRECISION NOT NULL DEFAULT 15 CHECK (time_scale > 0);
 
 ALTER TABLE residential_buildings
@@ -133,6 +135,19 @@ CREATE TABLE IF NOT EXISTS warehouse_stock (
   quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
   PRIMARY KEY (building_id, product_id)
 );
+
+CREATE TABLE IF NOT EXISTS inventory_batches (
+  id BIGSERIAL PRIMARY KEY,
+  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL,
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  received_day DATE NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS inventory_batches_fifo_idx
+  ON inventory_batches (building_id, product_id, received_day, id);
+CREATE INDEX IF NOT EXISTS inventory_batches_expiry_idx
+  ON inventory_batches (product_id, received_day);
 
 CREATE TABLE IF NOT EXISTS warehouse_demand (
   building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,

@@ -246,8 +246,8 @@ Na categoria **Comerciais**, a **Loja de Arroz** (2 × 2 tiles, até 4 funcioná
 estoque máximo de 20 unidades de arroz) custa 100 madeiras e 20 pedras e exige
 9.000 Work Points. Deve ficar inteira em área urbana, ao lado de uma estrada e
 sem sobrepor outras construções. O fluxo (prévia, obra, demolição, painel
-lateral com raio de busca de 60 tiles) é o mesmo das fazendas; venda e estoque
-ainda não estão implementados.
+lateral com raio de busca de 60 tiles) é o mesmo das fazendas. As vendas usam
+arroz entregue pelo armazém ligado e o preço configurado pelo dono.
 
 ### Pesqueiro e Loja de Peixes
 
@@ -377,7 +377,7 @@ As regras de construções, produção, estoques, trabalho e compra regional est
 em `RegrasGerais.odt` na pasta do projeto. Esta primeira etapa estabelece o mapa
 e a infraestrutura persistente em tempo real, com a assembleia municipal como
 primeira estrutura fundamental e estradas de terra como primeira infraestrutura
-urbana. As demais construções e transações econômicas ainda não estão habilitadas.
+urbana. As construções e transações habilitadas são descritas nas seções acima.
 
 ## Comandos do Master
 
@@ -386,6 +386,10 @@ A conta Master vê o botão **Master** na barra superior. O painel permite mudar
 ## Histórico de produção
 
 Fazendas, recursos e construções artesanais concluídas têm o botão **Histórico de produção**, com os últimos 30 dias: Work Points gerados, unidades produzidas, unidades enviadas ao armazém e eficiência (penalidade de Ferramentas ou, nas fazendas, a relação entre os Work Points do dia e os 1.000 necessários).
+
+## Histórico do comércio
+
+O dono de uma Loja de Arroz ou Loja de Peixes concluída pode abrir **Histórico do comércio** para consultar os últimos 30 dias por dia: gasto com funcionários, gasto com produtos efetivamente pagos, unidades vendidas, preço unitário de venda, receita e lucro/prejuízo. O abastecimento pelo armazém ligado do mesmo dono é uma transferência interna sem cobrança e aparece com gasto de produto C$ 0.
 
 - **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque desejado atingido, sem espaço, Work Points insuficientes ou armazém sem estoque). Falhas internas são exibidas separadamente, com a etapa e a mensagem do erro.
 - **Validade e espaço de armazenamento:** às 18:00 de cada dia do jogo, a perda esperada de cada produto perecível é `estoque atual / validade em dias`. A parte inteira é removida e a fração vira probabilidade de perder uma unidade adicional (por exemplo, 10 unidades com validade de 100 dias: 0,1 unidade/dia, ou 10% de chance de perder uma). Não há controle por lote ou data de entrada; produtos recém-adicionados seguem a mesma regra sobre o estoque agregado. A perda reduz estoques em construções e armazéns, e o espaço ocupado é atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o armazém está selecionado.

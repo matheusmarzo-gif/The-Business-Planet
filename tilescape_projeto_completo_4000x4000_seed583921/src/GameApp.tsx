@@ -14,6 +14,7 @@ import MasterPanel, { type OnlinePlayer } from './components/MasterPanel';
 import WarehousePanel from './components/WarehousePanel';
 import ConsumptionPanel, { type ProductConsumption } from './components/ConsumptionPanel';
 import ProductionHistoryPanel, { type ProductionDay } from './components/ProductionHistoryPanel';
+import CommerceHistoryPanel, { type CommerceDay } from './components/CommerceHistoryPanel';
 import WarehouseLogPanel, { type WarehouseLogDay, type WarehouseLogEvent } from './components/WarehouseLogPanel';
 import type { WarehouseDemand, WarehouseProductSetting } from './types/warehouse';
 import { GameMap } from './game/GameMap';
@@ -257,6 +258,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
   const [historyDays, setHistoryDays] = useState<ProductionDay[]>([]);
+  const [isCommerceHistoryOpen, setIsCommerceHistoryOpen] = useState(false);
+  const [isCommerceHistoryLoading, setIsCommerceHistoryLoading] = useState(false);
+  const [commerceHistoryError, setCommerceHistoryError] = useState('');
+  const [commerceHistoryDays, setCommerceHistoryDays] = useState<CommerceDay[]>([]);
   const [isWarehouseLogOpen, setIsWarehouseLogOpen] = useState(false);
   const [isWarehouseLogLoading, setIsWarehouseLogLoading] = useState(false);
   const [warehouseLogError, setWarehouseLogError] = useState('');
@@ -429,6 +434,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setIsHistoryOpen(false);
     setHistoryError('');
     setHistoryDays([]);
+    setIsCommerceHistoryOpen(false);
+    setCommerceHistoryError('');
+    setCommerceHistoryDays([]);
     setIsWarehouseLogOpen(false);
     setWarehouseLogError('');
     setWarehouseLogDays([]);
@@ -465,6 +473,22 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setHistoryError(error instanceof Error ? error.message : 'Não foi possível carregar o histórico.');
     } finally {
       setIsHistoryLoading(false);
+    }
+  };
+
+  const openCommerceHistory = async (buildingId: string) => {
+    setIsCommerceHistoryOpen(true);
+    setIsCommerceHistoryLoading(true);
+    setCommerceHistoryError('');
+    try {
+      const result = await cityRequest<{ days: CommerceDay[] }>(
+        `/api/residential-buildings/${buildingId}/commerce-history`,
+      );
+      setCommerceHistoryDays(result.days);
+    } catch (error) {
+      setCommerceHistoryError(error instanceof Error ? error.message : 'Não foi possível carregar o histórico.');
+    } finally {
+      setIsCommerceHistoryLoading(false);
     }
   };
 
@@ -1226,6 +1250,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             warehouseStockLoaded={warehouseStockLoaded}
             onOpenConsumption={() => void openConsumption(selectedResidence.id)}
             onOpenProductionHistory={() => void openProductionHistory(selectedResidence.id)}
+            onOpenCommerceHistory={() => void openCommerceHistory(selectedResidence.id)}
             onOpenWarehouseLog={() => void openWarehouseLog(selectedResidence.id)}
             isLinking={linkingFromId === selectedResidence.id}
             onStartLink={() => {
@@ -1273,6 +1298,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             isLoading={isHistoryLoading}
             error={historyError}
             onClose={() => setIsHistoryOpen(false)}
+          />
+        )}
+        {selectedResidence && isCommerceHistoryOpen && (
+          <CommerceHistoryPanel
+            title={`Histórico: ${RESIDENCES[selectedResidence.type].name}`}
+            days={commerceHistoryDays}
+            isLoading={isCommerceHistoryLoading}
+            error={commerceHistoryError}
+            onClose={() => setIsCommerceHistoryOpen(false)}
           />
         )}
         {selectedResidence && isConsumptionOpen && (

@@ -153,6 +153,16 @@ CREATE TABLE IF NOT EXISTS production_history (
   PRIMARY KEY (building_id, day)
 );
 
+CREATE TABLE IF NOT EXISTS commerce_history (
+  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  day DATE NOT NULL,
+  employee_expense INTEGER NOT NULL DEFAULT 0 CHECK (employee_expense >= 0),
+  product_expense INTEGER NOT NULL DEFAULT 0 CHECK (product_expense >= 0),
+  units_sold INTEGER NOT NULL DEFAULT 0 CHECK (units_sold >= 0),
+  sale_price INTEGER NOT NULL CHECK (sale_price >= 1),
+  PRIMARY KEY (building_id, day)
+);
+
 CREATE TABLE IF NOT EXISTS warehouse_transport_log (
   id BIGSERIAL PRIMARY KEY,
   warehouse_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,

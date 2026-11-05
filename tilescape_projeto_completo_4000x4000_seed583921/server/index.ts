@@ -41,7 +41,13 @@ import {
 import { STARTING_BALANCE } from '../src/types/wallet.js';
 import { isValidTimeScale, parseMasterGrant } from '../src/types/worldClock.js';
 import { advanceConstruction, allocateWorkers, getAverageIncomes, getDailyWorkPoints, getPayroll, type JobAssignment } from '../src/types/employment.js';
-import { getShopSalesCapacity, parsePrice, planRiceSales } from '../src/types/commerce.js';
+import {
+  getShopDailyFinancials,
+  getShopProfitLoss,
+  getShopSalesCapacity,
+  parsePrice,
+  planRiceSales,
+} from '../src/types/commerce.js';
 import { nextEfficiencyPenalty, planProduction, rollToolDemand } from '../src/types/fishing.js';
 import {
   canLinkToWarehouse,
@@ -636,6 +642,8 @@ async function runDailyEmployment(): Promise<boolean> {
           y: row.tile_y,
           price: row.price,
           stock: row.stock,
+          wage: row.wage,
+          workers: workers.get(row.id) ?? 0,
           capacity: getShopSalesCapacity(
             (workers.get(row.id) ?? 0) *
               getDailyWorkPoints(row.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness),
@@ -681,21 +689,47 @@ async function runDailyEmployment(): Promise<boolean> {
       }
       for (const shop of shops) {
         const quantity = sold.get(shop.id) ?? 0;
-        if (quantity <= 0) continue;
-        const owner = workplaces.find((row) => row.id === shop.id)?.created_by;
-        await client.query('UPDATE residential_buildings SET stock = stock - $2 WHERE id = $1', [
-          shop.id,
-          quantity,
-        ]);
-        if (owner) {
-          await client.query(
-            `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::bigint + $2::bigint)
-             ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::bigint`,
-            [owner, quantity * shop.price, STARTING_BALANCE],
-          );
+        if (quantity > 0) {
+          const owner = workplaces.find((row) => row.id === shop.id)?.created_by;
+          await client.query('UPDATE residential_buildings SET stock = stock - $2 WHERE id = $1', [
+            shop.id,
+            quantity,
+          ]);
+          if (owner) {
+            await client.query(
+              `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::bigint + $2::bigint)
+               ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::bigint`,
+              [owner, quantity * shop.price, STARTING_BALANCE],
+            );
+          }
+          changed = true;
         }
-        changed = true;
+        const financials = getShopDailyFinancials(
+          shop.wage,
+          shop.workers,
+          quantity,
+          shop.price,
+        );
+        await client.query(
+          `INSERT INTO commerce_history
+             (building_id, day, employee_expense, product_expense, units_sold, sale_price)
+           VALUES ($1, $2::date, $3, $4, $5, $6)
+           ON CONFLICT (building_id, day) DO UPDATE
+           SET employee_expense = EXCLUDED.employee_expense,
+               product_expense = EXCLUDED.product_expense,
+               units_sold = EXCLUDED.units_sold,
+               sale_price = EXCLUDED.sale_price`,
+          [
+            shop.id,
+            state.day,
+            financials.employeeExpense,
+            financials.productExpense,
+            financials.unitsSold,
+            financials.salePrice,
+          ],
+        );
       }
+      await client.query('DELETE FROM commerce_history WHERE day < $1::date - 30', [state.day]);
       }
       });
       await runStage('produção', async () => {
@@ -2036,6 +2070,69 @@ async function start() {
         console.error('Não foi possível consultar o histórico de produção:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
+  });
+  app.get('/api/residential-buildings/:id/commerce-history', requireAuth, (request, response) => {
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+    const userId = authenticatedUserIds.get(request);
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    void (async () => {
+      const { rows: owners } = await pool.query<{ created_by: string }>(
+        `SELECT created_by FROM residential_buildings
+         WHERE id = $1 AND building_type IN ('shop_rice', 'shop_fish')`,
+        [request.params.id],
+      );
+      if (!owners[0]) {
+        response.status(404).json({ error: 'shop_not_found' });
+        return;
+      }
+      if (owners[0].created_by !== userId) {
+        response.status(403).json({ error: 'forbidden' });
+        return;
+      }
+      const { rows } = await pool.query<{
+        day: string;
+        employee_expense: number;
+        product_expense: number;
+        units_sold: number;
+        sale_price: number;
+      }>(
+        `SELECT to_char(day, 'YYYY-MM-DD') AS day,
+                employee_expense, product_expense, units_sold, sale_price
+         FROM commerce_history
+         WHERE building_id = $1
+         ORDER BY day DESC
+         LIMIT 30`,
+        [request.params.id],
+      );
+      response.json({
+        days: rows.map((row) => {
+          const { revenue, profitLoss } = getShopProfitLoss(
+            row.units_sold,
+            row.sale_price,
+            row.employee_expense,
+            row.product_expense,
+          );
+          return {
+            day: row.day,
+            employeeExpense: row.employee_expense,
+            productExpense: row.product_expense,
+            unitsSold: row.units_sold,
+            salePrice: row.sale_price,
+            revenue,
+            profitLoss,
+          };
+        }),
+      });
+    })().catch((error: unknown) => {
+      console.error('Não foi possível consultar o histórico do comércio:', error);
+      response.status(503).json({ error: 'residence_unavailable' });
+    });
   });
   app.get('/api/residential-buildings/:id/consumption', requireAuth, (request, response) => {
     if (!residenceIdPattern.test(request.params.id)) {

@@ -33,6 +33,74 @@ export interface RicePurchase {
   quantity: number;
 }
 
+export interface ShopDailyFinancials {
+  employeeExpense: number;
+  productExpense: number;
+  unitsSold: number;
+  salePrice: number;
+  revenue: number;
+  profitLoss: number;
+}
+
+export function getShopProfitLoss(
+  unitsSold: number,
+  salePrice: number,
+  employeeExpense: number,
+  productExpense: number,
+): { revenue: number; profitLoss: number } {
+  if (
+    !Number.isInteger(unitsSold) ||
+    unitsSold < 0 ||
+    !Number.isInteger(salePrice) ||
+    salePrice < MIN_SHOP_PRICE ||
+    !Number.isInteger(employeeExpense) ||
+    employeeExpense < 0 ||
+    !Number.isInteger(productExpense) ||
+    productExpense < 0
+  ) {
+    throw new RangeError('Os valores financeiros diários do comércio são inválidos.');
+  }
+  const revenue = unitsSold * salePrice;
+  return { revenue, profitLoss: revenue - employeeExpense - productExpense };
+}
+
+export function getShopDailyFinancials(
+  wage: number,
+  workers: number,
+  unitsSold: number,
+  salePrice: number,
+): ShopDailyFinancials {
+  if (
+    !Number.isInteger(wage) ||
+    wage < 0 ||
+    !Number.isInteger(workers) ||
+    workers < 0 ||
+    !Number.isInteger(unitsSold) ||
+    unitsSold < 0 ||
+    !Number.isInteger(salePrice) ||
+    salePrice < MIN_SHOP_PRICE
+  ) {
+    throw new RangeError('Os valores financeiros diários do comércio são inválidos.');
+  }
+  const employeeExpense = wage * workers;
+  // Reposição pelo armazém ligado é uma transferência interna sem cobrança.
+  const productExpense = 0;
+  const { revenue, profitLoss } = getShopProfitLoss(
+    unitsSold,
+    salePrice,
+    employeeExpense,
+    productExpense,
+  );
+  return {
+    employeeExpense,
+    productExpense,
+    unitsSold,
+    salePrice,
+    revenue,
+    profitLoss,
+  };
+}
+
 export function parsePrice(value: unknown): number | null {
   if (typeof value !== 'object' || value === null) return null;
   const { price } = value as Record<string, unknown>;

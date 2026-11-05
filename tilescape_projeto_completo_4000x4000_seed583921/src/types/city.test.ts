@@ -24,6 +24,7 @@ import {
 import { getRoadPlacementError } from './road';
 import { allocateWorkers, getDailyWorkPoints, getHoursFactor, getPayroll, getRestFactor, getWorkBenefit, getAverageIncomes, advanceConstruction } from './employment';
 import {
+  getShopDailyFinancials,
   getPurchaseBenefit,
   getPurchaseQuantity,
   getShopSalesCapacity,
@@ -234,6 +235,25 @@ describe('rice sales', () => {
     y: 0,
     occupants,
     averageIncome,
+  });
+
+  it('calculates daily shop revenue and profit from payroll and paid product costs', () => {
+    assert.deepEqual(getShopDailyFinancials(20, 3, 12, 15), {
+      employeeExpense: 60,
+      productExpense: 0,
+      unitsSold: 12,
+      salePrice: 15,
+      revenue: 180,
+      profitLoss: 120,
+    });
+    assert.deepEqual(getShopDailyFinancials(25, 2, 0, 10), {
+      employeeExpense: 50,
+      productExpense: 0,
+      unitsSold: 0,
+      salePrice: 10,
+      revenue: 0,
+      profitLoss: -50,
+    });
   });
 
   it('computes capacity, price, benefit and quantity', () => {

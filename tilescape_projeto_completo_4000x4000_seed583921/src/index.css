@@ -91,6 +91,10 @@ button { color: inherit; }
 .warehouse-summary { margin: 10px 0; color: #a6a897; font-size: 11px; }
 .warehouse-error { margin: 0 0 8px; color: #e58b7d; font-size: 11px; }
 .warehouse-list { overflow-y: auto; display: grid; gap: 4px; }
+.commerce-history-panel .warehouse-list { overflow-x: auto; }
+.commerce-history-row { display: grid; grid-template-columns: repeat(7, minmax(82px, 1fr)); gap: 8px; align-items: center; min-width: 700px; font-size: 11px; }
+.commerce-profit { color: #9fd3a0; }
+.commerce-loss { color: #e58b7d; }
 .warehouse-row { display: grid; grid-template-columns: minmax(130px, 1.6fr) 70px 90px 90px 80px 62px; gap: 8px; align-items: center; font-size: 11px; }
 .consumption-row { display: grid; grid-template-columns: minmax(110px, 1.4fr) repeat(4, 1fr); gap: 8px; align-items: center; font-size: 11px; }
 .warehouse-head { position: sticky; top: 0; background: rgba(19,28,23,.98); color: #b29a66; font-size: 9px; font-weight: 700; letter-spacing: .06em; }

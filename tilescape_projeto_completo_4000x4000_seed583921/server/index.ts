@@ -401,29 +401,38 @@ async function logWarehouseDemand(
 }
 
 // Histórico diário de produção; cada etapa da economia grava só as colunas que conhece.
+// Roda em savepoint próprio: uma falha no histórico nunca pode desfazer a produção ou o transporte.
 async function logProduction(
   client: { query: (text: string, values: unknown[]) => Promise<unknown> },
   buildingId: string,
   day: string,
   values: { workPoints?: number; produced?: number; transported?: number; efficiency?: number },
 ) {
-  await client.query(
-    `INSERT INTO production_history (building_id, day, work_points, produced, transported, efficiency)
-     VALUES ($1, $2, COALESCE($3, 0), COALESCE($4, 0), COALESCE($5, 0), COALESCE($6, 100))
-     ON CONFLICT (building_id, day) DO UPDATE
-     SET work_points = COALESCE($3, production_history.work_points),
-         produced = COALESCE($4, production_history.produced),
-         transported = production_history.transported + COALESCE($5, 0),
-         efficiency = COALESCE($6, production_history.efficiency)`,
-    [
-      buildingId,
-      day,
-      values.workPoints ?? null,
-      values.produced ?? null,
-      values.transported ?? null,
-      values.efficiency ?? null,
-    ],
-  );
+  await client.query('SAVEPOINT production_log', []);
+  try {
+    await client.query(
+      `INSERT INTO production_history (building_id, day, work_points, produced, transported, efficiency)
+       VALUES ($1::uuid, $2::date, COALESCE($3::double precision, 0), COALESCE($4::double precision, 0),
+               COALESCE($5::double precision, 0), COALESCE($6::double precision, 100))
+       ON CONFLICT (building_id, day) DO UPDATE
+       SET work_points = COALESCE($3::double precision, production_history.work_points),
+           produced = COALESCE($4::double precision, production_history.produced),
+           transported = production_history.transported + COALESCE($5::double precision, 0),
+           efficiency = COALESCE($6::double precision, production_history.efficiency)`,
+      [
+        buildingId,
+        day,
+        values.workPoints ?? null,
+        values.produced ?? null,
+        values.transported ?? null,
+        values.efficiency ?? null,
+      ],
+    );
+    await client.query('RELEASE SAVEPOINT production_log', []);
+  } catch (error) {
+    await client.query('ROLLBACK TO SAVEPOINT production_log', []);
+    console.error('Não foi possível gravar o histórico de produção:', error);
+  }
 }
 
 // Às 12:00 distribui os trabalhadores e às 00:00 cobra a folha de pagamento dos donos.

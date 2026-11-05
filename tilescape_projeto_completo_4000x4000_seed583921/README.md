@@ -144,10 +144,11 @@ opção apaga os volumes, incluindo o banco e o estado persistente do mundo.
 ## Construções e cidades
 
 O mapa tem uma barra inferior com as categorias Construções Artesanais,
-Comerciais, Fazendas, Residências, Recursos, Indústrias e Prefeitura. A Prefeitura aparece somente
-para a conta Neon Auth configurada em `MASTER_EMAIL`. Cadastre o mesmo e-mail
-nas variáveis locais e no Render; crie essa conta pelo formulário do jogo para
-ativar a permissão.
+Comerciais, Fazendas, Residências, Recursos, Indústrias e Prefeitura. As seis
+categorias de construções estão disponíveis para todos os jogadores autenticados;
+a Prefeitura aparece somente para a conta Neon Auth configurada em
+`MASTER_EMAIL`. Cadastre o mesmo e-mail nas variáveis locais e no Render; crie
+essa conta pelo formulário do jogo para ativar a permissão.
 
 A primeira estrutura da Prefeitura é a **Assembleia**. Escolha-a no catálogo,
 informe o nome da cidade e mova o cursor pelo mapa para ver uma prévia: verde
@@ -169,9 +170,10 @@ podem se sobrepor. Regiões urbanas aparecem em azul e rurais em verde durante
 a edição; jogadores também veem somente a região relevante quando selecionam
 uma categoria: Construções Artesanais, Comerciais e Residências usam áreas
 urbanas; Fazendas, Recursos e Indústrias usam áreas rurais. A definição das
-zonas é persistida e sincronizada em tempo real. O posicionamento de edifícios
-das demais categorias ainda não está habilitado. Residências são descritas
-abaixo.
+zonas é persistida e sincronizada em tempo real. Jogadores autenticados podem
+iniciar construções em todas as seis categorias; os requisitos de zona, terreno,
+estrada e espaço continuam sendo validados pelo servidor. Residências e demais
+construções são descritas abaixo.
 Depois de confirmar o local, a Assembleia aparece imediatamente enquanto o
 servidor salva; se a operação falhar, ela é removida e a mensagem de erro é
 exibida.
@@ -210,14 +212,14 @@ de uma estrada. Clique para iniciar a obra:
 | Simples 1 | 2 × 2 tiles | 4 pessoas | 50 | 100 madeiras, 30 pedras | 18.000 Work Points |
 | Simples 2 | 3 × 3 tiles | 32 pessoas | 40 | 300 madeiras, 450 pedras | 67.500 Work Points |
 
-O estoque de materiais para construção ainda não está implementado. Por isso,
-jogadores comuns ainda não podem construir casas ou outras construções que
-exigem materiais. Cada jogador pode construir um primeiro **Armazém** gratuito,
-que fica pronto imediatamente; esse direito permanece registrado mesmo se o
-armazém for demolido. A conta Master pode iniciar outras construções sem
-materiais. Obras regulares aparecem com o ícone **Em construção** e a conta
-Master pode concluí-las com duplo clique. Capacidade, apreço e custo são dados
-informativos; ainda não alteram população ou estoque.
+O estoque e a cobrança de materiais para construção ainda não estão
+implementados; os custos exibidos são informativos. Todos os jogadores podem
+iniciar construções das seis categorias. Cada jogador pode construir um
+primeiro **Armazém** gratuito, que fica pronto imediatamente; esse direito
+permanece registrado mesmo se o armazém for demolido. As demais construções
+aparecem com o ícone **Em construção** e avançam com os Work Points dos
+funcionários; a conta Master também pode concluí-las instantaneamente com duplo
+clique. Capacidade e apreço ainda não alteram população ou estoque.
 Para demolir uma residência, ative **Demolir** e clique em qualquer tile dela.
 Não há confirmação; somente o jogador que iniciou a construção pode removê-la.
 

@@ -137,21 +137,17 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'residence_not_found') {
           error = 'Essa residência não existe mais.';
         } else if (body.error === 'outside_urban_zone') {
-          error = 'A residência precisa ficar dentro de uma área urbana.';
+          error = 'A construção precisa ficar dentro de uma área urbana.';
         } else if (body.error === 'outside_rural_zone') {
           error = 'A construção precisa ficar dentro de uma área rural.';
         } else if (body.error === 'residence_outside_municipality') {
-          error = 'A residência precisa ficar dentro da área municipal.';
+          error = 'A construção precisa ficar dentro da área municipal.';
         } else if (body.error === 'not_adjacent_to_road') {
-          error = 'A residência precisa ficar ao lado de uma estrada.';
+          error = 'A construção precisa ficar ao lado de uma estrada.';
         } else if (body.error === 'road_overlap') {
-          error = 'A residência não pode ocupar o espaço de uma estrada.';
+          error = 'A construção não pode ocupar o espaço de uma estrada.';
         } else if (body.error === 'invalid_residence') {
-          error = 'A residência ou o local escolhido é inválido.';
-        } else if (body.error === 'insufficient_materials') {
-          error = 'Você não possui materiais suficientes para iniciar essa construção.';
-        } else if (body.error === 'warehouse_already_claimed') {
-          error = 'Seu armazém gratuito já foi utilizado. Outros armazéns exigem materiais.';
+          error = 'A construção ou o local escolhido é inválido.';
         } else if (body.error === 'invalid_work_settings') {
           error = 'Informe funcionários desejados (até o máximo da construção), salário (0 a 100.000) e carga horária de 4 a 14 horas.';
         } else if (body.error === 'harvest_in_progress') {
@@ -1019,13 +1015,6 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   };
 
   const handleResidencePlace = async (type: ResidenceType, position: RoadPosition) => {
-    if (!user.isMaster && type !== 'warehouse') {
-      setResidencePlacementMessage(
-        'Por enquanto, jogadores comuns podem construir apenas o primeiro armazém, que é gratuito e instantâneo.',
-      );
-      return;
-    }
-
     const pending: ResidentialBuilding = {
       id: `pending-${Date.now()}-${position.x}-${position.y}`,
       type,
@@ -1591,7 +1580,6 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             activeCategory === 'industrias' ? (
             <>
               {Object.values(RESIDENCES)
-                .filter((residence) => user.isMaster || residence.type === 'warehouse')
                 .filter((residence) => KIND_CATEGORY[residence.kind] === activeCategory)
                 .map((residence) => (
                 <button
@@ -1629,11 +1617,6 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                   </span>
                 </button>
               ))}
-              {!user.isMaster && (
-                <p className="construction-empty">
-                  Seu primeiro armazém é gratuito e concluído na hora. As demais construções estarão disponíveis quando o estoque de materiais for implementado.
-                </p>
-              )}
             </>
           ) : (
             <p className="construction-empty">

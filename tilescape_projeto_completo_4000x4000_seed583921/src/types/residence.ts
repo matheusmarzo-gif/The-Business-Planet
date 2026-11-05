@@ -95,8 +95,8 @@ export const RESIDENCE_STATS = { skill: 10, health: 100, happiness: 100 } as con
 // Raio (em tiles) em que uma obra ou fazenda procura trabalhadores.
 export const WORKER_SEARCH_RADIUS = 60;
 
-export function canStartResidenceConstruction(type: ResidenceType, isMaster: boolean): boolean {
-  return isMaster || type === 'warehouse';
+export function isPlayerBuildableConstructionType(type: unknown): type is ResidenceType {
+  return typeof type === 'string' && Object.prototype.hasOwnProperty.call(RESIDENCES, type);
 }
 
 export function isWithinWorkerSearchRadius(

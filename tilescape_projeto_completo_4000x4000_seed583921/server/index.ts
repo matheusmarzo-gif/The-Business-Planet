@@ -30,7 +30,7 @@ import {
 import {
   getResidenceDefinition,
   getResidencePlacementError,
-  canStartResidenceConstruction,
+  isPlayerBuildableConstructionType,
   parseRent,
   parseWorkSettings,
   RESIDENCES,
@@ -1834,10 +1834,9 @@ async function createResidentialBuilding(
   type: ResidenceType,
   position: RoadPosition,
   userId: string,
-  isMaster: boolean,
 ): Promise<{
   building: ResidentialBuilding | null;
-  error: ResidencePlacementError | 'insufficient_materials' | 'warehouse_already_claimed' | null;
+  error: ResidencePlacementError | null;
 }> {
   const client = await pool.connect();
   try {
@@ -1854,13 +1853,6 @@ async function createResidentialBuilding(
         [userId],
       );
       isFirstWarehouse = !warehouseRows[0]?.has_warehouse;
-      if (!isMaster && !isFirstWarehouse) {
-        await client.query('ROLLBACK');
-        return { building: null, error: 'warehouse_already_claimed' };
-      }
-    } else if (!isMaster) {
-      await client.query('ROLLBACK');
-      return { building: null, error: 'insufficient_materials' };
     }
 
     const { rows: cityRows } = await client.query<{
@@ -2203,11 +2195,11 @@ async function start() {
       return;
     }
 
-    const definition = getResidenceDefinition(request.body?.type);
+    const type = request.body?.type;
     const x = request.body?.x;
     const y = request.body?.y;
     if (
-      !definition ||
+      !isPlayerBuildableConstructionType(type) ||
       typeof x !== 'number' ||
       !Number.isInteger(x) ||
       typeof y !== 'number' ||
@@ -2217,31 +2209,21 @@ async function start() {
       return;
     }
 
-    void isMasterUser(userId)
-      .then((isMaster) => {
-        if (!canStartResidenceConstruction(definition.type, isMaster)) {
-          response.status(409).json({ error: 'insufficient_materials' });
+    const definition = RESIDENCES[type];
+    void createResidentialBuilding(definition.type, { x, y }, userId)
+      .then(({ building, error }) => {
+        if (!building) {
+          response.status(409).json({ error });
           return;
         }
-        return createResidentialBuilding(definition.type, { x, y }, userId, isMaster)
-          .then(({ building, error }) => {
-            if (!building) {
-              response.status(409).json({ error });
-              return;
-            }
-            response.status(201).json(building);
-            void publishCities().catch((publishError: unknown) => {
-              console.error('A residência foi iniciada, mas a atualização do mundo falhou:', publishError);
-            });
-          })
-          .catch((error: unknown) => {
-            console.error('Não foi possível iniciar a construção residencial:', error);
-            response.status(503).json({ error: 'residence_creation_unavailable' });
-          });
+        response.status(201).json(building);
+        void publishCities().catch((publishError: unknown) => {
+          console.error('A residência foi iniciada, mas a atualização do mundo falhou:', publishError);
+        });
       })
       .catch((error: unknown) => {
-        console.error('Não foi possível verificar os materiais disponíveis:', error);
-        response.status(503).json({ error: 'authorization_unavailable' });
+        console.error('Não foi possível iniciar a construção residencial:', error);
+        response.status(503).json({ error: 'residence_creation_unavailable' });
       });
   });
   app.post(

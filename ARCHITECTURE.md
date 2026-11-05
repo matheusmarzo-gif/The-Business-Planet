@@ -16,11 +16,13 @@ atualizações entre instâncias.
 O mapa base é determinístico: não é persistido tile a tile. Cidades, estradas
 e residências são sobrepostas ao terreno gerado. Atualmente, a Prefeitura
 oferece a Assembleia e a Estrada de Terra. A conta master pode dividir cada
-área municipal em regiões urbanas e rurais persistentes. Duas residências
-podem ser colocadas em áreas urbanas ao lado de estradas; elas ficam em
-construção até a master concluí-las instantaneamente. O jogo também possui um
-catálogo de produtos, estoques persistentes e produção para as construções
-habilitadas; estoques perecíveis sofrem deterioração diária conforme a validade.
+área municipal em regiões urbanas e rurais persistentes. Todos os jogadores
+autenticados podem iniciar as construções do catálogo nas respectivas zonas e
+ao lado de estradas; o primeiro armazém de cada jogador é gratuito e instantâneo,
+e as obras regulares progridem por Work Points. A conta master pode concluí-las
+instantaneamente. O jogo também possui um catálogo de produtos, estoques
+persistentes e produção para as construções habilitadas; estoques perecíveis
+sofrem deterioração diária conforme a validade.
 População, bem-estar e economia são dados da cidade, mas ainda não existe
 simulação econômica ou de crescimento que os altere.
 
@@ -161,9 +163,9 @@ das cidades legíveis em tamanho fixo na tela.
   edição master ou ao selecionar uma categoria correspondente. Artesanais,
   Comerciais e Residências mapeiam à área urbana; Fazendas, Recursos e
   Indústrias mapeiam à rural. Prefeitura e Estrada de Terra não usam zonas.
-  Este mapeamento é uma regra compartilhada preparada para posicionamento
-  futuro para as demais categorias; duas residências estão habilitadas conforme
-  as regras abaixo.
+  Todas as seis categorias de construções são exibidas para jogadores
+  autenticados; a Prefeitura permanece restrita à conta master. O servidor
+  aplica o mapeamento de zonas ao posicionar qualquer construção do catálogo.
 - Qualquer jogador autenticado pode consultar cidades. `getCities` calcula a
   população, empregados nos estabelecimentos da cidade, vagas ainda abertas e
   salário diário médio ponderado por empregados; bem-estar e economia são
@@ -286,14 +288,14 @@ mapeamento e verificar todas as curvas.
 - O primeiro armazém de cada jogador é gratuito e criado diretamente como
   concluído, sem aguardar Work Points. `player_warehouse_claims` persiste esse
   direito mesmo após demolição e é inicializada para jogadores com armazéns
-  existentes. O servidor aplica o limite dentro do lock transacional. Até existir
-  estoque de materiais, jogadores comuns recebem `insufficient_materials` para
-  as demais construções; a conta master pode iniciar obras sem materiais. Uma
-  obra regular é persistida com status `under_construction` e usa
-  `public/buildings/em_construcao.png`.
-- Não há progresso por Work Points nem conclusão automática. A conta master
-  pode dar duplo clique na obra para concluí-la instantaneamente; a rota
-  verifica a autorização e recusa uma obra já concluída.
+  existentes. O servidor aplica essa regra dentro do lock transacional. Todos
+  os jogadores autenticados podem iniciar qualquer construção do catálogo;
+  custos de materiais ainda não são debitados. Obras regulares são persistidas
+  com status `under_construction` e usam `public/buildings/em_construcao.png`.
+- Os funcionários atribuídos a uma obra geram Work Points diários e a conclusão
+  ocorre automaticamente ao atingir o requisito. A conta master também pode
+  dar duplo clique na obra para concluí-la instantaneamente; a rota protege essa
+  operação e recusa uma obra já concluída.
 - Estradas também consultam os footprints residenciais para impedir que um
   traçado posterior cubra uma casa. No modo Demolir, clicar em qualquer tile
   do footprint de uma residência a remove sem confirmação; o servidor só
@@ -519,7 +521,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/roads` | Master | Valida e grava um caminho de estrada de até 600 tiles. |
 | `DELETE /api/roads/:x/:y` | Criador do tile | Demole um tile de estrada sem confirmação; publica o novo estado. |
 | `DELETE /api/roads` | Autenticado | Demole os tiles próprios de um caminho de até 600 tiles e publica o novo estado. |
-| `POST /api/residential-buildings` | Autenticado (primeiro armazém); Master (demais construções) | Valida e cria o primeiro armazém do jogador como concluído e gratuito ou inicia uma obra regular para Master. |
+| `POST /api/residential-buildings` | Autenticado | Valida e cria o primeiro armazém do jogador como concluído e gratuito ou inicia uma obra regular de qualquer categoria. |
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |
@@ -611,10 +613,10 @@ atualizado.
 
 - Ainda não há evolução de população ou simulação dinâmica de bem-estar.
 - O catálogo habilita casas, armazéns, fazendas de arroz e leite, lojas de
-  arroz, peixe e leite, pesqueiro, recursos e ferramentaria. Custos de materiais
-  de construção ainda não são debitados; a conta master pode iniciar obras e
-  concluí-las instantaneamente, enquanto o progresso de Work Points é processado
-  para construções com empregados.
+  arroz, peixe e leite, pesqueiro, recursos e ferramentaria para todos os
+  jogadores autenticados. Custos de materiais de construção ainda não são
+  debitados; obras progridem por Work Points e a conta master pode concluí-las
+  instantaneamente.
 - O estado de cada cidade/estrada é consultado e enviado integralmente na
   sincronização atual; crescimento grande do mundo pode exigir paginação ou
   atualizações incrementais.

@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { canStartResidenceConstruction } from './residence.js';
+import { isPlayerBuildableConstructionType, RESIDENCES } from './residence.js';
 
-test('allows a new player to request their first warehouse', () => {
-  assert.equal(canStartResidenceConstruction('warehouse', false), true);
+test('allows authenticated players to build every catalog construction', () => {
+  for (const type of Object.keys(RESIDENCES)) {
+    assert.equal(isPlayerBuildableConstructionType(type), true, type);
+  }
 });
 
-test('still requires master access for other constructions without material inventory', () => {
-  assert.equal(canStartResidenceConstruction('house_poor1', false), false);
-  assert.equal(canStartResidenceConstruction('warehouse', true), true);
-  assert.equal(canStartResidenceConstruction('house_poor1', true), true);
+test('rejects construction types outside the catalog', () => {
+  assert.equal(isPlayerBuildableConstructionType('prefeitura'), false);
+  assert.equal(isPlayerBuildableConstructionType('__proto__'), false);
+  assert.equal(isPlayerBuildableConstructionType(null), false);
 });

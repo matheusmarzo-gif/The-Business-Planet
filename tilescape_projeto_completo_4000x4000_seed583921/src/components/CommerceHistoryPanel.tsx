@@ -26,6 +26,7 @@ const benefitFormat = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 8 
 const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
 const outcomeText = {
   purchased: 'Comprou',
+  negative_benefit: 'Benefício negativo; não comprou',
   no_stock: 'Sem estoque',
   no_capacity: 'Sem capacidade',
   no_stock_or_capacity: 'Sem estoque e capacidade',

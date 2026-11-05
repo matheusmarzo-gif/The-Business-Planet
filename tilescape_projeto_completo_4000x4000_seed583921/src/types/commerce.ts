@@ -49,7 +49,13 @@ export interface ShopTransactionCandidate {
   demandBefore: number;
   purchased: number;
   demandAfter: number;
-  outcome: 'purchased' | 'no_stock' | 'no_capacity' | 'no_stock_or_capacity' | 'demand_fulfilled';
+  outcome:
+    | 'purchased'
+    | 'negative_benefit'
+    | 'no_stock'
+    | 'no_capacity'
+    | 'no_stock_or_capacity'
+    | 'demand_fulfilled';
 }
 
 export interface ShopResidenceTransaction {
@@ -154,14 +160,17 @@ export function getShopSalesCapacity(dailyWorkPoints: number): number {
 }
 
 // Benefício = ((Sm - preço local * (quantidade desejada / moradores)) / preço local)^3
-//            * (60 / (distância + 60)).
+//            * (60 / (distância + 60))^2.
 export function getPurchaseBenefit(
   income: number,
   price: number,
   distance = 0,
   desiredQuantityPerResident = 0,
 ): number {
-  return ((income - price * desiredQuantityPerResident) / price) ** 3 * (60 / (distance + 60));
+  return (
+    ((income - price * desiredQuantityPerResident) / price) ** 3 *
+    (60 / (distance + 60)) ** 2
+  );
 }
 
 // Pessoas * 0,03 * max(0,125, min(4, preço médio efetivo da área / preço local)).
@@ -278,7 +287,7 @@ export function planRiceSalesDetailed(
       const capacityAvailable = remainingCapacity.get(shop.id) ?? 0;
       const available = Math.min(stockAvailable, capacityAvailable);
       const demandBefore = wanted;
-      const quantity = Math.min(wanted, available);
+      const quantity = benefit < 0 ? 0 : Math.min(wanted, available);
       wanted -= quantity;
       if (quantity > 0) {
         remainingStock.set(shop.id, stockAvailable - quantity);
@@ -301,6 +310,8 @@ export function planRiceSalesDetailed(
         outcome:
           quantity > 0
             ? 'purchased'
+            : benefit < 0
+              ? 'negative_benefit'
             : demandBefore <= 0
               ? 'demand_fulfilled'
               : stockAvailable <= 0 && capacityAvailable <= 0

@@ -362,7 +362,8 @@ describe('rice sales', () => {
     assert.equal(parsePrice({ price: 12 }), 12);
     const benefit = ((50 - 10 * 0.045) / 10) ** 3;
     assert.equal(getPurchaseBenefit(50, 10, 0, 0.045), benefit);
-    assert.equal(getPurchaseBenefit(50, 10, 60, 0.045), benefit / 2);
+    assert.equal(getPurchaseBenefit(50, 10, 60, 0.045), benefit / 4);
+    assert.ok(getPurchaseBenefit(0.1, 10, 0, 0.045) < 0);
     // O fator de preço fica limitado a 0,125 e 4 antes do arredondamento probabilístico.
     assert.equal(getPurchaseQuantity(10, 1000, 1, () => 0.1), 2);
     assert.equal(getPurchaseQuantity(10, 1000, 1, () => 0.5), 1);
@@ -453,6 +454,26 @@ describe('rice sales', () => {
         ['shop-10', 2, 2, 0, 100, 0, 'no_stock'],
         ['shop-20', 3, 2, 100, 100, 2, 'purchased'],
       ],
+    );
+  });
+
+  it('does not buy from any shop with a negative benefit', () => {
+    const shops = [
+      shop('shop-9', 0, 9, 100, 100),
+      shop('shop-10', 4, 10, 100, 100),
+      shop('shop-20', 8, 20, 100, 100),
+    ];
+    const plan = planRiceSalesDetailed([home('low-income', 4, 100, 0.1)], shops, () => 0);
+
+    assert.deepEqual(plan.purchases, []);
+    assert.deepEqual(
+      shops.map((store) => plan.transactionsByShop.get(store.id)?.[0].candidate.outcome),
+      ['negative_benefit', 'negative_benefit', 'negative_benefit'],
+    );
+    assert.ok(
+      shops.every(
+        (store) => (plan.transactionsByShop.get(store.id)?.[0].candidate.benefit ?? 0) < 0,
+      ),
     );
   });
 });

@@ -1,4 +1,5 @@
 import type { CityAssembly } from './city.js';
+import type { Crop } from './farming.js';
 import { ASSEMBLY_SIZE, isFootprintInCityZone, MUNICIPAL_AREA_RADIUS } from './city.js';
 import type { RoadTile } from './road.js';
 
@@ -188,6 +189,8 @@ export interface ResidentialBuilding {
   price: number;
   stock: number;
   warehouseId: string | null;
+  // Plantação da fazenda de arroz; null quando não há plantio.
+  crop: Crop | null;
   // Funcionários empregados na construção ou, em residências, moradores empregados.
   employed: number;
 }

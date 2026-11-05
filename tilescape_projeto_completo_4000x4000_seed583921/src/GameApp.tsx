@@ -144,6 +144,10 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Você não possui materiais suficientes para iniciar essa construção.';
         } else if (body.error === 'invalid_work_settings') {
           error = 'Informe funcionários desejados (até o máximo da construção), salário (0 a 100.000) e carga horária de 4 a 14 horas.';
+        } else if (body.error === 'harvest_in_progress') {
+          error = 'A colheita está em andamento; só é possível plantar de novo ao terminar.';
+        } else if (body.error === 'cannot_plant') {
+          error = 'Somente fazendas de arroz concluídas podem plantar.';
         } else if (body.error === 'invalid_warehouse_link') {
           error = 'Essa construção não pode ser ligada a esse destino.';
         } else if (body.error === 'warehouse_out_of_range') {
@@ -396,6 +400,20 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setWorkSettingsError(error instanceof Error ? error.message : 'Não foi possível atualizar o vínculo.');
     } finally {
       setLinkingFromId(null);
+      setIsSavingWorkSettings(false);
+    }
+  };
+
+  const plantCrop = async (buildingId: string) => {
+    setIsSavingWorkSettings(true);
+    setWorkSettingsError('');
+    try {
+      await cityRequest<ResidentialBuilding>(`/api/residential-buildings/${buildingId}/plant`, {
+        method: 'POST',
+      });
+    } catch (error) {
+      setWorkSettingsError(error instanceof Error ? error.message : 'Não foi possível plantar.');
+    } finally {
       setIsSavingWorkSettings(false);
     }
   };
@@ -691,6 +709,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       price: DEFAULT_SHOP_PRICE,
       stock: 0,
       warehouseId: null,
+      crop: null,
       employed: 0,
     };
     setPendingResidentialBuildings((current) => [...current, pending]);
@@ -1035,6 +1054,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             }}
             onCancelLink={() => setLinkingFromId(null)}
             onUnlink={() => void linkWarehouse(selectedResidence.id, null)}
+            onPlant={() => void plantCrop(selectedResidence.id)}
             onClose={() => {
               setLinkingFromId(null);
               setSelectedResidenceId(null);

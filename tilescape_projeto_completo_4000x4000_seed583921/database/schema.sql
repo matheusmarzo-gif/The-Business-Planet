@@ -82,6 +82,13 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0);
 ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS warehouse_id UUID REFERENCES residential_buildings (id) ON DELETE SET NULL;
+ALTER TABLE residential_buildings
+  ADD COLUMN IF NOT EXISTS crop_phase TEXT CHECK (crop_phase IN ('growing', 'harvesting')),
+  ADD COLUMN IF NOT EXISTS crop_planted_day DATE,
+  ADD COLUMN IF NOT EXISTS crop_ratio_sum DOUBLE PRECISION NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS crop_days INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS crop_yield INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS crop_harvested INTEGER NOT NULL DEFAULT 0;
 
 -- O caixa dos jogadores pode ficar negativo (folha de pagamento).
 ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_check;

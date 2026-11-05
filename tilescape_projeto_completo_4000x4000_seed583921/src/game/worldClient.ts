@@ -80,6 +80,8 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
     Number.isInteger(building.price) &&
     Number.isInteger(building.stock) &&
     (building.warehouseId === null || typeof building.warehouseId === 'string') &&
+    (building.crop === null ||
+      (typeof building.crop === 'object' && typeof (building.crop as { phase?: unknown }).phase === 'string')) &&
     Number.isInteger(building.employed)
   );
 }

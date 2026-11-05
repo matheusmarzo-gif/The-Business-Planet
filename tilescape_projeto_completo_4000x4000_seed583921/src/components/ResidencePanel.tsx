@@ -11,6 +11,13 @@ import {
   ResidentialBuilding,
 } from '../types/residence';
 import { canLinkToWarehouse } from '../types/logistics';
+import {
+  FARM_DAILY_WORK_POINTS,
+  getHarvestDay,
+  getMonthOfDay,
+  getPlantingFactor,
+  HARVEST_WORK_POINTS_PER_UNIT,
+} from '../types/farming';
 
 interface ResidencePanelProps {
   building: ResidentialBuilding;
@@ -25,10 +32,12 @@ interface ResidencePanelProps {
   onStartLink: () => void;
   onCancelLink: () => void;
   onUnlink: () => void;
+  onPlant: () => void;
   onClose: () => void;
 }
 
 const number = new Intl.NumberFormat('pt-BR');
+const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
 
 export default function ResidencePanel({
   building,
@@ -43,6 +52,7 @@ export default function ResidencePanel({
   onStartLink,
   onCancelLink,
   onUnlink,
+  onPlant,
   onClose,
 }: ResidencePanelProps) {
   const definition = RESIDENCES[building.type];
@@ -142,6 +152,32 @@ export default function ResidencePanel({
         <button type="button" className="warehouse-open" onClick={onOpenWarehouse}>
           Produtos e estoque
         </button>
+      )}
+      {building.type === 'farm_rice' && building.status === 'completed' && (
+        <div className="crop-panel">
+          {building.crop === null ? (
+            <p>Nenhum plantio. Plante para iniciar o ciclo de 6 meses.</p>
+          ) : building.crop.phase === 'growing' ? (
+            <p>
+              Crescendo desde {formatDay(building.crop.plantedDay)}; colheita em{' '}
+              {formatDay(getHarvestDay(building.crop.plantedDay))}. Fator do mês do plantio:{' '}
+              {Math.round(getPlantingFactor(getMonthOfDay(building.crop.plantedDay)) * 100)}%
+              {building.crop.days > 0 &&
+                ` · Work Points até agora: ${Math.round((building.crop.ratioSum / building.crop.days) * 100)}% de ${number.format(FARM_DAILY_WORK_POINTS)}/dia`}
+              .
+            </p>
+          ) : (
+            <p>
+              Colhendo: {number.format(building.crop.harvested)} / {number.format(building.crop.yieldUnits)}{' '}
+              unidades ({number.format(HARVEST_WORK_POINTS_PER_UNIT)} Work Points por unidade).
+            </p>
+          )}
+          {isOwner && building.crop?.phase !== 'harvesting' && (
+            <button type="button" disabled={isSaving} onClick={onPlant}>
+              {building.crop ? 'Replantar (zera o contador)' : 'Plantar arroz'}
+            </button>
+          )}
+        </div>
       )}
       {isOwner && building.status === 'completed' && canLinkToWarehouse(building.type) && (
         <div className="warehouse-link">

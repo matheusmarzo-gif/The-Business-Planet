@@ -47,6 +47,11 @@ import {
   parseWarehouseLink,
   planTransfers,
 } from '../src/types/logistics.js';
+import {
+  advanceGrowth,
+  planHarvest,
+  type Crop,
+} from '../src/types/farming.js';
 import { parseWarehouseSetting } from '../src/types/warehouse.js';
 import {
   allocateImmigrants,
@@ -124,10 +129,18 @@ type ResidentialBuildingRow = {
   price: number;
   stock: number;
   warehouse_id: string | null;
+  crop_phase: Crop['phase'] | null;
+  crop_planted_day: string | null;
+  crop_ratio_sum: number;
+  crop_days: number;
+  crop_yield: number;
+  crop_harvested: number;
   employed: number;
 };
 
 const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id,
+  crop_phase, to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day, crop_ratio_sum, crop_days,
+  crop_yield, crop_harvested,
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
    WHERE j.workplace_id = residential_buildings.id OR j.residence_id = residential_buildings.id) AS employed`;
 
@@ -150,6 +163,17 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     price: row.price,
     stock: row.stock,
     warehouseId: row.warehouse_id,
+    crop:
+      row.crop_phase && row.crop_planted_day
+        ? {
+            phase: row.crop_phase,
+            plantedDay: row.crop_planted_day,
+            ratioSum: row.crop_ratio_sum,
+            days: row.crop_days,
+            yieldUnits: row.crop_yield,
+            harvested: row.crop_harvested,
+          }
+        : null,
     employed: row.employed,
   };
 }
@@ -487,6 +511,62 @@ async function runDailyEmployment(): Promise<boolean> {
             `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::bigint + $2::bigint)
              ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::bigint`,
             [owner, quantity * shop.price, STARTING_BALANCE],
+          );
+        }
+        changed = true;
+      }
+      // Fazendas de arroz: crescimento (produtividade pelos Work Points) e colheita.
+      const { rows: farmRows } = await client.query<{
+        id: string;
+        work_hours_per_day: number;
+        stock: number;
+        crop_phase: Crop['phase'];
+        crop_planted_day: string;
+        crop_ratio_sum: number;
+        crop_days: number;
+        crop_yield: number;
+        crop_harvested: number;
+      }>(
+        `SELECT id, work_hours_per_day, stock, crop_phase,
+                to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day,
+                crop_ratio_sum, crop_days, crop_yield, crop_harvested
+         FROM residential_buildings
+         WHERE building_type = 'farm_rice' AND status = 'completed' AND crop_phase IS NOT NULL`,
+      );
+      for (const farm of farmRows) {
+        const farmPoints =
+          (workers.get(farm.id) ?? 0) *
+          getDailyWorkPoints(farm.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness);
+        const crop: Crop = {
+          phase: farm.crop_phase,
+          plantedDay: farm.crop_planted_day,
+          ratioSum: farm.crop_ratio_sum,
+          days: farm.crop_days,
+          yieldUnits: farm.crop_yield,
+          harvested: farm.crop_harvested,
+        };
+        if (crop.phase === 'growing') {
+          const next = advanceGrowth(crop, state.day, farmPoints);
+          await client.query(
+            `UPDATE residential_buildings
+             SET crop_phase = $2, crop_ratio_sum = $3, crop_days = $4, crop_yield = $5, crop_harvested = $6
+             WHERE id = $1`,
+            [farm.id, next.phase, next.ratioSum, next.days, next.yieldUnits, next.harvested],
+          );
+        } else {
+          const capacity = RESIDENCES.farm_rice.stockCapacity ?? 0;
+          const { units, done } = planHarvest(crop, farmPoints, Math.max(0, capacity - farm.stock));
+          await client.query(
+            `UPDATE residential_buildings
+             SET stock = stock + $2,
+                 crop_phase = CASE WHEN $3::boolean THEN NULL ELSE crop_phase END,
+                 crop_planted_day = CASE WHEN $3::boolean THEN NULL ELSE crop_planted_day END,
+                 crop_ratio_sum = CASE WHEN $3::boolean THEN 0 ELSE crop_ratio_sum END,
+                 crop_days = CASE WHEN $3::boolean THEN 0 ELSE crop_days END,
+                 crop_yield = CASE WHEN $3::boolean THEN 0 ELSE crop_yield END,
+                 crop_harvested = CASE WHEN $3::boolean THEN 0 ELSE crop_harvested + $2 END
+             WHERE id = $1`,
+            [farm.id, units, done],
           );
         }
         changed = true;
@@ -1629,6 +1709,60 @@ async function start() {
       })
       .catch((error: unknown) => {
         console.error('Não foi possível atualizar o preço:', error);
+        response.status(503).json({ error: 'residence_unavailable' });
+      });
+  });
+  app.post('/api/residential-buildings/:id/plant', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    // Plantar ou replantar durante o crescimento zera o contador; durante a colheita não é permitido.
+    void pool
+      .query<ResidentialBuildingRow>(
+        `UPDATE residential_buildings
+         SET crop_phase = 'growing',
+             crop_planted_day = (SELECT (world_time AT TIME ZONE 'UTC')::date FROM world_state WHERE id = 1),
+             crop_ratio_sum = 0, crop_days = 0, crop_yield = 0, crop_harvested = 0
+         WHERE id = $1 AND created_by = $2 AND building_type = 'farm_rice' AND status = 'completed'
+           AND (crop_phase IS NULL OR crop_phase = 'growing')
+         RETURNING ${RESIDENTIAL_COLUMNS}`,
+        [request.params.id, userId],
+      )
+      .then(async ({ rows }) => {
+        if (!rows[0]) {
+          const { rows: existing } = await pool.query<{
+            created_by: string;
+            building_type: string;
+            status: string;
+          }>('SELECT created_by, building_type, status FROM residential_buildings WHERE id = $1', [
+            request.params.id,
+          ]);
+          if (!existing[0]) {
+            response.status(404).json({ error: 'residence_not_found' });
+          } else if (existing[0].created_by !== userId) {
+            response.status(403).json({ error: 'residence_not_owned' });
+          } else if (existing[0].building_type !== 'farm_rice' || existing[0].status !== 'completed') {
+            response.status(400).json({ error: 'cannot_plant' });
+          } else {
+            response.status(409).json({ error: 'harvest_in_progress' });
+          }
+          return;
+        }
+
+        response.json(mapResidentialBuilding(rows[0]));
+        void publishCities().catch((error: unknown) => {
+          console.error('O plantio foi registrado, mas a atualização do mundo falhou:', error);
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível plantar:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
   });

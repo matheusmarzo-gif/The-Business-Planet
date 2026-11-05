@@ -312,6 +312,18 @@ mapeamento e verificar todas as curvas.
   `quantidade × preço`; moradores não são cobrados.
   `employed` em `ResidentialBuilding` é calculado por subquery em
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
+- Produção da fazenda de arroz (`src/types/farming.ts`): `POST
+  /api/residential-buildings/:id/plant` (só dono, fazenda concluída; plantar ou
+  replantar durante o crescimento zera o contador; bloqueado na colheita)
+  grava `crop_phase`, `crop_planted_day` (dia do relógio do mundo),
+  `crop_ratio_sum`, `crop_days`, `crop_yield`, `crop_harvested`. No job das
+  00:00 (antes do transporte): em `growing` soma `min(1, WP do dia / 1000)`;
+  no dia da colheita (plantio + 6 meses de calendário) a produção vira
+  `floor(100 · fator do mês do plantio · média diária)` (meses 1–3: 100 %,
+  4–6: 60 %, 7–9: 40 %, 10–12: 20 %) e a fase passa a `harvesting`; nela,
+  200 WP por unidade colhida, limitado ao espaço livre do estoque (300); ao
+  terminar, o plantio é limpo e um novo pode ser feito. `ResidentialBuilding.crop`
+  expõe o estado ao cliente.
 - Logística de armazém (`src/types/logistics.ts`): `residential_buildings.
   warehouse_id` (FK própria, `ON DELETE SET NULL`) liga uma fazenda ou comércio
   concluído a um único armazém concluído do mesmo dono, a até 60 tiles

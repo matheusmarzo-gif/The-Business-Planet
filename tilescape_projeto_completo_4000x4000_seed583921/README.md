@@ -288,8 +288,16 @@ use **Ligar a um armazém** e clique em um armazém seu, concluído, a até 60 t
 estoque desejável e os 50 m³) e o armazém abastece os comércios ligados até o
 estoque máximo. O transporte custa Work Points do armazém: `100 × m³ + 0,125 × kg`;
 os pontos vêm dos funcionários do armazém e o que não couber não é transportado.
-O painel do armazém mostra o estoque real e o espaço ocupado. As fazendas ainda
-não produzem sozinhas.
+O painel do armazém mostra o estoque real e o espaço ocupado.
+
+**Fazenda de arroz:** o dono usa **Plantar arroz** no painel da fazenda concluída.
+A colheita ocorre 6 meses (de calendário do jogo) depois e rende até 100
+unidades. O mês do plantio define a produtividade (meses 1–3: 100 %, 4–6: 60 %,
+7–9: 40 %, 10–12: 20 %). A fazenda precisa de 1.000 Work Points por dia; a
+média diária de `min(1, pontos/1000)` durante o crescimento multiplica a
+produção (800 pontos por dia = −20 %). **Replantar** durante o crescimento zera
+o contador. Na colheita cada unidade custa 200 Work Points, limitados ao espaço
+livre do estoque (300); só depois de colher tudo é possível plantar de novo.
 
 Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.

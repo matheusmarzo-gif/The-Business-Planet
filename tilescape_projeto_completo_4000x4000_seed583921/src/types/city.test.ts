@@ -36,6 +36,13 @@ import {
   parseWarehouseLink,
   planTransfers,
 } from './logistics';
+import {
+  advanceGrowth,
+  getHarvestDay,
+  getPlantingFactor,
+  planHarvest,
+  type Crop,
+} from './farming';
 import { parseWarehouseSetting } from './warehouse';
 
 const city = { centerX: 1000, centerY: 1000 };
@@ -44,6 +51,43 @@ describe('wallet', () => {
   it('starts with C$ 10.000 and formats money in Brazilian style', () => {
     assert.equal(STARTING_BALANCE, 10000);
     assert.equal(formatMoney(STARTING_BALANCE).replace(/\u00a0/g, ' '), 'C$ 10.000');
+  });
+});
+
+describe('rice farming', () => {
+  const grow = (plantedDay: string, workPointsPerDay: number) => {
+    let crop: Crop = { phase: 'growing', plantedDay, ratioSum: 0, days: 0, yieldUnits: 0, harvested: 0 };
+    const end = getHarvestDay(plantedDay);
+    for (let day = new Date(plantedDay + 'T00:00:00Z'); crop.phase === 'growing'; ) {
+      day = new Date(day.getTime() + 86_400_000);
+      crop = advanceGrowth(crop, day.toISOString().slice(0, 10), workPointsPerDay);
+      assert.ok(day.toISOString().slice(0, 10) <= end);
+    }
+    return crop;
+  };
+
+  it('applies the planting month factor', () => {
+    assert.deepEqual([1, 3, 4, 6, 7, 9, 10, 12].map(getPlantingFactor), [1, 1, 0.6, 0.6, 0.4, 0.4, 0.2, 0.2]);
+    assert.equal(getHarvestDay('2026-03-15'), '2026-09-15');
+    assert.equal(getHarvestDay('2026-08-31'), '2027-02-28');
+  });
+
+  it('yields 100 units at full productivity and scales with Work Points', () => {
+    assert.equal(grow('2026-01-10', 1000).yieldUnits, 100);
+    assert.equal(grow('2026-01-10', 1500).yieldUnits, 100);
+    assert.equal(grow('2026-01-10', 800).yieldUnits, 80);
+    assert.equal(grow('2026-05-10', 1000).yieldUnits, 60);
+    assert.equal(grow('2026-08-10', 1000).yieldUnits, 40);
+    assert.equal(grow('2026-11-10', 1000).yieldUnits, 20);
+    assert.equal(grow('2026-01-10', 0).yieldUnits, 0);
+  });
+
+  it('harvests 200 Work Points per unit limited by free stock', () => {
+    const crop: Crop = { phase: 'harvesting', plantedDay: '2026-01-10', ratioSum: 0, days: 0, yieldUnits: 100, harvested: 0 };
+    assert.deepEqual(planHarvest(crop, 5000, 300), { units: 25, done: false });
+    assert.deepEqual(planHarvest(crop, 5000, 10), { units: 10, done: false });
+    assert.deepEqual(planHarvest({ ...crop, harvested: 90 }, 99999, 300), { units: 10, done: true });
+    assert.deepEqual(planHarvest(crop, 100, 300), { units: 0, done: false });
   });
 });
 
@@ -434,6 +478,7 @@ describe('municipal zones', () => {
         price: 10,
         stock: 0,
         warehouseId: null,
+        crop: null,
         employed: 0,
       };
 
@@ -476,6 +521,7 @@ describe('municipal zones', () => {
         price: 10,
         stock: 0,
         warehouseId: null,
+        crop: null,
         employed: 0,
       };
       assert.equal(

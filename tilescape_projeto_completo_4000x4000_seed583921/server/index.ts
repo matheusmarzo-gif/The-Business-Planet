@@ -667,7 +667,9 @@ async function runDailyEmployment(): Promise<boolean> {
       );
       const workplaces = buildings.filter(
         (building) =>
-          getResidenceDefinition(building.type)?.kind !== 'residence' && building.desiredWorkers > 0,
+          building.desiredWorkers > 0 &&
+          (getResidenceDefinition(building.type)?.kind !== 'residence' ||
+            building.status === 'under_construction'),
       );
       const assignments: JobAssignment[] = allocateWorkers(residences, workplaces);
       await client.query('DELETE FROM job_assignments');

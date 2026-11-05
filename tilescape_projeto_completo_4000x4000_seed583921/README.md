@@ -271,6 +271,26 @@ máximo de 40 peixes) custa 30 madeiras e 10 pedras e exige 6.000 Work Points. A
 vendas e o consumo das residências seguem a mesma fórmula do arroz; o consumo de
 peixe aparece em "Ver consumo da casa".
 
+### Fazenda leiteira e Loja de Leite
+
+Na categoria **Fazendas**, a **Fazenda leiteira** (3 × 3 tiles, até 10
+funcionários, estoque máximo de 400 litros) custa 60 madeiras e 60 pedras e
+exige 12.000 Work Points. Ela produz 1 litro a cada 5 Work Points efetivos; sua
+eficiência é de 40% nos meses 1–3, 100% nos meses 4–6, 80% nos meses 7–9 e
+60% nos meses 10–12. O leite produzido segue para o armazém ligado.
+
+Na categoria **Comerciais**, a **Loja de Leite** copia as características da
+Loja de Peixes: 2 × 2 tiles, até 4 funcionários, estoque máximo de 40 litros,
+custo de 30 madeiras e 10 pedras e 6.000 Work Points para construir. Seu preço
+padrão é C$ 10 e pode ser alterado pelo dono. A loja recebe leite do armazém
+ligado e vende às residências pelo mesmo cálculo de demanda e benefício usado
+para os demais produtos.
+
+O multiplicador de demanda básica pode ser ajustado em
+[`config/demanda_basica.txt`](./config/demanda_basica.txt). Os valores iniciais
+são `0.03` para arroz e peixe e `1` para leite. O servidor lê o arquivo ao
+iniciar; reinicie o serviço depois de alterá-lo.
+
 ### Recursos e Ferramentaria
 
 Na categoria **Recursos** (área rural, ao lado de estrada):
@@ -300,7 +320,8 @@ sobrepor estradas ou construções e precisa ficar ao lado de uma estrada. Toda 
 e a fazenda concluída terão uma área de 60 tiles de raio para procurar
 trabalhadores (exibida no painel; veja "Empregos e salários"). O
 funcionamento é o mesmo das residências (prévia, obra, demolição e painel
-lateral), mas sem moradores nem aluguel; produção e estoque ainda não existem.
+lateral), mas sem moradores nem aluguel; consulte a regra de crescimento e
+colheita da fazenda de arroz abaixo.
 
 ### Empregos e salários
 
@@ -317,13 +338,13 @@ salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). T
 1,2 com 4 h, 1 com 8 h, 0,8 com 14 h); a obra termina sozinha ao atingir o total
 necessário. Saúde e felicidade ainda são fixas em 100.
 
-Na **Loja de Arroz**, o dono define o preço do arroz (C$ 1 ou mais). Às 00:00 cada
-100 Work Points gerados pelos funcionários no dia somam 5 unidades de capacidade
-de venda. As residências compram primeiro das lojas em até 60 tiles com maior
+Nas lojas de arroz, peixe e leite, o dono define o preço (C$ 1 ou mais). Às 00:00
+cada 100 Work Points gerados pelos funcionários no dia somam 5 unidades de
+capacidade de venda. As residências compram primeiro das lojas em até 60 tiles com maior
 benefício. A média efetiva da área é calculada com as vendas do dia anterior,
 ponderando o preço praticado em cada loja pelas unidades vendidas. Para cada
-loja, calcula-se `quantidade desejada = moradores × 0,03 × max(0,125, min(4,
-média efetiva da área / preço local))`; o benefício é
+loja, calcula-se `quantidade desejada = moradores × demanda_basica × max(0,125,
+min(4, média efetiva da área / preço local))`; o benefício é
 `((renda média por morador − preço local × (quantidade desejada / moradores))
 / preço local)³ × (60 / (distância + 60))²`, com distância entre centros. Loja
 com benefício negativo não vende para a residência. A parte
@@ -386,7 +407,7 @@ o contador. Na colheita cada unidade custa 20 Work Points, limitados ao espaço
 livre do estoque (300; ligar a um armazém libera espaço); só depois de colher tudo é possível plantar de novo.
 
 **Consumo:** em residências concluídas, **Ver consumo da casa** mostra o consumo
-por pessoa de arroz e peixe no último dia e a média diária por pessoa nos últimos
+por pessoa de arroz, peixe e leite no último dia e a média diária por pessoa nos últimos
 30 dias, além do preço médio pago no dia e no mês. No painel da cidade, **Consumo**
 mostra esses mesmos dados agregados para todos os cidadãos: as quantidades
 compradas pelas residências da cidade são divididas pela população total, e os
@@ -426,7 +447,7 @@ Fazendas, recursos e construções artesanais concluídas têm o botão **Histó
 
 ## Histórico do comércio
 
-O dono de uma Loja de Arroz ou Loja de Peixes concluída pode abrir **Histórico do comércio** para consultar os últimos 30 dias por dia: gasto com funcionários, gasto com produtos efetivamente pagos, unidades vendidas, preço unitário de venda, receita e lucro/prejuízo. O abastecimento pelo armazém ligado do mesmo dono é uma transferência interna sem cobrança e aparece com gasto de produto C$ 0.
+O dono de uma Loja de Arroz, Loja de Peixes ou Loja de Leite concluída pode abrir **Histórico do comércio** para consultar os últimos 30 dias por dia: gasto com funcionários, gasto com produtos efetivamente pagos, unidades vendidas, preço unitário de venda, receita e lucro/prejuízo. O abastecimento pelo armazém ligado do mesmo dono é uma transferência interna sem cobrança e aparece com gasto de produto C$ 0.
 
 - **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque máximo atingido, estoque mínimo preservado, sem espaço, Work Points insuficientes ou armazém sem estoque). Falhas internas são exibidas separadamente, com a etapa e a mensagem do erro.
 - **Validade e espaço de armazenamento:** às 18:00 de cada dia do jogo, a perda esperada de cada produto perecível é `estoque atual / validade em dias`. A parte inteira é removida e a fração vira probabilidade de perder uma unidade adicional (por exemplo, 10 unidades com validade de 100 dias: 0,1 unidade/dia, ou 10% de chance de perder uma). Não há controle por lote ou data de entrada; produtos recém-adicionados seguem a mesma regra sobre o estoque agregado. A regra cobre os estoques principais de fazendas, comércios, construções artesanais e recursos, além dos produtos nos armazéns (indústrias). Produtos sem validade, como madeira, pedra, ferro e Ferramentas, não se deterioram. O espaço ocupado é atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o armazém está selecionado.

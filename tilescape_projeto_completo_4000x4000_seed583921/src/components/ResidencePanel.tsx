@@ -20,6 +20,7 @@ import {
   getPlantingFactor,
   HARVEST_WORK_POINTS_PER_UNIT,
 } from '../types/farming';
+import { getDairyFarmEfficiency } from '../types/dairy';
 
 interface ResidencePanelProps {
   building: ResidentialBuilding;
@@ -52,6 +53,9 @@ const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day
 function getProductionDescription(type: ResidenceType): string | null {
   const definition = RESIDENCES[type];
   if (definition.kind === 'farm') {
+    if (type === 'farm_dairy' && definition.production) {
+      return `Produção sazonal de leite: ${number.format(definition.production.workPointsPerUnit)} Work Points efetivos por litro. Eficiência: meses 1–3, ${number.format(getDairyFarmEfficiency(1) * 100)}%; 4–6, ${number.format(getDairyFarmEfficiency(4) * 100)}%; 7–9, ${number.format(getDairyFarmEfficiency(7) * 100)}%; 10–12, ${number.format(getDairyFarmEfficiency(10) * 100)}%.`;
+    }
     return `Ciclo de 6 meses: ${number.format(FARM_DAILY_WORK_POINTS)} Work Points por dia garantem produtividade plena; na colheita, cada unidade consome ${number.format(HARVEST_WORK_POINTS_PER_UNIT)} Work Points. O rendimento também varia conforme o mês do plantio.`;
   }
   if (definition.kind === 'shop') {
@@ -345,7 +349,7 @@ export default function ResidencePanel({
           {error && <p role="alert">{error}</p>}
         </form>
       )}
-      {(building.type === 'shop_rice' || building.type === 'shop_fish') && (
+      {(building.type === 'shop_rice' || building.type === 'shop_fish' || building.type === 'shop_milk') && (
         <form
           className="work-settings"
           onSubmit={(event) => {
@@ -354,7 +358,7 @@ export default function ResidencePanel({
           }}
         >
           <label>
-            Preço do {building.type === 'shop_fish' ? 'peixe' : 'arroz'} (C$ por unidade)
+            Preço do {building.type === 'shop_fish' ? 'peixe' : building.type === 'shop_milk' ? 'leite' : 'arroz'} (C$ por {building.type === 'shop_milk' ? 'litro' : 'unidade'})
             <input
               type="number"
               min={1}

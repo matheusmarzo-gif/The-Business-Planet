@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   getCityZonePlacementError,
   getRequiredCityZone,
@@ -39,8 +41,9 @@ import {
   getPurchaseQuantity,
   getShopSalesCapacity,
   parsePrice,
-  planRiceSales,
-  planRiceSalesDetailed,
+  getExpectedPurchaseQuantity,
+  planShopSales,
+  planShopSalesDetailed,
 } from './commerce';
 import {
   canLinkToWarehouse,
@@ -59,6 +62,8 @@ import {
 } from './farming';
 import { parseWarehouseSetting } from './warehouse';
 import { planDailySpoilage } from './product';
+import { getDairyFarmEfficiency } from './dairy';
+import { parseBasicDemandConfig } from './commerceDemand';
 
 const city = { centerX: 1000, centerY: 1000 };
 
@@ -315,7 +320,7 @@ describe('warehouse logistics', () => {
   });
 });
 
-describe('rice sales', () => {
+describe('shop sales', () => {
   const shop = (id: string, x: number, price: number, stock: number, capacity: number) => ({
     id,
     type: 'shop_rice' as const,
@@ -374,7 +379,7 @@ describe('rice sales', () => {
   });
 
   it('buys from the best benefit first, within capacity, stock and radius', () => {
-    const purchases = planRiceSales(
+    const purchases = planShopSales(
       [home('a', 10, 100, 50), home('far', 500, 100, 50)],
       [shop('cheap', 0, 5, 100, 4), shop('dear', 4, 20, 100, 100), shop('empty', 8, 1, 0, 100)],
       () => 0,
@@ -394,7 +399,7 @@ describe('rice sales', () => {
       unitsSoldLastDay: 100,
       lastDaySalePrice: 100,
     };
-    const purchases = planRiceSales(
+    const purchases = planShopSales(
       [home('a', 10, 100, 50)],
       [
         { ...shop('near', 0, 10, 100, 100), unitsSoldLastDay: 9, lastDaySalePrice: 10 },
@@ -418,7 +423,7 @@ describe('rice sales', () => {
       shop('shop-20', 8, 20, 100, 100),
     ];
     const randomValues = [0, 0.99];
-    const plan = planRiceSalesDetailed(homes, shops, () => randomValues.shift() ?? 0);
+    const plan = planShopSalesDetailed(homes, shops, () => randomValues.shift() ?? 0);
 
     assert.deepEqual(plan.purchases, [
       { shopId: 'shop-9', residenceId: 'a', quantity: 7 },
@@ -463,7 +468,7 @@ describe('rice sales', () => {
       shop('shop-10', 4, 10, 100, 100),
       shop('shop-20', 8, 20, 100, 100),
     ];
-    const plan = planRiceSalesDetailed([home('low-income', 4, 100, 0.1)], shops, () => 0);
+    const plan = planShopSalesDetailed([home('low-income', 4, 100, 0.1)], shops, () => 0);
 
     assert.deepEqual(plan.purchases, []);
     assert.deepEqual(
@@ -474,6 +479,132 @@ describe('rice sales', () => {
       shops.every(
         (store) => (plan.transactionsByShop.get(store.id)?.[0].candidate.benefit ?? 0) < 0,
       ),
+    );
+  });
+});
+
+describe('fazenda leiteira e demanda configurável', () => {
+  it('applies the requested monthly production efficiencies', () => {
+    assert.deepEqual(
+      [1, 3, 4, 6, 7, 9, 10, 12].map(getDairyFarmEfficiency),
+      [0.4, 0.4, 1, 1, 0.8, 0.8, 0.6, 0.6],
+    );
+    assert.throws(() => getDairyFarmEfficiency(0), RangeError);
+  });
+
+  it('accumulates dairy Work Points at five per liter and caps production by stock space', () => {
+    const dairy = RESIDENCES.farm_dairy;
+    assert.deepEqual(
+      [dairy.width, dairy.height, dairy.maxWorkers, dairy.stockCapacity, dairy.workPoints],
+      [3, 3, 10, 400, 12000],
+    );
+    assert.deepEqual(dairy.cost, { wood: 60, stone: 60 });
+    assert.deepEqual(
+      planProduction(
+        dairy.production!,
+        { progress: 2, workPoints: 11, penalty: 0, freeSpace: 4 },
+      ),
+      { units: 2, progress: 3, woodUsed: 0, ironUsed: 0 },
+    );
+    assert.equal(
+      planProduction(
+        dairy.production!,
+        { progress: 0, workPoints: 50, penalty: 0, freeSpace: 4 },
+      ).progress,
+      0,
+    );
+  });
+
+  it('uses the configured multiplier in household demand and validates the text file format', () => {
+    const multipliers = parseBasicDemandConfig([
+      '# demanda básica diária',
+      'demanda_basica.rice=0.03',
+      'demanda_basica.fish=0.03',
+      'demanda_basica.milk=1',
+    ].join('\n'));
+    assert.equal(multipliers.get('rice'), 0.03);
+    assert.equal(multipliers.get('fish'), 0.03);
+    assert.equal(multipliers.get('milk'), 1);
+    assert.equal(getExpectedPurchaseQuantity(10, 10, 10, multipliers.get('milk')), 10);
+    assert.throws(() => parseBasicDemandConfig('demanda_basica.milk=-1'), /linha 1/);
+    assert.throws(() => parseBasicDemandConfig('demanda_basica.milk=1'), /não define o produto rice/);
+    assert.throws(
+      () => parseBasicDemandConfig(['demanda_basica.milk=1', 'demanda_basica.milk=2'].join('\n')),
+      /linha 2/,
+    );
+    const configFile = readFileSync(
+      fileURLToPath(new URL('../../config/demanda_basica.txt', import.meta.url)),
+      'utf8',
+    );
+    assert.deepEqual(
+      [...parseBasicDemandConfig(configFile)],
+      [['rice', 0.03], ['fish', 0.03], ['milk', 1]],
+    );
+    const milkSales = planShopSalesDetailed(
+      [{
+        id: 'milk-home',
+        type: 'house_poor1',
+        x: 0,
+        y: 0,
+        occupants: 2,
+        averageIncome: 100,
+      }],
+      [{
+        id: 'milk-store',
+        type: 'shop_milk',
+        x: 4,
+        y: 0,
+        price: 10,
+        unitsSoldLastDay: 0,
+        lastDaySalePrice: 10,
+        stock: 40,
+        capacity: 40,
+      }],
+      () => 0,
+      multipliers.get('milk'),
+    );
+    assert.deepEqual(milkSales.purchases, [
+      { shopId: 'milk-store', residenceId: 'milk-home', quantity: 2 },
+    ]);
+  });
+
+  it('defines a dairy shop with the same building parameters as the fish shop', () => {
+    const dairyShop = RESIDENCES.shop_milk;
+    const fishShop = RESIDENCES.shop_fish;
+    assert.deepEqual(
+      [dairyShop.width, dairyShop.height, dairyShop.maxWorkers, dairyShop.stockCapacity, dairyShop.workPoints],
+      [fishShop.width, fishShop.height, fishShop.maxWorkers, fishShop.stockCapacity, fishShop.workPoints],
+    );
+    assert.deepEqual(dairyShop.cost, fishShop.cost);
+    assert.equal(dairyShop.stockProductId, 'milk');
+    assert.equal(dairyShop.asset, '/buildings/commerce/loja_leite.png');
+    assert.equal(canLinkToWarehouse('farm_dairy'), true);
+    assert.equal(canLinkToWarehouse('shop_milk'), true);
+    assert.deepEqual(
+      planTransfers(
+        {
+          stock: new Map(),
+          minimumStock: new Map(),
+          maximumStock: new Map([['milk', 400]]),
+          capacityM3: 50,
+          workPoints: 100000,
+        },
+        [{ buildingId: 'dairy-farm', type: 'farm_dairy', stock: 10 }],
+      ),
+      [{ buildingId: 'dairy-farm', productId: 'milk', quantity: 10, direction: 'out' }],
+    );
+    assert.deepEqual(
+      planTransfers(
+        {
+          stock: new Map([['milk', 20]]),
+          minimumStock: new Map(),
+          maximumStock: new Map(),
+          capacityM3: 50,
+          workPoints: 100000,
+        },
+        [{ buildingId: 'milk-store', type: 'shop_milk', stock: 0 }],
+      ),
+      [{ buildingId: 'milk-store', productId: 'milk', quantity: 20, direction: 'in' }],
     );
   });
 });
@@ -675,6 +806,7 @@ describe('municipal zones', () => {
       const position = { x: 20, y: 20 };
       const road = [{ x: 19, y: 20 }];
       assert.equal(getResidencePlacementError('farm_rice', position, [ruralCity], [], road, allLand, map), null);
+      assert.equal(getResidencePlacementError('farm_dairy', position, [ruralCity], [], road, allLand, map), null);
       assert.equal(
         getResidencePlacementError('farm_rice', position, [ruralCity], [], [], allLand, map),
         'not_adjacent_to_road',
@@ -693,6 +825,7 @@ describe('municipal zones', () => {
       const position = { x: 20, y: 20 };
       const road = [{ x: 19, y: 20 }];
       assert.equal(getResidencePlacementError('shop_rice', position, [residentialCity], [], road, allLand, map), null);
+      assert.equal(getResidencePlacementError('shop_milk', position, [residentialCity], [], road, allLand, map), null);
       assert.equal(
         getResidencePlacementError('shop_rice', position, [residentialCity], [], [], allLand, map),
         'not_adjacent_to_road',
@@ -951,6 +1084,13 @@ describe('fishery', () => {
       fish: 7,
       progress: 50,
     });
+    assert.deepEqual(
+      planProduction(
+        RESIDENCES.fishery.production!,
+        { progress: 50, workPoints: 1000, penalty: 30, freeSpace: 300 },
+      ),
+      { units: 7, progress: 50, woodUsed: 0, ironUsed: 0 },
+    );
     assert.equal(planFishing({ progress: 0, workPoints: 1000, penalty: 0, freeSpace: 4 }).fish, 4);
   });
 

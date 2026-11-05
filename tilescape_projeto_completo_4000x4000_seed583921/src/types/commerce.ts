@@ -30,7 +30,7 @@ export interface SalesResidence {
   averageIncome: number;
 }
 
-export interface RicePurchase {
+export interface StorePurchase {
   shopId: string;
   residenceId: string;
   quantity: number;
@@ -147,8 +147,8 @@ export function isCommerceDiagnosticsUpdate(value: unknown): value is CommerceDi
   );
 }
 
-export interface RiceSalesPlan {
-  purchases: RicePurchase[];
+export interface StoreSalesPlan {
+  purchases: StorePurchase[];
   transactionsByShop: Map<string, ShopResidenceTransaction[]>;
 }
 
@@ -252,15 +252,16 @@ export function getPurchaseBenefit(
   );
 }
 
-// Pessoas * 0,03 * max(0,125, min(4, preço médio efetivo da área / preço local)).
-function getExpectedPurchaseQuantity(
+// Moradores * demanda básica * max(0,125, min(4, preço médio efetivo da área / preço local)).
+export function getExpectedPurchaseQuantity(
   occupants: number,
   areaAveragePrice: number,
   price: number,
+  demandBasic = PURCHASE_RATE,
 ): number {
   return (
     occupants *
-    PURCHASE_RATE *
+    demandBasic *
     Math.max(PURCHASE_MIN_RATIO, Math.min(PURCHASE_MAX_RATIO, areaAveragePrice / price))
   );
 }
@@ -270,8 +271,9 @@ export function getPurchaseQuantity(
   areaAveragePrice: number,
   price: number,
   random: () => number,
+  demandBasic = PURCHASE_RATE,
 ): number {
-  const expected = getExpectedPurchaseQuantity(occupants, areaAveragePrice, price);
+  const expected = getExpectedPurchaseQuantity(occupants, areaAveragePrice, price, demandBasic);
   const whole = Math.floor(expected);
   return whole + (random() < expected - whole ? 1 : 0);
 }
@@ -300,22 +302,24 @@ function getDistanceBetweenBuildings(
  * Cada residência (por id) compra das lojas em 60 tiles, do maior benefício para
  * o menor, limitada pela capacidade de venda do dia e pelo estoque de cada loja.
  */
-export function planRiceSales(
+export function planShopSales(
   residences: SalesResidence[],
   shops: SalesShop[],
   random: () => number = Math.random,
-): RicePurchase[] {
-  return planRiceSalesDetailed(residences, shops, random).purchases;
+  demandBasic = PURCHASE_RATE,
+): StorePurchase[] {
+  return planShopSalesDetailed(residences, shops, random, demandBasic).purchases;
 }
 
-export function planRiceSalesDetailed(
+export function planShopSalesDetailed(
   residences: SalesResidence[],
   shops: SalesShop[],
   random: () => number = Math.random,
-): RiceSalesPlan {
+  demandBasic = PURCHASE_RATE,
+): StoreSalesPlan {
   const remainingStock = new Map(shops.map((shop) => [shop.id, shop.stock]));
   const remainingCapacity = new Map(shops.map((shop) => [shop.id, shop.capacity]));
-  const purchases: RicePurchase[] = [];
+  const purchases: StorePurchase[] = [];
   const transactionsByShop = new Map<string, ShopResidenceTransaction[]>(
     shops.map((shop) => [shop.id, []]),
   );
@@ -332,7 +336,12 @@ export function planRiceSalesDetailed(
         : nearby.reduce((sum, shop) => sum + shop.price, 0) / nearby.length;
     const ranked = nearby
       .map((shop) => {
-        const desiredQuantity = getExpectedPurchaseQuantity(residence.occupants, average, shop.price);
+        const desiredQuantity = getExpectedPurchaseQuantity(
+          residence.occupants,
+          average,
+          shop.price,
+          demandBasic,
+        );
         const distance = getDistanceBetweenBuildings(shop, residence);
         return {
           shop,
@@ -352,12 +361,14 @@ export function planRiceSalesDetailed(
       residence.occupants,
       average,
       ranked[0].shop.price,
+      demandBasic,
     );
     const desiredQuantity = getPurchaseQuantity(
       residence.occupants,
       average,
       ranked[0].shop.price,
       random,
+      demandBasic,
     );
     let wanted = desiredQuantity;
     const candidates: ShopTransactionCandidate[] = [];

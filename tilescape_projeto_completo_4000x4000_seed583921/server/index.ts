@@ -56,10 +56,12 @@ import {
   getShopProfitLoss,
   getShopSalesCapacity,
   parsePrice,
-  planRiceSalesDetailed,
+  planShopSalesDetailed,
   type CommerceDiagnosticsUpdate,
 } from '../src/types/commerce.js';
 import { nextEfficiencyPenalty, planProduction, rollToolDemand } from '../src/types/fishing.js';
+import { getDairyFarmEfficiency } from '../src/types/dairy.js';
+import { parseBasicDemandConfig } from '../src/types/commerceDemand.js';
 import {
   canLinkToWarehouse,
   getTransportDemand,
@@ -97,6 +99,7 @@ const MAP = {
   seed: WORLD_CONFIG.seed,
 };
 const mapGenerator = createMapGenerator(WORLD_CONFIG, DEFAULT_TILE_LIST);
+let demandBasicByProduct = new Map<string, number>();
 const landTileIds = new Set(
   DEFAULT_TILE_LIST.filter((tile) => tile.category === 'land').map((tile) => tile.id),
 );
@@ -710,7 +713,12 @@ async function runDailyEmployment(): Promise<boolean> {
       for (const { shopType, productId } of [
         { shopType: 'shop_rice', productId: 'rice' },
         { shopType: 'shop_fish', productId: 'fish' },
+        { shopType: 'shop_milk', productId: 'milk' },
       ] as const) {
+      const demandBasic = demandBasicByProduct.get(productId);
+      if (demandBasic === undefined) {
+        throw new Error(`demanda_basica não configurada para o produto ${productId}.`);
+      }
       const { rows: previousSalesRows } = await client.query<{
         building_id: string;
         units_sold: number;
@@ -763,7 +771,7 @@ async function runDailyEmployment(): Promise<boolean> {
       const sold = new Map<string, number>();
       const bought = new Map<string, { quantity: number; spent: number }>();
       const shopPrice = new Map(shops.map((shop) => [shop.id, shop.price]));
-      const salesPlan = planRiceSalesDetailed(homes, shops);
+      const salesPlan = planShopSalesDetailed(homes, shops, Math.random, demandBasic);
       for (const purchase of salesPlan.purchases) {
         sold.set(purchase.shopId, (sold.get(purchase.shopId) ?? 0) + purchase.quantity);
         const total = bought.get(purchase.residenceId) ?? { quantity: 0, spent: 0 };
@@ -865,9 +873,12 @@ async function runDailyEmployment(): Promise<boolean> {
           : current.efficiency_penalty;
         const generatedPoints =
           count * getDailyWorkPoints(site.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness);
+        const month = Number(state.day.slice(5, 7));
+        const seasonalEfficiency =
+          site.building_type === 'farm_dairy' ? getDairyFarmEfficiency(month) : 1;
         const result = planProduction(definition.production, {
           progress: current.production_progress,
-          workPoints: generatedPoints,
+          workPoints: generatedPoints * seasonalEfficiency,
           penalty,
           freeSpace: (definition.stockCapacity ?? 0) - current.stock,
           wood: current.wood_stock,
@@ -894,9 +905,9 @@ async function runDailyEmployment(): Promise<boolean> {
         );
         changed = true;
         await logProduction(client, site.id, state.day, {
-          workPoints: generatedPoints,
+          workPoints: generatedPoints * seasonalEfficiency,
           produced: result.units,
-          efficiency: 100 - penalty,
+          efficiency: (100 - penalty) * seasonalEfficiency,
         });
       }
       });
@@ -1930,6 +1941,11 @@ async function start() {
     'utf8',
   );
   await pool.query(schema);
+  const demandConfig = await readFile(
+    fileURLToPath(new URL('../config/demanda_basica.txt', import.meta.url)),
+    'utf8',
+  );
+  demandBasicByProduct = parseBasicDemandConfig(demandConfig);
   await pool.query(
     `INSERT INTO world_state (id, world_time, last_real_at)
      VALUES (1, TIMESTAMPTZ '1100-01-01 06:00:00+00', clock_timestamp())
@@ -2277,7 +2293,7 @@ async function start() {
     void (async () => {
       const { rows: owners } = await pool.query<{ created_by: string }>(
         `SELECT created_by FROM residential_buildings
-         WHERE id = $1 AND building_type IN ('shop_rice', 'shop_fish')`,
+         WHERE id = $1 AND building_type IN ('shop_rice', 'shop_fish', 'shop_milk')`,
         [request.params.id],
       );
       if (!owners[0]) {
@@ -2643,7 +2659,7 @@ async function start() {
       .query<ResidentialBuildingRow>(
         `UPDATE residential_buildings
          SET price = $3
-         WHERE id = $1 AND created_by = $2 AND building_type IN ('shop_rice', 'shop_fish')
+         WHERE id = $1 AND created_by = $2 AND building_type IN ('shop_rice', 'shop_fish', 'shop_milk')
          RETURNING ${RESIDENTIAL_COLUMNS}`,
         [request.params.id, userId, price],
       )

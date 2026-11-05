@@ -40,6 +40,8 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/types/city.ts` | Tipos, dimensões e regras geométricas de cidades/Assembleias. |
 | `src/types/road.ts` | Tipos, limites, validação, interpolação e escolha das peças de estrada. |
 | `src/types/residence.ts` | Catálogo, atributos e validação compartilhada das residências. |
+| `src/types/commerceDemand.ts` | Parsing e validação dos multiplicadores de demanda básica configurados no servidor. |
+| `src/types/dairy.ts` | Eficiência mensal da produção leiteira. |
 | `src/types/product.ts` | Catálogo estático dos produtos, unidades, peso, volume e validade padrão. |
 | `src/components/ProductCatalog.tsx` | Interface pesquisável para consultar as fichas de produtos. |
 | `src/components/CommerceHistoryPanel.tsx` | Histórico diário de despesas, vendas e resultado dos comércios. |
@@ -50,6 +52,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/utils/tileAssets.ts` | Catálogo de água/terra usado pelo gerador. |
 | `server/index.ts` | API Express, autenticação de tokens, banco, Redis, relógio e WebSocket. |
 | `database/schema.sql` | DDL aplicado pelo servidor durante a inicialização. |
+| `config/demanda_basica.txt` | Multiplicadores de demanda residencial por produto, carregados na inicialização do servidor. |
 | `public/` | Imagens servidas pelo Vite/Express por URLs públicas. |
 | `README.md` | Instalação, configuração local, publicação e instruções para jogadores. |
 
@@ -258,6 +261,16 @@ mapeamento e verificar todas as curvas.
   (`WORKER_SEARCH_RADIUS`, `isWithinWorkerSearchRadius`); a contratação ainda
   não existe. O CHECK de `building_type` é recriado
   de forma idempotente no schema. Sprite: `public/buildings/farms/fazenda_arroz.png`.
+- `farm_dairy` (categoria Fazendas, área rural) ocupa 3 × 3 tiles, emprega até
+  10 funcionários, guarda até 400 litros de leite, custa 60 madeiras e 60
+  pedras e exige 12.000 Work Points. A regra `accumulate` produz 1 litro a
+  cada 5 Work Points efetivos, com eficiência mensal de 40%, 100%, 80% e 60%
+  nos respectivos trimestres. Seu leite é transferido ao armazém ligado.
+  Sprite: `public/buildings/farms/fazenda_leiteira.jpg`.
+- `shop_milk` (categoria Comerciais) usa a mesma definição, preço editável e
+  fluxo de venda da Loja de Peixes: 2 × 2 tiles, 4 funcionários, estoque máximo
+  de 40 litros, custo de 30 madeiras e 10 pedras e 6.000 Work Points. Produto
+  `milk`; sprite `public/buildings/commerce/loja_leite.png`.
 - O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
   área ocupada deve ficar dentro da cidade e de uma zona urbana, em terra, sem
   sobrepor Assembleia, estrada ou residência, e deve encostar ortogonalmente
@@ -314,22 +327,26 @@ mapeamento e verificar todas as curvas.
   fator 1,2 em 4 h, 1 em 8 h, 0,8 em 14 h, linear entre eles; saúde e felicidade
   fixas em 100 por enquanto) e é concluída automaticamente ao atingir os Work
   Points necessários.
-- Vendas de arroz e peixe (`src/types/commerce.ts`): `shop_rice` e `shop_fish`
+- Vendas de arroz, peixe e leite (`src/types/commerce.ts`): `shop_rice`,
+  `shop_fish` e `shop_milk`
   têm `price` (padrão C$ 10, editável pelo dono via
   `PATCH /api/residential-buildings/:id/price`) e estoque abastecido pelo
   armazém ligado do mesmo dono. No job das 00:00 a capacidade de venda do dia é
   `floor(WP gerados no dia / 100) · 5`
-  (WP = empregados × `getDailyWorkPoints`). `planRiceSales` percorre as
+  (WP = empregados × `getDailyWorkPoints`). `planShopSales` percorre as
   residências por id: `Vma` = preço médio efetivamente pago nas lojas do produto
   em 60 tiles no dia anterior (`Σ(unidades vendidas × preço praticado) /
   Σ(unidades vendidas)`); `Sm` = salário médio por morador (soma dos salários
   dos empregados / ocupantes). Para cada loja local, a quantidade desejada é
-  `ocupantes · 0,03 · max(0,125, min(4, Vma / Vlocal))` (a parte fracionária é a
-  chance de +1 unidade) e o benefício é
+  `ocupantes · demanda_basica · max(0,125, min(4, Vma / Vlocal))` (a parte
+  fracionária é a chance de +1 unidade) e o benefício é
   `((Sm − Vlocal · (quantidade desejada / ocupantes))/Vlocal)³ ·
   (60/(distância + 60))²`; distância entre centros. Lojas com benefício
   negativo não vendem para aquela residência. Se não houve vendas na área no
   dia anterior, `Vma` usa a média simples dos preços atuais das lojas próximas.
+  `demanda_basica` é carregada de `config/demanda_basica.txt` na inicialização:
+  arroz e peixe começam em `0.03`, leite em `1`; alterar o arquivo requer
+  reiniciar o servidor.
   A residência tenta comprar a demanda arredondada probabilisticamente da loja
   de maior benefício para a menor, limitada por capacidade e estoque. O dono
   recebe `quantidade × preço`; moradores não são cobrados.
@@ -365,7 +382,7 @@ mapeamento e verificar todas as curvas.
   20 WP por unidade colhida, limitado ao espaço livre do estoque (300); ao
   terminar, o plantio é limpo e um novo pode ser feito. `ResidentialBuilding.crop`
   expõe o estado ao cliente.
-- Consumo das residências: as compras de arroz das 00:00 são gravadas em
+- Consumo das residências: as compras de arroz, peixe e leite das 00:00 são gravadas em
   `residence_consumption (building_id, product_id, day, quantity, spent,
   occupants)` (cascata). `GET /api/residential-buildings/:id/consumption`
   devolve por produto o consumo por pessoa no último dia e a média diária por
@@ -374,7 +391,8 @@ mapeamento e verificar todas as curvas.
   A rota da cidade agrega os mesmos registros para todas as casas municipais,
   divide pelo total atual de moradores para obter a média diária por cidadão e
   pondera os preços pelas unidades compradas.
-- Pesqueiro e Loja de Peixes (`fishery`, `shop_fish`): `src/types/fishing.ts`
+- Pesqueiro e lojas de peixes/leite (`fishery`, `shop_fish`, `shop_milk`):
+  `src/types/fishing.ts`
   concentra as regras puras. O Pesqueiro (categoria Artesanais, `kind: 'fishery'`,
   2 × 2, 10 funcionários, estoque de 300 peixes e 10 Ferramentas) precisa de área
   urbana, ao lado de estrada e com pelo menos 1 tile sobre água (`requiresWater`;
@@ -386,12 +404,17 @@ mapeamento e verificar todas as curvas.
   `rollToolDemand`); atendida se `tool_stock` cobre a demanda (consome), senão a
   penalidade vai a 30% e sobe 10 pontos/dia até 90%; atendida, cai 10/dia
   (`nextEfficiencyPenalty`). Produção: 100 Work Points por peixe, reduzidos pela
-  penalidade, com o resto acumulado (`planFishing`). A Loja de Peixes reutiliza as
-  vendas/benefício do arroz (`planRiceSales`, loop por `shopType`/`productId`) e
-  grava consumo `fish`. Ferramentas (`tools`) é um produto novo (5 kg, 0,01 m³,
+  penalidade, com o resto acumulado. As regras `accumulate` usam o custo por
+  unidade de `ProductionRule.workPointsPerUnit`. A Loja de Peixes reutiliza as
+  vendas/benefício da Loja de Arroz e grava consumo `fish`; a Loja de Leite usa
+  o mesmo planner com multiplicador próprio e grava `milk`. Ferramentas (`tools`) é um produto novo (5 kg, 0,01 m³,
   validade infinita); `planTransfers` leva peixe do Pesqueiro ao armazém e
   Ferramentas do armazém ao Pesqueiro (`Transfer.productId === 'tools'` grava em
-  `tool_stock`). A rota de preço vale para `shop_rice` e `shop_fish`.
+  `  tool_stock`). A rota de preço vale para `shop_rice`, `shop_fish` e `shop_milk`.
+- Produção leiteira: `getDairyFarmEfficiency` (`src/types/dairy.ts`) aplica
+  fatores mensais de 40%, 100%, 80% e 60% à produção diária de `farm_dairy`.
+  O produto existente `milk` (litro, 0,001 m³, validade de 7 dias) deteriora
+  nos estoques da fazenda, armazéns e lojas pela rotina genérica de validade.
 - Recursos e Ferramentaria (`lumber_mill`, `quarry`, `iron_mine` em `kind:
   'resource'`, categoria Recursos, zona rural, ao lado de estrada; `toolmaker`
   em `kind: 'workshop'`, categoria Artesanais, zona urbana). `KIND_CATEGORY` em
@@ -570,13 +593,11 @@ atualizado.
 ## Limites e próximos passos já conhecidos
 
 - Ainda não há evolução de população ou simulação dinâmica de bem-estar.
-- As categorias Construções Artesanais, Comerciais, Fazendas, Recursos e
-  Indústrias aparecem na interface, mas ainda não habilitam posicionamento ou
-  catálogo de edifícios. Residências contém somente as duas opções descritas
-  acima.
-- Não há estoque nem sistema de Work Points; por isso, somente a conta master
-  consegue iniciar residências, e toda obra iniciada permanece em construção
-  até a conclusão manual instantânea da master.
+- O catálogo habilita casas, armazéns, fazendas de arroz e leite, lojas de
+  arroz, peixe e leite, pesqueiro, recursos e ferramentaria. Custos de materiais
+  de construção ainda não são debitados; a conta master pode iniciar obras e
+  concluí-las instantaneamente, enquanto o progresso de Work Points é processado
+  para construções com empregados.
 - O estado de cada cidade/estrada é consultado e enviado integralmente na
   sincronização atual; crescimento grande do mundo pode exigir paginação ou
   atualizações incrementais.

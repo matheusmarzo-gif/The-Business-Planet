@@ -7,7 +7,9 @@ export type ResidenceType =
   | 'house_poor1'
   | 'house_poor2'
   | 'farm_rice'
+  | 'farm_dairy'
   | 'shop_rice'
+  | 'shop_milk'
   | 'warehouse'
   | 'fishery'
   | 'shop_fish'
@@ -185,6 +187,25 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     stockProductId: 'rice',
     stockCapacity: 300,
   },
+  farm_dairy: {
+    type: 'farm_dairy',
+    kind: 'farm',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Fazenda leiteira',
+    asset: '/buildings/farms/fazenda_leiteira.jpg',
+    width: 3,
+    height: 3,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 60, stone: 60 },
+    workPoints: 12000,
+    maxWorkers: 10,
+    stockProduct: 'Leite',
+    stockProductId: 'milk',
+    stockCapacity: 400,
+    production: { mode: 'accumulate', workPointsPerUnit: 5 },
+  },
   shop_rice: {
     type: 'shop_rice',
     kind: 'shop',
@@ -202,6 +223,24 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     stockProduct: 'Arroz',
     stockProductId: 'rice',
     stockCapacity: 20,
+  },
+  shop_milk: {
+    type: 'shop_milk',
+    kind: 'shop',
+    requiredZone: 'urban',
+    requiresRoad: true,
+    name: 'Loja de Leite',
+    asset: '/buildings/commerce/loja_leite.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 30, stone: 10 },
+    workPoints: 6000,
+    maxWorkers: 4,
+    stockProduct: 'Leite',
+    stockProductId: 'milk',
+    stockCapacity: 40,
   },
   fishery: {
     type: 'fishery',

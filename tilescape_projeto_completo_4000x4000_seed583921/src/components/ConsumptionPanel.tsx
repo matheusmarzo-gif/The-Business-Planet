@@ -10,7 +10,7 @@ export interface ProductConsumption {
 }
 
 // Produtos consumidos pelas residências (mesma fórmula de compra para todos).
-export const CONSUMED_PRODUCT_IDS = ['rice', 'fish'];
+export const CONSUMED_PRODUCT_IDS = ['rice', 'fish', 'milk'];
 
 interface ConsumptionPanelProps {
   consumption: Map<string, ProductConsumption>;

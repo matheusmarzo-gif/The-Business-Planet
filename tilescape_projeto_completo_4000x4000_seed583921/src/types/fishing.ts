@@ -74,8 +74,15 @@ export function planProduction(
   const free = Math.max(0, input.freeSpace);
   const effective = Math.max(0, input.workPoints) * (1 - input.penalty / 100);
   if (rule.mode === 'accumulate') {
-    const result = planFishing({ ...input, freeSpace: free });
-    return { units: result.fish, progress: result.progress, woodUsed: 0, ironUsed: 0 };
+    const total = input.progress + effective;
+    const possible = Math.floor(total / rule.workPointsPerUnit + 1e-9);
+    const units = Math.max(0, Math.min(possible, free));
+    return {
+      units,
+      progress: units < possible ? 0 : Math.max(0, total - units * rule.workPointsPerUnit),
+      woodUsed: 0,
+      ironUsed: 0,
+    };
   }
   if (rule.mode === 'chance') {
     const expected = effective / rule.workPointsPerUnit;

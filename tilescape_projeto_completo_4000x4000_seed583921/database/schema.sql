@@ -75,7 +75,13 @@ ALTER TABLE residential_buildings
 
 ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS work_points_done DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (work_points_done >= 0);
- pode ficar negativo (folha de pagamento).
+
+ALTER TABLE residential_buildings
+  ADD COLUMN IF NOT EXISTS price INTEGER NOT NULL DEFAULT 10 CHECK (price BETWEEN 1 AND 100000);
+ALTER TABLE residential_buildings
+  ADD COLUMN IF NOT EXISTS stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0);
+
+-- O caixa dos jogadores pode ficar negativo (folha de pagamento).
 ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_check;
 
 ALTER TABLE residential_buildings

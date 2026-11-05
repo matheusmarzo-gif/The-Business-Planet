@@ -272,7 +272,13 @@ salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). T
 às 00:00 cada funcionário de uma obra gera
 `12,5 × horas × saúde/100 × felicidade/100 × fator de descanso` Work Points (fator
 1,2 com 4 h, 1 com 8 h, 0,8 com 14 h); a obra termina sozinha ao atingir o total
-necessário. Saúde e felicidade ainda são fixas em 100. O
+necessário. Saúde e felicidade ainda são fixas em 100.
+
+Na **Loja de Arroz**, o dono define o preço do arroz (C$ 1 ou mais). Às 00:00 cada
+100 Work Points gerados pelos funcionários no dia somam 5 unidades de capacidade
+de venda. As residências em 60 tiles compram das lojas de maior benefício para a
+menor, `((Sm − Vma)/Vlocal)³`, e o dono recebe o valor da venda. A loja só vende
+o estoque que tiver (começa em 0; o abastecimento ainda não existe). O
 painel mostra funcionários atuais, desejados e vagas; nas residências, as
 pessoas empregadas.
 

@@ -27,6 +27,7 @@ import {
   getRequiredCityZone,
   MAX_CITY_ZONES,
 } from './types/city';
+import { DEFAULT_SHOP_PRICE } from './types/commerce';
 import {
   DEFAULT_RENT,
   DEFAULT_WAGE,
@@ -143,6 +144,8 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Você não possui materiais suficientes para iniciar essa construção.';
         } else if (body.error === 'invalid_work_settings') {
           error = 'Informe funcionários desejados (até o máximo da construção), salário (0 a 100.000) e carga horária de 4 a 14 horas.';
+        } else if (body.error === 'invalid_price') {
+          error = 'O preço deve ser um número inteiro de C$ 1 a C$ 100.000.';
         } else if (body.error === 'invalid_rent') {
           error = 'O aluguel deve ser um número inteiro de C$ 1 a C$ 100.000.';
         } else if (body.error === 'invalid_warehouse_setting') {
@@ -411,6 +414,25 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setIsSavingWorkSettings(false);
     }
   };
+  const savePrice = async (buildingId: string, price: number) => {
+    setIsSavingWorkSettings(true);
+    setWorkSettingsError('');
+    try {
+      const building = await cityRequest<ResidentialBuilding>(
+        `/api/residential-buildings/${buildingId}/price`,
+        { method: 'PATCH', body: JSON.stringify({ price }) },
+      );
+      setResidentialBuildings((current) =>
+        current.map((item) => (item.id === building.id ? building : item)),
+      );
+    } catch (error) {
+      setWorkSettingsError(
+        error instanceof Error ? error.message : 'Não foi possível salvar o preço.',
+      );
+    } finally {
+      setIsSavingWorkSettings(false);
+    }
+  };
   const zoomBy = (factor: number) =>
     setCamera((current) => {
       const zoom = Math.min(6, Math.max(0.004, current.zoom * factor));
@@ -630,6 +652,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       occupants: 0,
       desiredWorkers: 0,
       workPointsDone: 0,
+      price: DEFAULT_SHOP_PRICE,
+      stock: 0,
       employed: 0,
     };
     setPendingResidentialBuildings((current) => [...current, pending]);
@@ -965,6 +989,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             error={workSettingsError}
             onSave={(settings) => void saveWorkSettings(selectedResidence.id, settings)}
             onSaveRent={(rent) => void saveRent(selectedResidence.id, rent)}
+            onSavePrice={(price) => void savePrice(selectedResidence.id, price)}
             onOpenWarehouse={() => void openWarehouse(selectedResidence.id)}
             onClose={() => setSelectedResidenceId(null)}
           />

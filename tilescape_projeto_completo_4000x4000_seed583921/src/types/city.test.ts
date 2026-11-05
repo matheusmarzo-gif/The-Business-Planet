@@ -22,6 +22,13 @@ import {
 } from './residence';
 import { getRoadPlacementError } from './road';
 import { allocateWorkers, getDailyWorkPoints, getHoursFactor, getPayroll, getRestFactor, getWorkBenefit } from './employment';
+import {
+  getPurchaseBenefit,
+  getPurchaseQuantity,
+  getShopSalesCapacity,
+  parsePrice,
+  planRiceSales,
+} from './commerce';
 import { parseWarehouseSetting } from './warehouse';
 
 const city = { centerX: 1000, centerY: 1000 };
@@ -30,6 +37,55 @@ describe('wallet', () => {
   it('starts with C$ 10.000 and formats money in Brazilian style', () => {
     assert.equal(STARTING_BALANCE, 10000);
     assert.equal(formatMoney(STARTING_BALANCE).replace(/\u00a0/g, ' '), 'C$ 10.000');
+  });
+});
+
+describe('rice sales', () => {
+  const shop = (id: string, x: number, price: number, stock: number, capacity: number) => ({
+    id,
+    type: 'shop_rice' as const,
+    x,
+    y: 0,
+    price,
+    stock,
+    capacity,
+  });
+  const home = (id: string, x: number, occupants: number, averageIncome: number) => ({
+    id,
+    type: 'house_poor1' as const,
+    x,
+    y: 0,
+    occupants,
+    averageIncome,
+  });
+
+  it('computes capacity, price, benefit and quantity', () => {
+    assert.equal(getShopSalesCapacity(99), 0);
+    assert.equal(getShopSalesCapacity(250), 10);
+    assert.equal(parsePrice({ price: 0 }), null);
+    assert.equal(parsePrice({ price: 12 }), 12);
+    assert.equal(getPurchaseBenefit(30, 10, 10), 8);
+    // 10 pessoas * 0,03 * max(4, 1) = 1,2
+    assert.equal(getPurchaseQuantity(10, 10, 10, () => 0.5), 1);
+    assert.equal(getPurchaseQuantity(10, 10, 10, () => 0.1), 2);
+    // 1 pessoa: 0,12 -> 12% de chance de comprar 1 unidade
+    assert.equal(getPurchaseQuantity(1, 10, 10, () => 0.11), 1);
+    assert.equal(getPurchaseQuantity(1, 10, 10, () => 0.13), 0);
+  });
+
+  it('buys from the best benefit first, within capacity, stock and radius', () => {
+    const purchases = planRiceSales(
+      [home('a', 10, 100, 50), home('far', 500, 100, 50)],
+      [shop('cheap', 0, 5, 100, 4), shop('dear', 4, 20, 100, 100), shop('empty', 8, 1, 0, 100)],
+      () => 0,
+    );
+    // Vma = (5+20+1)/3; "cheap" tem o maior benefício, mas só vende 4 (capacidade); o resto vem de "dear".
+    assert.deepEqual(purchases, [
+      { shopId: 'cheap', residenceId: 'a', quantity: 4 },
+      { shopId: 'dear', residenceId: 'a', quantity: purchases[1].quantity },
+    ]);
+    assert.ok(purchases[1].quantity > 0);
+    assert.equal(purchases.some((purchase) => purchase.residenceId === 'far'), false);
   });
 });
 
@@ -295,6 +351,8 @@ describe('municipal zones', () => {
         occupants: 0,
         desiredWorkers: 0,
         workPointsDone: 0,
+        price: 10,
+        stock: 0,
         employed: 0,
       };
 
@@ -334,6 +392,8 @@ describe('municipal zones', () => {
         occupants: 0,
         desiredWorkers: 0,
         workPointsDone: 0,
+        price: 10,
+        stock: 0,
         employed: 0,
       };
       assert.equal(

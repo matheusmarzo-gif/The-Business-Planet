@@ -18,6 +18,7 @@ interface ResidencePanelProps {
   error: string;
   onSave: (settings: { wage: number; workHoursPerDay: number; desiredWorkers: number }) => void;
   onSaveRent: (rent: number) => void;
+  onSavePrice: (price: number) => void;
   onOpenWarehouse: () => void;
   onClose: () => void;
 }
@@ -31,6 +32,7 @@ export default function ResidencePanel({
   error,
   onSave,
   onSaveRent,
+  onSavePrice,
   onOpenWarehouse,
   onClose,
 }: ResidencePanelProps) {
@@ -39,6 +41,11 @@ export default function ResidencePanel({
   const [hours, setHours] = useState(String(building.workHoursPerDay));
   const [rent, setRent] = useState(String(building.rent));
   const [desired, setDesired] = useState(String(building.desiredWorkers));
+  const [price, setPrice] = useState(String(building.price));
+
+  useEffect(() => {
+    setPrice(String(building.price));
+  }, [building.id, building.price]);
 
   useEffect(() => {
     setWage(String(building.wage));
@@ -82,7 +89,7 @@ export default function ResidencePanel({
             ...jobRows,
             definition.kind === 'warehouse'
               ? ['Espaço ocupado', `0 / ${number.format(definition.storageCapacityM3 ?? 0)} m³`]
-              : [`Estoque de ${definition.stockProduct}`, `0 / ${number.format(definition.stockCapacity ?? 0)}`],
+              : [`Estoque de ${definition.stockProduct}`, `${number.format(building.stock)} / ${number.format(definition.stockCapacity ?? 0)}`],
           ]
         : [
             ['Ocupantes atuais', number.format(building.occupants)],
@@ -173,6 +180,35 @@ export default function ResidencePanel({
             <small>Somente o dono da construção pode editar.</small>
           )}
           {error && <p role="alert">{error}</p>}
+        </form>
+      )}
+      {building.type === 'shop_rice' && (
+        <form
+          className="work-settings"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSavePrice(Number(price));
+          }}
+        >
+          <label>
+            Preço do arroz (C$ por unidade)
+            <input
+              type="number"
+              min={1}
+              max={100000}
+              step={1}
+              value={price}
+              disabled={!isOwner || isSaving}
+              onChange={(event) => setPrice(event.target.value)}
+            />
+          </label>
+          {isOwner ? (
+            <button type="submit" disabled={isSaving}>
+              {isSaving ? 'Salvando…' : 'Salvar preço'}
+            </button>
+          ) : (
+            <small>Somente o dono da loja pode editar.</small>
+          )}
         </form>
       )}
       {!isFarm && (

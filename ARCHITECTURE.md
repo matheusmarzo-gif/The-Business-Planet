@@ -299,6 +299,17 @@ mapeamento e verificar todas as curvas.
   fator 1,2 em 4 h, 1 em 8 h, 0,8 em 14 h, linear entre eles; saúde e felicidade
   fixas em 100 por enquanto) e é concluída automaticamente ao atingir os Work
   Points necessários.
+- Vendas de arroz (`src/types/commerce.ts`): `shop_rice` tem `price` (padrão
+  C$ 10, editável pelo dono via `PATCH /api/residential-buildings/:id/price`) e
+  `stock` (começa em 0; ainda não há abastecimento, então nada vende). No job
+  das 00:00 a capacidade de venda do dia é `floor(WP gerados no dia / 100) · 5`
+  (WP = empregados × `getDailyWorkPoints`). `planRiceSales` percorre as
+  residências por id: `Vma` = preço médio das lojas em 60 tiles, `Sm` = salário
+  médio por morador (soma dos salários dos empregados / ocupantes), benefício
+  `((Sm − Vma)/Vlocal)³` e quantidade `ocupantes · 0,03 · max(4, Vma/Vlocal)`
+  (a parte fracionária é a chance de +1 unidade). Compra-se da loja de maior
+  benefício para a menor, limitada por capacidade e estoque. O dono recebe
+  `quantidade × preço`; moradores não são cobrados.
   `employed` em `ResidentialBuilding` é calculado por subquery em
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
 

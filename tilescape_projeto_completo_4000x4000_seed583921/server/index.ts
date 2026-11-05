@@ -40,6 +40,7 @@ import {
 } from '../src/types/residence.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
 import { allocateWorkers, getDailyWorkPoints, getPayroll, type JobAssignment } from '../src/types/employment.js';
+import { getShopSalesCapacity, parsePrice, planRiceSales } from '../src/types/commerce.js';
 import { parseWarehouseSetting } from '../src/types/warehouse.js';
 import {
   allocateImmigrants,
@@ -114,10 +115,12 @@ type ResidentialBuildingRow = {
   occupants: number;
   desired_workers: number;
   work_points_done: number;
+  price: number;
+  stock: number;
   employed: number;
 };
 
-const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done,
+const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock,
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
    WHERE j.workplace_id = residential_buildings.id OR j.residence_id = residential_buildings.id) AS employed`;
 
@@ -137,6 +140,8 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     occupants: row.occupants,
     desiredWorkers: row.desired_workers,
     workPointsDone: row.work_points_done,
+    price: row.price,
+    stock: row.stock,
     employed: row.employed,
   };
 }
@@ -366,8 +371,15 @@ async function runDailyEmployment(): Promise<boolean> {
         building_type: ResidenceType;
         work_hours_per_day: number;
         work_points_done: number;
+        tile_x: number;
+        tile_y: number;
+        price: number;
+        stock: number;
+        occupants: number;
       }>(
-        'SELECT id, created_by, wage, status, building_type, work_hours_per_day, work_points_done FROM residential_buildings',
+        `SELECT id, created_by, wage, status, building_type, work_hours_per_day, work_points_done,
+                tile_x, tile_y, price, stock, occupants
+         FROM residential_buildings`,
       );
       const { rows: assignmentRows } = await client.query<{
         workplace_id: string;
@@ -410,6 +422,65 @@ async function runDailyEmployment(): Promise<boolean> {
            WHERE id = $1`,
           [site.id, total, needed],
         );
+        changed = true;
+      }
+      // Vendas de arroz: capacidade do dia vem dos Work Points gerados pela loja.
+      const wageOf = new Map(workplaces.map((row) => [row.id, row.wage]));
+      const incomeByResidence = new Map<string, number>();
+      for (const row of assignmentRows) {
+        incomeByResidence.set(
+          row.residence_id,
+          (incomeByResidence.get(row.residence_id) ?? 0) + row.count * (wageOf.get(row.workplace_id) ?? 0),
+        );
+      }
+      const shops = workplaces
+        .filter((row) => row.status === 'completed' && row.building_type === 'shop_rice')
+        .map((row) => ({
+          id: row.id,
+          type: row.building_type,
+          x: row.tile_x,
+          y: row.tile_y,
+          price: row.price,
+          stock: row.stock,
+          capacity: getShopSalesCapacity(
+            (workers.get(row.id) ?? 0) *
+              getDailyWorkPoints(row.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness),
+          ),
+        }));
+      const homes = workplaces
+        .filter(
+          (row) =>
+            row.status === 'completed' &&
+            getResidenceDefinition(row.building_type)?.kind === 'residence' &&
+            row.occupants > 0,
+        )
+        .map((row) => ({
+          id: row.id,
+          type: row.building_type,
+          x: row.tile_x,
+          y: row.tile_y,
+          occupants: row.occupants,
+          averageIncome: (incomeByResidence.get(row.id) ?? 0) / row.occupants,
+        }));
+      const sold = new Map<string, number>();
+      for (const purchase of planRiceSales(homes, shops)) {
+        sold.set(purchase.shopId, (sold.get(purchase.shopId) ?? 0) + purchase.quantity);
+      }
+      for (const shop of shops) {
+        const quantity = sold.get(shop.id) ?? 0;
+        if (quantity <= 0) continue;
+        const owner = workplaces.find((row) => row.id === shop.id)?.created_by;
+        await client.query('UPDATE residential_buildings SET stock = stock - $2 WHERE id = $1', [
+          shop.id,
+          quantity,
+        ]);
+        if (owner) {
+          await client.query(
+            `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::bigint + $2::bigint)
+             ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::bigint`,
+            [owner, quantity * shop.price, STARTING_BALANCE],
+          );
+        }
         changed = true;
       }
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
@@ -1448,6 +1519,47 @@ async function start() {
       })
       .catch((error: unknown) => {
         console.error('Não foi possível atualizar o aluguel:', error);
+        response.status(503).json({ error: 'residence_unavailable' });
+      });
+  });
+  app.patch('/api/residential-buildings/:id/price', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const price = parsePrice(request.body);
+    if (!residenceIdPattern.test(request.params.id) || price === null) {
+      response.status(400).json({ error: 'invalid_price' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void pool
+      .query<ResidentialBuildingRow>(
+        `UPDATE residential_buildings
+         SET price = $3
+         WHERE id = $1 AND created_by = $2 AND building_type = 'shop_rice'
+         RETURNING ${RESIDENTIAL_COLUMNS}`,
+        [request.params.id, userId, price],
+      )
+      .then(async ({ rows }) => {
+        if (!rows[0]) {
+          const existing = await pool.query('SELECT 1 FROM residential_buildings WHERE id = $1', [
+            request.params.id,
+          ]);
+          response
+            .status(existing.rowCount ? 403 : 404)
+            .json({ error: existing.rowCount ? 'residence_not_owned' : 'residence_not_found' });
+          return;
+        }
+
+        response.json(mapResidentialBuilding(rows[0]));
+        void publishCities().catch((error: unknown) => {
+          console.error('O preço foi atualizado, mas a atualização do mundo falhou:', error);
+        });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível atualizar o preço:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
   });

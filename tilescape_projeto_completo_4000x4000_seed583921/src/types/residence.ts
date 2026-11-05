@@ -193,7 +193,7 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     requiredZone: 'rural',
     requiresRoad: true,
     name: 'Fazenda leiteira',
-    asset: '/buildings/farms/fazenda_leiteira.jpg',
+    asset: '/buildings/farms/fazenda_leiteira.png',
     width: 3,
     height: 3,
     capacity: 0,

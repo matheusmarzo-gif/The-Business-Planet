@@ -499,6 +499,7 @@ describe('fazenda leiteira e demanda configurável', () => {
       [3, 3, 10, 400, 12000],
     );
     assert.deepEqual(dairy.cost, { wood: 60, stone: 60 });
+    assert.equal(dairy.asset, '/buildings/farms/fazenda_leiteira.png');
     assert.deepEqual(
       planProduction(
         dairy.production!,

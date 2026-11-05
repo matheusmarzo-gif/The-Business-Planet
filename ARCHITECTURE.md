@@ -266,7 +266,7 @@ mapeamento e verificar todas as curvas.
   pedras e exige 12.000 Work Points. A regra `accumulate` produz 1 litro a
   cada 5 Work Points efetivos, com eficiência mensal de 40%, 100%, 80% e 60%
   nos respectivos trimestres. Seu leite é transferido ao armazém ligado.
-  Sprite: `public/buildings/farms/fazenda_leiteira.jpg`.
+  Sprite: `public/buildings/farms/fazenda_leiteira.png`.
 - `shop_milk` (categoria Comerciais) usa a mesma definição, preço editável e
   fluxo de venda da Loja de Peixes: 2 × 2 tiles, 4 funcionários, estoque máximo
   de 40 litros, custo de 30 madeiras e 10 pedras e 6.000 Work Points. Produto

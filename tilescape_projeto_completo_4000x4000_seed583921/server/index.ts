@@ -496,7 +496,19 @@ async function runDailyEmployment(): Promise<boolean> {
       }
       // Falhas na economia (vendas, produção, transporte) não devem desfazer folha e obras do dia.
       await client.query('SAVEPOINT daily_economy');
+      // Cada etapa tem seu próprio savepoint: uma falha nas vendas ou no transporte não desfaz a produção.
+      const runStage = async (name: string, stage: () => Promise<void>) => {
+        await client.query('SAVEPOINT economy_stage');
+        try {
+          await stage();
+          await client.query('RELEASE SAVEPOINT economy_stage');
+        } catch (stageError) {
+          await client.query('ROLLBACK TO SAVEPOINT economy_stage');
+          console.error(`Falha na economia diária (${name}):`, stageError);
+        }
+      };
       try {
+      await runStage('vendas', async () => {
       // Vendas de arroz: capacidade do dia vem dos Work Points gerados pela loja.
       const wageOf = new Map(workplaces.map((row) => [row.id, row.wage]));
       const incomeByResidence = getAverageIncomes(
@@ -582,6 +594,8 @@ async function runDailyEmployment(): Promise<boolean> {
         changed = true;
       }
       }
+      });
+      await runStage('produção', async () => {
       // Construções produtivas: demanda de Ferramentas, penalidade de eficiência e produção diária.
       for (const site of workplaces) {
         const definition = getResidenceDefinition(site.building_type);
@@ -611,7 +625,7 @@ async function runDailyEmployment(): Promise<boolean> {
           progress: current.production_progress,
           workPoints:
             count * getDailyWorkPoints(site.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness),
-          penalty: current.efficiency_penalty,
+          penalty,
           freeSpace: (definition.stockCapacity ?? 0) - current.stock,
           wood: current.wood_stock,
           iron: current.iron_stock,
@@ -637,6 +651,8 @@ async function runDailyEmployment(): Promise<boolean> {
         );
         changed = true;
       }
+      });
+      await runStage('fazendas', async () => {
       // Fazendas de arroz: crescimento (produtividade pelos Work Points) e colheita.
       const { rows: farmRows } = await client.query<{
         id: string;
@@ -693,6 +709,8 @@ async function runDailyEmployment(): Promise<boolean> {
         }
         changed = true;
       }
+      });
+      await runStage('transporte', async () => {
       // Transporte entre armazéns e construções ligadas; consome Work Points do armazém.
       const { rows: warehouseRows } = await client.query<{
         id: string;
@@ -779,6 +797,7 @@ async function runDailyEmployment(): Promise<boolean> {
           transfers.reduce((sum, item) => sum + getTransportDemand(item.productId, item.quantity), 0),
         );
       }
+      });
       } catch (economyError) {
         await client.query('ROLLBACK TO SAVEPOINT daily_economy');
         console.error('Falha na economia diária (folha e obras foram preservadas):', economyError);

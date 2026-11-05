@@ -519,4 +519,4 @@ atualizado.
 - O editor de mapa procedural continua no código, mas não está ligado ao fluxo
   de entrada atual.
 
-- Obras e economia di�ria: �s 00:00 o progresso das obras usa dvanceConstruction (employment.ts; conclui quando Work Points >= necess�rios, para todos os tipos). Vendas, produ��o e transporte rodam sob um SAVEPOINT (daily_economy): se falharem, folha e obras do dia s�o preservadas e o erro � registrado.
+- Obras e economia diária: às 00:00 o progresso das obras usa `advanceConstruction` (employment.ts; conclui quando Work Points >= necessários, para todos os tipos). Vendas, produção, fazendas e transporte rodam, cada etapa, sob seu próprio SAVEPOINT (`runStage`): se uma falhar, as demais, a folha e as obras do dia são preservadas e o erro é registrado com o nome da etapa.

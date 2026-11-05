@@ -1231,9 +1231,19 @@ describe('obras', () => {
 
 describe('comandos do master', () => {
   it('only accepts known time scales and sane grants', async () => {
-    const { isValidTimeScale, parseMasterGrant } = await import('./worldClock');
+    const {
+      isPastDailyWorldRefreshTime,
+      isValidTimeScale,
+      parseMasterGrant,
+    } = await import('./worldClock');
     for (const scale of [15, 30, 60, 240]) assert.equal(isValidTimeScale(scale), true);
     for (const scale of [0, 1, 45, -15, '15', null]) assert.equal(isValidTimeScale(scale), false);
+    assert.equal(isPastDailyWorldRefreshTime(0, 29), false);
+    assert.equal(isPastDailyWorldRefreshTime(0, 30), true);
+    assert.equal(isPastDailyWorldRefreshTime(0, 31), true);
+    assert.equal(isPastDailyWorldRefreshTime(1, 0), true);
+    assert.equal(isPastDailyWorldRefreshTime(24, 0), false);
+    assert.equal(isPastDailyWorldRefreshTime(0, 60), false);
     assert.equal(parseMasterGrant(500), 500);
     for (const grant of [0, -5, 1.5, 2_000_000_000, '10', NaN]) assert.equal(parseMasterGrant(grant), null);
   });

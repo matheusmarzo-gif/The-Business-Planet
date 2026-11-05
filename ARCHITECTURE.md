@@ -587,6 +587,11 @@ envelope `{ type: "cities", cities, roads, buildings }`; snapshots contêm hora
 do jogo, hora do servidor, velocidade, mapa e jogadores online.
 `src/game/worldClient.ts` reconecta com atraso exponencial limitado e valida o
 formato básico das mensagens antes de atualizar o React.
+Depois das 00:30 UTC do relógio do jogo, o líder publica uma sincronização
+completa desse estado para todos os jogadores conectados. `last_full_world_sync_day`
+em `world_state` registra a publicação por dia; o lock transacional da linha
+evita duplicatas entre instâncias e a marcação só é gravada após o Pub/Sub ter
+aceitado a mensagem.
 
 ## Variáveis de ambiente
 
@@ -635,3 +640,4 @@ atualizado.
   de entrada atual.
 
 - Obras e economia diária: às 00:00 o progresso das obras usa `advanceConstruction` (employment.ts; conclui quando Work Points >= necessários, para todos os tipos). Vendas, produção, fazendas e transporte rodam, cada etapa, sob seu próprio SAVEPOINT (`runStage`): se uma falhar, as demais, a folha e as obras do dia são preservadas e o erro é registrado com o nome da etapa.
+- Sincronização diária: a partir de 00:30 UTC do relógio do jogo, uma mensagem completa de cidades, estradas e construções é publicada pelo Redis para os jogadores conectados, no máximo uma vez por dia. A atualização não recarrega a página; `worldClient.ts` aplica o estado recebido.

@@ -42,7 +42,11 @@ import {
   type ResidencePlacementError,
 } from '../src/types/residence.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
-import { isValidTimeScale, parseMasterGrant } from '../src/types/worldClock.js';
+import {
+  isPastDailyWorldRefreshTime,
+  isValidTimeScale,
+  parseMasterGrant,
+} from '../src/types/worldClock.js';
 import {
   advanceConstruction,
   allocateWorkers,
@@ -364,6 +368,50 @@ function deliverCommerceDiagnostics(message: string) {
 async function publishSnapshot() {
   const snapshot = await getSnapshot();
   await redis.publish(SNAPSHOT_CHANNEL, JSON.stringify(snapshot));
+}
+
+async function publishDailyFullWorldStateIfDue(): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query<{
+      day: string;
+      hour: number;
+      minute: number;
+      last_full_world_sync_day: string | null;
+    }>(
+      `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+              EXTRACT(HOUR FROM world_time AT TIME ZONE 'UTC')::int AS hour,
+              EXTRACT(MINUTE FROM world_time AT TIME ZONE 'UTC')::int AS minute,
+              to_char(last_full_world_sync_day, 'YYYY-MM-DD') AS last_full_world_sync_day
+       FROM world_state
+       WHERE id = 1
+       FOR UPDATE`,
+    );
+    const state = rows[0];
+    if (!state) throw new Error('O relógio global ainda não foi inicializado.');
+    if (
+      !isPastDailyWorldRefreshTime(state.hour, state.minute) ||
+      state.last_full_world_sync_day === state.day
+    ) {
+      await client.query('COMMIT');
+      return;
+    }
+
+    await publishCities();
+    await client.query(
+      'UPDATE world_state SET last_full_world_sync_day = $1::date WHERE id = 1',
+      [state.day],
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter a sincronização diária do mundo:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function getCities(): Promise<CityAssembly[]> {
@@ -1447,6 +1495,9 @@ async function advanceClock() {
       console.error('A atualização diária foi aplicada, mas a atualização do mundo falhou:', error);
     });
   }
+  await publishDailyFullWorldStateIfDue().catch((error: unknown) => {
+    console.error('Não foi possível forçar a sincronização diária do mundo:', error);
+  });
   await publishSnapshot();
 }
 

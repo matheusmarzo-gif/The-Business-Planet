@@ -7,6 +7,12 @@ export function isValidTimeScale(value: unknown): value is number {
   return typeof value === 'number' && (WORLD_TIME_SCALES as readonly number[]).includes(value);
 }
 
+export function isPastDailyWorldRefreshTime(hour: number, minute: number): boolean {
+  return Number.isInteger(hour) && Number.isInteger(minute) &&
+    hour >= 0 && hour < 24 && minute >= 0 && minute < 60 &&
+    hour * 60 + minute >= 30;
+}
+
 export function parseMasterGrant(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= MAX_MASTER_GRANT
     ? value

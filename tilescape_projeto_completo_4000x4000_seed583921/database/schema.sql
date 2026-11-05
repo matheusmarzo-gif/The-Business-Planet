@@ -85,6 +85,8 @@ ALTER TABLE world_state
 ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS last_spoilage_day DATE;
 ALTER TABLE world_state
+  ADD COLUMN IF NOT EXISTS last_full_world_sync_day DATE;
+ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS time_scale DOUBLE PRECISION NOT NULL DEFAULT 15 CHECK (time_scale > 0);
 
 ALTER TABLE residential_buildings

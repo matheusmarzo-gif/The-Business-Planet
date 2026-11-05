@@ -112,7 +112,10 @@ válida; as rotas do mundo verificam os tokens no servidor.
 
 Cada push para a branch conectada ao Render pode iniciar uma nova publicação.
 O relógio global e sua persistência ficam no PostgreSQL; o Redis gerencia a
-presença e a distribuição das atualizações em tempo real.
+presença e a distribuição das atualizações em tempo real. Após 00:30 no
+relógio do jogo, o servidor também envia a todos os jogadores conectados uma
+sincronização completa de cidades, estradas e construções, sem recarregar a
+página.
 
 ## Executar localmente (opcional)
 

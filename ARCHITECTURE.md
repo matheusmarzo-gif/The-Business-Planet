@@ -289,9 +289,15 @@ mapeamento e verificar todas as curvas.
   concluído, sem aguardar Work Points. `player_warehouse_claims` persiste esse
   direito mesmo após demolição e é inicializada para jogadores com armazéns
   existentes. O servidor aplica essa regra dentro do lock transacional. Todos
-  os jogadores autenticados podem iniciar qualquer construção do catálogo;
-  custos de materiais ainda não são debitados. Obras regulares são persistidas
-  com status `under_construction` e usam `public/buildings/em_construcao.png`.
+  os jogadores autenticados podem iniciar qualquer construção do catálogo; a
+  conta master mantém a permissão de iniciar sem materiais.
+  Exceto o primeiro armazém, a construção exige a Madeira e a Pedra definidas
+  em `ResidenceDefinition.cost`, debitadas atomicamente dos armazéns concluídos
+  do jogador a até 60 tiles do centro do local escolhido; estoques de vários
+  armazéns próximos podem ser combinados. Para jogadores comuns, estoque
+  insuficiente rejeita a obra sem débito parcial. Obras regulares são
+  persistidas com status `under_construction` e usam
+  `public/buildings/em_construcao.png`.
 - Os funcionários atribuídos a uma obra geram Work Points diários e a conclusão
   ocorre automaticamente ao atingir o requisito. A conta master também pode
   dar duplo clique na obra para concluí-la instantaneamente; a rota protege essa
@@ -300,8 +306,9 @@ mapeamento e verificar todas as curvas.
   traçado posterior cubra uma casa. No modo Demolir, clicar em qualquer tile
   do footprint de uma residência a remove sem confirmação; o servidor só
   permite a remoção ao autor e publica o novo estado.
-- Capacidade, apreço local, custos e Work Points são metadados; população,
-  estoque, consumo e produção ainda não são simulados.
+- Capacidade e apreço local são metadados; Work Points avançam obras e custos
+  debitam materiais. População, consumo das residências e produção residencial
+  ainda não são simulados.
 - `GET /api/player/resources?x=&y=` agrega Madeira e Pedra dos armazéns
   concluídos do próprio usuário em até 60 tiles do centro da câmera. A barra
   superior atualiza esses totais quando a área muda e em intervalo regular.
@@ -449,11 +456,12 @@ mapeamento e verificar todas as curvas.
   garante uma execução por rodada) cada armazém em modo `buy` procura armazéns
   de outros donos em até 60 tiles em modo `sell`. O vendedor oferece só o que
   excede seu estoque mínimo, ao preço dele; o comprador só compra se esse
-  preço for menor que seu valor e recebe até seu estoque máximo numérico ou,
+  preço for igual ou menor que seu valor e recebe até seu estoque máximo numérico ou,
   em `MAX`, até o espaço livre (50 m³). As ofertas mais baratas são atendidas primeiro entre todos os
   fornecedores. O comprador gasta Work Points de transporte (mesma fórmula; cada
   rodada usa metade dos pontos diários) e paga ao vendedor (carteira pode ficar
-  negativa).
+  negativa). Pedra exige 30 Work Points por unidade (160 kg, 0,1 m³), contra
+  16,25 por unidade de Madeira (50 kg, 0,1 m³).
 - Demanda de Work Points do armazém: `logWarehouseDemand` (server/index.ts)
   acumula por dia de jogo, na tabela `warehouse_demand (building_id, day, demand)`
   (cascata), a demanda das transferências locais (00:00) e das compras entre
@@ -521,7 +529,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/roads` | Master | Valida e grava um caminho de estrada de até 600 tiles. |
 | `DELETE /api/roads/:x/:y` | Criador do tile | Demole um tile de estrada sem confirmação; publica o novo estado. |
 | `DELETE /api/roads` | Autenticado | Demole os tiles próprios de um caminho de até 600 tiles e publica o novo estado. |
-| `POST /api/residential-buildings` | Autenticado | Valida e cria o primeiro armazém do jogador como concluído e gratuito ou inicia uma obra regular de qualquer categoria. |
+| `POST /api/residential-buildings` | Autenticado | Valida o estoque e desconta atomicamente os materiais (exceto para Master); o primeiro armazém do jogador é concluído e gratuito. |
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |

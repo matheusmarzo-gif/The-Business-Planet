@@ -31,10 +31,12 @@ import {
   getResidenceDefinition,
   getResidencePlacementError,
   isPlayerBuildableConstructionType,
+  planConstructionMaterialWithdrawals,
   parseRent,
   parseWorkSettings,
   RESIDENCES,
   RESIDENCE_STATS,
+  WORKER_SEARCH_RADIUS,
   type ResidentialBuilding,
   type ResidenceType,
   type ResidencePlacementError,
@@ -1834,9 +1836,10 @@ async function createResidentialBuilding(
   type: ResidenceType,
   position: RoadPosition,
   userId: string,
+  isMaster: boolean,
 ): Promise<{
   building: ResidentialBuilding | null;
-  error: ResidencePlacementError | null;
+  error: ResidencePlacementError | 'insufficient_materials' | null;
 }> {
   const client = await pool.connect();
   try {
@@ -1928,6 +1931,58 @@ async function createResidentialBuilding(
     if (!city) {
       await client.query('ROLLBACK');
       return { building: null, error: 'outside_municipality' };
+    }
+
+    if (!isFirstWarehouse && !isMaster) {
+      const constructionCenterX = position.x + definition.width / 2;
+      const constructionCenterY = position.y + definition.height / 2;
+      const { rows: materialRows } = await client.query<{
+        building_id: string;
+        product_id: 'wood' | 'stone';
+        quantity: number;
+      }>(
+        `SELECT warehouse.id AS building_id, stock.product_id, stock.quantity
+         FROM residential_buildings AS warehouse
+         JOIN warehouse_stock AS stock ON stock.building_id = warehouse.id
+         WHERE warehouse.building_type = 'warehouse'
+           AND warehouse.status = 'completed'
+           AND warehouse.created_by = $1
+           AND stock.product_id IN ('wood', 'stone')
+           AND POWER(warehouse.tile_x + $4 - $2, 2)
+             + POWER(warehouse.tile_y + $4 - $3, 2) <= $5
+         ORDER BY POWER(warehouse.tile_x + $4 - $2, 2)
+             + POWER(warehouse.tile_y + $4 - $3, 2), warehouse.id`,
+        [
+          userId,
+          constructionCenterX,
+          constructionCenterY,
+          RESIDENCES.warehouse.width / 2,
+          WORKER_SEARCH_RADIUS * WORKER_SEARCH_RADIUS,
+        ],
+      );
+      const withdrawals = planConstructionMaterialWithdrawals(
+        materialRows.map((row) => ({
+          buildingId: row.building_id,
+          productId: row.product_id,
+          quantity: row.quantity,
+        })),
+        definition.cost,
+      );
+      if (!withdrawals) {
+        await client.query('ROLLBACK');
+        return { building: null, error: 'insufficient_materials' };
+      }
+      for (const withdrawal of withdrawals) {
+        const { rowCount } = await client.query(
+          `UPDATE warehouse_stock
+           SET quantity = quantity - $3
+           WHERE building_id = $1 AND product_id = $2 AND quantity >= $3`,
+          [withdrawal.buildingId, withdrawal.productId, withdrawal.quantity],
+        );
+        if (rowCount !== 1) {
+          throw new Error('O estoque de materiais mudou durante o início da construção.');
+        }
+      }
     }
 
     if (type === 'warehouse') {
@@ -2210,20 +2265,27 @@ async function start() {
     }
 
     const definition = RESIDENCES[type];
-    void createResidentialBuilding(definition.type, { x, y }, userId)
-      .then(({ building, error }) => {
-        if (!building) {
-          response.status(409).json({ error });
-          return;
-        }
-        response.status(201).json(building);
-        void publishCities().catch((publishError: unknown) => {
-          console.error('A residência foi iniciada, mas a atualização do mundo falhou:', publishError);
-        });
+    void isMasterUser(userId)
+      .then((isMaster) => {
+        void createResidentialBuilding(definition.type, { x, y }, userId, isMaster)
+          .then(({ building, error }) => {
+            if (!building) {
+              response.status(409).json({ error });
+              return;
+            }
+            response.status(201).json(building);
+            void publishCities().catch((publishError: unknown) => {
+              console.error('A residência foi iniciada, mas a atualização do mundo falhou:', publishError);
+            });
+          })
+          .catch((error: unknown) => {
+            console.error('Não foi possível iniciar a construção residencial:', error);
+            response.status(503).json({ error: 'residence_creation_unavailable' });
+          });
       })
       .catch((error: unknown) => {
-        console.error('Não foi possível iniciar a construção residencial:', error);
-        response.status(503).json({ error: 'residence_creation_unavailable' });
+        console.error('Não foi possível verificar as permissões do jogador:', error);
+        response.status(503).json({ error: 'authorization_unavailable' });
       });
   });
   app.post(

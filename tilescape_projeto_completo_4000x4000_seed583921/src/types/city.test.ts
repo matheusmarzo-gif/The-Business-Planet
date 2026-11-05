@@ -140,6 +140,18 @@ describe('warehouse trading', () => {
     ]);
     assert.equal(trades[0].quantity, 10);
   });
+
+  it('accepts offers at the buyer price limit and accounts for stone transport weight', () => {
+    const trades = planWarehouseTrades([
+      warehouse('buyer', 'b', 0, [], [['stone', 10, 5, 'buy']], 80),
+      warehouse('seller', 'a', 10, [['stone', 10]], [['stone', 0, 5, 'sell']]),
+    ]);
+    assert.deepEqual(trades, [
+      { buyerId: 'buyer', sellerId: 'seller', productId: 'stone', quantity: 2, price: 5 },
+    ]);
+    assert.equal(getTransportDemand('wood', 1), 16.25);
+    assert.equal(getTransportDemand('stone', 1), 30);
+  });
 });
 
 describe('rice farming', () => {

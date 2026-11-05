@@ -212,14 +212,17 @@ de uma estrada. Clique para iniciar a obra:
 | Simples 1 | 2 × 2 tiles | 4 pessoas | 50 | 100 madeiras, 30 pedras | 18.000 Work Points |
 | Simples 2 | 3 × 3 tiles | 32 pessoas | 40 | 300 madeiras, 450 pedras | 67.500 Work Points |
 
-O estoque e a cobrança de materiais para construção ainda não estão
-implementados; os custos exibidos são informativos. Todos os jogadores podem
-iniciar construções das seis categorias. Cada jogador pode construir um
-primeiro **Armazém** gratuito, que fica pronto imediatamente; esse direito
-permanece registrado mesmo se o armazém for demolido. As demais construções
-aparecem com o ícone **Em construção** e avançam com os Work Points dos
-funcionários; a conta Master também pode concluí-las instantaneamente com duplo
-clique. Capacidade e apreço ainda não alteram população ou estoque.
+Todos os jogadores podem iniciar construções das seis categorias. Para jogadores
+que não são Master, o custo de Madeira e Pedra é descontado dos armazéns
+concluídos do próprio jogador a até 60 tiles do centro da construção; o servidor
+exige os dois materiais e faz a cobrança atomicamente ao iniciar a obra. Se o
+custo não estiver disponível, a construção não é iniciada. Cada jogador pode
+construir um primeiro **Armazém** gratuito, que fica pronto imediatamente; esse
+direito permanece registrado mesmo se o armazém for demolido. As demais
+construções aparecem com o ícone **Em construção** e avançam com os Work Points
+dos funcionários; a conta Master mantém a permissão de iniciar sem materiais e
+concluí-las instantaneamente com duplo clique. Capacidade e apreço ainda não
+alteram população ou estoque.
 Para demolir uma residência, ative **Demolir** e clique em qualquer tile dela.
 Não há confirmação; somente o jogador que iniciou a construção pode removê-la.
 
@@ -256,8 +259,10 @@ campo **Preço médio** mostra a média ponderada dos preços de venda em
 armazéns concluídos a até 60 tiles, ponderada pela quantidade que cada um pode
 oferecer acima do próprio mínimo. **Procurar fornecedores** tenta comprar, para
 os produtos configurados como **Compra**, até os estoques desejados, respeitando
-preços, distância, capacidade e Work Points; a ação pode ser repetida sem
-aguardar a rodada automática.
+preços (inclusive quando a oferta iguala o limite desejado), distância,
+capacidade e Work Points; a ação pode ser repetida sem aguardar a rodada
+automática. Pedra exige mais Work Points por unidade que Madeira por ser mais
+pesada; cada compra é limitada aos Work Points disponíveis naquela rodada.
 
 ### Comércio
 

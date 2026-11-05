@@ -148,6 +148,8 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'A construção não pode ocupar o espaço de uma estrada.';
         } else if (body.error === 'invalid_residence') {
           error = 'A construção ou o local escolhido é inválido.';
+        } else if (body.error === 'insufficient_materials') {
+          error = 'Estoque próximo insuficiente de Madeira e/ou Pedra. Os materiais devem estar em armazéns concluídos a até 60 tiles da construção.';
         } else if (body.error === 'invalid_work_settings') {
           error = 'Informe funcionários desejados (até o máximo da construção), salário (0 a 100.000) e carga horária de 4 a 14 horas.';
         } else if (body.error === 'harvest_in_progress') {
@@ -1056,6 +1058,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setPendingResidentialBuildings((current) =>
         current.filter((item) => item.id !== pending.id),
       );
+      void refreshLocalResources();
     } catch (error) {
       setPendingResidentialBuildings((current) =>
         current.filter((item) => item.id !== pending.id),

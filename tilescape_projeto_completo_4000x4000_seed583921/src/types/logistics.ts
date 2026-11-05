@@ -295,7 +295,7 @@ export function planWarehouseTrades(
         if (
           buyer.ownerId === seller.ownerId ||
           want?.mode !== 'buy' ||
-          offer.price >= want.price ||
+          offer.price > want.price ||
           !isWithinLinkRadius(buyer, seller)
         ) {
           continue;

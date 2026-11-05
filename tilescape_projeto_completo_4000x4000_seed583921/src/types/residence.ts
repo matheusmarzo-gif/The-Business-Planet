@@ -54,6 +54,18 @@ export interface ResidenceCost {
   stone: number;
 }
 
+export interface ConstructionMaterialStock {
+  buildingId: string;
+  productId: 'wood' | 'stone';
+  quantity: number;
+}
+
+export interface ConstructionMaterialWithdrawal {
+  buildingId: string;
+  productId: 'wood' | 'stone';
+  quantity: number;
+}
+
 export interface ResidenceDefinition {
   type: ResidenceType;
   kind: BuildingKind;
@@ -97,6 +109,30 @@ export const WORKER_SEARCH_RADIUS = 60;
 
 export function isPlayerBuildableConstructionType(type: unknown): type is ResidenceType {
   return typeof type === 'string' && Object.prototype.hasOwnProperty.call(RESIDENCES, type);
+}
+
+export function planConstructionMaterialWithdrawals(
+  stocks: readonly ConstructionMaterialStock[],
+  cost: ResidenceCost,
+): ConstructionMaterialWithdrawal[] | null {
+  const withdrawals: ConstructionMaterialWithdrawal[] = [];
+  for (const productId of ['wood', 'stone'] as const) {
+    let remaining = cost[productId];
+    if (!Number.isInteger(remaining) || remaining < 0) return null;
+    for (const stock of stocks) {
+      if (stock.productId !== productId || !Number.isInteger(stock.quantity) || stock.quantity <= 0) {
+        continue;
+      }
+      const quantity = Math.min(remaining, stock.quantity);
+      if (quantity > 0) {
+        withdrawals.push({ buildingId: stock.buildingId, productId, quantity });
+        remaining -= quantity;
+      }
+      if (remaining === 0) break;
+    }
+    if (remaining > 0) return null;
+  }
+  return withdrawals;
 }
 
 export function isWithinWorkerSearchRadius(

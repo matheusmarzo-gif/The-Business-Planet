@@ -265,6 +265,26 @@ máximo de 40 peixes) custa 30 madeiras e 10 pedras e exige 6.000 Work Points. A
 vendas e o consumo das residências seguem a mesma fórmula do arroz; o consumo de
 peixe aparece em "Ver consumo da casa".
 
+### Recursos e Ferramentaria
+
+Na categoria **Recursos** (área rural, ao lado de estrada):
+
+| Construção | Tam. | Func. | Estoque máx. | Custo | Work Points | Produção diária |
+|---|---|---|---|---|---|---|
+| Madeireira | 2 × 2 | 10 | 30 madeiras, 5 Ferramentas | 60 madeira, 10 pedra | 6.000 | 1 madeira / 1000 WP |
+| Pedreira | 2 × 2 | 30 | 10 pedras, 5 Ferramentas | 60 madeira, 10 pedra | 6.000 | 1 pedra / 3000 WP |
+| Mina de Ferro | 3 × 3 | 30 | 5 ferro, 5 Ferramentas | 120 madeira, 60 pedra | 24.000 | 1 ferro / 3000 WP |
+
+Abaixo do mínimo de WP, a fração vira probabilidade de produzir 1 unidade. A
+demanda de Ferramentas é 0,05 por funcionário/dia (0,15 na Mina) com a mesma
+penalidade do Pesqueiro, que reduz os WP efetivos.
+
+Na categoria **Artesanais** (área urbana, ao lado de estrada), a **Ferramentaria**
+(2 × 2, 30 funcionários, estoque máx. 100 Ferramentas, 30 madeiras e 5 ferro)
+custa 60 madeiras e 60 pedras e exige 12.000 Work Points. Por dia, cada lote de
+1000 WP + 5 madeiras + 1 ferro produz 100 Ferramentas. Madeira e ferro chegam por
+armazém ligado.
+
 ### Fazendas
 
 Na categoria **Fazendas**, a **Fazenda de arroz** (4 × 4 tiles, até 30 funcionários,

@@ -1,4 +1,4 @@
-import type { CityAssembly } from './city.js';
+import type { CityAssembly, ConstructionCategory } from './city.js';
 import type { Crop } from './farming.js';
 import { ASSEMBLY_SIZE, isFootprintInCityZone, MUNICIPAL_AREA_RADIUS } from './city.js';
 import type { RoadTile } from './road.js';
@@ -10,8 +10,41 @@ export type ResidenceType =
   | 'shop_rice'
   | 'warehouse'
   | 'fishery'
-  | 'shop_fish';
-export type BuildingKind = 'residence' | 'farm' | 'shop' | 'warehouse' | 'fishery';
+  | 'shop_fish'
+  | 'lumber_mill'
+  | 'quarry'
+  | 'iron_mine'
+  | 'toolmaker';
+export type BuildingKind =
+  | 'residence'
+  | 'farm'
+  | 'shop'
+  | 'warehouse'
+  | 'fishery'
+  | 'resource'
+  | 'workshop';
+
+// Categoria da barra de construção em que cada tipo aparece.
+export const KIND_CATEGORY: Record<BuildingKind, ConstructionCategory> = {
+  residence: 'residencias',
+  farm: 'fazendas',
+  shop: 'comerciais',
+  warehouse: 'industrias',
+  fishery: 'artesanais',
+  workshop: 'artesanais',
+  resource: 'recursos',
+};
+
+// 'accumulate': 1 unidade a cada N Work Points, com resto acumulado.
+// 'chance': Work Points/N é a probabilidade diária de 1 unidade (parte inteira é certa).
+// 'batch': cada N Work Points + insumos geram um lote de `batchSize` unidades.
+export interface ProductionRule {
+  mode: 'accumulate' | 'chance' | 'batch';
+  workPointsPerUnit: number;
+  batchSize?: number;
+  batchWood?: number;
+  batchIron?: number;
+}
 export type ResidentialBuildingStatus = 'under_construction' | 'completed';
 
 export interface ResidenceCost {
@@ -36,8 +69,13 @@ export interface ResidenceDefinition {
   stockProduct?: string;
   stockProductId?: string;
   stockCapacity?: number;
-  // Estoque máximo de Ferramentas consumidas pela construção (Pesqueiro).
+  // Estoques máximos de insumos (Ferramentas, madeira, ferro) guardados pela construção.
   toolCapacity?: number;
+  woodCapacity?: number;
+  ironCapacity?: number;
+  // Demanda diária de Ferramentas por funcionário (valores abaixo de 1 são probabilidade).
+  toolDemandPerWorker?: number;
+  production?: ProductionRule;
   // Exige pelo menos um tile sobre água (o restante pode ser terra).
   requiresWater?: boolean;
   storageCapacityM3?: number;
@@ -183,7 +221,93 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     stockProductId: 'fish',
     stockCapacity: 300,
     toolCapacity: 10,
+    toolDemandPerWorker: 0.05,
+    production: { mode: 'accumulate', workPointsPerUnit: 100 },
     requiresWater: true,
+  },
+  lumber_mill: {
+    type: 'lumber_mill',
+    kind: 'resource',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Madeireira',
+    asset: '/buildings/resources/madeireira.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 60, stone: 10 },
+    workPoints: 6000,
+    maxWorkers: 10,
+    stockProduct: 'Madeira',
+    stockProductId: 'wood',
+    stockCapacity: 30,
+    toolCapacity: 5,
+    toolDemandPerWorker: 0.05,
+    production: { mode: 'chance', workPointsPerUnit: 1000 },
+  },
+  quarry: {
+    type: 'quarry',
+    kind: 'resource',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Pedreira',
+    asset: '/buildings/resources/pedreira.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 60, stone: 10 },
+    workPoints: 6000,
+    maxWorkers: 30,
+    stockProduct: 'Pedra',
+    stockProductId: 'stone',
+    stockCapacity: 10,
+    toolCapacity: 5,
+    toolDemandPerWorker: 0.05,
+    production: { mode: 'chance', workPointsPerUnit: 3000 },
+  },
+  iron_mine: {
+    type: 'iron_mine',
+    kind: 'resource',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Mina de Ferro',
+    asset: '/buildings/resources/mina_ferro.png',
+    width: 3,
+    height: 3,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 120, stone: 60 },
+    workPoints: 24000,
+    maxWorkers: 30,
+    stockProduct: 'Ferro',
+    stockProductId: 'iron',
+    stockCapacity: 5,
+    toolCapacity: 5,
+    toolDemandPerWorker: 0.15,
+    production: { mode: 'chance', workPointsPerUnit: 3000 },
+  },
+  toolmaker: {
+    type: 'toolmaker',
+    kind: 'workshop',
+    requiredZone: 'urban',
+    requiresRoad: true,
+    name: 'Ferramentaria',
+    asset: '/buildings/artisan/ferramentaria.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 60, stone: 60 },
+    workPoints: 12000,
+    maxWorkers: 30,
+    stockProduct: 'Ferramentas',
+    stockProductId: 'tools',
+    stockCapacity: 100,
+    woodCapacity: 30,
+    ironCapacity: 5,
+    production: { mode: 'batch', workPointsPerUnit: 1000, batchSize: 100, batchWood: 5, batchIron: 1 },
   },
   shop_fish: {
     type: 'shop_fish',
@@ -243,6 +367,8 @@ export interface ResidentialBuilding {
   warehouseId: string | null;
   // Pesqueiro: Ferramentas em estoque e penalidade de eficiência (0–90, em %).
   toolStock: number;
+  woodStock: number;
+  ironStock: number;
   efficiencyPenalty: number;
   // Plantação da fazenda de arroz; null quando não há plantio.
   crop: Crop | null;
@@ -263,18 +389,7 @@ export type ResidencePlacementError =
   | 'not_adjacent_to_road';
 
 export function getResidenceDefinition(type: string): ResidenceDefinition | null {
-  if (
-    type === 'house_poor1' ||
-    type === 'house_poor2' ||
-    type === 'farm_rice' ||
-    type === 'shop_rice' ||
-    type === 'warehouse' ||
-    type === 'fishery' ||
-    type === 'shop_fish'
-  ) {
-    return RESIDENCES[type];
-  }
-  return null;
+  return Object.prototype.hasOwnProperty.call(RESIDENCES, type) ? RESIDENCES[type as ResidenceType] : null;
 }
 
 export function isTileInResidenceFootprint(

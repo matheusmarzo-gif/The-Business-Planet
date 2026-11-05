@@ -31,6 +31,7 @@ import {
   DEFAULT_WAGE,
   DEFAULT_WORK_HOURS,
   RESIDENCES,
+  KIND_CATEGORY,
   ResidentialBuilding,
   ResidencePlacementError,
   ResidenceType,
@@ -700,15 +701,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setIsDemolitionMode(false);
     setIsPlacingCity(false);
     setIsPlacingRoads(false);
-    setActiveCategory(
-      {
-        farm: 'fazendas',
-        shop: 'comerciais',
-        fishery: 'artesanais',
-        residence: 'residencias',
-        warehouse: 'industrias',
-      }[RESIDENCES[type].kind] as ConstructionCategory,
-    );
+    setActiveCategory(KIND_CATEGORY[RESIDENCES[type].kind]);
     setResidencePlacementType(type);
     setResidencePlacementMessage('');
     setConstructionMessage('');
@@ -757,6 +750,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       stock: 0,
       warehouseId: null,
       toolStock: 0,
+      woodStock: 0,
+      ironStock: 0,
       efficiencyPenalty: 0,
       crop: null,
       employed: 0,
@@ -1223,18 +1218,13 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             </>
           ) : activeCategory === 'residencias' ||
             activeCategory === 'artesanais' ||
+            activeCategory === 'recursos' ||
             activeCategory === 'fazendas' ||
             activeCategory === 'comerciais' ||
             activeCategory === 'industrias' ? (
             <>
               {Object.values(RESIDENCES)
-                .filter(
-                  (residence) =>
-                    residence.kind ===
-                    { artesanais: 'fishery', fazendas: 'farm', comerciais: 'shop', industrias: 'warehouse', residencias: 'residence' }[
-                      activeCategory
-                    ],
-                )
+                .filter((residence) => KIND_CATEGORY[residence.kind] === activeCategory)
                 .map((residence) => (
                 <button
                   className={`construction-card${residencePlacementType === residence.type ? ' active' : ''}`}
@@ -1250,7 +1240,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                       {residence.kind === 'warehouse'
                         ? `Até ${residence.maxWorkers} funcionários · Capacidade ${residence.storageCapacityM3} m³ de qualquer produto`
                         : residence.kind !== 'residence'
-                        ? `Até ${residence.maxWorkers} funcionários · Estoque máx. ${residence.stockCapacity} ${residence.stockProduct}${residence.toolCapacity ? ` · ${residence.toolCapacity} Ferramentas` : ''}`
+                        ? `Até ${residence.maxWorkers} funcionários · Estoque máx. ${residence.stockCapacity} ${residence.stockProduct}${residence.toolCapacity ? ` · ${residence.toolCapacity} Ferramentas` : ''}${residence.woodCapacity ? ` · ${residence.woodCapacity} Madeira` : ''}${residence.ironCapacity ? ` · ${residence.ironCapacity} Ferro` : ''}`
                         : `Capacidade ${residence.capacity} pessoas`}
                     </small>
                     <small>

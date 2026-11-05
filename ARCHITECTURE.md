@@ -348,6 +348,18 @@ mapeamento e verificar todas as curvas.
   validade infinita); `planTransfers` leva peixe do Pesqueiro ao armazém e
   Ferramentas do armazém ao Pesqueiro (`Transfer.productId === 'tools'` grava em
   `tool_stock`). A rota de preço vale para `shop_rice` e `shop_fish`.
+- Recursos e Ferramentaria (`lumber_mill`, `quarry`, `iron_mine` em `kind:
+  'resource'`, categoria Recursos, zona rural, ao lado de estrada; `toolmaker`
+  em `kind: 'workshop'`, categoria Artesanais, zona urbana). `KIND_CATEGORY` em
+  `residence.ts` mapeia kind → categoria. A produção é declarada por
+  `ResidenceDefinition.production` (`ProductionRule`: `accumulate`, `chance` ou
+  `batch`) e executada por `planProduction` (`fishing.ts`) no bloco diário de
+  `runDailyEmployment`, que serve a qualquer construção com `production`.
+  Madeireira: 1 madeira/1000 WP; Pedreira e Mina: 1 pedra/ferro a cada 3000 WP
+  (fração = probabilidade); demanda de Ferramentas 0,05 (0,15 na Mina) com a
+  penalidade do Pesqueiro. Ferramentaria: lote de 1000 WP + 5 madeiras + 1 ferro
+  = 100 Ferramentas, sem penalidade. Colunas novas `wood_stock` e `iron_stock`;
+  `planTransfers` leva madeira/ferro do armazém à Ferramentaria (`InputProduct`).
 - Comércio entre armazéns (`planWarehouseTrades` em `src/types/logistics.ts`): às
   03:00 e 15:00 (`world_state.last_warehouse_trade_slot`, ex. `2026-01-01T15`,
   garante uma execução por rodada) cada armazém em modo `buy` procura armazéns

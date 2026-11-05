@@ -1,3 +1,5 @@
+import type { ProductionRule } from './residence.js';
+
 export const FISH_WORK_POINTS = 100;
 export const TOOL_DEMAND_PER_WORKER = 0.05;
 export const INITIAL_PENALTY = 30;
@@ -8,8 +10,12 @@ export const MAX_PENALTY = 90;
  * Demanda diária de Ferramentas: 0,05 por funcionário. A parte inteira é certa e a
  * fração é a probabilidade de gerar mais uma unidade (0,35 = 35% de chance de 1).
  */
-export function rollToolDemand(workers: number, random: () => number = Math.random): number {
-  const expected = Math.max(0, workers) * TOOL_DEMAND_PER_WORKER;
+export function rollToolDemand(
+  workers: number,
+  random: () => number = Math.random,
+  perWorker: number = TOOL_DEMAND_PER_WORKER,
+): number {
+  const expected = Math.max(0, workers) * perWorker;
   const whole = Math.floor(expected + 1e-9);
   return whole + (random() < expected - whole ? 1 : 0);
 }
@@ -38,4 +44,63 @@ export function planFishing(input: {
   const possible = Math.floor(total / FISH_WORK_POINTS + 1e-9);
   const fish = Math.max(0, Math.min(possible, input.freeSpace));
   return { fish, progress: fish < possible ? 0 : Math.max(0, total - fish * FISH_WORK_POINTS) };
+}
+
+export interface ProductionInput {
+  progress: number;
+  workPoints: number;
+  penalty: number;
+  freeSpace: number;
+  wood?: number;
+  iron?: number;
+}
+
+export interface ProductionResult {
+  units: number;
+  progress: number;
+  woodUsed: number;
+  ironUsed: number;
+}
+
+/**
+ * Produção diária de uma construção produtiva. Os Work Points são reduzidos pela
+ * penalidade de Ferramentas. Veja `ProductionRule` para os três modos.
+ */
+export function planProduction(
+  rule: ProductionRule,
+  input: ProductionInput,
+  random: () => number = Math.random,
+): ProductionResult {
+  const free = Math.max(0, input.freeSpace);
+  const effective = Math.max(0, input.workPoints) * (1 - input.penalty / 100);
+  if (rule.mode === 'accumulate') {
+    const result = planFishing({ ...input, freeSpace: free });
+    return { units: result.fish, progress: result.progress, woodUsed: 0, ironUsed: 0 };
+  }
+  if (rule.mode === 'chance') {
+    const expected = effective / rule.workPointsPerUnit;
+    const whole = Math.floor(expected + 1e-9);
+    const units = whole + (random() < expected - whole ? 1 : 0);
+    return { units: Math.min(units, free), progress: 0, woodUsed: 0, ironUsed: 0 };
+  }
+  const batchSize = rule.batchSize ?? 1;
+  const batchWood = rule.batchWood ?? 0;
+  const batchIron = rule.batchIron ?? 0;
+  const total = input.progress + Math.max(0, input.workPoints);
+  const wanted = Math.floor(total / rule.workPointsPerUnit + 1e-9);
+  const batches = Math.max(
+    0,
+    Math.min(
+      wanted,
+      Math.floor(free / batchSize),
+      batchWood > 0 ? Math.floor((input.wood ?? 0) / batchWood) : Infinity,
+      batchIron > 0 ? Math.floor((input.iron ?? 0) / batchIron) : Infinity,
+    ),
+  );
+  return {
+    units: batches * batchSize,
+    progress: batches < wanted ? 0 : total - batches * rule.workPointsPerUnit,
+    woodUsed: batches * batchWood,
+    ironUsed: batches * batchIron,
+  };
 }

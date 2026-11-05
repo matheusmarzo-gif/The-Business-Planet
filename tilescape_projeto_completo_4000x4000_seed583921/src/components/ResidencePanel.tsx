@@ -11,7 +11,6 @@ import {
   ResidentialBuilding,
 } from '../types/residence';
 import { canLinkToWarehouse } from '../types/logistics';
-import { TOOL_DEMAND_PER_WORKER } from '../types/fishing';
 import {
   FARM_DAILY_WORK_POINTS,
   getHarvestDay,
@@ -116,12 +115,22 @@ export default function ResidencePanel({
             definition.kind === 'warehouse'
               ? ['Espaço ocupado', `0 / ${number.format(definition.storageCapacityM3 ?? 0)} m³`]
               : [`Estoque de ${definition.stockProduct}`, `${number.format(building.stock)} / ${number.format(definition.stockCapacity ?? 0)}`],
-            ...(definition.kind === 'fishery'
+            ...(definition.toolCapacity
               ? ([
-                  ['Estoque de Ferramentas', `${number.format(building.toolStock)} / ${number.format(definition.toolCapacity ?? 0)}`],
-                  ['Demanda de Ferramentas por dia', `${(building.employed * TOOL_DEMAND_PER_WORKER).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}`],
-                  ['Penalidade de eficiência', `${building.efficiencyPenalty}%`],
+                  ['Estoque de Ferramentas', `${number.format(building.toolStock)} / ${number.format(definition.toolCapacity)}`],
+                  ...(definition.toolDemandPerWorker
+                    ? [
+                        ['Demanda de Ferramentas por dia', `${(building.employed * definition.toolDemandPerWorker).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}`],
+                        ['Penalidade de eficiência', `${building.efficiencyPenalty}%`],
+                      ]
+                    : []),
                 ] as [string, string][])
+              : []),
+            ...(definition.woodCapacity
+              ? ([['Estoque de Madeira', `${number.format(building.woodStock)} / ${number.format(definition.woodCapacity)}`]] as [string, string][])
+              : []),
+            ...(definition.ironCapacity
+              ? ([['Estoque de Ferro', `${number.format(building.ironStock)} / ${number.format(definition.ironCapacity)}`]] as [string, string][])
               : []),
           ]
         : [
@@ -142,7 +151,9 @@ export default function ResidencePanel({
             ? 'EM CONSTRUÇÃO'
             : definition.kind === 'farm'
               ? 'FAZENDA'
-              : definition.kind === 'fishery'
+              : definition.kind === 'resource'
+                ? 'RECURSO'
+                : definition.kind === 'fishery' || definition.kind === 'workshop'
                 ? 'CONSTRUÇÃO ARTESANAL'
                 : definition.kind === 'shop'
                 ? 'COMÉRCIO'

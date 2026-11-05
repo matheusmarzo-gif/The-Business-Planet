@@ -41,7 +41,7 @@ import {
 import { STARTING_BALANCE } from '../src/types/wallet.js';
 import { allocateWorkers, getDailyWorkPoints, getPayroll, type JobAssignment } from '../src/types/employment.js';
 import { getShopSalesCapacity, parsePrice, planRiceSales } from '../src/types/commerce.js';
-import { nextEfficiencyPenalty, planFishing, rollToolDemand } from '../src/types/fishing.js';
+import { nextEfficiencyPenalty, planProduction, rollToolDemand } from '../src/types/fishing.js';
 import {
   canLinkToWarehouse,
   getTransportDemand,
@@ -133,6 +133,8 @@ type ResidentialBuildingRow = {
   stock: number;
   warehouse_id: string | null;
   tool_stock: number;
+  wood_stock: number;
+  iron_stock: number;
   efficiency_penalty: number;
   crop_phase: Crop['phase'] | null;
   crop_planted_day: string | null;
@@ -143,7 +145,7 @@ type ResidentialBuildingRow = {
   employed: number;
 };
 
-const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id, tool_stock, efficiency_penalty,
+const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id, tool_stock, wood_stock, iron_stock, efficiency_penalty,
   crop_phase, to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day, crop_ratio_sum, crop_days,
   crop_yield, crop_harvested,
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
@@ -169,6 +171,8 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     stock: row.stock,
     warehouseId: row.warehouse_id,
     toolStock: row.tool_stock,
+    woodStock: row.wood_stock,
+    ironStock: row.iron_stock,
     efficiencyPenalty: row.efficiency_penalty,
     crop:
       row.crop_phase && row.crop_planted_day
@@ -562,39 +566,58 @@ async function runDailyEmployment(): Promise<boolean> {
         changed = true;
       }
       }
-      // Pesqueiros: demanda de Ferramentas, penalidade de eficiência e pesca diária.
+      // Construções produtivas: demanda de Ferramentas, penalidade de eficiência e produção diária.
       for (const site of workplaces) {
-        if (site.building_type !== 'fishery' || site.status !== 'completed') continue;
+        const definition = getResidenceDefinition(site.building_type);
+        if (!definition?.production || site.status !== 'completed') continue;
         const count = workers.get(site.id) ?? 0;
         const { rows: stateRows } = await client.query<{
           stock: number;
           tool_stock: number;
+          wood_stock: number;
+          iron_stock: number;
           efficiency_penalty: number;
           production_progress: number;
         }>(
-          'SELECT stock, tool_stock, efficiency_penalty, production_progress FROM residential_buildings WHERE id = $1',
+          `SELECT stock, tool_stock, wood_stock, iron_stock, efficiency_penalty, production_progress
+           FROM residential_buildings WHERE id = $1`,
           [site.id],
         );
-        const fishery = stateRows[0];
-        if (!fishery) continue;
-        const demand = rollToolDemand(count);
-        const demandMet = fishery.tool_stock >= demand;
-        const penalty = nextEfficiencyPenalty(fishery.efficiency_penalty, demandMet);
-        const fishing = planFishing({
-          progress: fishery.production_progress,
+        const current = stateRows[0];
+        if (!current) continue;
+        const usesTools = Boolean(definition.toolCapacity);
+        const demand = usesTools ? rollToolDemand(count, Math.random, definition.toolDemandPerWorker) : 0;
+        const demandMet = current.tool_stock >= demand;
+        const penalty = usesTools
+          ? nextEfficiencyPenalty(current.efficiency_penalty, demandMet)
+          : current.efficiency_penalty;
+        const result = planProduction(definition.production, {
+          progress: current.production_progress,
           workPoints:
             count * getDailyWorkPoints(site.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness),
-          penalty: fishery.efficiency_penalty,
-          freeSpace: Math.max(0, (RESIDENCES.fishery.stockCapacity ?? 0) - fishery.stock),
+          penalty: current.efficiency_penalty,
+          freeSpace: (definition.stockCapacity ?? 0) - current.stock,
+          wood: current.wood_stock,
+          iron: current.iron_stock,
         });
         await client.query(
           `UPDATE residential_buildings
            SET stock = stock + $2,
                production_progress = $3,
                tool_stock = tool_stock - $4,
+               wood_stock = wood_stock - $6,
+               iron_stock = iron_stock - $7,
                efficiency_penalty = $5
            WHERE id = $1`,
-          [site.id, fishing.fish, fishing.progress, demandMet ? demand : 0, penalty],
+          [
+            site.id,
+            result.units,
+            result.progress,
+            usesTools && demandMet ? demand : 0,
+            penalty,
+            result.woodUsed,
+            result.ironUsed,
+          ],
         );
         changed = true;
       }
@@ -670,8 +693,10 @@ async function runDailyEmployment(): Promise<boolean> {
           building_type: ResidenceType;
           stock: number;
           tool_stock: number;
+          wood_stock: number;
+          iron_stock: number;
         }>(
-          `SELECT id, building_type, stock, tool_stock FROM residential_buildings
+          `SELECT id, building_type, stock, tool_stock, wood_stock, iron_stock FROM residential_buildings
            WHERE warehouse_id = $1 AND status = 'completed'`,
           [warehouse.id],
         );
@@ -692,6 +717,7 @@ async function runDailyEmployment(): Promise<boolean> {
           'SELECT product_id, desired_stock FROM warehouse_product_settings WHERE building_id = $1',
           [warehouse.id],
         );
+        const types = new Map(linked.map((row) => [row.id, row.building_type]));
         const transfers = planTransfers(
           {
             stock: new Map(stockRows.map((row) => [row.product_id, row.quantity])),
@@ -704,6 +730,8 @@ async function runDailyEmployment(): Promise<boolean> {
             type: row.building_type,
             stock: row.stock,
             toolStock: row.tool_stock,
+            woodStock: row.wood_stock,
+            ironStock: row.iron_stock,
           })),
         );
         for (const transfer of transfers) {
@@ -713,13 +741,19 @@ async function runDailyEmployment(): Promise<boolean> {
              ON CONFLICT (building_id, product_id) DO UPDATE SET quantity = warehouse_stock.quantity + $3`,
             [warehouse.id, transfer.productId, delta],
           );
-          await client.query(
-            `UPDATE residential_buildings
-             SET stock = stock + CASE WHEN $3 THEN 0 ELSE $2 END,
-                 tool_stock = tool_stock + CASE WHEN $3 THEN $2 ELSE 0 END
-             WHERE id = $1`,
-            [transfer.buildingId, -delta, transfer.productId === 'tools'],
-          );
+          const kind = getResidenceDefinition(types.get(transfer.buildingId) ?? '')?.kind;
+          // 'in' em comércios repõe o estoque principal; nas demais construções é um insumo.
+          const column =
+            transfer.direction === 'out' || kind === 'shop'
+              ? 'stock'
+              : ({ tools: 'tool_stock', wood: 'wood_stock', iron: 'iron_stock' } as Record<string, string>)[
+                  transfer.productId
+                ];
+          if (!column) continue;
+          await client.query(`UPDATE residential_buildings SET ${column} = ${column} + $2 WHERE id = $1`, [
+            transfer.buildingId,
+            -delta,
+          ]);
           changed = true;
         }
         await logWarehouseDemand(

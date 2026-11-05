@@ -26,7 +26,11 @@ export interface LogisticsLink {
   type: ResidenceType;
   stock: number;
   toolStock?: number;
+  woodStock?: number;
+  ironStock?: number;
 }
+
+export type InputProduct = 'tools' | 'wood' | 'iron';
 
 export interface WarehouseLogistics {
   stock: Map<string, number>;
@@ -53,7 +57,7 @@ export function parseWarehouseLink(value: unknown): { warehouseId: string | null
 
 export function canLinkToWarehouse(type: string): boolean {
   const kind = getResidenceDefinition(type)?.kind;
-  return kind === 'farm' || kind === 'shop' || kind === 'fishery';
+  return kind === 'farm' || kind === 'shop' || kind === 'fishery' || kind === 'resource' || kind === 'workshop';
 }
 
 export function isWithinLinkRadius(
@@ -81,13 +85,16 @@ export function planTransfers(warehouse: WarehouseLogistics, links: LogisticsLin
   const usedM3 = () =>
     PRODUCTS.reduce((sum, product) => sum + (stock.get(product.id) ?? 0) * product.volumeM3, 0);
 
-  const move = (link: LogisticsLink, direction: TransferDirection, productId?: string) => {
+  const move = (link: LogisticsLink, direction: TransferDirection, input?: InputProduct) => {
     const definition = getResidenceDefinition(link.type);
-    const product = PRODUCTS.find((item) => item.id === (productId ?? definition?.stockProductId));
+    const product = PRODUCTS.find((item) => item.id === (input ?? definition?.stockProductId));
     if (!definition || !product) return;
-    const isTool = product.id === 'tools';
-    const current = isTool ? (link.toolStock ?? 0) : link.stock;
-    const capacity = isTool ? (definition.toolCapacity ?? 0) : (definition.stockCapacity ?? 0);
+    const current = input
+      ? { tools: link.toolStock, wood: link.woodStock, iron: link.ironStock }[input] ?? 0
+      : link.stock;
+    const capacity = input
+      ? { tools: definition.toolCapacity, wood: definition.woodCapacity, iron: definition.ironCapacity }[input] ?? 0
+      : (definition.stockCapacity ?? 0);
     const inWarehouse = stock.get(product.id) ?? 0;
     const unitDemand = getTransportDemand(product.id, 1);
     const affordable = Math.floor(points / unitDemand + 1e-9);
@@ -106,14 +113,19 @@ export function planTransfers(warehouse: WarehouseLogistics, links: LogisticsLin
     transfers.push({ buildingId: link.buildingId, productId: product.id, quantity, direction });
   };
 
+  // Produtores enviam ao armazém; depois comércios recebem a mercadoria e produtores recebem insumos.
   for (const link of sorted) {
     const kind = getResidenceDefinition(link.type)?.kind;
-    if (kind === 'farm' || kind === 'fishery') move(link, 'out');
+    if (kind === 'farm' || kind === 'fishery' || kind === 'resource' || kind === 'workshop') {
+      move(link, 'out');
+    }
   }
   for (const link of sorted) {
-    const kind = getResidenceDefinition(link.type)?.kind;
-    if (kind === 'shop') move(link, 'in');
-    if (kind === 'fishery') move(link, 'in', 'tools');
+    const definition = getResidenceDefinition(link.type);
+    if (definition?.kind === 'shop') move(link, 'in');
+    if (definition?.toolCapacity) move(link, 'in', 'tools');
+    if (definition?.woodCapacity) move(link, 'in', 'wood');
+    if (definition?.ironCapacity) move(link, 'in', 'iron');
   }
   return transfers;
 }

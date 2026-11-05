@@ -7,7 +7,7 @@ import {
   type CityZone,
 } from './city';
 import { STARTING_BALANCE, formatMoney } from './wallet';
-import { nextEfficiencyPenalty, planFishing, rollToolDemand } from './fishing';
+import { nextEfficiencyPenalty, planFishing, planProduction, rollToolDemand } from './fishing';
 import {
   allocateImmigrants,
   getCityPopulation,
@@ -531,6 +531,8 @@ describe('municipal zones', () => {
         stock: 0,
         warehouseId: null,
         toolStock: 0,
+        woodStock: 0,
+        ironStock: 0,
         efficiencyPenalty: 0,
         crop: null,
         employed: 0,
@@ -576,6 +578,8 @@ describe('municipal zones', () => {
         stock: 0,
         warehouseId: null,
         toolStock: 0,
+        woodStock: 0,
+        ironStock: 0,
         efficiencyPenalty: 0,
         crop: null,
         employed: 0,
@@ -729,5 +733,40 @@ describe('fishery', () => {
       { buildingId: 'f', productId: 'fish', quantity: 30, direction: 'out' },
       { buildingId: 'f', productId: 'tools', quantity: 6, direction: 'in' },
     ]);
+  });
+});
+
+describe('recursos e ferramentaria', () => {
+  it('uses chance mode for quarries and caps by free space', () => {
+    const rule = RESIDENCES.quarry.production!;
+    assert.equal(planProduction(rule, { progress: 0, workPoints: 6000, penalty: 0, freeSpace: 10 }).units, 2);
+    assert.equal(planProduction(rule, { progress: 0, workPoints: 6000, penalty: 0, freeSpace: 1 }).units, 1);
+    assert.equal(planProduction(rule, { progress: 0, workPoints: 1500, penalty: 0, freeSpace: 10 }, () => 0.4).units, 1);
+    assert.equal(planProduction(rule, { progress: 0, workPoints: 1500, penalty: 0, freeSpace: 10 }, () => 0.6).units, 0);
+  });
+
+  it('makes a toolmaker batch only with inputs', () => {
+    const rule = RESIDENCES.toolmaker.production!;
+    const base = { progress: 0, workPoints: 1000, penalty: 0, freeSpace: 100 };
+    assert.equal(planProduction(rule, { ...base, wood: 5, iron: 0 }).units, 0);
+    const ok = planProduction(rule, { ...base, wood: 5, iron: 1 });
+    assert.deepEqual([ok.units, ok.woodUsed, ok.ironUsed], [100, 5, 1]);
+  });
+
+  it('defines the new buildings', () => {
+    assert.equal(RESIDENCES.iron_mine.toolDemandPerWorker, 0.15);
+    assert.equal(RESIDENCES.lumber_mill.toolDemandPerWorker, 0.05);
+    assert.equal(RESIDENCES.iron_mine.width, 3);
+  });
+
+  it('supplies wood and iron to a toolmaker through a warehouse', () => {
+    const transfers = planTransfers(
+      { stock: new Map([['wood', 20], ['iron', 3]]), desired: new Map(), capacityM3: 50, workPoints: 1e6 },
+      [{ buildingId: 't', type: 'toolmaker', stock: 0, woodStock: 10, ironStock: 1 }],
+    );
+    assert.deepEqual(
+      transfers.map((t) => [t.productId, t.quantity, t.direction]),
+      [['wood', 20, 'in'], ['iron', 3, 'in']].map(([p, q, d]) => [p, Math.min(q as number, p === 'wood' ? 20 : 3), d]),
+    );
   });
 });

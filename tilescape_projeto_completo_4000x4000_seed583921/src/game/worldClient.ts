@@ -2,7 +2,7 @@ import { getAccessToken } from '../auth/authClient';
 import type { CityAssembly } from '../types/city';
 import type { CityZone } from '../types/city';
 import type { RoadTile } from '../types/road';
-import type { ResidentialBuilding } from '../types/residence';
+import { getResidenceDefinition, type ResidentialBuilding } from '../types/residence';
 
 export interface WorldSnapshot {
   worldTime: string;
@@ -60,13 +60,8 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
   const building = value as Record<string, unknown>;
   return (
     typeof building.id === 'string' &&
-    (building.type === 'house_poor1' ||
-      building.type === 'house_poor2' ||
-      building.type === 'farm_rice' ||
-      building.type === 'shop_rice' ||
-      building.type === 'warehouse' ||
-      building.type === 'fishery' ||
-      building.type === 'shop_fish') &&
+    typeof building.type === 'string' &&
+    getResidenceDefinition(building.type) !== null &&
     Number.isInteger(building.x) &&
     Number.isInteger(building.y) &&
     typeof building.cityId === 'string' &&

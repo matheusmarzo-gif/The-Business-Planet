@@ -318,7 +318,9 @@ de venda. As residências em 60 tiles compram das lojas de maior benefício para
 menor, `((Sm − Vma)/Vlocal)³`, e o dono recebe o valor da venda. A loja só vende
 o estoque que tiver (começa em 0; pode ser abastecida por um armazém ligado). O
 painel mostra funcionários atuais, desejados e vagas; nas residências, as
-pessoas empregadas.
+pessoas empregadas. Nos painéis de construções produtivas, uma descrição antes
+dos dados de funcionários resume os Work Points e os insumos usados por unidade
+ou lote; lojas mostram a capacidade de venda e armazéns, o custo de transporte.
 
 **Armazéns e logística:** no painel de uma fazenda ou comércio concluído seu,
 use **Ligar a um armazém** e clique em um armazém seu, concluído, a até 60 tiles

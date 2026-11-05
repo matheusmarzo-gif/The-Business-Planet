@@ -9,6 +9,7 @@ import {
   WORKER_SEARCH_RADIUS,
   RESIDENCES,
   ResidentialBuilding,
+  ResidenceType,
 } from '../types/residence';
 import { canLinkToWarehouse } from '../types/logistics';
 import { PRODUCTS } from '../types/product';
@@ -47,6 +48,30 @@ interface ResidencePanelProps {
 
 const number = new Intl.NumberFormat('pt-BR');
 const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
+
+function getProductionDescription(type: ResidenceType): string | null {
+  const definition = RESIDENCES[type];
+  if (definition.kind === 'farm') {
+    return `Ciclo de 6 meses: ${number.format(FARM_DAILY_WORK_POINTS)} Work Points por dia garantem produtividade plena; na colheita, cada unidade consome ${number.format(HARVEST_WORK_POINTS_PER_UNIT)} Work Points. O rendimento também varia conforme o mês do plantio.`;
+  }
+  if (definition.kind === 'shop') {
+    return `A cada 100 Work Points gerados pelos funcionários, a loja ganha capacidade para vender até 5 unidades. As vendas dependem da demanda e do estoque disponível, abastecido pelo armazém ligado.`;
+  }
+  if (definition.kind === 'warehouse') {
+    return 'Não fabrica produtos: os Work Points dos funcionários são usados no transporte de mercadorias; cada carga consome 100 Work Points por m³ e 0,125 por kg.';
+  }
+
+  const rule = definition.production;
+  if (!rule || !definition.stockProduct) return null;
+  const product = definition.stockProduct.toLocaleLowerCase('pt-BR');
+  if (rule.mode === 'batch') {
+    return `A cada ${number.format(rule.workPointsPerUnit)} Work Points + ${rule.batchWood ?? 0} madeiras + ${rule.batchIron ?? 0} ferro, produz ${number.format(rule.batchSize ?? 1)} ${product}.`;
+  }
+  if (rule.mode === 'chance') {
+    return `Cada bloco completo de ${number.format(rule.workPointsPerUnit)} Work Points efetivos produz 1 ${product}; o restante dá chance proporcional de produzir mais uma unidade.`;
+  }
+  return `Cada ${number.format(rule.workPointsPerUnit)} Work Points efetivos produz 1 ${product}; o progresso restante é acumulado para o próximo dia.`;
+}
 
 export default function ResidencePanel({
   building,
@@ -105,6 +130,7 @@ export default function ResidencePanel({
 
   const isResidence = definition.kind === 'residence';
   const isFarm = !isResidence;
+  const productionDescription = getProductionDescription(building.type);
   const openJobs = Math.max(0, Math.min(building.desiredWorkers, definition.maxWorkers) - building.employed);
   const jobRows: [string, string][] = [
     ['Funcionários atuais', number.format(building.employed)],
@@ -186,6 +212,7 @@ export default function ResidencePanel({
           ×
         </button>
       </div>
+      {productionDescription && <p className="production-description">{productionDescription}</p>}
       <div className="panel-divider" />
       <dl className="detail-list">
         {rows.map(([label, value]) => (

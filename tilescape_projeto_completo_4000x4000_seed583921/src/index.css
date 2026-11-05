@@ -107,6 +107,7 @@ button { color: inherit; }
 .panel-title h1 em { color: #d4bd86; font-style: normal; }
 .panel-title p, .tile-details p { max-width: 245px; margin: 0; color: #a6a897; font-size: 11px; line-height: 1.65; }
 .panel-divider { height: 1px; flex: 0 0 1px; margin: 23px 0; background: rgba(219,201,158,.13); }
+.production-description { margin: 0; color: #b7b19e; font-size: 11px; line-height: 1.55; }
 .landmark { display: flex; align-items: center; gap: 11px; }
 .landmark-icon { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid rgba(207,178,116,.22); border-radius: 9px; color: #d3b77a; background: rgba(193,162,100,.08); }
 .landmark>div:last-child { display: grid; gap: 3px; }

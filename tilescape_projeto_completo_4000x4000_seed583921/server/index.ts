@@ -808,6 +808,11 @@ async function runDailyEmployment(): Promise<boolean> {
             ironStock: row.iron_stock,
           })),
         );
+        if (transfers.length === 0 && linked.some((row) => row.stock > 0)) {
+          console.warn(
+            `Armazém ${warehouse.id}: nada transportado (Work Points do dia: ${workPoints}, funcionários: ${workers.get(warehouse.id) ?? 0}, ligados: ${linked.length}).`,
+          );
+        }
         for (const transfer of transfers) {
           const delta = transfer.direction === 'out' ? transfer.quantity : -transfer.quantity;
           await client.query(

@@ -34,7 +34,7 @@ interface Draft {
   mode: WarehouseTradeMode;
 }
 
-const number = new Intl.NumberFormat('pt-BR');
+const number = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 
 export default function WarehousePanel({
   building,
@@ -180,9 +180,10 @@ export default function WarehousePanel({
               />
               <input
                 type="number"
+                inputMode="decimal"
                 min={0}
                 max={MAX_WAREHOUSE_PRICE}
-                step={1}
+                step={0.01}
                 aria-label={`Valor de ${product.name}`}
                 value={draft.price}
                 disabled={!isOwner || isSaving}

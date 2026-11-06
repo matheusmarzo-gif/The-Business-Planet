@@ -1,4 +1,5 @@
 import { PRODUCTS } from './product.js';
+import { isCurrencyAmount, roundCurrency } from './currency.js';
 
 export type WarehouseTradeMode = 'sell' | 'buy';
 
@@ -45,8 +46,7 @@ export function parseWarehouseSetting(value: unknown): WarehouseProductSetting |
         !Number.isInteger(maximumStock) ||
         maximumStock < 0 ||
         maximumStock > MAX_WAREHOUSE_STOCK)) ||
-    typeof price !== 'number' ||
-    !Number.isInteger(price) ||
+    !isCurrencyAmount(price) ||
     price < 0 ||
     price > MAX_WAREHOUSE_PRICE ||
     (mode !== 'sell' && mode !== 'buy')
@@ -54,7 +54,7 @@ export function parseWarehouseSetting(value: unknown): WarehouseProductSetting |
     return null;
   }
   if (maximumStock !== null && minimumStock > maximumStock) return null;
-  return { productId, minimumStock, maximumStock, price, mode };
+  return { productId, minimumStock, maximumStock, price: roundCurrency(price), mode };
 }
 
 export function isWarehouseSetting(value: unknown): value is WarehouseProductSetting {

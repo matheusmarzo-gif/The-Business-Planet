@@ -7,6 +7,7 @@ import {
 } from './farming.js';
 import { ASSEMBLY_SIZE, isFootprintInCityZone, MUNICIPAL_AREA_RADIUS } from './city.js';
 import type { RoadTile } from './road.js';
+import { isCurrencyAmount, roundCurrency } from './currency.js';
 
 export type ResidenceType =
   | 'house_poor1'
@@ -123,7 +124,7 @@ export const DEFAULT_WORK_HOURS = 8;
 export const MIN_WORK_HOURS = 4;
 export const MAX_WORK_HOURS = 14;
 export const DEFAULT_RENT = 10;
-export const MIN_RENT = 1;
+export const MIN_RENT = 0.01;
 export const MAX_RENT = 100000;
 export const MAX_CONSTRUCTION_WORKERS = 100;
 export const RESIDENCE_STATS = { skill: 10, health: 100, happiness: 100 } as const;
@@ -182,7 +183,7 @@ export function parseWorkSettings(
     desiredWorkers < 0 ||
     desiredWorkers > 100000 ||
     typeof wage !== 'number' ||
-    !Number.isInteger(wage) ||
+    !isCurrencyAmount(wage) ||
     wage < 0 ||
     wage > MAX_WAGE ||
     typeof workHoursPerDay !== 'number' ||
@@ -192,16 +193,16 @@ export function parseWorkSettings(
   ) {
     return null;
   }
-  return { wage, workHoursPerDay, desiredWorkers };
+  return { wage: roundCurrency(wage), workHoursPerDay, desiredWorkers };
 }
 
 export function parseRent(value: unknown): number | null {
   if (typeof value !== 'object' || value === null) return null;
   const { rent } = value as Record<string, unknown>;
-  if (typeof rent !== 'number' || !Number.isInteger(rent) || rent < MIN_RENT || rent > MAX_RENT) {
+  if (!isCurrencyAmount(rent) || rent < MIN_RENT || rent > MAX_RENT) {
     return null;
   }
-  return rent;
+  return roundCurrency(rent);
 }
 
 export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {

@@ -4,6 +4,7 @@ import {
   isWithinWorkerSearchRadius,
   MAX_CONSTRUCTION_WORKERS,
 } from './residence.js';
+import { roundCurrency } from './currency.js';
 
 export interface EmploymentResidence {
   id: string;
@@ -230,8 +231,10 @@ export function getPayroll(
   }
   const owed = new Map<string, number>();
   for (const workplace of workplaces) {
-    const total = (employed.get(workplace.id) ?? 0) * workplace.wage;
-    if (total > 0) owed.set(workplace.ownerId, (owed.get(workplace.ownerId) ?? 0) + total);
+    const total = roundCurrency((employed.get(workplace.id) ?? 0) * workplace.wage);
+    if (total > 0) {
+      owed.set(workplace.ownerId, roundCurrency((owed.get(workplace.ownerId) ?? 0) + total));
+    }
   }
   return owed;
 }

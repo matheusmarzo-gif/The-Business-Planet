@@ -4,6 +4,7 @@ import type { CityAssembly } from '../types/city';
 import type { CityZone } from '../types/city';
 import type { RoadTile } from '../types/road';
 import { getResidenceDefinition, type ResidentialBuilding } from '../types/residence';
+import { isCurrencyAmount } from '../types/currency';
 
 export interface WorldSnapshot {
   worldTime: string;
@@ -75,13 +76,13 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
     (building.status === 'under_construction' || building.status === 'completed') &&
     typeof building.startedAt === 'string' &&
     (building.completedAt === null || typeof building.completedAt === 'string') &&
-    Number.isInteger(building.wage) &&
+    isCurrencyAmount(building.wage) &&
     Number.isInteger(building.workHoursPerDay) &&
-    Number.isInteger(building.rent) &&
+    isCurrencyAmount(building.rent) &&
     Number.isInteger(building.occupants) &&
     Number.isInteger(building.desiredWorkers) &&
     Number.isFinite(building.workPointsDone) &&
-    Number.isInteger(building.price) &&
+    isCurrencyAmount(building.price) &&
     Number.isInteger(building.stock) &&
     (building.warehouseId === null || typeof building.warehouseId === 'string') &&
     (building.crop === null ||

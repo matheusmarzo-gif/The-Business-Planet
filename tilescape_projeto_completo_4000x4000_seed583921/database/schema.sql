@@ -6,9 +6,12 @@ CREATE TABLE IF NOT EXISTS world_state (
 
 CREATE TABLE IF NOT EXISTS player_wallets (
   user_id TEXT PRIMARY KEY,
-  balance BIGINT NOT NULL CHECK (balance >= 0),
+  balance NUMERIC(14, 2) NOT NULL CHECK (balance >= 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
+
+ALTER TABLE player_wallets
+  ALTER COLUMN balance TYPE NUMERIC(14, 2) USING balance::numeric(14, 2);
 
 CREATE TABLE IF NOT EXISTS city_assemblies (
   id UUID PRIMARY KEY,
@@ -102,13 +105,20 @@ WHERE building_type = 'warehouse'
 ON CONFLICT (user_id) DO NOTHING;
 
 ALTER TABLE residential_buildings
-  ADD COLUMN IF NOT EXISTS wage INTEGER NOT NULL DEFAULT 10 CHECK (wage BETWEEN 0 AND 100000);
+  ADD COLUMN IF NOT EXISTS wage NUMERIC(12, 2) NOT NULL DEFAULT 10 CHECK (wage BETWEEN 0 AND 100000);
 ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS work_hours_per_day SMALLINT NOT NULL DEFAULT 8
   CHECK (work_hours_per_day BETWEEN 1 AND 24);
 
 ALTER TABLE residential_buildings
-  ADD COLUMN IF NOT EXISTS rent INTEGER NOT NULL DEFAULT 10 CHECK (rent BETWEEN 1 AND 100000);
+  ADD COLUMN IF NOT EXISTS rent NUMERIC(12, 2) NOT NULL DEFAULT 10 CHECK (rent BETWEEN 0.01 AND 100000);
+ALTER TABLE residential_buildings
+  DROP CONSTRAINT IF EXISTS residential_buildings_wage_check,
+  DROP CONSTRAINT IF EXISTS residential_buildings_rent_check,
+  ALTER COLUMN wage TYPE NUMERIC(12, 2) USING wage::numeric(12, 2),
+  ALTER COLUMN rent TYPE NUMERIC(12, 2) USING rent::numeric(12, 2),
+  ADD CONSTRAINT residential_buildings_wage_check CHECK (wage BETWEEN 0 AND 100000),
+  ADD CONSTRAINT residential_buildings_rent_check CHECK (rent BETWEEN 0.01 AND 100000);
 ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS occupants INTEGER NOT NULL DEFAULT 0 CHECK (occupants >= 0);
 ALTER TABLE world_state
@@ -133,7 +143,12 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS work_points_done DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (work_points_done >= 0);
 
 ALTER TABLE residential_buildings
-  ADD COLUMN IF NOT EXISTS price INTEGER NOT NULL DEFAULT 10 CHECK (price BETWEEN 1 AND 100000);
+  ADD COLUMN IF NOT EXISTS price NUMERIC(12, 2) NOT NULL DEFAULT 10 CHECK (price BETWEEN 0.01 AND 100000);
+ALTER TABLE residential_buildings
+  DROP CONSTRAINT IF EXISTS residential_buildings_price_check,
+  ALTER COLUMN price TYPE NUMERIC(12, 2) USING price::numeric(12, 2);
+ALTER TABLE residential_buildings
+  ADD CONSTRAINT residential_buildings_price_check CHECK (price BETWEEN 0.01 AND 100000);
 ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0);
 ALTER TABLE residential_buildings
@@ -166,10 +181,13 @@ CREATE TABLE IF NOT EXISTS warehouse_product_settings (
   product_id TEXT NOT NULL,
   minimum_stock INTEGER NOT NULL DEFAULT 0 CHECK (minimum_stock BETWEEN 0 AND 1000000),
   maximum_stock INTEGER CHECK (maximum_stock BETWEEN 0 AND 1000000),
-  price INTEGER NOT NULL DEFAULT 0 CHECK (price BETWEEN 0 AND 1000000),
+  price NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (price BETWEEN 0 AND 1000000),
   mode TEXT NOT NULL DEFAULT 'sell' CHECK (mode IN ('sell', 'buy')),
   PRIMARY KEY (building_id, product_id)
 );
+
+ALTER TABLE warehouse_product_settings
+  ALTER COLUMN price TYPE NUMERIC(12, 2) USING price::numeric(12, 2);
 
 DO $$
 DECLARE
@@ -261,19 +279,29 @@ CREATE TABLE IF NOT EXISTS production_history (
 CREATE TABLE IF NOT EXISTS commerce_history (
   building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
   day DATE NOT NULL,
-  employee_expense INTEGER NOT NULL DEFAULT 0 CHECK (employee_expense >= 0),
-  product_expense INTEGER NOT NULL DEFAULT 0 CHECK (product_expense >= 0),
+  employee_expense NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (employee_expense >= 0),
+  product_expense NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (product_expense >= 0),
   units_sold INTEGER NOT NULL DEFAULT 0 CHECK (units_sold >= 0),
-  sale_price INTEGER NOT NULL CHECK (sale_price >= 1),
+  sale_price NUMERIC(12, 2) NOT NULL CHECK (sale_price >= 0.01),
   PRIMARY KEY (building_id, day)
 );
+
+ALTER TABLE commerce_history
+  DROP CONSTRAINT IF EXISTS commerce_history_sale_price_check,
+  ALTER COLUMN employee_expense TYPE NUMERIC(14, 2) USING employee_expense::numeric(14, 2),
+  ALTER COLUMN product_expense TYPE NUMERIC(14, 2) USING product_expense::numeric(14, 2),
+  ALTER COLUMN sale_price TYPE NUMERIC(12, 2) USING sale_price::numeric(12, 2),
+  ADD CONSTRAINT commerce_history_sale_price_check CHECK (sale_price >= 0.01);
 
 CREATE TABLE IF NOT EXISTS warehouse_payroll_history (
   building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
   day DATE NOT NULL,
-  employee_expense BIGINT NOT NULL DEFAULT 0 CHECK (employee_expense >= 0),
+  employee_expense NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (employee_expense >= 0),
   PRIMARY KEY (building_id, day)
 );
+
+ALTER TABLE warehouse_payroll_history
+  ALTER COLUMN employee_expense TYPE NUMERIC(14, 2) USING employee_expense::numeric(14, 2);
 
 CREATE TABLE IF NOT EXISTS warehouse_trade_history (
   id BIGSERIAL PRIMARY KEY,
@@ -282,8 +310,11 @@ CREATE TABLE IF NOT EXISTS warehouse_trade_history (
   seller_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
   product_id TEXT NOT NULL,
   quantity INTEGER NOT NULL CHECK (quantity > 0),
-  unit_price INTEGER NOT NULL CHECK (unit_price >= 0)
+  unit_price NUMERIC(12, 2) NOT NULL CHECK (unit_price >= 0)
 );
+
+ALTER TABLE warehouse_trade_history
+  ALTER COLUMN unit_price TYPE NUMERIC(12, 2) USING unit_price::numeric(12, 2);
 
 CREATE INDEX IF NOT EXISTS warehouse_trade_history_buyer_day_idx
   ON warehouse_trade_history (buyer_id, day DESC);
@@ -314,10 +345,13 @@ CREATE TABLE IF NOT EXISTS residence_consumption (
   product_id TEXT NOT NULL,
   day DATE NOT NULL,
   quantity DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (quantity >= 0),
-  spent DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (spent >= 0),
+  spent NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (spent >= 0),
   occupants INTEGER NOT NULL DEFAULT 0 CHECK (occupants >= 0),
   PRIMARY KEY (building_id, product_id, day)
 );
+
+ALTER TABLE residence_consumption
+  ALTER COLUMN spent TYPE NUMERIC(14, 2) USING spent::numeric(14, 2);
 
 CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
   ON residential_buildings (city_id);

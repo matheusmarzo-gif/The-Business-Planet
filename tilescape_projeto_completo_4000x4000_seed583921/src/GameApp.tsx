@@ -153,7 +153,7 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'insufficient_materials') {
           error = 'Estoque próximo insuficiente de Madeira e/ou Pedra. Os materiais devem estar em armazéns concluídos a até 60 tiles da construção.';
         } else if (body.error === 'invalid_work_settings') {
-          error = 'Informe funcionários desejados (até o máximo da construção), salário (0 a 100.000) e carga horária de 4 a 14 horas.';
+          error = 'Informe funcionários desejados (até o máximo da construção), salário (C$ 0 a C$ 100.000, com até 2 casas decimais) e carga horária de 4 a 14 horas.';
         } else if (body.error === 'harvest_in_progress') {
           error = 'A colheita está em andamento; só é possível plantar de novo ao terminar.';
         } else if (body.error === 'cannot_plant') {
@@ -165,11 +165,11 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'warehouse_not_owned') {
           error = 'Você só pode ligar a armazéns que construiu.';
         } else if (body.error === 'invalid_price') {
-          error = 'O preço deve ser um número inteiro de C$ 1 a C$ 100.000.';
+          error = 'O preço deve ser de C$ 0,01 a C$ 100.000, com até 2 casas decimais.';
         } else if (body.error === 'invalid_rent') {
-          error = 'O aluguel deve ser um número inteiro de C$ 1 a C$ 100.000.';
+          error = 'O aluguel deve ser de C$ 0,01 a C$ 100.000, com até 2 casas decimais.';
         } else if (body.error === 'invalid_warehouse_setting') {
-          error = 'Informe estoque desejável e valor inteiros (0 a 1.000.000) e o tipo venda/compra.';
+          error = 'Informe estoques desejáveis inteiros (0 a 1.000.000), valor entre C$ 0 e C$ 1.000.000 com até 2 casas decimais e o tipo venda/compra.';
         } else if (body.error === 'not_a_warehouse') {
           error = 'Essa construção não é um armazém concluído.';
         } else if (body.error === 'building_already_complete') {

@@ -346,7 +346,7 @@ export default function ResidencePanel({
               type="number"
               min={0}
               max={MAX_WAGE}
-              step={1}
+              step={0.01}
               value={wage}
               disabled={!isOwner || isSaving}
               onChange={(event) => setWage(event.target.value)}
@@ -386,9 +386,9 @@ export default function ResidencePanel({
             Preço do {definition.stockProduct?.toLocaleLowerCase('pt-BR') ?? 'produto'} (C$ por {definition.stockProductId === 'milk' ? 'litro' : 'unidade'})
             <input
               type="number"
-              min={1}
+              min={0.01}
               max={100000}
-              step={1}
+              step={0.01}
               value={price}
               disabled={!isOwner || isSaving}
               onChange={(event) => setPrice(event.target.value)}
@@ -411,7 +411,7 @@ export default function ResidencePanel({
             type="number"
             min={MIN_RENT}
             max={MAX_RENT}
-            step={1}
+            step={0.01}
             value={rent}
             disabled={!isOwner || isSaving}
             onChange={(event) => setRent(event.target.value)}

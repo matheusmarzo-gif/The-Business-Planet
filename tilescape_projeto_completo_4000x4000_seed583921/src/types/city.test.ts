@@ -9,6 +9,7 @@ import {
   type CityZone,
 } from './city';
 import { STARTING_BALANCE, formatMoney } from './wallet';
+import { isCurrencyAmount, roundCurrency } from './currency';
 import { nextEfficiencyPenalty, planFishing, planProduction, rollToolDemand } from './fishing';
 import {
   allocateImmigrants,
@@ -45,6 +46,7 @@ import {
   getShopDailyFinancials,
   getPurchaseBenefitCalculation,
   getShopSalesCapacity,
+  isShopResidenceTransaction,
   parsePrice,
   planShopSales,
   planShopSalesDetailed,
@@ -76,6 +78,11 @@ describe('wallet', () => {
   it('starts with C$ 10.000 and formats money in Brazilian style', () => {
     assert.equal(STARTING_BALANCE, 10000);
     assert.equal(formatMoney(STARTING_BALANCE).replace(/\u00a0/g, ' '), 'C$ 10.000');
+    assert.equal(formatMoney(1.23).replace(/\u00a0/g, ' '), 'C$ 1,23');
+    assert.equal(isCurrencyAmount(1.23), true);
+    assert.equal(isCurrencyAmount(1.234), false);
+    assert.equal(isCurrencyAmount(1.2300000000001), false);
+    assert.equal(roundCurrency(1.23 * 3), 3.69);
   });
 
   describe('nomes das construções', () => {
@@ -471,6 +478,14 @@ describe('shop sales', () => {
       revenue: 0,
       profitLoss: -50,
     });
+    assert.deepEqual(getShopDailyFinancials(0.25, 3, 3, 1.23), {
+      employeeExpense: 0.75,
+      productExpense: 0,
+      unitsSold: 3,
+      salePrice: 1.23,
+      revenue: 3.69,
+      profitLoss: 2.94,
+    });
   });
 
   it('computes store benefit with the basic-basket formula and zero guards', () => {
@@ -483,6 +498,9 @@ describe('shop sales', () => {
     assert.equal(getShopSalesCapacity('shop_milk', 0.9), 0);
     assert.equal(parsePrice({ price: 0 }), null);
     assert.equal(parsePrice({ price: 12 }), 12);
+    assert.equal(parsePrice({ price: 0.01 }), 0.01);
+    assert.equal(parsePrice({ price: 1.23 }), 1.23);
+    assert.equal(parsePrice({ price: 1.234 }), null);
     const income = 1;
     const price = 5;
     const basicNeed = 0.03;
@@ -519,6 +537,40 @@ describe('shop sales', () => {
     const fartherStore = getPurchaseBenefitCalculation(income, price, basicNeed, rr, 40);
     assert.ok(fartherStore.errorBenefit < calculation.errorBenefit);
     assert.ok(fartherStore.associatedBenefit < calculation.associatedBenefit);
+  });
+
+  it('accepts fractional shop prices in commerce diagnostics', () => {
+    const transaction = {
+      residenceId: 'home',
+      occupants: 3,
+      averageIncome: 10,
+      areaAveragePrice: 1.23,
+      expectedDemand: 1,
+      desiredQuantity: 1,
+      candidate: {
+        shopId: 'shop',
+        price: 1.23,
+        distance: 0,
+        desiredQuantity: 1,
+        benefit: 1,
+        rank: 1,
+        stockAvailable: 1,
+        capacityAvailable: 1,
+        available: 1,
+        demandBefore: 1,
+        purchased: 1,
+        demandAfter: 0,
+        outcome: 'purchased' as const,
+      },
+    };
+    assert.equal(isShopResidenceTransaction(transaction), true);
+    assert.equal(
+      isShopResidenceTransaction({
+        ...transaction,
+        candidate: { ...transaction.candidate, price: 1.234 },
+      }),
+      false,
+    );
   });
 
   it('sells the new food products through the shared residence-demand planner', () => {
@@ -898,7 +950,12 @@ describe('work settings', () => {
     assert.equal(parseWorkSettings({ wage: 10, workHoursPerDay: 15, desiredWorkers: 0 }), null);
     assert.ok(parseWorkSettings({ wage: 10, workHoursPerDay: 4, desiredWorkers: 0 }));
     assert.ok(parseWorkSettings({ wage: 10, workHoursPerDay: 14, desiredWorkers: 0 }));
-    assert.equal(parseWorkSettings({ wage: 1.5, workHoursPerDay: 8, desiredWorkers: 0 }), null);
+    assert.deepEqual(parseWorkSettings({ wage: 1.5, workHoursPerDay: 8, desiredWorkers: 0 }), {
+      wage: 1.5,
+      workHoursPerDay: 8,
+      desiredWorkers: 0,
+    });
+    assert.equal(parseWorkSettings({ wage: 1.234, workHoursPerDay: 8, desiredWorkers: 0 }), null);
     assert.equal(parseWorkSettings(null), null);
   });
 
@@ -971,12 +1028,20 @@ describe('work settings', () => {
       )],
       [['u1', 530]],
     );
+    assert.deepEqual(
+      [...getPayroll([{ id: 'cent-wage', ownerId: 'u2', wage: 0.23 }], [
+        { workplaceId: 'cent-wage', residenceId: 'home', count: 3 },
+      ])],
+      [['u2', 0.69]],
+    );
   });
 
-  it('requires rent of at least 1', () => {
+  it('accepts rent in cents with a minimum of C$ 0.01', () => {
     assert.equal(parseRent({ rent: 1 }), 1);
+    assert.equal(parseRent({ rent: 0.01 }), 0.01);
+    assert.equal(parseRent({ rent: 2.5 }), 2.5);
     assert.equal(parseRent({ rent: 0 }), null);
-    assert.equal(parseRent({ rent: 2.5 }), null);
+    assert.equal(parseRent({ rent: 2.501 }), null);
   });
 });
 
@@ -1141,6 +1206,11 @@ describe('municipal zones', () => {
       assert.deepEqual(parseWarehouseSetting(valid), valid);
       assert.equal(parseWarehouseSetting({ ...valid, productId: 'unknown' }), null);
       assert.equal(parseWarehouseSetting({ ...valid, price: -1 }), null);
+      assert.deepEqual(parseWarehouseSetting({ ...valid, price: 1.23 }), {
+        ...valid,
+        price: 1.23,
+      });
+      assert.equal(parseWarehouseSetting({ ...valid, price: 1.234 }), null);
       assert.equal(parseWarehouseSetting({ ...valid, maximumStock: 1.5 }), null);
       assert.equal(parseWarehouseSetting({ ...valid, minimumStock: 11 }), null);
       assert.deepEqual(parseWarehouseSetting({ ...valid, maximumStock: null }), { ...valid, maximumStock: null });
@@ -1482,7 +1552,9 @@ describe('comandos do master', () => {
     assert.equal(isPastDailyWorldRefreshTime(24, 0), false);
     assert.equal(isPastDailyWorldRefreshTime(0, 60), false);
     assert.equal(parseMasterGrant(500), 500);
-    for (const grant of [0, -5, 1.5, 2_000_000_000, '10', NaN]) assert.equal(parseMasterGrant(grant), null);
+    assert.equal(parseMasterGrant(0.01), 0.01);
+    assert.equal(parseMasterGrant(1.5), 1.5);
+    for (const grant of [0, -5, 1.234, 2_000_000_000, '10', NaN]) assert.equal(parseMasterGrant(grant), null);
   });
 });
 

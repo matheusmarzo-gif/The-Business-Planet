@@ -1,8 +1,9 @@
 import { getResidenceDefinition, isWithinWorkerSearchRadius, type ResidenceType } from './residence.js';
 import { BASIC_BASKET_PRODUCT_IDS } from './commerceDemand.js';
+import { isCurrencyAmount, roundCurrency } from './currency.js';
 
 export const DEFAULT_SHOP_PRICE = 10;
-export const MIN_SHOP_PRICE = 1;
+export const MIN_SHOP_PRICE = 0.01;
 export const MAX_SHOP_PRICE = 100000;
 export const SHOP_SALES_WORK_POINTS_PER_UNIT = 20;
 export const MILK_SALES_WORK_POINTS_PER_LITER = 1;
@@ -152,7 +153,8 @@ export function isShopResidenceTransaction(value: unknown): value is ShopResiden
   const candidate = transaction.candidate as Record<string, unknown>;
   return (
     typeof candidate.shopId === 'string' &&
-    isPositiveInteger(candidate.price) &&
+    isCurrencyAmount(candidate.price) &&
+    candidate.price >= MIN_SHOP_PRICE &&
     isNonNegativeNumber(candidate.distance) &&
     (candidate.distanceFactor === undefined ||
       (isFiniteNumber(candidate.distanceFactor) && candidate.distanceFactor > 0)) &&
@@ -228,17 +230,20 @@ export function getShopProfitLoss(
   if (
     !Number.isInteger(unitsSold) ||
     unitsSold < 0 ||
-    !Number.isInteger(salePrice) ||
+    !isCurrencyAmount(salePrice) ||
     salePrice < MIN_SHOP_PRICE ||
-    !Number.isInteger(employeeExpense) ||
+    !isCurrencyAmount(employeeExpense) ||
     employeeExpense < 0 ||
-    !Number.isInteger(productExpense) ||
+    !isCurrencyAmount(productExpense) ||
     productExpense < 0
   ) {
     throw new RangeError('Os valores financeiros diários do comércio são inválidos.');
   }
-  const revenue = unitsSold * salePrice;
-  return { revenue, profitLoss: revenue - employeeExpense - productExpense };
+  const revenue = roundCurrency(unitsSold * salePrice);
+  return {
+    revenue,
+    profitLoss: roundCurrency(revenue - employeeExpense - productExpense),
+  };
 }
 
 export function getShopDailyFinancials(
@@ -248,18 +253,18 @@ export function getShopDailyFinancials(
   salePrice: number,
 ): ShopDailyFinancials {
   if (
-    !Number.isInteger(wage) ||
+    !isCurrencyAmount(wage) ||
     wage < 0 ||
     !Number.isInteger(workers) ||
     workers < 0 ||
     !Number.isInteger(unitsSold) ||
     unitsSold < 0 ||
-    !Number.isInteger(salePrice) ||
+    !isCurrencyAmount(salePrice) ||
     salePrice < MIN_SHOP_PRICE
   ) {
     throw new RangeError('Os valores financeiros diários do comércio são inválidos.');
   }
-  const employeeExpense = wage * workers;
+  const employeeExpense = roundCurrency(wage * workers);
   // Reposição pelo armazém ligado é uma transferência interna sem cobrança.
   const productExpense = 0;
   const { revenue, profitLoss } = getShopProfitLoss(
@@ -282,14 +287,13 @@ export function parsePrice(value: unknown): number | null {
   if (typeof value !== 'object' || value === null) return null;
   const { price } = value as Record<string, unknown>;
   if (
-    typeof price !== 'number' ||
-    !Number.isInteger(price) ||
+    !isCurrencyAmount(price) ||
     price < MIN_SHOP_PRICE ||
     price > MAX_SHOP_PRICE
   ) {
     return null;
   }
-  return price;
+  return roundCurrency(price);
 }
 
 export function getShopSalesCapacity(
@@ -331,7 +335,7 @@ export function getCityProductAveragePrices(
     if (
       !Number.isInteger(sale.unitsSold) ||
       sale.unitsSold < 0 ||
-      !Number.isFinite(sale.price) ||
+      !isCurrencyAmount(sale.price) ||
       sale.price < MIN_SHOP_PRICE
     ) {
       throw new RangeError('O histórico mensal de preços contém uma venda inválida.');
@@ -346,7 +350,7 @@ export function getCityProductAveragePrices(
 
   const currentPrices = new Map<string, { total: number; count: number }>();
   for (const shop of shops) {
-    if (!Number.isFinite(shop.price) || shop.price < MIN_SHOP_PRICE) {
+    if (!isCurrencyAmount(shop.price) || shop.price < MIN_SHOP_PRICE) {
       throw new RangeError('Uma loja possui um preço inválido ao calcular a média da cidade.');
     }
     const key = getCityProductKey(shop.cityId, shop.productId);

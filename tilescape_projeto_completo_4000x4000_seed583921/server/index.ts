@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { config as loadDotEnv } from 'dotenv';
 import express, { type RequestHandler } from 'express';
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
-import { Pool, type PoolClient } from 'pg';
+import { Pool, types, type PoolClient } from 'pg';
 import { createClient } from 'redis';
 import { WebSocket, WebSocketServer } from 'ws';
 import {
@@ -43,6 +43,7 @@ import {
   type ResidencePlacementError,
 } from '../src/types/residence.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
+import { roundCurrency } from '../src/types/currency.js';
 import {
   isPastDailyWorldRefreshTime,
   isValidTimeScale,
@@ -126,6 +127,8 @@ const CITIES_CHANNEL = 'valdora:world:cities';
 const COMMERCE_DIAGNOSTICS_CHANNEL = 'valdora:world:commerce-diagnostics';
 const INSTANCE_ID = randomUUID();
 const PRESENCE_TTL_MS = 35_000;
+types.setTypeParser(types.builtins.NUMERIC, (value) => Number(value));
+
 const pool = new Pool({
   connectionString:
     process.env.DATABASE_URL ?? 'postgres://valdora:valdora_dev_password@localhost:5432/valdora',
@@ -765,7 +768,7 @@ async function applyWarehouseTrades(
     const seller = ownerOf.get(trade.sellerId);
     if (!buyer || !seller) throw new Error('Uma troca de armazém não tem comprador ou vendedor válido.');
 
-    const cost = trade.quantity * trade.price;
+    const cost = roundCurrency(trade.quantity * trade.price);
     await client.query(
       `INSERT INTO warehouse_trade_history
          (day, buyer_id, seller_id, product_id, quantity, unit_price)
@@ -786,8 +789,8 @@ async function applyWarehouseTrades(
       [seller, cost],
     ] as const) {
       await client.query(
-        `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::bigint + $2::bigint)
-         ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::bigint`,
+        `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::numeric + $2::numeric)
+         ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::numeric`,
         [userId, delta, STARTING_BALANCE],
       );
     }
@@ -930,8 +933,8 @@ async function runDailyEmployment(): Promise<boolean> {
       );
       for (const [ownerId, amount] of owed) {
         await client.query(
-          `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::bigint - $2::bigint)
-           ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance - $2::bigint`,
+          `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::numeric - $2::numeric)
+           ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance - $2::numeric`,
           [ownerId, amount, STARTING_BALANCE],
         );
       }
@@ -947,7 +950,7 @@ async function runDailyEmployment(): Promise<boolean> {
            VALUES ($1, $2::date, $3)
            ON CONFLICT (building_id, day)
            DO UPDATE SET employee_expense = EXCLUDED.employee_expense`,
-          [warehouse.id, state.day, (workers.get(warehouse.id) ?? 0) * warehouse.wage],
+          [warehouse.id, state.day, roundCurrency((workers.get(warehouse.id) ?? 0) * warehouse.wage)],
         );
       }
       for (const site of workplaces) {
@@ -1099,7 +1102,9 @@ async function runDailyEmployment(): Promise<boolean> {
         const key = `${purchase.residenceId}\u0000${purchase.productId}`;
         const total = bought.get(key) ?? { quantity: 0, spent: 0 };
         total.quantity += purchase.quantity;
-        total.spent += purchase.quantity * (shopPrice.get(purchase.shopId) ?? 0);
+        total.spent = roundCurrency(
+          total.spent + purchase.quantity * (shopPrice.get(purchase.shopId) ?? 0),
+        );
         bought.set(key, total);
       }
       for (const home of homes) {
@@ -1127,9 +1132,9 @@ async function runDailyEmployment(): Promise<boolean> {
           ]);
           if (owner) {
             await client.query(
-              `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::bigint + $2::bigint)
-               ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::bigint`,
-              [owner, quantity * shop.price, STARTING_BALANCE],
+              `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::numeric + $2::numeric)
+               ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::numeric`,
+              [owner, roundCurrency(quantity * shop.price), STARTING_BALANCE],
             );
           }
           changed = true;
@@ -2369,12 +2374,12 @@ async function start() {
         [userId, STARTING_BALANCE],
       )
       .then(() =>
-        pool.query<{ balance: string }>(
+        pool.query<{ balance: number }>(
           'SELECT balance FROM player_wallets WHERE user_id = $1',
           [userId],
         ),
       )
-      .then(({ rows }) => response.json({ balance: Number(rows[0].balance) }))
+      .then(({ rows }) => response.json({ balance: rows[0].balance }))
       .catch((error: unknown) => {
         console.error('Não foi possível consultar a carteira:', error);
         response.status(503).json({ error: 'wallet_unavailable' });
@@ -2478,7 +2483,7 @@ async function start() {
           purchaseExpense,
           soldQuantity: Number(row.sold_quantity),
           salesRevenue,
-          profitLoss: salesRevenue - purchaseExpense,
+          profitLoss: roundCurrency(salesRevenue - purchaseExpense),
         };
       });
       response.json({
@@ -3866,13 +3871,13 @@ async function start() {
       return;
     }
     void pool
-      .query<{ balance: string }>(
-        `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $2::bigint + $3::bigint)
-         ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $3::bigint
+      .query<{ balance: number }>(
+        `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $2::numeric + $3::numeric)
+         ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $3::numeric
          RETURNING balance`,
         [userId, STARTING_BALANCE, amount],
       )
-      .then(({ rows }) => response.json({ balance: Number(rows[0].balance) }))
+      .then(({ rows }) => response.json({ balance: rows[0].balance }))
       .catch((error: unknown) => {
         console.error('Não foi possível adicionar dinheiro:', error);
         response.status(503).json({ error: 'wallet_unavailable' });

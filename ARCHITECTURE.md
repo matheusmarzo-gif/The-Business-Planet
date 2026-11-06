@@ -334,8 +334,8 @@ mapeamento e verificar todas as curvas.
   cálculo, `getAverageIncomes` em `employment.ts`, alimenta as vendas às 00:00). Em construção: Work Points
   0/necessários, empregados 0/até 100, salário diário (`wage`, C$ por dia
   de trabalho) e carga horária (`workHoursPerDay`, 4–14 h), editáveis só pelo
-  criador (`created_by`). O criador também define o aluguel (`rent`, inteiro ≥
-  C$ 1, por pessoa) em qualquer status. O
+  criador (`created_by`). O criador também define o aluguel (`rent`, ≥ C$ 0,01,
+  com até duas casas decimais, por pessoa) em qualquer status. O
   cliente consulta `GET .../ownership` porque o dono não é publicado no
   WebSocket; o servidor revalida a autoria nos `PATCH` com `parseWorkSettings`
   e `parseRent`.
@@ -374,7 +374,7 @@ mapeamento e verificar todas as curvas.
 - Vendas da Cesta Básica (`src/types/commerce.ts`): lojas cujo catálogo tem
   `kind: 'shop'` e `stockProductId` participam das vendas; incluem arroz,
   batata, milho, cevada, trigo, peixe, carne vermelha e leite. Todas têm `price`
-  (padrão C$ 10, editável pelo dono via
+  (padrão C$ 10, editável pelo dono em centavos via
   `PATCH /api/residential-buildings/:id/price`) e estoque abastecido pelo
   armazém ligado do mesmo dono. No job das 00:00, lojas de produtos por unidade
   têm capacidade `floor(WP do dia / 20)` unidades e leite
@@ -579,7 +579,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/residential-buildings/:id/commerce-history` | Dono do comércio | Retorna os últimos 30 dias de dados financeiros de `commerce_history`; o painel combina a resposta com diagnósticos presentes no armazenamento local do navegador. |
 | `GET /api/master/online-players` | Master | Lista `{ players: [{ id, name, email, connections }] }` a partir da presença no Redis (`userId|uuid`) e de `neon_auth."user"`. |
 | `POST /api/master/time-scale` | Master | `{ timeScale }` validado por `isValidTimeScale` (`src/types/worldClock.ts`: 15, 30, 60, 240); avança o relógio com a velocidade antiga, grava `world_state.time_scale` e republica o snapshot. |
-| `POST /api/master/grant-money` | Master | `{ amount }` (inteiro 1 a 1.000.000.000, `parseMasterGrant`) creditado na carteira do próprio Master; retorna `{ balance }`. |
+| `POST /api/master/grant-money` | Master | `{ amount }` (C$ 0,01 a C$ 1.000.000.000, com até duas casas decimais, `parseMasterGrant`) creditado na carteira do próprio Master; retorna `{ balance }`. |
 | `POST /api/cities` | Master | Valida e cria Assembleia/cidade. |
 | `PATCH /api/cities/:id` | Master | Altera o nome de uma cidade. |
 | `PUT /api/cities/:id/zones` | Master | Valida e substitui as regiões urbanas/rurais da cidade. |
@@ -591,8 +591,8 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |
-| `PATCH /api/residential-buildings/:id/work-settings` | Criador; obras e construções não residenciais concluídas | Valida funcionários desejados (0–100 em obras ou 0–máximo após concluídas), salário diário e carga horária (4–14 h); reduz empregados excedentes. |
-| `PATCH /api/residential-buildings/:id/rent` | Criador | Valida e grava o aluguel por pessoa (≥ C$ 1). |
+| `PATCH /api/residential-buildings/:id/work-settings` | Criador; obras e construções não residenciais concluídas | Valida funcionários desejados (0–100 em obras ou 0–máximo após concluídas), salário diário (até duas casas decimais) e carga horária (4–14 h); reduz empregados excedentes. |
+| `PATCH /api/residential-buildings/:id/rent` | Criador | Valida e grava o aluguel por pessoa (≥ C$ 0,01, até duas casas decimais). |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |
 
 Falhas de validação são respostas HTTP explícitas; indisponibilidade de banco,
@@ -607,11 +607,17 @@ de sucesso.
 - `city_assemblies` guarda nomes, centros, métricas e autorias.
 - `city_zones` guarda os retângulos municipais, com cascata ao excluir a cidade.
 - `road_tiles` guarda uma linha por tile, referência à cidade e autoria.
-- `player_wallets` guarda o saldo (`balance`, BIGINT, pode ficar negativo) por `user_id` (`sub`
+- `player_wallets` guarda o saldo (`balance`, NUMERIC(14,2), pode ficar negativo) por `user_id` (`sub`
   do Neon Auth). A carteira é criada com `STARTING_BALANCE` (`src/types/wallet.ts`)
   na primeira chamada a `GET /api/wallet`; o saldo aparece na barra superior
   como `C$ …` e é reconsultado a cada 30 s. Débitos/créditos futuros (aluguel,
   salários, custos) devem ser feitos no servidor, na mesma transação da ação.
+- Valores monetários usam precisão de centavos (`NUMERIC(...,2)` no PostgreSQL);
+  preços, salários, aluguéis, pagamentos, históricos e carteiras aceitam no
+  máximo duas casas decimais. O parser do driver converte esses campos em
+  números para a API, e `formatMoney` os exibe em pt-BR. O esquema converte as
+  antigas colunas inteiras/`BIGINT`/`DOUBLE PRECISION` para `NUMERIC` preservando
+  os valores já existentes.
 - `residential_buildings` guarda tipo, footprint, cidade, status, autoria e
   horários de início/conclusão, `wage`, `work_hours_per_day`, `desired_workers`, `rent` e
   `occupants` (colunas

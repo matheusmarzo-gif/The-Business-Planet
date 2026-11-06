@@ -1,3 +1,5 @@
+import { isCurrencyAmount, roundCurrency } from './currency.js';
+
 // Velocidades do mundo (segundos de jogo por segundo real; 15 = 1:15).
 export const WORLD_TIME_SCALES = [15, 30, 60, 240] as const;
 export const DEFAULT_TIME_SCALE = 15;
@@ -14,7 +16,7 @@ export function isPastDailyWorldRefreshTime(hour: number, minute: number): boole
 }
 
 export function parseMasterGrant(value: unknown): number | null {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= MAX_MASTER_GRANT
-    ? value
+  return isCurrencyAmount(value) && value >= 0.01 && value <= MAX_MASTER_GRANT
+    ? roundCurrency(value)
     : null;
 }

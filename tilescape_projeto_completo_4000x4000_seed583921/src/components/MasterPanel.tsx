@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MAX_MASTER_GRANT, WORLD_TIME_SCALES } from '../types/worldClock';
 import { formatMoney } from '../types/wallet';
+import { isCurrencyAmount } from '../types/currency';
 
 export interface OnlinePlayer {
   id: string;
@@ -36,7 +37,7 @@ export default function MasterPanel({
 }: MasterPanelProps) {
   const [amount, setAmount] = useState('1000');
   const parsed = Number(amount);
-  const isValidAmount = Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_MASTER_GRANT;
+  const isValidAmount = isCurrencyAmount(parsed) && parsed >= 0.01 && parsed <= MAX_MASTER_GRANT;
 
   useEffect(() => {
     onRefreshPlayers();
@@ -83,9 +84,9 @@ export default function MasterPanel({
         <input
           className="master-input"
           type="number"
-          min={1}
+          min={0.01}
           max={MAX_MASTER_GRANT}
-          step={1}
+          step={0.01}
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
           aria-label="Valor em C$"

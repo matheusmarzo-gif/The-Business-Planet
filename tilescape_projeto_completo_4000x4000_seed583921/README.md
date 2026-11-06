@@ -208,6 +208,9 @@ remoção é sincronizada com os demais jogadores.
 Cada jogador começa com **C$ 10.000**. O saldo aparece na barra superior, ao
 lado do contador de viajantes. A carteira é criada no primeiro acesso após esta
 atualização (inclusive para contas já existentes) e é guardada no servidor.
+Preços, salários, aluguéis, negociações e saldos aceitam até duas casas
+decimais (centavos), exibidas no padrão brasileiro; por exemplo, **C$ 1,23**
+por litro de leite.
 
 ### Residências
 
@@ -242,11 +245,11 @@ e renda média por morador (calculada a partir dos empregos já alocados: soma d
 salários dos empregos dos moradores ÷ ocupantes); obras mostram Work Points, empregados
 e permitem ao dono editar o salário ofertado (C$ por dia de trabalho) e a carga
 horária por dia (4 a 14 h). O dono também define o aluguel por pessoa (mínimo
-C$ 1) da residência. Todo dia às 00:00 do reino, cidades com menos de 1.000
-habitantes recebem 40 imigrantes, que ocupam as residências concluídas mais
-baratas com vaga (empate: maior apreço). A população da cidade é a soma dos
-ocupantes das suas residências. A cobrança do aluguel ainda não é aplicada, pois
-o jogo não tem dinheiro dos jogadores. Clique em outro ponto do mapa ou em × para fechar.
+C$ 0,01, com até duas casas decimais) da residência. Todo dia às 00:00 do reino,
+cidades com menos de 1.000 habitantes recebem 40 imigrantes, que ocupam as
+residências concluídas mais baratas com vaga (empate: maior apreço). A população
+da cidade é a soma dos ocupantes das suas residências. A cobrança do aluguel
+ainda não foi implementada. Clique em outro ponto do mapa ou em × para fechar.
 
 ### Indústrias
 
@@ -399,7 +402,8 @@ salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). T
 necessário. Saúde e felicidade ainda são fixas em 100.
 
 Nas lojas de arroz, batata, milho, cevada, trigo, peixe, leite e no Açougue, o
-dono define o preço (C$ 1 ou mais). Às 00:00, a capacidade de venda considera os
+dono define o preço (a partir de C$ 0,01, com até duas casas decimais). Às
+00:00, a capacidade de venda considera os
 Work Points gerados pelos funcionários no dia: as lojas de produtos por unidade
 (arroz, batata, milho, cevada, trigo, peixe e carne vermelha) ganham 1 unidade
 por 20 Work Points; a Loja de Leite ganha 1 litro por Work Point. Para cada produto, as residências consideram lojas do produto em até
@@ -521,7 +525,7 @@ urbana. As construções e transações habilitadas são descritas nas seções 
 
 ## Comandos do Master
 
-A conta Master vê o botão **Master** na barra superior. O painel permite mudar a velocidade do mundo (1:15, 1:30, 1:60 ou 1:240; dias mais rápidos aceleram folha, Work Points e vendas), adicionar C$ à própria conta (de 1 a 1.000.000.000 por vez) e ver os jogadores online conectados.
+A conta Master vê o botão **Master** na barra superior. O painel permite mudar a velocidade do mundo (1:15, 1:30, 1:60 ou 1:240; dias mais rápidos aceleram folha, Work Points e vendas), adicionar C$ à própria conta (de C$ 0,01 a C$ 1.000.000.000 por vez) e ver os jogadores online conectados.
 
 ## Histórico de produção
 

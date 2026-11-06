@@ -111,9 +111,9 @@ Para verificar a conexão com PostgreSQL e Redis, abra
 válida; as rotas do mundo verificam os tokens no servidor.
 Cada tipo de construção de um jogador recebe numeração romana individual
 (por exemplo, Loja de Arroz I e Loja de Arroz II). O nome aparece no painel de
-detalhes e, junto ao nome do proprietário, na etiqueta sobre a construção,
-visível somente para o próprio jogador. Na aba **Contábil**, **Visualizar**
-fecha o painel, centraliza o mapa na construção e abre seus detalhes.
+detalhes. A etiqueta sobre a construção mostra somente o nome do jogador e é
+visível apenas para ele. Na aba **Contábil**, **Visualizar** fecha o painel,
+centraliza o mapa na construção e abre seus detalhes.
 
 Cada push para a branch conectada ao Render pode iniciar uma nova publicação.
 O relógio global e sua persistência ficam no PostgreSQL; o Redis gerencia a

@@ -23,7 +23,6 @@ import {
 } from '../types/road';
 import {
   getResidencePlacementError,
-  getResidentialBuildingName,
   isTileInResidenceFootprint,
   RESIDENCES,
   ResidentialBuilding,
@@ -389,7 +388,7 @@ export function GameMap({
       const { width } = RESIDENCES[building.type];
       labelsLayer.addChild(
         createCityLabel(
-          `${getResidentialBuildingName(building.type, building.buildingNumber)}\n${building.ownerName}`,
+          building.ownerName,
           camera.x + (building.x + width / 2) * tilePixels,
           camera.y + (building.y - 0.35) * tilePixels,
         ),

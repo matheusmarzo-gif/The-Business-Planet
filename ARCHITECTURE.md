@@ -652,12 +652,13 @@ Cada construção recebe um número sequencial por dono e tipo, mantido em
 `player_building_counters` e persistido em `residential_buildings.building_number`.
 Na inicialização, instalações existentes recebem números por data de criação;
 demolições não reutilizam números. O cliente formata esses números em algarismos
-romanos (`getResidentialBuildingName`) no painel e no mapa. O nome do criador é
-obtido de `neon_auth."user"` e aparece junto da etiqueta individualizada somente
-nas construções do próprio jogador. O servidor envia a cada socket apenas um
-booleano de propriedade para controlar a etiqueta; o ID interno do proprietário
-é removido antes da transmissão ao navegador. **Visualizar** no painel contábil
-centraliza a câmera e seleciona a construção pelo ID recebido.
+romanos (`getResidentialBuildingName`) no painel descritivo. O nome do criador é
+obtido de `neon_auth."user"` e aparece no painel de detalhes; a etiqueta sobre
+cada construção do próprio jogador mostra somente esse nome, sem o nome
+numerado da construção. O servidor envia a cada socket apenas um booleano de
+propriedade para controlar a etiqueta; o ID interno do proprietário é removido
+antes da transmissão ao navegador. **Visualizar** no painel contábil centraliza
+a câmera e seleciona a construção pelo ID recebido.
 
 ## Variáveis de ambiente
 

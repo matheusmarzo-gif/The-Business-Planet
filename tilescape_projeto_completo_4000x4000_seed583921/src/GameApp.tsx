@@ -101,6 +101,16 @@ interface GameAppProps {
   signOutError: string;
 }
 
+function isCityErrorResponse(body: unknown): body is { error: string; [key: string]: unknown } {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    !Array.isArray(body) &&
+    'error' in body &&
+    typeof body.error === 'string'
+  );
+}
+
 async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await getAccessToken();
   const headers = new Headers(init?.headers);
@@ -113,7 +123,7 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
     let errorCode = '';
     try {
       const body: unknown = await response.json();
-      if (typeof body === 'object' && body !== null && 'error' in body && typeof body.error === 'string') {
+      if (isCityErrorResponse(body)) {
         errorCode = body.error;
         if (body.error === 'map_bounds') {
           error = path.startsWith('/api/residential-buildings')
@@ -214,7 +224,42 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'transfer_stock_changed') {
           error = 'O estoque de origem mudou antes da transferência.';
         } else if (body.error === 'transfer_unavailable') {
-          error = 'Não foi possível concluir a transferência agora.';
+          if (
+            typeof body.reason === 'string' ||
+            typeof body.failureStage === 'string' ||
+            typeof body.failureReference === 'string'
+          ) {
+            const failureReasons: Record<string, string> = {
+              concurrent_change: 'Outra operação alterou os dados ao mesmo tempo; atualize os estoques e tente novamente.',
+              database_constraint: 'O banco de dados recusou uma gravação por uma regra de integridade.',
+              database_unavailable: 'O banco de dados ficou indisponível durante a operação.',
+              unexpected_failure: 'Ocorreu uma falha inesperada no servidor.',
+            };
+            const failureStages: Record<string, string> = {
+              connecting_to_database: 'conectar ao banco de dados',
+              beginning_transaction: 'iniciar a operação',
+              acquiring_world_lock: 'reservar o estado do mundo',
+              rechecking_transfer_limits: 'validar novamente os limites',
+              removing_product_from_source: 'retirar o produto da origem',
+              adding_product_to_destination: 'adicionar o produto ao destino',
+              recording_transfer_history: 'registrar o histórico da transferência',
+              registering_transport_work_points: 'registrar o custo de transporte',
+              committing_transaction: 'confirmar as alterações',
+            };
+            const reason =
+              typeof body.reason === 'string'
+                ? failureReasons[body.reason] ?? failureReasons.unexpected_failure
+                : failureReasons.unexpected_failure;
+            const stage =
+              typeof body.failureStage === 'string'
+                ? failureStages[body.failureStage] ?? 'uma etapa não identificada'
+                : 'uma etapa não identificada';
+            const reference =
+              typeof body.failureReference === 'string' ? body.failureReference : null;
+            error = `${reason} Etapa: ${stage}.${reference ? ` Código de diagnóstico: ${reference}.` : ''}`;
+          } else {
+            error = 'Não foi possível processar a transferência agora. Tente novamente.';
+          }
         } else if (body.error === 'building_already_complete') {
           error = 'Essa construção já foi concluída.';
         } else if (body.error === 'building_not_found') {

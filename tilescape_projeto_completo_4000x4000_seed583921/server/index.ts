@@ -947,6 +947,25 @@ type ManualWarehouseTransferQuoteResult =
   | { error: string }
   | { quote: ManualWarehouseTransferQuote };
 
+type ManualTransferFailureReason =
+  | 'concurrent_change'
+  | 'database_constraint'
+  | 'database_unavailable'
+  | 'unexpected_failure';
+
+function getManualTransferFailureReason(error: unknown): ManualTransferFailureReason {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
+      ? error.code
+      : '';
+  if (['40001', '40P01', '55P03'].includes(code)) return 'concurrent_change';
+  if (code.startsWith('23')) return 'database_constraint';
+  if (code.startsWith('08') || ['57P01', '57P02', '57P03'].includes(code)) {
+    return 'database_unavailable';
+  }
+  return 'unexpected_failure';
+}
+
 async function getManualWarehouseTransferQuote(
   client: PoolClient,
   userId: string,
@@ -4089,10 +4108,15 @@ async function start() {
       return;
     }
 
+    const failureReference = randomUUID().slice(0, 8).toUpperCase();
+    let failureStage = 'connecting_to_database';
     void pool.connect().then(async (client) => {
       try {
+        failureStage = 'beginning_transaction';
         await client.query('BEGIN');
+        failureStage = 'acquiring_world_lock';
         await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        failureStage = 'rechecking_transfer_limits';
         const result = await getManualWarehouseTransferQuote(
           client,
           userId,
@@ -4122,6 +4146,7 @@ async function start() {
           return;
         }
 
+        failureStage = 'removing_product_from_source';
         const { rowCount: sourceUpdated } = await client.query(
           `UPDATE warehouse_stock
            SET quantity = quantity - $3
@@ -4134,6 +4159,7 @@ async function start() {
           return;
         }
         if (result.quote.destinationColumn) {
+          failureStage = 'adding_product_to_destination';
           const column = result.quote.destinationColumn;
           const { rowCount: destinationUpdated } = await client.query(
             `UPDATE residential_buildings
@@ -4151,6 +4177,7 @@ async function start() {
             return;
           }
         } else {
+          failureStage = 'adding_product_to_destination';
           await client.query(
             `INSERT INTO warehouse_stock (building_id, product_id, quantity)
              VALUES ($1, $2, $3)
@@ -4159,6 +4186,7 @@ async function start() {
             [destinationId, productId, quantity],
           );
         }
+        failureStage = 'recording_transfer_history';
         await client.query(
           `INSERT INTO warehouse_transport_log
              (warehouse_id, day, linked_id, linked_type, product_id, direction, wanted, moved, reason)
@@ -4172,8 +4200,10 @@ async function start() {
             quantity,
           ],
         );
+        failureStage = 'registering_transport_work_points';
         const workPoints = getTransportDemand(productId, quantity as number);
         await logWarehouseDemand(client, request.params.id, result.quote.day, workPoints);
+        failureStage = 'committing_transaction';
         await client.query('COMMIT');
         response.json({ quantity, workPoints });
         void publishCities().catch((error: unknown) => {
@@ -4181,16 +4211,37 @@ async function start() {
         });
       } catch (error: unknown) {
         await client.query('ROLLBACK').catch((rollbackError: unknown) => {
-          console.error('Não foi possível reverter a transferência do armazém:', rollbackError);
+          console.error(
+            `Não foi possível reverter a transferência do armazém [${failureReference}]:`,
+            rollbackError,
+          );
         });
-        console.error('Não foi possível transferir o produto entre construções:', error);
-        response.status(503).json({ error: 'transfer_unavailable' });
+        const reason = getManualTransferFailureReason(error);
+        console.error(
+          `Falha na transferência [${failureReference}] durante ${failureStage} (${reason}):`,
+          error,
+        );
+        response.status(503).json({
+          error: 'transfer_unavailable',
+          failureReference,
+          failureStage,
+          reason,
+        });
       } finally {
         client.release();
       }
     }).catch((error: unknown) => {
-      console.error('Não foi possível iniciar a transferência do armazém:', error);
-      response.status(503).json({ error: 'transfer_unavailable' });
+      const reason = getManualTransferFailureReason(error);
+      console.error(
+        `Não foi possível iniciar a transferência [${failureReference}] durante ${failureStage} (${reason}):`,
+        error,
+      );
+      response.status(503).json({
+        error: 'transfer_unavailable',
+        failureReference,
+        failureStage,
+        reason,
+      });
     });
   });
   app.get('/api/residential-buildings/:id/warehouse', requireAuth, (request, response) => {

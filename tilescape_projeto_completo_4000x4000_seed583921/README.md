@@ -505,7 +505,9 @@ Desejável** da origem. O destino precisa armazenar aquele produto; o limite da
 quantidade considera sua capacidade própria ou, para outro armazém, o **Estoque
 Máximo Desejável** e o espaço livre em m³. Madeira e Ferramentas, por exemplo,
 podem ser enviadas diretamente aos estoques de insumos de construções que as
-utilizam.
+utilizam. Se ocorrer uma falha técnica, a mensagem informa a etapa e um código
+de diagnóstico; envie esse código ao administrador para localizar o erro
+correspondente nos logs do servidor.
 
 **Influência:** o botão **Ver influência** no painel de qualquer construção
 desenha no mapa o raio de 60 tiles dela.

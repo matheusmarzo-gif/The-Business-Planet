@@ -23,8 +23,9 @@ e as obras regulares progridem por Work Points. A conta master pode concluí-las
 instantaneamente. O jogo também possui um catálogo de produtos, estoques
 persistentes e produção para as construções habilitadas; estoques perecíveis
 sofrem deterioração diária conforme a validade.
-População, bem-estar e economia são dados da cidade, mas ainda não existe
-simulação econômica ou de crescimento que os altere.
+População, bem-estar e economia agregados da cidade ainda não têm dinâmica
+própria; o jogo já processa rotinas diárias de imigração, emprego, consumo,
+produção, vendas e aluguel.
 
 ## Estrutura do repositório
 
@@ -347,7 +348,7 @@ mapeamento e verificar todas as curvas.
   local. `world_state.last_immigration_day` evita repetir o dia (recupera até 30
   dias perdidos). A população da cidade é a soma de `occupants` das residências
   (calculada em SQL em `getCities`; `city_assemblies.population` não é mais
-  usada). A cobrança diária do aluguel ainda não existe.
+  usada). A cobrança diária do aluguel é processada pelo job das 00:00.
 - Emprego (`src/types/employment.ts`): obras e construções concluídas que não
   são residências têm `desired_workers` (0 até 100 durante a obra e 0 até
   `maxWorkers` após a conclusão; padrão 0), `wage` e `work_hours_per_day`.
@@ -364,8 +365,12 @@ mapeamento e verificar todas as curvas.
   entre as demais; as vagas restantes e os benefícios são recalculados para a
   residência seguinte.
   À 00:00 o mesmo job debita de cada dono `salário × empregados` em
-  `player_wallets` (o dinheiro some; o saldo pode ficar negativo). Controle
-  de idempotência em `world_state.last_job_allocation_day` e `last_payroll_day`.
+  `player_wallets` (o dinheiro some; o saldo pode ficar negativo). Para cada
+  residência concluída, calcula `occupants × rent`, credita o total ao dono e
+  grava moradores, aluguel por pessoa e receita em `residence_rent_history`.
+  Como moradores são NPCs sem carteira individual, não há débito pessoal. O
+  crédito, o histórico e a folha são transacionais e idempotentes, protegidos
+  pelo lock `583921303` e `world_state.last_payroll_day`.
   No mesmo job das 00:00, cada obra soma `work_points_done += empregados ×
   getDailyWorkPoints` (`12,5 · H · saúde/100 · felicidade/100 · fator_descanso`;
   fator 1,2 em 4 h, 1 em 8 h, 0,8 em 14 h, linear entre eles; saúde e felicidade
@@ -570,7 +575,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo médio por cidadão da cidade e preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira do usuário com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
-| `GET /api/accounting` | Autenticado | Retorna, apenas para o jogador da sessão, salários/receita e posição/número de cada loja nos últimos 30 dias; salários, posições/números dos próprios armazéns e compra/venda por produto; margem por produto não desconta salários. |
+| `GET /api/accounting` | Autenticado | Retorna, apenas para o jogador da sessão, salários/receita das lojas, aluguel gerado por residência, salários e produção por construção produtiva, além dos relatórios de armazéns; os valores usam os últimos 30 dias do relógio do jogo. |
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
 | `GET /api/residential-buildings/:id/warehouse-log` | Dono do armazém | Retorna `{ days: [{ day, workPoints }], events: [{ day, buildingType, productId, direction, wanted, moved, reason, errorDetail }] }` do armazém (tabela `warehouse_transport_log`, gravada às 00:00 na etapa de transporte, 30 dias; `reason` = `desired_reached`/`no_space`/`no_work_points`/`warehouse_empty` quando moveu menos que o desejado; erros internos registram etapa e detalhe em `errorDetail`). |
 | `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo), estoque e preço médio local ponderado por oferta acima do mínimo; espaço ocupado é calculado no cliente. |
@@ -610,8 +615,8 @@ de sucesso.
 - `player_wallets` guarda o saldo (`balance`, NUMERIC(14,2), pode ficar negativo) por `user_id` (`sub`
   do Neon Auth). A carteira é criada com `STARTING_BALANCE` (`src/types/wallet.ts`)
   na primeira chamada a `GET /api/wallet`; o saldo aparece na barra superior
-  como `C$ …` e é reconsultado a cada 30 s. Débitos/créditos futuros (aluguel,
-  salários, custos) devem ser feitos no servidor, na mesma transação da ação.
+  como `C$ …` e é reconsultado a cada 30 s. Débitos e créditos são aplicados no
+  servidor e na mesma transação do processamento diário.
 - Valores monetários usam precisão de centavos (`NUMERIC(...,2)` no PostgreSQL);
   preços, salários, aluguéis, pagamentos, históricos e carteiras aceitam no
   máximo duas casas decimais. O parser do driver converte esses campos em
@@ -624,6 +629,16 @@ de sucesso.
   adicionadas com `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, assim como
   `world_state.last_immigration_day`); excluir a cidade
   remove suas residências por cascata.
+- `residence_rent_history` registra, por residência e dia, moradores, aluguel
+  por pessoa e receita gerada. `building_payroll_history` guarda despesas
+  salariais diárias para todas as construções; o esquema migra salários
+  históricos disponíveis de lojas e armazéns. Novos históricos de aluguel e de
+  salários de outras construções começam com esta atualização.
+- `production_history` guarda a produção diária por construção. A aba
+  **Produção** combina essa tabela com `building_payroll_history`; **Residências**
+  combina população/capacidade atuais com a receita de
+  `residence_rent_history`. O endpoint restringe os relatórios ao dono
+  autenticado e agrega o dia corrente e os 29 anteriores.
 - A tabela `neon_auth."user"` é gerenciada pelo Neon Auth, não pelo esquema do
   jogo.
 

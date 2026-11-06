@@ -303,6 +303,28 @@ CREATE TABLE IF NOT EXISTS warehouse_payroll_history (
 ALTER TABLE warehouse_payroll_history
   ALTER COLUMN employee_expense TYPE NUMERIC(14, 2) USING employee_expense::numeric(14, 2);
 
+CREATE TABLE IF NOT EXISTS building_payroll_history (
+  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  day DATE NOT NULL,
+  employee_expense NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (employee_expense >= 0),
+  PRIMARY KEY (building_id, day)
+);
+
+INSERT INTO building_payroll_history (building_id, day, employee_expense)
+SELECT building_id, day, employee_expense FROM commerce_history
+UNION ALL
+SELECT building_id, day, employee_expense FROM warehouse_payroll_history
+ON CONFLICT (building_id, day) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS residence_rent_history (
+  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  day DATE NOT NULL,
+  occupants INTEGER NOT NULL CHECK (occupants >= 0),
+  rent_per_person NUMERIC(12, 2) NOT NULL CHECK (rent_per_person >= 0.01),
+  rent_revenue NUMERIC(14, 2) NOT NULL CHECK (rent_revenue >= 0),
+  PRIMARY KEY (building_id, day)
+);
+
 CREATE TABLE IF NOT EXISTS warehouse_trade_history (
   id BIGSERIAL PRIMARY KEY,
   day DATE NOT NULL,

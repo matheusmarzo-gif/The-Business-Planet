@@ -21,7 +21,7 @@ export default function AccountingPanel({
   onViewBuilding,
   onClose,
 }: AccountingPanelProps) {
-  const [activeTab, setActiveTab] = useState<'shops' | 'warehouses'>('shops');
+  const [activeTab, setActiveTab] = useState<'shops' | 'warehouses' | 'residences' | 'production'>('shops');
 
   return (
     <section className="warehouse-panel accounting-panel" aria-label="Painel contábil">
@@ -54,6 +54,24 @@ export default function AccountingPanel({
         >
           Armazéns
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'residences'}
+          className={activeTab === 'residences' ? 'active' : ''}
+          onClick={() => setActiveTab('residences')}
+        >
+          Residências
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'production'}
+          className={activeTab === 'production' ? 'active' : ''}
+          onClick={() => setActiveTab('production')}
+        >
+          Produção
+        </button>
       </div>
       {error && <p role="alert" className="warehouse-error">{error}</p>}
       {activeTab === 'shops' ? (
@@ -78,7 +96,7 @@ export default function AccountingPanel({
             </div>
           ))}
         </div>
-      ) : (
+      ) : activeTab === 'warehouses' ? (
         <>
           <p className="accounting-payroll">
             Salários pagos pelos armazéns: <strong>{formatMoney(summary?.warehouse.employeeExpense ?? 0)}</strong>
@@ -135,6 +153,68 @@ export default function AccountingPanel({
           <p className="accounting-history-note">
             O resultado por produto é a receita das vendas menos o custo das compras; não desconta salários.
           </p>
+        </>
+      ) : activeTab === 'residences' ? (
+        <>
+          <p className="accounting-history-note">
+            A receita é o aluguel efetivamente gerado nos últimos 30 dias. Moradores são NPCs sem carteira
+            individual; o valor é creditado diretamente ao proprietário. O histórico começa com esta atualização.
+          </p>
+          <div className="warehouse-list accounting-list">
+            <div className="accounting-four-row warehouse-head">
+              <span>Residência</span>
+              <span>Moradores / capacidade</span>
+              <span>Aluguel gerado</span>
+              <span />
+            </div>
+            {!isLoading && !error && (summary?.residences.length ?? 0) === 0 && (
+              <p className="warehouse-summary">Você ainda não possui residências.</p>
+            )}
+            {summary?.residences.map((residence) => (
+              <div className="accounting-four-row" key={residence.id}>
+                <span>{getResidentialBuildingName(residence.type, residence.buildingNumber)}</span>
+                <span>{integer.format(residence.occupants)} / {integer.format(residence.capacity)}</span>
+                <span>{formatMoney(residence.rentRevenue)}</span>
+                <button type="button" className="accounting-view-button" onClick={() => onViewBuilding(residence)}>
+                  Visualizar
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="accounting-history-note">
+            Salários e produção somam os registros diários dos últimos 30 dias. Não há dados recuperáveis de
+            salários anteriores à implantação deste histórico.
+          </p>
+          <div className="warehouse-list accounting-list">
+            <div className="accounting-four-row warehouse-head">
+              <span>Construção</span>
+              <span>Gasto com salários</span>
+              <span>Produção</span>
+              <span />
+            </div>
+            {!isLoading && !error && (summary?.production.length ?? 0) === 0 && (
+              <p className="warehouse-summary">Você ainda não possui construções produtivas.</p>
+            )}
+            {summary?.production.map((building) => {
+              const product = PRODUCTS.find((entry) => entry.id === building.stockProductId);
+              const produced = building.stockProductId
+                ? `${integer.format(building.produced)} ${product?.name ?? building.stockProductId}`
+                : integer.format(building.produced);
+              return (
+                <div className="accounting-four-row" key={building.id}>
+                  <span>{getResidentialBuildingName(building.type, building.buildingNumber)}</span>
+                  <span>{formatMoney(building.employeeExpense)}</span>
+                  <span>{produced}</span>
+                  <button type="button" className="accounting-view-button" onClick={() => onViewBuilding(building)}>
+                    Visualizar
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </>
       )}
     </section>

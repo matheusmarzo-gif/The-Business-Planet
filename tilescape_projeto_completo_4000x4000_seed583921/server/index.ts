@@ -44,6 +44,7 @@ import {
 } from '../src/types/residence.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
 import { roundCurrency } from '../src/types/currency.js';
+import { calculateDailyRentRevenue } from '../src/types/accounting.js';
 import {
   isPastDailyWorldRefreshTime,
   isValidTimeScale,
@@ -120,6 +121,12 @@ let demandBasicByProduct = new Map<string, number>();
 const landTileIds = new Set(
   DEFAULT_TILE_LIST.filter((tile) => tile.category === 'land').map((tile) => tile.id),
 );
+const RESIDENCE_BUILDING_TYPES = Object.values(RESIDENCES)
+  .filter((definition) => definition.kind === 'residence')
+  .map((definition) => definition.type);
+const PRODUCTION_BUILDING_TYPES = Object.values(RESIDENCES)
+  .filter((definition) => ['farm', 'fishery', 'resource', 'workshop'].includes(definition.kind))
+  .map((definition) => definition.type);
 const CLOCK_LEADER_KEY = 'valdora:clock:leader';
 const PRESENCE_KEY = 'valdora:presence';
 const SNAPSHOT_CHANNEL = 'valdora:world:snapshots';
@@ -913,9 +920,10 @@ async function runDailyEmployment(): Promise<boolean> {
         price: number;
         stock: number;
         occupants: number;
+        rent: number;
       }>(
         `SELECT id, created_by, city_id, wage, status, building_type, work_hours_per_day, work_points_done,
-                tile_x, tile_y, price, stock, occupants
+                tile_x, tile_y, price, stock, occupants, rent
          FROM residential_buildings`,
       );
       const { rows: assignmentRows } = await client.query<{
@@ -942,6 +950,47 @@ async function runDailyEmployment(): Promise<boolean> {
       const workers = new Map<string, number>();
       for (const row of assignmentRows) {
         workers.set(row.workplace_id, (workers.get(row.workplace_id) ?? 0) + row.count);
+      }
+      const rentIncomeByOwner = new Map<string, number>();
+      for (const residence of workplaces) {
+        if (
+          residence.status !== 'completed' ||
+          getResidenceDefinition(residence.building_type)?.kind !== 'residence'
+        ) continue;
+        const revenue = calculateDailyRentRevenue(residence.occupants, residence.rent);
+        await client.query(
+          `INSERT INTO residence_rent_history
+             (building_id, day, occupants, rent_per_person, rent_revenue)
+           VALUES ($1, $2::date, $3, $4, $5)
+           ON CONFLICT (building_id, day) DO UPDATE
+           SET occupants = EXCLUDED.occupants,
+               rent_per_person = EXCLUDED.rent_per_person,
+               rent_revenue = EXCLUDED.rent_revenue`,
+          [residence.id, state.day, residence.occupants, residence.rent, revenue],
+        );
+        if (revenue > 0) {
+          rentIncomeByOwner.set(
+            residence.created_by,
+            roundCurrency((rentIncomeByOwner.get(residence.created_by) ?? 0) + revenue),
+          );
+        }
+      }
+      for (const [ownerId, amount] of rentIncomeByOwner) {
+        await client.query(
+          `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::numeric + $2::numeric)
+           ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::numeric`,
+          [ownerId, amount, STARTING_BALANCE],
+        );
+        changed = true;
+      }
+      for (const building of workplaces) {
+        await client.query(
+          `INSERT INTO building_payroll_history (building_id, day, employee_expense)
+           VALUES ($1, $2::date, $3)
+           ON CONFLICT (building_id, day)
+           DO UPDATE SET employee_expense = EXCLUDED.employee_expense`,
+          [building.id, state.day, roundCurrency((workers.get(building.id) ?? 0) * building.wage)],
+        );
       }
       for (const warehouse of workplaces) {
         if (warehouse.building_type !== 'warehouse') continue;
@@ -1520,6 +1569,16 @@ async function runDailyEmployment(): Promise<boolean> {
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
       await client.query(
         `DELETE FROM warehouse_payroll_history
+         WHERE day < $1::date - 29`,
+        [state.day],
+      );
+      await client.query(
+        `DELETE FROM building_payroll_history
+         WHERE day < $1::date - 29`,
+        [state.day],
+      );
+      await client.query(
+        `DELETE FROM residence_rent_history
          WHERE day < $1::date - 29`,
         [state.day],
       );
@@ -2402,7 +2461,7 @@ async function start() {
         return;
       }
 
-      const [shopResult, payrollResult, warehouseBuildingsResult, productResult] = await Promise.all([
+      const [shopResult, payrollResult, warehouseBuildingsResult, productResult, residenceResult, productionResult] = await Promise.all([
         pool.query<{
           id: string;
           building_type: ResidenceType;
@@ -2428,7 +2487,7 @@ async function start() {
         ),
         pool.query<{ employee_expense: string }>(
           `SELECT COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense
-           FROM warehouse_payroll_history history
+           FROM building_payroll_history history
            JOIN residential_buildings building ON building.id = history.building_id
            WHERE building.created_by = $1
              AND building.building_type = 'warehouse'
@@ -2472,6 +2531,59 @@ async function start() {
            ORDER BY history.product_id`,
           [userId, day],
         ),
+        pool.query<{
+          id: string;
+          building_type: ResidenceType;
+          building_number: number;
+          tile_x: number;
+          tile_y: number;
+          occupants: number;
+          rent_revenue: string;
+        }>(
+          `SELECT building.id, building.building_type, building.building_number,
+                  building.tile_x, building.tile_y, building.occupants,
+                  COALESCE(SUM(history.rent_revenue), 0)::text AS rent_revenue
+           FROM residential_buildings building
+           LEFT JOIN residence_rent_history history
+             ON history.building_id = building.id
+            AND history.day BETWEEN $2::date - 29 AND $2::date
+           WHERE building.created_by = $1
+             AND building.building_type = ANY($3::text[])
+           GROUP BY building.id
+           ORDER BY building.building_type, building.building_number`,
+          [userId, day, RESIDENCE_BUILDING_TYPES],
+        ),
+        pool.query<{
+          id: string;
+          building_type: ResidenceType;
+          building_number: number;
+          tile_x: number;
+          tile_y: number;
+          employee_expense: string;
+          produced: string;
+        }>(
+          `SELECT building.id, building.building_type, building.building_number,
+                  building.tile_x, building.tile_y,
+                  COALESCE(payroll.employee_expense, 0)::text AS employee_expense,
+                  COALESCE(production.produced, 0)::text AS produced
+           FROM residential_buildings building
+           LEFT JOIN (
+             SELECT building_id, SUM(employee_expense) AS employee_expense
+             FROM building_payroll_history
+             WHERE day BETWEEN $2::date - 29 AND $2::date
+             GROUP BY building_id
+           ) payroll ON payroll.building_id = building.id
+           LEFT JOIN (
+             SELECT building_id, SUM(produced) AS produced
+             FROM production_history
+             WHERE day BETWEEN $2::date - 29 AND $2::date
+             GROUP BY building_id
+           ) production ON production.building_id = building.id
+           WHERE building.created_by = $1
+             AND building.building_type = ANY($3::text[])
+           ORDER BY building.building_type, building.building_number`,
+          [userId, day, PRODUCTION_BUILDING_TYPES],
+        ),
       ]);
 
       const products = productResult.rows.map((row) => {
@@ -2495,6 +2607,26 @@ async function start() {
           y: row.tile_y,
           employeeExpense: Number(row.employee_expense),
           revenue: Number(row.revenue),
+        })),
+        residences: residenceResult.rows.map((row) => ({
+          id: row.id,
+          type: row.building_type,
+          buildingNumber: row.building_number,
+          x: row.tile_x,
+          y: row.tile_y,
+          occupants: row.occupants,
+          capacity: RESIDENCES[row.building_type].capacity,
+          rentRevenue: Number(row.rent_revenue),
+        })),
+        production: productionResult.rows.map((row) => ({
+          id: row.id,
+          type: row.building_type,
+          buildingNumber: row.building_number,
+          x: row.tile_x,
+          y: row.tile_y,
+          employeeExpense: Number(row.employee_expense),
+          produced: Number(row.produced),
+          stockProductId: getResidenceDefinition(row.building_type)?.stockProductId ?? null,
         })),
         warehouse: {
           employeeExpense: Number(payrollResult.rows[0]?.employee_expense ?? 0),

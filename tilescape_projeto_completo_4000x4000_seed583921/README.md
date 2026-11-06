@@ -157,7 +157,8 @@ categorias de construções estão disponíveis para todos os jogadores autentic
 a Prefeitura aparece somente para a conta Neon Auth configurada em
 `MASTER_EMAIL`. Cadastre o mesmo e-mail nas variáveis locais e no Render; crie
 essa conta pelo formulário do jogo para ativar a permissão. O botão **Contábil**
-abre os relatórios das lojas comerciais e dos armazéns do jogador conectado.
+abre os relatórios das lojas comerciais, dos armazéns, das residências e da
+produção do jogador conectado.
 
 A primeira estrutura da Prefeitura é a **Assembleia**. Escolha-a no catálogo,
 informe o nome da cidade e mova o cursor pelo mapa para ver uma prévia: verde
@@ -248,8 +249,10 @@ horária por dia (4 a 14 h). O dono também define o aluguel por pessoa (mínimo
 C$ 0,01, com até duas casas decimais) da residência. Todo dia às 00:00 do reino,
 cidades com menos de 1.000 habitantes recebem 40 imigrantes, que ocupam as
 residências concluídas mais baratas com vaga (empate: maior apreço). A população
-da cidade é a soma dos ocupantes das suas residências. A cobrança do aluguel
-ainda não foi implementada. Clique em outro ponto do mapa ou em × para fechar.
+da cidade é a soma dos ocupantes das suas residências. Todo dia às 00:00 do
+relógio do jogo, o aluguel por pessoa é multiplicado pelos moradores e creditado
+ao dono da residência. Como moradores são NPCs sem carteira individual, não há
+débito separado. Clique em outro ponto do mapa ou em × para fechar.
 
 ### Indústrias
 
@@ -542,15 +545,20 @@ transferência interna sem cobrança e aparece com gasto de produto C$ 0.
 
 ## Contábil
 
-O botão **Contábil** na barra inferior tem duas abas. **Lojas comerciais** lista
+O botão **Contábil** na barra inferior tem quatro abas. **Lojas comerciais** lista
 todas as lojas do jogador e soma salários pagos e receita de vendas nos últimos
 30 dias do relógio do jogo; **Visualizar** centraliza a loja no mapa e abre seus
 detalhes. **Armazéns** mostra os armazéns do jogador (também com **Visualizar**),
 salários pagos e, por produto,
 quantidades e valores comprados/vendidos, além do resultado bruto (receita de
 vendas menos custo de compras). O resultado por produto não desconta salários.
-O histórico financeiro de armazéns começa com esta atualização; transações
-anteriores não podem ser reconstruídas.
+**Residências** lista moradores, capacidade e aluguel efetivamente gerado para
+cada casa nos últimos 30 dias, com o mesmo atalho **Visualizar**. **Produção**
+lista fazendas, pesqueiros, recursos e oficinas, seus salários e unidades
+produzidas no período. O histórico de aluguel começa com esta atualização;
+salários de construções não comerciais anteriores a ela não podem ser
+reconstruídos. O histórico financeiro de armazéns começa com esta atualização;
+transações anteriores não podem ser reconstruídas.
 
 - **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque máximo atingido, estoque mínimo preservado, sem espaço, Work Points insuficientes ou armazém sem estoque). Falhas internas são exibidas separadamente, com a etapa e a mensagem do erro.
 - **Validade e espaço de armazenamento:** às 18:00 de cada dia do jogo, a perda esperada de cada produto perecível é `estoque atual / validade em dias`. A parte inteira é removida e a fração vira probabilidade de perder uma unidade adicional (por exemplo, 10 unidades com validade de 100 dias: 0,1 unidade/dia, ou 10% de chance de perder uma). Não há controle por lote ou data de entrada; produtos recém-adicionados seguem a mesma regra sobre o estoque agregado. A regra cobre os estoques principais de fazendas, comércios, construções artesanais e recursos, além dos produtos nos armazéns (indústrias). Produtos sem validade, como madeira, pedra, ferro e Ferramentas, não se deterioram. O espaço ocupado é atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o armazém está selecionado.

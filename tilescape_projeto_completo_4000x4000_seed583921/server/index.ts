@@ -1060,37 +1060,83 @@ async function limitJobAssignments(
   }
 }
 
-// Histórico diário de produção; cada etapa da economia grava só as colunas que conhece.
-// Roda em savepoint próprio: uma falha no histórico nunca pode desfazer a produção ou o transporte.
-async function logProduction(
+interface ProductionHistoryEntry {
+  buildingId: string;
+  workPoints?: number;
+  produced?: number;
+  transported?: number;
+  efficiency?: number;
+}
+
+async function applyWalletBatch(
+  client: PoolClient,
+  amountsByUser: Map<string, number>,
+  operation: 'credit' | 'debit',
+): Promise<void> {
+  if (amountsByUser.size === 0) return;
+  const userIds = [...amountsByUser.keys()];
+  const amounts = userIds.map((userId) => amountsByUser.get(userId) ?? 0);
+  const balanceChange = operation === 'credit' ? '+' : '-';
+  const conflictAmount = operation === 'credit'
+    ? 'EXCLUDED.balance - $3::numeric'
+    : '$3::numeric - EXCLUDED.balance';
+  await client.query(
+    `INSERT INTO player_wallets (user_id, balance)
+     SELECT changes.user_id, $3::numeric ${balanceChange} changes.amount
+     FROM UNNEST($1::text[], $2::numeric[]) AS changes(user_id, amount)
+     WHERE TRUE
+     ON CONFLICT (user_id) DO UPDATE
+     SET balance = player_wallets.balance ${balanceChange} (${conflictAmount})`,
+    [userIds, amounts, STARTING_BALANCE],
+  );
+}
+
+async function logProductionBatch(
   client: { query: (text: string, values: unknown[]) => Promise<unknown> },
-  buildingId: string,
   day: string,
-  values: { workPoints?: number; produced?: number; transported?: number; efficiency?: number },
+  entries: ProductionHistoryEntry[],
 ) {
+  if (entries.length === 0) return;
   await client.query('SAVEPOINT production_log', []);
   try {
     await client.query(
-      `INSERT INTO production_history (building_id, day, work_points, produced, transported, efficiency)
-       VALUES ($1::uuid, $2::date, COALESCE($3::double precision, 0), COALESCE($4::double precision, 0),
-               COALESCE($5::double precision, 0), COALESCE($6::double precision, 100))
-       ON CONFLICT (building_id, day) DO UPDATE
-       SET work_points = COALESCE($3::double precision, production_history.work_points),
-           produced = COALESCE($4::double precision, production_history.produced),
-           transported = production_history.transported + COALESCE($5::double precision, 0),
-           efficiency = COALESCE($6::double precision, production_history.efficiency)`,
+      `WITH batch AS MATERIALIZED (
+         SELECT *
+         FROM UNNEST(
+           $2::uuid[], $3::double precision[], $4::double precision[],
+           $5::double precision[], $6::double precision[]
+         ) AS input_rows(building_id, work_points, produced, transported, efficiency)
+       ), updated AS (
+         UPDATE production_history history
+         SET work_points = COALESCE(batch.work_points, history.work_points),
+             produced = COALESCE(batch.produced, history.produced),
+             transported = history.transported + COALESCE(batch.transported, 0),
+             efficiency = COALESCE(batch.efficiency, history.efficiency)
+         FROM batch
+         WHERE history.building_id = batch.building_id AND history.day = $1::date
+         RETURNING history.building_id
+       )
+       INSERT INTO production_history
+         (building_id, day, work_points, produced, transported, efficiency)
+       SELECT batch.building_id, $1::date,
+              COALESCE(batch.work_points, 0), COALESCE(batch.produced, 0),
+              COALESCE(batch.transported, 0), COALESCE(batch.efficiency, 100)
+       FROM batch
+       LEFT JOIN updated USING (building_id)
+       WHERE updated.building_id IS NULL`,
       [
-        buildingId,
         day,
-        values.workPoints ?? null,
-        values.produced ?? null,
-        values.transported ?? null,
-        values.efficiency ?? null,
+        entries.map((entry) => entry.buildingId),
+        entries.map((entry) => entry.workPoints ?? null),
+        entries.map((entry) => entry.produced ?? null),
+        entries.map((entry) => entry.transported ?? null),
+        entries.map((entry) => entry.efficiency ?? null),
       ],
     );
     await client.query('RELEASE SAVEPOINT production_log', []);
   } catch (error) {
     await client.query('ROLLBACK TO SAVEPOINT production_log', []);
+    await client.query('RELEASE SAVEPOINT production_log', []);
     console.error('Não foi possível gravar o histórico de produção:', error);
   }
 }
@@ -1165,7 +1211,7 @@ async function runDailyEmployment(): Promise<boolean> {
         workplace_id: string;
         residence_id: string;
         count: number;
-      }>('SELECT workplace_id, residence_id, count FROM job_assignments');
+      }>('SELECT workplace_id, residence_id, count FROM job_assignments ORDER BY workplace_id, residence_id');
       const owed = getPayroll(
         workplaces.map((row) => ({ id: row.id, ownerId: row.created_by, wage: row.wage })),
         assignmentRows.map((row) => ({
@@ -1174,35 +1220,26 @@ async function runDailyEmployment(): Promise<boolean> {
           count: row.count,
         })),
       );
-      for (const [ownerId, amount] of owed) {
-        await client.query(
-          `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::numeric - $2::numeric)
-           ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance - $2::numeric`,
-          [ownerId, amount, STARTING_BALANCE],
-        );
-      }
+      await applyWalletBatch(client, owed, 'debit');
       // Work Points diários das obras: cada funcionário contribui conforme a carga horária.
       const workers = new Map<string, number>();
       for (const row of assignmentRows) {
         workers.set(row.workplace_id, (workers.get(row.workplace_id) ?? 0) + row.count);
       }
       const rentIncomeByOwner = new Map<string, number>();
+      const rentEntries: { id: string; occupants: number; rent: number; revenue: number }[] = [];
       for (const residence of workplaces) {
         if (
           residence.status !== 'completed' ||
           getResidenceDefinition(residence.building_type)?.kind !== 'residence'
         ) continue;
         const revenue = calculateDailyRentRevenue(residence.occupants, residence.rent);
-        await client.query(
-          `INSERT INTO residence_rent_history
-             (building_id, day, occupants, rent_per_person, rent_revenue)
-           VALUES ($1, $2::date, $3, $4, $5)
-           ON CONFLICT (building_id, day) DO UPDATE
-           SET occupants = EXCLUDED.occupants,
-               rent_per_person = EXCLUDED.rent_per_person,
-               rent_revenue = EXCLUDED.rent_revenue`,
-          [residence.id, state.day, residence.occupants, residence.rent, revenue],
-        );
+        rentEntries.push({
+          id: residence.id,
+          occupants: residence.occupants,
+          rent: residence.rent,
+          revenue,
+        });
         if (revenue > 0) {
           rentIncomeByOwner.set(
             residence.created_by,
@@ -1210,33 +1247,77 @@ async function runDailyEmployment(): Promise<boolean> {
           );
         }
       }
-      for (const [ownerId, amount] of rentIncomeByOwner) {
+      if (rentEntries.length > 0) {
         await client.query(
-          `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::numeric + $2::numeric)
-           ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::numeric`,
-          [ownerId, amount, STARTING_BALANCE],
+          `INSERT INTO residence_rent_history
+             (building_id, day, occupants, rent_per_person, rent_revenue)
+           SELECT batch.building_id, $1::date, batch.occupants, batch.rent, batch.revenue
+           FROM UNNEST(
+             $2::uuid[], $3::integer[], $4::numeric[], $5::numeric[]
+           ) AS batch(building_id, occupants, rent, revenue)
+           WHERE TRUE
+           ON CONFLICT (building_id, day) DO UPDATE
+           SET occupants = EXCLUDED.occupants,
+               rent_per_person = EXCLUDED.rent_per_person,
+               rent_revenue = EXCLUDED.rent_revenue`,
+          [
+            state.day,
+            rentEntries.map((entry) => entry.id),
+            rentEntries.map((entry) => entry.occupants),
+            rentEntries.map((entry) => entry.rent),
+            rentEntries.map((entry) => entry.revenue),
+          ],
         );
+      }
+      await applyWalletBatch(client, rentIncomeByOwner, 'credit');
+      if (rentIncomeByOwner.size > 0) {
         changed = true;
       }
-      for (const building of workplaces) {
+      if (workplaces.length > 0) {
         await client.query(
           `INSERT INTO building_payroll_history (building_id, day, employee_expense)
-           VALUES ($1, $2::date, $3)
+           SELECT batch.building_id, $1::date, batch.employee_expense
+           FROM UNNEST($2::uuid[], $3::numeric[])
+             AS batch(building_id, employee_expense)
+           WHERE TRUE
            ON CONFLICT (building_id, day)
            DO UPDATE SET employee_expense = EXCLUDED.employee_expense`,
-          [building.id, state.day, roundCurrency((workers.get(building.id) ?? 0) * building.wage)],
+          [
+            state.day,
+            workplaces.map((building) => building.id),
+            workplaces.map((building) =>
+              roundCurrency((workers.get(building.id) ?? 0) * building.wage),
+            ),
+          ],
         );
       }
-      for (const warehouse of workplaces) {
-        if (warehouse.building_type !== 'warehouse') continue;
+      const warehousePayroll = workplaces.filter(
+        (building) => building.building_type === 'warehouse',
+      );
+      if (warehousePayroll.length > 0) {
         await client.query(
           `INSERT INTO warehouse_payroll_history (building_id, day, employee_expense)
-           VALUES ($1, $2::date, $3)
+           SELECT batch.building_id, $1::date, batch.employee_expense
+           FROM UNNEST($2::uuid[], $3::numeric[])
+             AS batch(building_id, employee_expense)
+           WHERE TRUE
            ON CONFLICT (building_id, day)
            DO UPDATE SET employee_expense = EXCLUDED.employee_expense`,
-          [warehouse.id, state.day, roundCurrency((workers.get(warehouse.id) ?? 0) * warehouse.wage)],
+          [
+            state.day,
+            warehousePayroll.map((warehouse) => warehouse.id),
+            warehousePayroll.map((warehouse) =>
+              roundCurrency((workers.get(warehouse.id) ?? 0) * warehouse.wage),
+            ),
+          ],
         );
       }
+      const constructionUpdates: {
+        id: string;
+        done: number;
+        completed: boolean;
+        maximumWorkers: number;
+      }[] = [];
       for (const site of workplaces) {
         const count = workers.get(site.id) ?? 0;
         if (site.status !== 'under_construction' || count === 0) continue;
@@ -1249,22 +1330,92 @@ async function runDailyEmployment(): Promise<boolean> {
           RESIDENCE_STATS.health,
           RESIDENCE_STATS.happiness,
         );
-        await client.query(
-          `UPDATE residential_buildings
-           SET work_points_done = $2::double precision,
-               status = CASE WHEN $3::boolean THEN 'completed' ELSE status END,
-               completed_at = CASE WHEN $3::boolean THEN clock_timestamp() ELSE completed_at END,
-               desired_workers = CASE
-                 WHEN $3::boolean THEN LEAST(desired_workers, $4)
-                 ELSE desired_workers
-               END
-           WHERE id = $1`,
-          [site.id, progress.done, progress.completed, RESIDENCES[site.building_type].maxWorkers],
-        );
-        if (progress.completed) {
-          await limitJobAssignments(client, site.id, RESIDENCES[site.building_type].maxWorkers);
-        }
+        constructionUpdates.push({
+          id: site.id,
+          done: progress.done,
+          completed: progress.completed,
+          maximumWorkers: RESIDENCES[site.building_type].maxWorkers,
+        });
         changed = true;
+      }
+      if (constructionUpdates.length > 0) {
+        await client.query(
+          `UPDATE residential_buildings building
+           SET work_points_done = progress.work_points_done,
+               status = CASE WHEN progress.completed THEN 'completed' ELSE building.status END,
+               completed_at = CASE
+                 WHEN progress.completed THEN clock_timestamp()
+                 ELSE building.completed_at
+               END,
+               desired_workers = CASE
+                 WHEN progress.completed THEN LEAST(building.desired_workers, progress.maximum_workers)
+                 ELSE building.desired_workers
+               END
+           FROM UNNEST(
+             $1::uuid[], $2::double precision[], $3::boolean[], $4::integer[]
+           ) AS progress(id, work_points_done, completed, maximum_workers)
+           WHERE building.id = progress.id`,
+          [
+            constructionUpdates.map((update) => update.id),
+            constructionUpdates.map((update) => update.done),
+            constructionUpdates.map((update) => update.completed),
+            constructionUpdates.map((update) => update.maximumWorkers),
+          ],
+        );
+      }
+      const completedSites = constructionUpdates.filter((update) => update.completed);
+      if (completedSites.length > 0) {
+        const remainingByWorkplace = new Map(
+          completedSites.map((update) => [update.id, update.maximumWorkers]),
+        );
+        const deletedAssignments: { workplaceId: string; residenceId: string }[] = [];
+        const reducedAssignments: { workplaceId: string; residenceId: string; count: number }[] = [];
+        for (const assignment of assignmentRows) {
+          const remaining = remainingByWorkplace.get(assignment.workplace_id);
+          if (remaining === undefined) continue;
+          const retained = Math.min(assignment.count, remaining);
+          remainingByWorkplace.set(assignment.workplace_id, remaining - retained);
+          if (retained === assignment.count) continue;
+          if (retained === 0) {
+            deletedAssignments.push({
+              workplaceId: assignment.workplace_id,
+              residenceId: assignment.residence_id,
+            });
+          } else {
+            reducedAssignments.push({
+              workplaceId: assignment.workplace_id,
+              residenceId: assignment.residence_id,
+              count: retained,
+            });
+          }
+        }
+        if (deletedAssignments.length > 0) {
+          await client.query(
+            `DELETE FROM job_assignments assignment
+             USING UNNEST($1::uuid[], $2::uuid[]) AS removed(workplace_id, residence_id)
+             WHERE assignment.workplace_id = removed.workplace_id
+               AND assignment.residence_id = removed.residence_id`,
+            [
+              deletedAssignments.map((assignment) => assignment.workplaceId),
+              deletedAssignments.map((assignment) => assignment.residenceId),
+            ],
+          );
+        }
+        if (reducedAssignments.length > 0) {
+          await client.query(
+            `UPDATE job_assignments assignment
+             SET count = reduced.count
+             FROM UNNEST($1::uuid[], $2::uuid[], $3::integer[])
+               AS reduced(workplace_id, residence_id, count)
+             WHERE assignment.workplace_id = reduced.workplace_id
+               AND assignment.residence_id = reduced.residence_id`,
+            [
+              reducedAssignments.map((assignment) => assignment.workplaceId),
+              reducedAssignments.map((assignment) => assignment.residenceId),
+              reducedAssignments.map((assignment) => assignment.count),
+            ],
+          );
+        }
       }
       return { workplaces, workers, assignmentRows };
         },
@@ -1398,62 +1549,107 @@ async function runDailyEmployment(): Promise<boolean> {
         );
         bought.set(key, total);
       }
+      const consumptionEntries: {
+        buildingId: string;
+        productId: string;
+        quantity: number;
+        spent: number;
+        occupants: number;
+      }[] = [];
       for (const home of homes) {
         for (const productId of demandBasicByProduct.keys()) {
           const total = bought.get(`${home.id}\u0000${productId}`);
           if (!total) continue;
-          await client.query(
-            `INSERT INTO residence_consumption (building_id, product_id, day, quantity, spent, occupants)
-             VALUES ($1, $2, $3::date, $4, $5, $6)
-             ON CONFLICT (building_id, product_id, day) DO UPDATE
-             SET quantity = residence_consumption.quantity + $4,
-                 spent = residence_consumption.spent + $5,
-                 occupants = $6`,
-            [home.id, productId, state.day, total.quantity, total.spent, home.occupants],
-          );
+          consumptionEntries.push({
+            buildingId: home.id,
+            productId,
+            quantity: total.quantity,
+            spent: total.spent,
+            occupants: home.occupants,
+          });
         }
       }
-      for (const shop of shops) {
-        const quantity = sold.get(shop.id) ?? 0;
-        if (quantity > 0) {
-          const owner = shop.ownerId;
-          await client.query('UPDATE residential_buildings SET stock = stock - $2 WHERE id = $1', [
-            shop.id,
-            quantity,
-          ]);
-          if (owner) {
-            await client.query(
-              `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $3::numeric + $2::numeric)
-               ON CONFLICT (user_id) DO UPDATE SET balance = player_wallets.balance + $2::numeric`,
-              [owner, roundCurrency(quantity * shop.price), STARTING_BALANCE],
-            );
-          }
-          changed = true;
-        }
-        const financials = getShopDailyFinancials(
-          shop.wage,
-          shop.workers,
-          quantity,
-          shop.price,
+      if (consumptionEntries.length > 0) {
+        await client.query(
+          `INSERT INTO residence_consumption
+             (building_id, product_id, day, quantity, spent, occupants)
+           SELECT batch.building_id, batch.product_id, $1::date,
+                  batch.quantity, batch.spent, batch.occupants
+           FROM UNNEST(
+             $2::uuid[], $3::text[], $4::double precision[],
+             $5::numeric[], $6::integer[]
+           ) AS batch(building_id, product_id, quantity, spent, occupants)
+           WHERE TRUE
+           ON CONFLICT (building_id, product_id, day) DO UPDATE
+           SET quantity = residence_consumption.quantity + EXCLUDED.quantity,
+               spent = residence_consumption.spent + EXCLUDED.spent,
+               occupants = EXCLUDED.occupants`,
+          [
+            state.day,
+            consumptionEntries.map((entry) => entry.buildingId),
+            consumptionEntries.map((entry) => entry.productId),
+            consumptionEntries.map((entry) => entry.quantity),
+            consumptionEntries.map((entry) => entry.spent),
+            consumptionEntries.map((entry) => entry.occupants),
+          ],
         );
+      }
+      const stockSales = shops
+        .map((shop) => ({ id: shop.id, quantity: sold.get(shop.id) ?? 0 }))
+        .filter((sale) => sale.quantity > 0);
+      if (stockSales.length > 0) {
+        await client.query(
+          `UPDATE residential_buildings building
+           SET stock = building.stock - sales.quantity
+           FROM UNNEST($1::uuid[], $2::integer[]) AS sales(id, quantity)
+           WHERE building.id = sales.id`,
+          [stockSales.map((sale) => sale.id), stockSales.map((sale) => sale.quantity)],
+        );
+        changed = true;
+      }
+      const shopRevenueByOwner = new Map<string, number>();
+      const commerceHistoryEntries = shops.map((shop) => {
+        const quantity = sold.get(shop.id) ?? 0;
+        if (quantity > 0 && shop.ownerId) {
+          const revenue = roundCurrency(quantity * shop.price);
+          shopRevenueByOwner.set(
+            shop.ownerId,
+            roundCurrency((shopRevenueByOwner.get(shop.ownerId) ?? 0) + revenue),
+          );
+        }
+        return {
+          id: shop.id,
+          ...getShopDailyFinancials(shop.wage, shop.workers, quantity, shop.price),
+        };
+      });
+      await applyWalletBatch(client, shopRevenueByOwner, 'credit');
+      if (commerceHistoryEntries.length > 0) {
         await client.query(
           `INSERT INTO commerce_history
              (building_id, day, employee_expense, product_expense, units_sold, sale_price)
-           VALUES ($1, $2::date, $3, $4, $5, $6)
+           SELECT batch.building_id, $1::date, batch.employee_expense,
+                  batch.product_expense, batch.units_sold, batch.sale_price
+           FROM UNNEST(
+             $2::uuid[], $3::numeric[], $4::numeric[],
+             $5::integer[], $6::numeric[]
+           ) AS batch(building_id, employee_expense, product_expense, units_sold, sale_price)
+           WHERE TRUE
            ON CONFLICT (building_id, day) DO UPDATE
            SET employee_expense = EXCLUDED.employee_expense,
                product_expense = EXCLUDED.product_expense,
                units_sold = EXCLUDED.units_sold,
                sale_price = EXCLUDED.sale_price`,
           [
-            shop.id,
             state.day,
-            financials.employeeExpense,
-            financials.productExpense,
-            financials.unitsSold,
-            financials.salePrice,
+            commerceHistoryEntries.map((entry) => entry.id),
+            commerceHistoryEntries.map((entry) => entry.employeeExpense),
+            commerceHistoryEntries.map((entry) => entry.productExpense),
+            commerceHistoryEntries.map((entry) => entry.unitsSold),
+            commerceHistoryEntries.map((entry) => entry.salePrice),
           ],
         );
+      }
+      for (const shop of shops) {
         salesDiagnostics.push({
           ownerId: shop.ownerId,
           type: 'commerce_diagnostics',
@@ -1467,23 +1663,43 @@ async function runDailyEmployment(): Promise<boolean> {
       if (salesStageSucceeded) pendingCommerceDiagnostics.push(...salesDiagnostics);
       await runStage('produção', async () => {
       // Construções produtivas: demanda de Ferramentas, penalidade de eficiência e produção diária.
-      for (const site of workplaces) {
+      const productiveSites = workplaces.filter((site) => {
         const definition = getResidenceDefinition(site.building_type);
-        if (!definition?.production || site.status !== 'completed') continue;
+        return Boolean(definition?.production && site.status === 'completed');
+      });
+      const { rows: productionStates } = productiveSites.length > 0
+        ? await client.query<{
+            id: string;
+            stock: number;
+            tool_stock: number;
+            wood_stock: number;
+            iron_stock: number;
+            efficiency_penalty: number;
+            production_progress: number;
+          }>(
+            `SELECT id, stock, tool_stock, wood_stock, iron_stock,
+                    efficiency_penalty, production_progress
+             FROM residential_buildings
+             WHERE id = ANY($1::uuid[])`,
+            [productiveSites.map((site) => site.id)],
+          )
+        : { rows: [] };
+      const productionStateById = new Map(productionStates.map((row) => [row.id, row]));
+      const productionUpdates: {
+        id: string;
+        units: number;
+        progress: number;
+        toolDemand: number;
+        woodUsed: number;
+        ironUsed: number;
+        penalty: number;
+      }[] = [];
+      const productionHistory: ProductionHistoryEntry[] = [];
+      for (const site of productiveSites) {
+        const definition = getResidenceDefinition(site.building_type);
+        if (!definition?.production) continue;
         const count = workers.get(site.id) ?? 0;
-        const { rows: stateRows } = await client.query<{
-          stock: number;
-          tool_stock: number;
-          wood_stock: number;
-          iron_stock: number;
-          efficiency_penalty: number;
-          production_progress: number;
-        }>(
-          `SELECT stock, tool_stock, wood_stock, iron_stock, efficiency_penalty, production_progress
-           FROM residential_buildings WHERE id = $1`,
-          [site.id],
-        );
-        const current = stateRows[0];
+        const current = productionStateById.get(site.id);
         if (!current) continue;
         const usesTools = Boolean(definition.toolCapacity);
         const demand = usesTools ? rollToolDemand(count, Math.random, definition.toolDemandPerWorker) : 0;
@@ -1504,32 +1720,51 @@ async function runDailyEmployment(): Promise<boolean> {
           wood: current.wood_stock,
           iron: current.iron_stock,
         });
-        await client.query(
-          `UPDATE residential_buildings
-           SET stock = stock + $2,
-               production_progress = $3,
-               tool_stock = tool_stock - $4,
-               wood_stock = wood_stock - $6,
-               iron_stock = iron_stock - $7,
-               efficiency_penalty = $5
-           WHERE id = $1`,
-          [
-            site.id,
-            result.units,
-            result.progress,
-            usesTools && demandMet ? demand : 0,
-            penalty,
-            result.woodUsed,
-            result.ironUsed,
-          ],
-        );
-        changed = true;
-        await logProduction(client, site.id, state.day, {
+        productionUpdates.push({
+          id: site.id,
+          units: result.units,
+          progress: result.progress,
+          toolDemand: usesTools && demandMet ? demand : 0,
+          woodUsed: result.woodUsed,
+          ironUsed: result.ironUsed,
+          penalty,
+        });
+        productionHistory.push({
+          buildingId: site.id,
           workPoints: generatedPoints * seasonalEfficiency,
           produced: result.units,
           efficiency: (100 - penalty) * seasonalEfficiency,
         });
       }
+      if (productionUpdates.length > 0) {
+        await client.query(
+          `UPDATE residential_buildings building
+           SET stock = building.stock + production.units,
+               production_progress = production.progress,
+               tool_stock = building.tool_stock - production.tool_demand,
+               wood_stock = building.wood_stock - production.wood_used,
+               iron_stock = building.iron_stock - production.iron_used,
+               efficiency_penalty = production.penalty
+           FROM UNNEST(
+             $1::uuid[], $2::integer[], $3::double precision[], $4::integer[],
+             $5::integer[], $6::integer[], $7::double precision[]
+           ) AS production(
+             id, units, progress, tool_demand, wood_used, iron_used, penalty
+           )
+           WHERE building.id = production.id`,
+          [
+            productionUpdates.map((update) => update.id),
+            productionUpdates.map((update) => update.units),
+            productionUpdates.map((update) => update.progress),
+            productionUpdates.map((update) => update.toolDemand),
+            productionUpdates.map((update) => update.woodUsed),
+            productionUpdates.map((update) => update.ironUsed),
+            productionUpdates.map((update) => update.penalty),
+          ],
+        );
+        changed = true;
+      }
+      await logProductionBatch(client, state.day, productionHistory);
       });
       await runStage('fazendas', async () => {
       // Crescimento e colheita/corte das fazendas agrícolas.
@@ -1552,6 +1787,17 @@ async function runDailyEmployment(): Promise<boolean> {
          WHERE building_type = ANY($1::text[]) AND status = 'completed' AND crop_phase IS NOT NULL`,
         [FARM_CROP_TYPES],
       );
+      const farmUpdates: {
+        id: string;
+        stockDelta: number;
+        phase: Crop['phase'] | null;
+        plantedDay: string | null;
+        ratioSum: number;
+        days: number;
+        yieldUnits: number;
+        harvested: number;
+      }[] = [];
+      const farmHistory: ProductionHistoryEntry[] = [];
       for (const farm of farmRows) {
         const cropRule = RESIDENCES[farm.building_type].cropRule;
         if (!cropRule) {
@@ -1571,12 +1817,16 @@ async function runDailyEmployment(): Promise<boolean> {
         let farmProduced = 0;
         if (crop.phase === 'growing') {
           const next = advanceGrowth(crop, state.day, farmPoints, cropRule);
-          await client.query(
-            `UPDATE residential_buildings
-             SET crop_phase = $2, crop_ratio_sum = $3, crop_days = $4, crop_yield = $5, crop_harvested = $6
-             WHERE id = $1`,
-            [farm.id, next.phase, next.ratioSum, next.days, next.yieldUnits, next.harvested],
-          );
+          farmUpdates.push({
+            id: farm.id,
+            stockDelta: 0,
+            phase: next.phase,
+            plantedDay: next.plantedDay,
+            ratioSum: next.ratioSum,
+            days: next.days,
+            yieldUnits: next.yieldUnits,
+            harvested: next.harvested,
+          });
         } else {
           const capacity = RESIDENCES[farm.building_type].stockCapacity ?? 0;
           const { units, done } = planHarvest(
@@ -1586,26 +1836,55 @@ async function runDailyEmployment(): Promise<boolean> {
             cropRule,
           );
           farmProduced = units;
-          await client.query(
-            `UPDATE residential_buildings
-             SET stock = stock + $2,
-                 crop_phase = CASE WHEN $3::boolean THEN NULL ELSE crop_phase END,
-                 crop_planted_day = CASE WHEN $3::boolean THEN NULL ELSE crop_planted_day END,
-                 crop_ratio_sum = CASE WHEN $3::boolean THEN 0 ELSE crop_ratio_sum END,
-                 crop_days = CASE WHEN $3::boolean THEN 0 ELSE crop_days END,
-                 crop_yield = CASE WHEN $3::boolean THEN 0 ELSE crop_yield END,
-                 crop_harvested = CASE WHEN $3::boolean THEN 0 ELSE crop_harvested + $2 END
-             WHERE id = $1`,
-            [farm.id, units, done],
-          );
+          farmUpdates.push({
+            id: farm.id,
+            stockDelta: units,
+            phase: done ? null : crop.phase,
+            plantedDay: done ? null : crop.plantedDay,
+            ratioSum: done ? 0 : crop.ratioSum,
+            days: done ? 0 : crop.days,
+            yieldUnits: done ? 0 : crop.yieldUnits,
+            harvested: done ? 0 : crop.harvested + units,
+          });
         }
-        await logProduction(client, farm.id, state.day, {
+        farmHistory.push({
+          buildingId: farm.id,
           workPoints: farmPoints,
           produced: farmProduced,
           efficiency: getDailyWorkRatio(farmPoints, cropRule.dailyWorkPoints) * 100,
         });
         changed = true;
       }
+      if (farmUpdates.length > 0) {
+        await client.query(
+          `UPDATE residential_buildings building
+           SET stock = building.stock + farm.stock_delta,
+               crop_phase = farm.phase,
+               crop_planted_day = farm.planted_day,
+               crop_ratio_sum = farm.ratio_sum,
+               crop_days = farm.days,
+               crop_yield = farm.yield_units,
+               crop_harvested = farm.harvested
+           FROM UNNEST(
+             $1::uuid[], $2::integer[], $3::text[], $4::date[],
+             $5::double precision[], $6::integer[], $7::integer[], $8::integer[]
+           ) AS farm(
+             id, stock_delta, phase, planted_day, ratio_sum, days, yield_units, harvested
+           )
+           WHERE building.id = farm.id`,
+          [
+            farmUpdates.map((update) => update.id),
+            farmUpdates.map((update) => update.stockDelta),
+            farmUpdates.map((update) => update.phase),
+            farmUpdates.map((update) => update.plantedDay),
+            farmUpdates.map((update) => update.ratioSum),
+            farmUpdates.map((update) => update.days),
+            farmUpdates.map((update) => update.yieldUnits),
+            farmUpdates.map((update) => update.harvested),
+          ],
+        );
+      }
+      await logProductionBatch(client, state.day, farmHistory);
       });
       await runStage('transporte', async () => {
       // Transporte entre armazéns e construções ligadas; consome Work Points do armazém.
@@ -1618,18 +1897,26 @@ async function runDailyEmployment(): Promise<boolean> {
         `SELECT id, tile_x, tile_y, building_type FROM residential_buildings
          WHERE building_type = 'warehouse' AND status = 'completed'`,
       );
+      const workplaceById = new Map(workplaces.map((workplace) => [workplace.id, workplace]));
+      await logProductionBatch(
+        client,
+        state.day,
+        warehouseRows.map((warehouse) => {
+          const warehouseSite = workplaceById.get(warehouse.id);
+          return {
+            buildingId: warehouse.id,
+            workPoints:
+              (workers.get(warehouse.id) ?? 0) *
+              getDailyWorkPoints(
+                warehouseSite?.work_hours_per_day ?? 8,
+                RESIDENCE_STATS.health,
+                RESIDENCE_STATS.happiness,
+              ),
+          };
+        }),
+      );
       for (const warehouse of warehouseRows) {
         let transportPhase = 'loading_linked_buildings';
-        const warehouseSiteForLog = workplaces.find((row) => row.id === warehouse.id);
-        await logProduction(client, warehouse.id, state.day, {
-          workPoints:
-            (workers.get(warehouse.id) ?? 0) *
-            getDailyWorkPoints(
-              warehouseSiteForLog?.work_hours_per_day ?? 8,
-              RESIDENCE_STATS.health,
-              RESIDENCE_STATS.happiness,
-            ),
-        });
         // Uma falha em um armazém não pode desfazer o histórico nem o transporte dos demais.
         await client.query('SAVEPOINT warehouse_transport');
         try {
@@ -1641,12 +1928,13 @@ async function runDailyEmployment(): Promise<boolean> {
           wood_stock: number;
           iron_stock: number;
         }>(
-          `SELECT id, building_type, stock, tool_stock, wood_stock, iron_stock FROM residential_buildings
+          `SELECT id, building_type, stock, tool_stock, wood_stock, iron_stock
+           FROM residential_buildings
            WHERE warehouse_id = $1 AND status = 'completed'`,
           [warehouse.id],
         );
         transportPhase = 'loading_stock';
-        const warehouseSite = workplaces.find((row) => row.id === warehouse.id);
+        const warehouseSite = workplaceById.get(warehouse.id);
         const workPoints =
           (workers.get(warehouse.id) ?? 0) *
           getDailyWorkPoints(
@@ -1658,18 +1946,35 @@ async function runDailyEmployment(): Promise<boolean> {
           await client.query('RELEASE SAVEPOINT warehouse_transport');
           continue;
         }
-        const { rows: stockRows } = await client.query<{ product_id: string; quantity: number }>(
-          'SELECT product_id, quantity FROM warehouse_stock WHERE building_id = $1',
-          [warehouse.id],
-        );
-        const { rows: settingRows } = await client.query<{
-          product_id: string;
-          minimum_stock: number;
-          maximum_stock: number | null;
+        const { rows: [warehouseInventory] } = await client.query<{
+          stock: { product_id: string; quantity: number }[];
+          settings: {
+            product_id: string;
+            minimum_stock: number;
+            maximum_stock: number | null;
+          }[];
         }>(
-          'SELECT product_id, minimum_stock, maximum_stock FROM warehouse_product_settings WHERE building_id = $1',
+          `SELECT
+             COALESCE((
+               SELECT json_agg(stock)
+               FROM (
+                 SELECT product_id, quantity
+                 FROM warehouse_stock WHERE building_id = $1
+               ) stock
+             ), '[]'::json) AS stock,
+             COALESCE((
+               SELECT json_agg(settings)
+               FROM (
+                 SELECT product_id, minimum_stock, maximum_stock
+                 FROM warehouse_product_settings WHERE building_id = $1
+               ) settings
+             ), '[]'::json) AS settings`,
           [warehouse.id],
         );
+        if (!warehouseInventory) {
+          throw new Error(`Não foi possível carregar o estoque do armazém ${warehouse.id}.`);
+        }
+        const { stock: stockRows, settings: settingRows } = warehouseInventory;
         const types = new Map(linked.map((row) => [row.id, row.building_type]));
         transportPhase = 'planning_transfers';
         const { transfers, attempts } = planTransfersDetailed(
@@ -1692,21 +1997,29 @@ async function runDailyEmployment(): Promise<boolean> {
         transportPhase = 'writing_attempts';
         await client.query('SAVEPOINT transport_log');
         try {
-          for (const attempt of attempts) {
+          if (attempts.length > 0) {
             await client.query(
               `INSERT INTO warehouse_transport_log
                  (warehouse_id, day, linked_id, linked_type, product_id, direction, wanted, moved, reason)
-               VALUES ($1, $2::date, $3, $4, $5, $6, $7, $8, $9)`,
+               SELECT $1, $2::date, batch.building_id, batch.building_type,
+                      batch.product_id, batch.direction, batch.wanted, batch.moved, batch.reason
+               FROM UNNEST(
+                 $3::uuid[], $4::text[], $5::text[], $6::text[],
+                 $7::integer[], $8::integer[], $9::text[]
+               ) WITH ORDINALITY AS batch(
+                 building_id, building_type, product_id, direction, wanted, moved, reason, position
+               )
+               ORDER BY batch.position`,
               [
                 warehouse.id,
                 state.day,
-                attempt.buildingId,
-                types.get(attempt.buildingId) ?? '',
-                attempt.productId,
-                attempt.direction,
-                attempt.wanted,
-                attempt.moved,
-                attempt.reason,
+                attempts.map((attempt) => attempt.buildingId),
+                attempts.map((attempt) => types.get(attempt.buildingId) ?? ''),
+                attempts.map((attempt) => attempt.productId),
+                attempts.map((attempt) => attempt.direction),
+                attempts.map((attempt) => attempt.wanted),
+                attempts.map((attempt) => attempt.moved),
+                attempts.map((attempt) => attempt.reason),
               ],
             );
           }
@@ -1720,27 +2033,86 @@ async function runDailyEmployment(): Promise<boolean> {
           console.error('Não foi possível gravar o histórico do armazém:', logError);
         }
         transportPhase = 'applying_transfers';
+        const stockAddedByProduct = new Map<string, number>();
+        const stockWithdrawnByProduct = new Map<string, number>();
+        const buildingChanges = new Map<string, {
+          stock: number;
+          tools: number;
+          wood: number;
+          iron: number;
+        }>();
+        const transportedByBuilding = new Map<string, number>();
+        const availableStock = new Map(stockRows.map((row) => [row.product_id, row.quantity]));
         for (const transfer of transfers) {
+          const totals = transfer.direction === 'out' ? stockAddedByProduct : stockWithdrawnByProduct;
+          totals.set(
+            transfer.productId,
+            (totals.get(transfer.productId) ?? 0) + transfer.quantity,
+          );
           if (transfer.direction === 'out') {
-            await client.query(
-              `INSERT INTO warehouse_stock (building_id, product_id, quantity) VALUES ($1, $2, $3)
-               ON CONFLICT (building_id, product_id) DO UPDATE
-               SET quantity = warehouse_stock.quantity + EXCLUDED.quantity`,
-              [warehouse.id, transfer.productId, transfer.quantity],
+            availableStock.set(
+              transfer.productId,
+              (availableStock.get(transfer.productId) ?? 0) + transfer.quantity,
             );
-          } else {
-            const result = await client.query(
-              `UPDATE warehouse_stock
-               SET quantity = quantity - $3
-               WHERE building_id = $1 AND product_id = $2 AND quantity >= $3`,
-              [warehouse.id, transfer.productId, transfer.quantity],
+          }
+        }
+        for (const transfer of transfers) {
+          if (transfer.direction !== 'in') continue;
+          const available = availableStock.get(transfer.productId) ?? 0;
+          if (available < transfer.quantity) {
+            throw new Error(
+              `Estoque insuficiente no armazém ${warehouse.id} para ${transfer.productId}: ${transfer.quantity}.`,
             );
-            if (result.rowCount !== 1) {
+          }
+          availableStock.set(transfer.productId, available - transfer.quantity);
+        }
+        if (stockAddedByProduct.size > 0) {
+          const products = [...stockAddedByProduct.keys()];
+          await client.query(
+            `INSERT INTO warehouse_stock (building_id, product_id, quantity)
+             SELECT $1, batch.product_id, batch.quantity
+             FROM UNNEST($2::text[], $3::integer[]) AS batch(product_id, quantity)
+             WHERE TRUE
+             ON CONFLICT (building_id, product_id) DO UPDATE
+             SET quantity = warehouse_stock.quantity + EXCLUDED.quantity`,
+            [
+              warehouse.id,
+              products,
+              products.map((productId) => stockAddedByProduct.get(productId) ?? 0),
+            ],
+          );
+        }
+        if (stockWithdrawnByProduct.size > 0) {
+          const products = [...stockWithdrawnByProduct.keys()];
+          const quantities = products.map(
+            (productId) => stockWithdrawnByProduct.get(productId) ?? 0,
+          );
+          const result = await client.query<{ product_id: string }>(
+            `UPDATE warehouse_stock stock
+             SET quantity = stock.quantity - withdrawal.quantity
+             FROM UNNEST($1::text[], $2::integer[])
+               AS withdrawal(product_id, quantity)
+             WHERE stock.building_id = $3
+               AND stock.product_id = withdrawal.product_id
+               AND stock.quantity >= withdrawal.quantity
+             RETURNING stock.product_id`,
+            [products, quantities, warehouse.id],
+          );
+          const updatedProducts = new Set(result.rows.map((row) => row.product_id));
+          if (updatedProducts.size !== products.length) {
+            const failedTransfer = transfers.find(
+              (transfer) =>
+                transfer.direction === 'in' && !updatedProducts.has(transfer.productId),
+            );
+            if (failedTransfer) {
               throw new Error(
-                `Estoque insuficiente no armazém ${warehouse.id} para ${transfer.productId}: ${transfer.quantity}.`,
+                `Estoque insuficiente no armazém ${warehouse.id} para ${failedTransfer.productId}: ${failedTransfer.quantity}.`,
               );
             }
+            throw new Error(`Não foi possível atualizar o estoque do armazém ${warehouse.id}.`);
           }
+        }
+        for (const transfer of transfers) {
           const kind = getResidenceDefinition(types.get(transfer.buildingId) ?? '')?.kind;
           // 'in' em comércios repõe o estoque principal; nas demais construções é um insumo.
           const column =
@@ -1750,15 +2122,56 @@ async function runDailyEmployment(): Promise<boolean> {
                   transfer.productId
                 ];
           if (!column) continue;
-          await client.query(`UPDATE residential_buildings SET ${column} = ${column} + $2 WHERE id = $1`, [
-            transfer.buildingId,
-            transfer.direction === 'out' ? -transfer.quantity : transfer.quantity,
-          ]);
           if (transfer.direction === 'out') {
-            await logProduction(client, transfer.buildingId, state.day, { transported: transfer.quantity });
+            transportedByBuilding.set(
+              transfer.buildingId,
+              (transportedByBuilding.get(transfer.buildingId) ?? 0) + transfer.quantity,
+            );
           }
+          const changes = buildingChanges.get(transfer.buildingId) ?? {
+            stock: 0,
+            tools: 0,
+            wood: 0,
+            iron: 0,
+          };
+          const delta = transfer.direction === 'out' ? -transfer.quantity : transfer.quantity;
+          if (column === 'stock') changes.stock += delta;
+          else if (column === 'tool_stock') changes.tools += delta;
+          else if (column === 'wood_stock') changes.wood += delta;
+          else if (column === 'iron_stock') changes.iron += delta;
+          buildingChanges.set(transfer.buildingId, changes);
+        }
+        if (buildingChanges.size > 0) {
+          const buildingIds = [...buildingChanges.keys()];
+          await client.query(
+            `UPDATE residential_buildings building
+             SET stock = building.stock + changes.stock,
+                 tool_stock = building.tool_stock + changes.tools,
+                 wood_stock = building.wood_stock + changes.wood,
+                 iron_stock = building.iron_stock + changes.iron
+             FROM UNNEST(
+               $1::uuid[], $2::integer[], $3::integer[],
+               $4::integer[], $5::integer[]
+             ) AS changes(id, stock, tools, wood, iron)
+             WHERE building.id = changes.id`,
+            [
+              buildingIds,
+              buildingIds.map((id) => buildingChanges.get(id)?.stock ?? 0),
+              buildingIds.map((id) => buildingChanges.get(id)?.tools ?? 0),
+              buildingIds.map((id) => buildingChanges.get(id)?.wood ?? 0),
+              buildingIds.map((id) => buildingChanges.get(id)?.iron ?? 0),
+            ],
+          );
           changed = true;
         }
+        await logProductionBatch(
+          client,
+          state.day,
+          [...transportedByBuilding].map(([buildingId, transported]) => ({
+            buildingId,
+            transported,
+          })),
+        );
         transportPhase = 'recording_daily_demand';
         await logWarehouseDemand(
           client,
@@ -1872,10 +2285,17 @@ async function runDailyEmployment(): Promise<boolean> {
       );
       const assignments: JobAssignment[] = allocateWorkers(residences, workplaces);
       await client.query('DELETE FROM job_assignments');
-      for (const assignment of assignments) {
+      if (assignments.length > 0) {
         await client.query(
-          'INSERT INTO job_assignments (workplace_id, residence_id, count) VALUES ($1, $2, $3)',
-          [assignment.workplaceId, assignment.residenceId, assignment.count],
+          `INSERT INTO job_assignments (workplace_id, residence_id, count)
+           SELECT batch.workplace_id, batch.residence_id, batch.count
+           FROM UNNEST($1::uuid[], $2::uuid[], $3::integer[])
+             AS batch(workplace_id, residence_id, count)`,
+          [
+            assignments.map((assignment) => assignment.workplaceId),
+            assignments.map((assignment) => assignment.residenceId),
+            assignments.map((assignment) => assignment.count),
+          ],
         );
       }
       await client.query('UPDATE world_state SET last_job_allocation_day = $1 WHERE id = 1', [state.day]);

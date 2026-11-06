@@ -23,6 +23,7 @@ interface WarehousePanelProps {
   error: string;
   supplierMessage: string;
   onSave: (setting: WarehouseProductSetting) => void;
+  onTransfer: (productId: string) => void;
   onSearchSuppliers: () => void;
   onClose: () => void;
 }
@@ -48,6 +49,7 @@ export default function WarehousePanel({
   error,
   supplierMessage,
   onSave,
+  onTransfer,
   onSearchSuppliers,
   onClose,
 }: WarehousePanelProps) {
@@ -141,7 +143,7 @@ export default function WarehousePanel({
           <span>Estoque Mínimo Desejável</span>
           <span>Valor (C$)</span>
           <span>Tipo</span>
-          <span />
+          <span>Ações</span>
         </div>
         {filteredProducts.map((product) => {
           const draft = draftFor(product.id);
@@ -198,24 +200,33 @@ export default function WarehousePanel({
                 <option value="sell">Venda</option>
                 <option value="buy">Compra</option>
               </select>
-              <button
-                type="button"
-                disabled={!isOwner || isSaving}
-                onClick={() =>
-                  onSave({
-                    productId: product.id,
-                    minimumStock: Number(draft.minimumStock),
-                    maximumStock:
-                      draft.maximumStock.trim().toUpperCase() === 'MAX'
-                        ? null
-                        : Number(draft.maximumStock),
-                    price: Number(draft.price),
-                    mode: draft.mode,
-                  })
-                }
-              >
-                Salvar
-              </button>
+              <span className="warehouse-row-actions">
+                <button
+                  type="button"
+                  disabled={!isOwner || isSaving}
+                  onClick={() =>
+                    onSave({
+                      productId: product.id,
+                      minimumStock: Number(draft.minimumStock),
+                      maximumStock:
+                        draft.maximumStock.trim().toUpperCase() === 'MAX'
+                          ? null
+                          : Number(draft.maximumStock),
+                      price: Number(draft.price),
+                      mode: draft.mode,
+                    })
+                  }
+                >
+                  Salvar
+                </button>
+                <button
+                  type="button"
+                  disabled={!isOwner || isSaving || (stock.get(product.id) ?? 0) <= 0}
+                  onClick={() => onTransfer(product.id)}
+                >
+                  Transferir
+                </button>
+              </span>
             </div>
           );
         })}

@@ -497,6 +497,16 @@ O painel do armazém mostra o estoque real e o espaço ocupado. A barra superior
 mostra Madeira e Pedra dos armazéns próprios a até 60 tiles do centro da câmera;
 os totais são atualizados ao explorar outra área e periodicamente.
 
+**Transferência manual:** no painel **Produtos e estoque** de um armazém seu,
+clique em **Transferir** na linha do produto, selecione outra construção sua
+concluída a até 60 tiles e informe a quantidade. A transferência usa os Work
+Points diários ainda disponíveis no armazém e preserva o **Estoque Mínimo
+Desejável** da origem. O destino precisa armazenar aquele produto; o limite da
+quantidade considera sua capacidade própria ou, para outro armazém, o **Estoque
+Máximo Desejável** e o espaço livre em m³. Madeira e Ferramentas, por exemplo,
+podem ser enviadas diretamente aos estoques de insumos de construções que as
+utilizam.
+
 **Influência:** o botão **Ver influência** no painel de qualquer construção
 desenha no mapa o raio de 60 tiles dela.
 

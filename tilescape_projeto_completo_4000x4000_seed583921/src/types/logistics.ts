@@ -50,6 +50,28 @@ export function getTransportDemand(productId: string, quantity: number): number 
   );
 }
 
+export function getMaxManualTransferQuantity(input: {
+  productId: string;
+  sourceStock: number;
+  sourceMinimumStock: number;
+  destinationFreeCapacity: number;
+  availableWorkPoints: number;
+}): number {
+  const product = PRODUCTS.find((item) => item.id === input.productId);
+  if (!product || product.volumeM3 <= 0 || product.weightKg < 0) return 0;
+  const unitDemand = getTransportDemand(input.productId, 1);
+  return Math.max(
+    0,
+    Math.floor(
+      Math.min(
+        input.sourceStock - input.sourceMinimumStock,
+        input.destinationFreeCapacity,
+        input.availableWorkPoints / unitDemand,
+      ) + 1e-9,
+    ),
+  );
+}
+
 export function parseWarehouseLink(value: unknown): { warehouseId: string | null } | null {
   if (typeof value !== 'object' || value === null) return null;
   const { warehouseId } = value as Record<string, unknown>;

@@ -139,13 +139,21 @@ button { color: inherit; }
 .commerce-candidate-list p { margin: 0; color: #a6a897; font-size: 10px; line-height: 1.5; }
 .commerce-profit { color: #9fd3a0; }
 .commerce-loss { color: #e58b7d; }
-.warehouse-row { display: grid; grid-template-columns: minmax(130px, 1.6fr) 62px 82px minmax(100px, 1fr) minmax(100px, 1fr) 74px 68px 64px; min-width: 730px; gap: 7px; align-items: center; font-size: 11px; }
+.warehouse-row { display: grid; grid-template-columns: minmax(130px, 1.6fr) 62px 82px minmax(100px, 1fr) minmax(100px, 1fr) 74px 68px 130px; min-width: 800px; gap: 7px; align-items: center; font-size: 11px; }
 .consumption-row { display: grid; grid-template-columns: minmax(110px, 1.4fr) repeat(4, 1fr); gap: 8px; align-items: center; font-size: 11px; }
 .warehouse-head { position: sticky; top: 0; background: rgba(19,28,23,.98); color: #b29a66; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
 .warehouse-product { display: flex; align-items: center; gap: 7px; }
 .warehouse-product img { width: 26px; height: 26px; object-fit: contain; }
 .warehouse-row input, .warehouse-row select { width: 100%; padding: 5px 6px; border: 1px solid rgba(219,201,158,.2); border-radius: 6px; background: rgba(255,255,255,.04); color: #eee7d6; font: 500 11px 'DM Sans', sans-serif; }
 .warehouse-row button { padding: 5px; border: 1px solid rgba(207,178,116,.4); border-radius: 6px; background: rgba(193,162,100,.15); color: #e6dfce; cursor: pointer; }
+.warehouse-row button:disabled { opacity: .5; cursor: default; }
+.warehouse-row-actions { display: flex; gap: 4px; }
+.warehouse-transfer-backdrop { position: fixed; inset: 0; z-index: 11; display: grid; place-items: center; padding: 20px; background: rgba(5,9,7,.68); backdrop-filter: blur(5px); }
+.warehouse-transfer-panel { position: relative; width: min(440px, calc(100vw - 32px)); padding: 20px; border: 1px solid rgba(219,201,158,.2); border-radius: 13px; background: rgba(19,28,23,.99); box-shadow: 0 18px 50px rgba(0,0,0,.42); color: #eee7d6; }
+.warehouse-transfer-quantity { display: grid; gap: 6px; margin: 14px 0; color: #c9c4b1; font-size: 11px; }
+.warehouse-transfer-quantity input { width: 100%; padding: 9px; border: 1px solid rgba(219,201,158,.25); border-radius: 7px; color: #eee7d6; background: rgba(255,255,255,.04); font: 500 13px 'DM Sans', sans-serif; }
+.warehouse-transfer-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.warehouse-transfer-actions button:disabled { opacity: .5; cursor: default; }
 .eyebrow { font-size: 8px; color: #b29a66; }
 .panel-title h1 { margin: 13px 0 9px; font: 600 25px/1.18 'Manrope', sans-serif; letter-spacing: -.045em; }
 .panel-title h1 em { color: #d4bd86; font-style: normal; }

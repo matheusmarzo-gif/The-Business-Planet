@@ -591,7 +591,15 @@ mapeamento e verificar todas as curvas.
   unidades proporcionalmente ao que falta em cada uma, com arredondamento
   inteiro determinístico; o histórico informa essa distribuição. O que não
   couber por espaço ou Work Points não é transportado, e a produção para o
-  armazém tem prioridade sobre o abastecimento.
+  armazém tem prioridade sobre o abastecimento. A transferência manual começa
+  no painel do armazém por produto, seleciona um destino concluído do mesmo
+  dono em até 60 tiles e consulta um limite no servidor. A rota executora volta
+  a validar a origem e o destino sob o lock transacional global, respeita o
+  estoque mínimo da origem, o limite natural/desejável do destino e os Work
+  Points restantes do dia (`gerados - warehouse_demand`). Ela atualiza ambos
+  os estoques, registra o movimento no `warehouse_transport_log` e debita os
+  Work Points no `warehouse_demand`. Destinos não armazéns só recebem produtos
+  para os quais tenham estoque de saída ou capacidade de insumo configurados.
 - Validade de estoques: não há lotes nem datas de entrada. Às 18:00 do dia do
   jogo, `applyDailySpoilage` calcula para cada estoque perecível a perda
   esperada `quantidade / PRODUCTS.shelfLifeDays`; a parte inteira é removida
@@ -619,6 +627,8 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
 | `GET /api/residential-buildings/:id/warehouse-log` | Dono do armazém | Retorna `{ days: [{ day, workPoints }], events: [{ day, buildingType, productId, direction, wanted, moved, reason, errorDetail }] }` do armazém (tabela `warehouse_transport_log`, gravada às 00:00 na etapa de transporte, 30 dias; `reason` = `desired_reached`/`no_space`/`no_work_points`/`warehouse_empty` quando moveu menos que o desejado; erros internos registram etapa e detalhe em `errorDetail`). |
 | `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo), estoque e preço médio local ponderado por oferta acima do mínimo; espaço ocupado é calculado no cliente. |
+| `GET /api/residential-buildings/:id/warehouse-transfer-quote?destinationId=&productId=` | Dono do armazém | Calcula o limite atual da transferência considerando estoque mínimo de origem, capacidade/estoque desejável do destino, distância e Work Points restantes do dia. |
+| `POST /api/residential-buildings/:id/warehouse-transfer` | Dono do armazém | Transfere `{ destinationId, productId, quantity }` para construção concluída do mesmo dono em até 60 tiles; recalcula e valida todos os limites no servidor, grava o histórico e publica os estoques atualizados. |
 | `POST /api/residential-buildings/:id/warehouse/suppliers` | Dono do armazém | Executa compras imediatas do armazém especificado pelo mesmo planejador das rodadas automáticas. |
 | `GET /api/residential-buildings/:id/production-history` | Autenticado | Retorna `{ days: [{ day, workPoints, produced, transported, efficiency }] }` dos últimos 30 dias (tabela `production_history`, gravada às 00:00 pelas etapas de produção, fazendas e transporte; `transported` conta só envios ao armazém). |
 | `GET /api/residential-buildings/:id/commerce-history` | Dono do comércio | Retorna os últimos 30 dias de dados financeiros de `commerce_history`; o painel combina a resposta com diagnósticos presentes no armazenamento local do navegador. |

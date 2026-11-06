@@ -14,6 +14,7 @@ import ProductCatalog from './components/ProductCatalog';
 import ResidencePanel from './components/ResidencePanel';
 import MasterPanel, { type OnlinePlayer } from './components/MasterPanel';
 import WarehousePanel from './components/WarehousePanel';
+import WarehouseTransferPanel from './components/WarehouseTransferPanel';
 import ConsumptionPanel, { type ProductConsumption } from './components/ConsumptionPanel';
 import ProductionHistoryPanel, { type ProductionDay } from './components/ProductionHistoryPanel';
 import CommerceHistoryPanel, { type CommerceDay } from './components/CommerceHistoryPanel';
@@ -74,6 +75,21 @@ const CATEGORY_LABELS: Record<ConstructionCategory, string> = {
   industrias: 'Indústrias',
   prefeitura: 'Prefeitura',
 };
+
+interface WarehouseTransferFlow {
+  sourceId: string;
+  productId: string;
+  destination: ResidentialBuilding | null;
+  quote: {
+    maxQuantity: number;
+    workPoints: number;
+    destinationStock: number;
+    destinationCapacity: number | null;
+  } | null;
+  isLoadingQuote: boolean;
+  isSubmitting: boolean;
+  error: string;
+}
 
 interface GameAppProps {
   user: {
@@ -177,6 +193,28 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Informe estoques desejáveis inteiros (0 a 1.000.000), valor entre C$ 0 e C$ 1.000.000 com até 2 casas decimais e o tipo venda/compra.';
         } else if (body.error === 'not_a_warehouse') {
           error = 'Essa construção não é um armazém concluído.';
+        } else if (body.error === 'invalid_transfer_request') {
+          error = 'Os dados da transferência são inválidos.';
+        } else if (body.error === 'transfer_building_not_found') {
+          error = 'A construção de origem ou destino não existe mais.';
+        } else if (body.error === 'transfer_building_not_owned') {
+          error = 'A origem e o destino da transferência precisam pertencer a você.';
+        } else if (body.error === 'transfer_source_not_warehouse') {
+          error = 'A construção de origem precisa ser um armazém concluído.';
+        } else if (body.error === 'transfer_destination_not_completed') {
+          error = 'A construção de destino precisa estar concluída.';
+        } else if (body.error === 'transfer_out_of_range') {
+          error = 'O destino precisa estar a até 60 tiles do armazém.';
+        } else if (body.error === 'transfer_product_not_storable') {
+          error = 'Essa construção não armazena esse produto.';
+        } else if (body.error === 'transfer_limit_exceeded') {
+          error = 'O limite mudou. Confira o estoque, o espaço e os Work Points disponíveis.';
+        } else if (body.error === 'transfer_destination_full') {
+          error = 'Não há espaço suficiente no estoque do destino.';
+        } else if (body.error === 'transfer_stock_changed') {
+          error = 'O estoque de origem mudou antes da transferência.';
+        } else if (body.error === 'transfer_unavailable') {
+          error = 'Não foi possível concluir a transferência agora.';
         } else if (body.error === 'building_already_complete') {
           error = 'Essa construção já foi concluída.';
         } else if (body.error === 'building_not_found') {
@@ -270,6 +308,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [warehouseDemand, setWarehouseDemand] = useState<WarehouseDemand | null>(null);
   const [isSearchingSuppliers, setIsSearchingSuppliers] = useState(false);
   const [warehouseSupplierMessage, setWarehouseSupplierMessage] = useState('');
+  const [warehouseTransfer, setWarehouseTransfer] = useState<WarehouseTransferFlow | null>(null);
   const [localResources, setLocalResources] = useState<{ wood: number; stone: number } | null>(null);
   const [isConsumptionOpen, setIsConsumptionOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -830,7 +869,138 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
+  const beginWarehouseTransfer = (sourceId: string, productId: string) => {
+    setIsWarehouseOpen(false);
+    setSelectedResidenceId(null);
+    setWarehouseTransfer({
+      sourceId,
+      productId,
+      destination: null,
+      quote: null,
+      isLoadingQuote: false,
+      isSubmitting: false,
+      error: '',
+    });
+  };
+
+  const chooseWarehouseTransferDestination = async (
+    transfer: WarehouseTransferFlow,
+    destination: ResidentialBuilding,
+  ) => {
+    setSelectedResidenceId(destination.id);
+    setWarehouseTransfer((current) =>
+      current?.sourceId === transfer.sourceId && current.productId === transfer.productId
+        ? { ...current, destination, quote: null, isLoadingQuote: true, error: '' }
+        : current,
+    );
+    try {
+      const query = new URLSearchParams({
+        destinationId: destination.id,
+        productId: transfer.productId,
+      });
+      const quote = await cityRequest<NonNullable<WarehouseTransferFlow['quote']>>(
+        `/api/residential-buildings/${transfer.sourceId}/warehouse-transfer-quote?${query}`,
+      );
+      setWarehouseTransfer((current) =>
+        current?.sourceId === transfer.sourceId &&
+        current.productId === transfer.productId &&
+        current.destination?.id === destination.id
+          ? { ...current, quote, isLoadingQuote: false, error: '' }
+          : current,
+      );
+    } catch (error) {
+      setWarehouseTransfer((current) =>
+        current?.sourceId === transfer.sourceId && current.productId === transfer.productId
+          ? {
+              ...current,
+              destination: null,
+              quote: null,
+              isLoadingQuote: false,
+              error: error instanceof Error ? error.message : 'Não foi possível verificar esse destino.',
+            }
+          : current,
+      );
+    }
+  };
+
+  const executeWarehouseTransfer = async (quantity: number) => {
+    const destination = warehouseTransfer?.destination;
+    if (!warehouseTransfer || !destination) return;
+    const transfer = { ...warehouseTransfer, destination };
+    setWarehouseTransfer({ ...transfer, isSubmitting: true, error: '' });
+    try {
+      await cityRequest<{ quantity: number; workPoints: number }>(
+        `/api/residential-buildings/${transfer.sourceId}/warehouse-transfer`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            destinationId: transfer.destination.id,
+            productId: transfer.productId,
+            quantity,
+          }),
+        },
+      );
+      setWarehouseTransfer(null);
+      if (transfer.destination.type === 'warehouse') {
+        setIsWarehouseOpen(true);
+        await refreshWarehouse(transfer.destination.id, true);
+      }
+    } catch (error) {
+      let message = error instanceof Error ? error.message : 'Não foi possível transferir o produto.';
+      if (
+        error instanceof CityRequestError &&
+        (error.code === 'transfer_limit_exceeded' || error.code === 'transfer_stock_changed')
+      ) {
+        try {
+          const query = new URLSearchParams({
+            destinationId: transfer.destination.id,
+            productId: transfer.productId,
+          });
+          const quote = await cityRequest<NonNullable<WarehouseTransferFlow['quote']>>(
+            `/api/residential-buildings/${transfer.sourceId}/warehouse-transfer-quote?${query}`,
+          );
+          setWarehouseTransfer({
+            ...transfer,
+            quote,
+            isSubmitting: false,
+            error: `${message} O novo limite é ${quote.maxQuantity}.`,
+          });
+          return;
+        } catch (quoteError) {
+          message = quoteError instanceof Error ? quoteError.message : message;
+        }
+      }
+      setWarehouseTransfer({ ...transfer, isSubmitting: false, error: message });
+    }
+  };
+
   const handleResidenceSelect = (building: ResidentialBuilding) => {
+    if (warehouseTransfer) {
+      if (warehouseTransfer.destination) return;
+      if (building.id === warehouseTransfer.sourceId) {
+        setWarehouseTransfer({
+          ...warehouseTransfer,
+          error: 'Escolha uma construção de destino diferente do armazém de origem.',
+        });
+        return;
+      }
+      if (!building.isOwnedByCurrentUser) {
+        setWarehouseTransfer({
+          ...warehouseTransfer,
+          error: 'O destino precisa ser uma construção sua.',
+        });
+        return;
+      }
+      if (building.status !== 'completed') {
+        setWarehouseTransfer({
+          ...warehouseTransfer,
+          error: 'O destino precisa estar concluído.',
+        });
+        return;
+      }
+      void chooseWarehouseTransferDestination(warehouseTransfer, building);
+      return;
+    }
     if (linkingFromId && linkingFromId !== building.id) {
       void linkWarehouse(linkingFromId, building.id);
       return;
@@ -1642,8 +1812,32 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             error={warehouseError}
             supplierMessage={warehouseSupplierMessage}
             onSave={(setting) => void saveWarehouseSetting(selectedResidenceKey, setting)}
+            onTransfer={(productId) => beginWarehouseTransfer(selectedResidenceKey, productId)}
             onSearchSuppliers={() => void searchWarehouseSuppliers(selectedResidenceKey)}
             onClose={() => setIsWarehouseOpen(false)}
+          />
+        )}
+        {warehouseTransfer && (!warehouseTransfer.destination || warehouseTransfer.isLoadingQuote) && (
+          <div className="placement-banner" role="status">
+            {warehouseTransfer.error ||
+              (warehouseTransfer.isLoadingQuote
+                ? 'Verificando estoque, espaço e Work Points disponíveis…'
+                : 'Clique em uma construção sua, concluída e a até 60 tiles, para escolher o destino.')}
+            <button type="button" onClick={() => setWarehouseTransfer(null)}>Cancelar</button>
+          </div>
+        )}
+        {warehouseTransfer?.destination && warehouseTransfer.quote && (
+          <WarehouseTransferPanel
+            productId={warehouseTransfer.productId}
+            destination={warehouseTransfer.destination}
+            maxQuantity={warehouseTransfer.quote.maxQuantity}
+            workPoints={warehouseTransfer.quote.workPoints}
+            destinationStock={warehouseTransfer.quote.destinationStock}
+            destinationCapacity={warehouseTransfer.quote.destinationCapacity}
+            isSubmitting={warehouseTransfer.isSubmitting}
+            error={warehouseTransfer.error}
+            onSubmit={(quantity) => void executeWarehouseTransfer(quantity)}
+            onClose={() => setWarehouseTransfer(null)}
           />
         )}
 

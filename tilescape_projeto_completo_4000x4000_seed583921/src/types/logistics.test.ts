@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { planWarehouseTrades, type TradeWarehouse } from './logistics.js';
+import {
+  getMaxManualTransferQuantity,
+  getTransportDemand,
+  planWarehouseTrades,
+  type TradeWarehouse,
+} from './logistics.js';
 
 function createWarehouse(
   id: string,
@@ -34,4 +39,38 @@ test('manual warehouse supplier search plans trades only for the requested buyer
   assert.equal(trades.length, 1);
   assert.equal(trades[0].buyerId, requestedBuyer.id);
   assert.equal(trades[0].sellerId, seller.id);
+});
+
+test('manual transfer limit respects reserved source stock, destination capacity, and transport work points', () => {
+  assert.equal(getTransportDemand('rice', 1), 2);
+  assert.equal(
+    getMaxManualTransferQuantity({
+      productId: 'rice',
+      sourceStock: 20,
+      sourceMinimumStock: 5,
+      destinationFreeCapacity: 8,
+      availableWorkPoints: 10,
+    }),
+    5,
+  );
+  assert.equal(
+    getMaxManualTransferQuantity({
+      productId: 'rice',
+      sourceStock: 20,
+      sourceMinimumStock: 20,
+      destinationFreeCapacity: 8,
+      availableWorkPoints: 100,
+    }),
+    0,
+  );
+  assert.equal(
+    getMaxManualTransferQuantity({
+      productId: 'unknown',
+      sourceStock: 20,
+      sourceMinimumStock: 0,
+      destinationFreeCapacity: 20,
+      availableWorkPoints: 100,
+    }),
+    0,
+  );
 });

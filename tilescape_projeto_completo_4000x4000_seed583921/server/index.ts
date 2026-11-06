@@ -80,6 +80,7 @@ import { parseBasicDemandConfig } from '../src/types/commerceDemand.js';
 import {
   canLinkToWarehouse,
   getTransportDemand,
+  getMaxManualTransferQuantity,
   isWithinLinkRadius,
   parseWarehouseLink,
   planTransfersDetailed,
@@ -929,6 +930,186 @@ async function logWarehouseDemand(
      ON CONFLICT (building_id, day) DO UPDATE SET demand = warehouse_demand.demand + $3`,
     [warehouseId, day, demand],
   );
+}
+
+interface ManualWarehouseTransferQuote {
+  maxQuantity: number;
+  workPoints: number;
+  destinationStock: number;
+  destinationCapacity: number | null;
+  sourceMinimumStock: number;
+  destinationColumn: 'stock' | 'tool_stock' | 'wood_stock' | 'iron_stock' | 'sugarcane_stock' | null;
+  destinationType: ResidenceType;
+  day: string;
+}
+
+type ManualWarehouseTransferQuoteResult =
+  | { error: string }
+  | { quote: ManualWarehouseTransferQuote };
+
+async function getManualWarehouseTransferQuote(
+  client: PoolClient,
+  userId: string,
+  sourceId: string,
+  destinationId: string,
+  productId: string,
+): Promise<ManualWarehouseTransferQuoteResult> {
+  const product = PRODUCTS.find((item) => item.id === productId);
+  if (!product) return { error: 'invalid_product' };
+  if (sourceId === destinationId) return { error: 'same_transfer_building' };
+
+  const { rows: buildings } = await client.query<{
+    id: string;
+    building_type: ResidenceType;
+    created_by: string;
+    status: string;
+    tile_x: number;
+    tile_y: number;
+    work_hours_per_day: number;
+    stock: number;
+    tool_stock: number;
+    wood_stock: number;
+    iron_stock: number;
+    sugarcane_stock: number;
+  }>(
+    `SELECT id, building_type, created_by, status, tile_x, tile_y, work_hours_per_day,
+            stock, tool_stock, wood_stock, iron_stock, sugarcane_stock
+     FROM residential_buildings
+     WHERE id = ANY($1::uuid[])
+     ORDER BY id
+     FOR UPDATE`,
+    [[sourceId, destinationId]],
+  );
+  const source = buildings.find((building) => building.id === sourceId);
+  const destination = buildings.find((building) => building.id === destinationId);
+  if (!source || !destination) return { error: 'transfer_building_not_found' };
+  if (source.created_by !== userId || destination.created_by !== userId) {
+    return { error: 'transfer_building_not_owned' };
+  }
+  if (source.building_type !== 'warehouse' || source.status !== 'completed') {
+    return { error: 'transfer_source_not_warehouse' };
+  }
+  if (destination.status !== 'completed') return { error: 'transfer_destination_not_completed' };
+  if (
+    !isWithinLinkRadius(
+      { type: source.building_type, x: source.tile_x, y: source.tile_y },
+      { type: destination.building_type, x: destination.tile_x, y: destination.tile_y },
+    )
+  ) {
+    return { error: 'transfer_out_of_range' };
+  }
+
+  const { rows: [world] } = await client.query<{ day: string }>(
+    `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
+     FROM world_state WHERE id = 1`,
+  );
+  if (!world) return { error: 'world_unavailable' };
+  const { rows: [workforce] } = await client.query<{ workers: number; demand: number }>(
+    `SELECT
+       COALESCE((SELECT SUM(count) FROM job_assignments WHERE workplace_id = $1), 0)::int AS workers,
+       COALESCE((SELECT demand FROM warehouse_demand WHERE building_id = $1 AND day = $2::date), 0) AS demand`,
+    [sourceId, world.day],
+  );
+  const availableWorkPoints = Math.max(
+    0,
+    (workforce?.workers ?? 0) *
+      getDailyWorkPoints(source.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness) -
+      (workforce?.demand ?? 0),
+  );
+
+  const { rows: sourceStockRows } = await client.query<{ quantity: number }>(
+    `SELECT quantity FROM warehouse_stock
+     WHERE building_id = $1 AND product_id = $2 FOR UPDATE`,
+    [sourceId, productId],
+  );
+  const { rows: sourceSettings } = await client.query<{ minimum_stock: number }>(
+    `SELECT minimum_stock FROM warehouse_product_settings
+     WHERE building_id = $1 AND product_id = $2 FOR UPDATE`,
+    [sourceId, productId],
+  );
+  const sourceStock = sourceStockRows[0]?.quantity ?? 0;
+  const sourceMinimumStock = sourceSettings[0]?.minimum_stock ?? 0;
+  let destinationStock = 0;
+  let destinationCapacity: number | null = 0;
+  let destinationFreeCapacity = 0;
+  let destinationColumn: ManualWarehouseTransferQuote['destinationColumn'] = null;
+
+  if (destination.building_type === 'warehouse') {
+    const { rows: destinationInventory } = await client.query<{ product_id: string; quantity: number }>(
+      `SELECT product_id, quantity FROM warehouse_stock WHERE building_id = $1 FOR UPDATE`,
+      [destinationId],
+    );
+    destinationStock =
+      destinationInventory.find((item) => item.product_id === productId)?.quantity ?? 0;
+    const destinationUsedM3 = destinationInventory.reduce((total, item) => {
+      const definition = PRODUCTS.find((entry) => entry.id === item.product_id);
+      return total + item.quantity * (definition?.volumeM3 ?? 0);
+    }, 0);
+    const { rows: [destinationSetting] } = await client.query<{ maximum_stock: number | null }>(
+      `SELECT maximum_stock FROM warehouse_product_settings
+       WHERE building_id = $1 AND product_id = $2 FOR UPDATE`,
+      [destinationId, productId],
+    );
+    destinationCapacity = destinationSetting?.maximum_stock ?? null;
+    const configuredSpace = destinationCapacity === null
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, destinationCapacity - destinationStock);
+    const physicalSpace = Math.max(
+      0,
+      Math.floor(
+        ((RESIDENCES.warehouse.storageCapacityM3 ?? 0) - destinationUsedM3) /
+          product.volumeM3 +
+          1e-9,
+      ),
+    );
+    destinationFreeCapacity = Math.min(configuredSpace, physicalSpace);
+  } else {
+    const definition = getResidenceDefinition(destination.building_type);
+    if (!definition) return { error: 'transfer_product_not_storable' };
+    if (definition.stockProductId === productId && (definition.stockCapacity ?? 0) > 0) {
+      destinationStock = destination.stock;
+      destinationCapacity = definition.stockCapacity ?? 0;
+      destinationColumn = 'stock';
+    } else if (productId === 'tools' && (definition.toolCapacity ?? 0) > 0) {
+      destinationStock = destination.tool_stock;
+      destinationCapacity = definition.toolCapacity ?? 0;
+      destinationColumn = 'tool_stock';
+    } else if (productId === 'wood' && (definition.woodCapacity ?? 0) > 0) {
+      destinationStock = destination.wood_stock;
+      destinationCapacity = definition.woodCapacity ?? 0;
+      destinationColumn = 'wood_stock';
+    } else if (productId === 'iron' && (definition.ironCapacity ?? 0) > 0) {
+      destinationStock = destination.iron_stock;
+      destinationCapacity = definition.ironCapacity ?? 0;
+      destinationColumn = 'iron_stock';
+    } else if (productId === 'sugarcane' && (definition.sugarcaneCapacity ?? 0) > 0) {
+      destinationStock = destination.sugarcane_stock;
+      destinationCapacity = definition.sugarcaneCapacity ?? 0;
+      destinationColumn = 'sugarcane_stock';
+    } else {
+      return { error: 'transfer_product_not_storable' };
+    }
+    destinationFreeCapacity = Math.max(0, destinationCapacity - destinationStock);
+  }
+
+  return {
+    quote: {
+      maxQuantity: getMaxManualTransferQuantity({
+        productId,
+        sourceStock,
+        sourceMinimumStock,
+        destinationFreeCapacity,
+        availableWorkPoints,
+      }),
+      workPoints: availableWorkPoints,
+      destinationStock,
+      destinationCapacity,
+      sourceMinimumStock,
+      destinationColumn,
+      destinationType: destination.building_type,
+      day: world.day,
+    },
+  };
 }
 
 interface WarehouseTradeBuildingRow {
@@ -3828,6 +4009,189 @@ async function start() {
         console.error('Não foi possível consultar o consumo da residência:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
+  });
+  app.get('/api/residential-buildings/:id/warehouse-transfer-quote', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const destinationId = request.query.destinationId;
+    const productId = request.query.productId;
+    if (
+      !userId ||
+      !residenceIdPattern.test(request.params.id) ||
+      typeof destinationId !== 'string' ||
+      !residenceIdPattern.test(destinationId) ||
+      typeof productId !== 'string'
+    ) {
+      response.status(400).json({ error: 'invalid_transfer_request' });
+      return;
+    }
+
+    void pool.connect().then(async (client) => {
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const result = await getManualWarehouseTransferQuote(
+          client,
+          userId,
+          request.params.id,
+          destinationId,
+          productId,
+        );
+        if ('error' in result) {
+          await client.query('ROLLBACK');
+          const status =
+            result.error === 'transfer_building_not_owned'
+              ? 403
+              : result.error === 'transfer_building_not_found'
+                ? 404
+                : result.error === 'world_unavailable'
+                  ? 503
+                  : 409;
+          response.status(status).json({ error: result.error });
+          return;
+        }
+        await client.query('COMMIT');
+        response.json({
+          maxQuantity: result.quote.maxQuantity,
+          workPoints: getTransportDemand(productId, result.quote.maxQuantity),
+          destinationStock: result.quote.destinationStock,
+          destinationCapacity: result.quote.destinationCapacity,
+        });
+      } catch (error: unknown) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter a consulta de transferência:', rollbackError);
+        });
+        console.error('Não foi possível calcular os limites da transferência:', error);
+        response.status(503).json({ error: 'transfer_unavailable' });
+      } finally {
+        client.release();
+      }
+    }).catch((error: unknown) => {
+      console.error('Não foi possível iniciar a consulta de transferência:', error);
+      response.status(503).json({ error: 'transfer_unavailable' });
+    });
+  });
+  app.post('/api/residential-buildings/:id/warehouse-transfer', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const body = request.body as Record<string, unknown> | null;
+    const destinationId = body?.destinationId;
+    const productId = body?.productId;
+    const quantity = body?.quantity;
+    if (
+      !userId ||
+      !residenceIdPattern.test(request.params.id) ||
+      typeof destinationId !== 'string' ||
+      !residenceIdPattern.test(destinationId) ||
+      typeof productId !== 'string' ||
+      !Number.isInteger(quantity) ||
+      (quantity as number) <= 0
+    ) {
+      response.status(400).json({ error: 'invalid_transfer_request' });
+      return;
+    }
+
+    void pool.connect().then(async (client) => {
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const result = await getManualWarehouseTransferQuote(
+          client,
+          userId,
+          request.params.id,
+          destinationId,
+          productId,
+        );
+        if ('error' in result) {
+          await client.query('ROLLBACK');
+          const status =
+            result.error === 'transfer_building_not_owned'
+              ? 403
+              : result.error === 'transfer_building_not_found'
+                ? 404
+                : result.error === 'world_unavailable'
+                  ? 503
+                  : 409;
+          response.status(status).json({ error: result.error });
+          return;
+        }
+        if ((quantity as number) > result.quote.maxQuantity) {
+          await client.query('ROLLBACK');
+          response.status(409).json({
+            error: 'transfer_limit_exceeded',
+            maxQuantity: result.quote.maxQuantity,
+          });
+          return;
+        }
+
+        const { rowCount: sourceUpdated } = await client.query(
+          `UPDATE warehouse_stock
+           SET quantity = quantity - $3
+           WHERE building_id = $1 AND product_id = $2 AND quantity >= $3 + $4`,
+          [request.params.id, productId, quantity, result.quote.sourceMinimumStock],
+        );
+        if (sourceUpdated !== 1) {
+          await client.query('ROLLBACK');
+          response.status(409).json({ error: 'transfer_stock_changed' });
+          return;
+        }
+        if (result.quote.destinationColumn) {
+          const column = result.quote.destinationColumn;
+          const { rowCount: destinationUpdated } = await client.query(
+            `UPDATE residential_buildings
+             SET ${column} = ${column} + $2
+             WHERE id = $1 AND ${column} + $2 <= $3`,
+            [
+              destinationId,
+              quantity,
+              (result.quote.destinationCapacity ?? 0),
+            ],
+          );
+          if (destinationUpdated !== 1) {
+            await client.query('ROLLBACK');
+            response.status(409).json({ error: 'transfer_destination_full' });
+            return;
+          }
+        } else {
+          await client.query(
+            `INSERT INTO warehouse_stock (building_id, product_id, quantity)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (building_id, product_id)
+             DO UPDATE SET quantity = warehouse_stock.quantity + EXCLUDED.quantity`,
+            [destinationId, productId, quantity],
+          );
+        }
+        await client.query(
+          `INSERT INTO warehouse_transport_log
+             (warehouse_id, day, linked_id, linked_type, product_id, direction, wanted, moved, reason)
+           VALUES ($1, $2::date, $3, $4, $5, 'in', $6, $6, NULL)`,
+          [
+            request.params.id,
+            result.quote.day,
+            destinationId,
+            result.quote.destinationType,
+            productId,
+            quantity,
+          ],
+        );
+        const workPoints = getTransportDemand(productId, quantity as number);
+        await logWarehouseDemand(client, request.params.id, result.quote.day, workPoints);
+        await client.query('COMMIT');
+        response.json({ quantity, workPoints });
+        void publishCities().catch((error: unknown) => {
+          console.error('A transferência foi concluída, mas a atualização do mundo falhou:', error);
+        });
+      } catch (error: unknown) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter a transferência do armazém:', rollbackError);
+        });
+        console.error('Não foi possível transferir o produto entre construções:', error);
+        response.status(503).json({ error: 'transfer_unavailable' });
+      } finally {
+        client.release();
+      }
+    }).catch((error: unknown) => {
+      console.error('Não foi possível iniciar a transferência do armazém:', error);
+      response.status(503).json({ error: 'transfer_unavailable' });
+    });
   });
   app.get('/api/residential-buildings/:id/warehouse', requireAuth, (request, response) => {
     if (!residenceIdPattern.test(request.params.id)) {

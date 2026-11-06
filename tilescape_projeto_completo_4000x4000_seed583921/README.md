@@ -379,11 +379,16 @@ desejados**, **salário por dia** e **carga horária** (4 a 14 h). Durante a obr
 é possível definir até 100 funcionários, independentemente do limite final do
 edifício; ao concluir, o número desejado e os empregados são reduzidos ao máximo
 definitivo da construção (por exemplo, 4 na Loja de Leite). Em construções
-concluídas vale o limite do catálogo. Todo dia às 12:00 (horário do mundo) os moradores
-são distribuídos: cada construção com vagas tem um *benefício*
-`vagas × F_H² × salário / carga horária`, com `F_H = 1 − 0,5·(|H−8|/6)²`, e as
-residências empregam seus moradores (dentro de 60 tiles) do maior benefício para
-o menor, atualizando as vagas a cada preenchimento. Às 00:00 o dono paga o
+concluídas vale o limite do catálogo. Todo dia às 12:00 (horário do mundo), cada
+residência considera todas as ofertas com vagas a até 60 tiles. O benefício de
+cada oferta é `vagas × F_H² × (salário diário ÷ horas) × fator_distância`, com
+`F_H = 1 − 0,5·(|H−8|/6)²` e `fator_distância = √(60 / (60 + d))`, onde `d` é a
+distância entre os centros da residência e do trabalho. Os moradores são
+repartidos entre os postos proporcionalmente a esses benefícios. O arredondamento
+inteiro pelo método dos maiores restos mantém a soma igual ao número de moradores
+que podem ser contratados; se uma oferta atingir suas vagas, o excedente é
+redistribuído entre as demais. As vagas restantes são atualizadas antes de
+processar a próxima residência. Às 00:00 o dono paga o
 salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). Também
 às 00:00 cada funcionário de uma obra gera
 `12,5 × horas × saúde/100 × felicidade/100 × fator de descanso` Work Points (fator

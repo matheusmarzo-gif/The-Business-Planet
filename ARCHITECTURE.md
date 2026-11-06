@@ -352,9 +352,15 @@ mapeamento e verificar todas as curvas.
   `runDailyEmployment` (mesmo lock `583921303`, chamada em
   `advanceClock`) às 12:00 do mundo recalcula do zero `job_assignments`
   (`workplace_id`, `residence_id`, `count`): `allocateWorkers` percorre as
-  residências por id e emprega os moradores nas construções dentro do raio de
-  60 tiles, da maior para a menor `getWorkBenefit = vagas · F_H² · salário / horas`
-  (`F_H = 1 − 0,5·(|H−8|/6)²`), recalculando as vagas a cada preenchimento.
+  residências por id e considera todas as ofertas com vagas no raio de 60 tiles.
+  Para cada residência, cada oferta recebe `benefícioᵢ = vagas · F_H² · salário /
+  horas · √(60 / (60 + dᵢ))`, onde `F_H = 1 − 0,5·(|H−8|/6)²` e `dᵢ` é a
+  distância entre os centros da casa e do trabalho. Os moradores são repartidos
+  proporcionalmente aos benefícios; o método dos maiores restos garante
+  alocações inteiras cuja soma é a população empregável da casa, limitada pelas
+  vagas elegíveis. Se uma oferta atingir seu limite, o excedente é redistribuído
+  entre as demais; as vagas restantes e os benefícios são recalculados para a
+  residência seguinte.
   À 00:00 o mesmo job debita de cada dono `salário × empregados` em
   `player_wallets` (o dinheiro some; o saldo pode ficar negativo). Controle
   de idempotência em `world_state.last_job_allocation_day` e `last_payroll_day`.

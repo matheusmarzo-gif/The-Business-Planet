@@ -812,6 +812,16 @@ describe('fazenda leiteira e demanda configurável', () => {
 });
 
 describe('work settings', () => {
+  const workplace = (id: string, x: number, wage: number, desiredWorkers: number) => ({
+    id,
+    type: 'farm_rice' as const,
+    x,
+    y: 0,
+    wage,
+    workHoursPerDay: 8,
+    desiredWorkers,
+  });
+
   it('allows up to 100 workers during construction and applies the building limit on completion', () => {
     assert.equal(getMaxDesiredWorkers('shop_milk', 'under_construction'), 100);
     assert.equal(getMaxDesiredWorkers('shop_milk', 'completed'), 4);
@@ -872,55 +882,74 @@ describe('work settings', () => {
     assert.equal(parseWorkSettings(null), null);
   });
 
-  it('computes the work benefit and allocates workers from best to worst', () => {
+  it('computes the distance-adjusted work benefit', () => {
     assert.equal(getHoursFactor(8), 1);
     assert.equal(getHoursFactor(14), 0.5);
     assert.equal(getHoursFactor(2), 0.5);
     assert.equal(getWorkBenefit(10, 80, 8), 100);
+    assert.ok(Math.abs(getWorkBenefit(10, 80, 8, 60) - 100 * Math.sqrt(0.5)) < 1e-12);
     assert.equal(getRestFactor(4), 1.2);
     assert.equal(getRestFactor(8), 1);
     assert.ok(Math.abs(getRestFactor(14) - 0.8) < 1e-9);
     assert.equal(getDailyWorkPoints(8, 100, 100), 100);
     assert.equal(getDailyWorkPoints(8, 50, 100), 50);
     assert.ok(Math.abs(getDailyWorkPoints(4, 100, 100) - 60) < 1e-9);
-    const workplace = (id: string, x: number, wage: number, desiredWorkers: number) => ({
-      id,
-      type: 'farm_rice' as const,
-      x,
-      y: 0,
-      wage,
-      workHoursPerDay: 8,
-      desiredWorkers,
-    });
-    const homes = [
-      { id: 'a', type: 'house_poor1' as const, x: 10, y: 0, occupants: 4 },
-      { id: 'b', type: 'house_poor1' as const, x: 12, y: 0, occupants: 4 },
-      { id: 'far', type: 'house_poor1' as const, x: 500, y: 0, occupants: 4 },
-    ];
-    const assignments = allocateWorkers(homes, [
-      workplace('rich', 0, 30, 5),
-      workplace('poor', 4, 10, 10),
-      workplace('closed', 8, 99, 0),
+  });
+
+  it('distributes each home proportionally and rounds allocations to its population', () => {
+    const home = { id: 'home', type: 'house_poor1' as const, x: 100, y: 100, occupants: 32 };
+    const near = workplace('near', 99, 10, 32);
+    near.y = 99;
+    const far = workplace('far', 159, 10, 32);
+    far.y = 99;
+    const assignments = allocateWorkers([home], [near, far]);
+    const distanceFactor = Math.sqrt(60 / 120);
+
+    assert.deepEqual(assignments, [
+      { workplaceId: 'near', residenceId: 'home', count: 19 },
+      { workplaceId: 'far', residenceId: 'home', count: 13 },
     ]);
-    // "a" escolhe a melhor (benefício 18,75); com 1 vaga restante o benefício de "rich" cai e "b" vai para "poor".
+    assert.equal(assignments.reduce((sum, assignment) => sum + assignment.count, 0), home.occupants);
+    assert.equal(getWorkBenefit(32, 10, 8, 60) / getWorkBenefit(32, 10, 8), distanceFactor);
+  });
+
+  it('caps proportional shares at vacancies and redistributes overflow', () => {
+    const home = { id: 'home', type: 'house_poor1' as const, x: 100, y: 100, occupants: 10 };
+    const scarce = workplace('scarce', 99, 1000, 2);
+    scarce.y = 99;
+    const available = workplace('available', 99, 10, 10);
+    available.y = 99;
+    assert.deepEqual(allocateWorkers([home], [scarce, available]), [
+      { workplaceId: 'scarce', residenceId: 'home', count: 2 },
+      { workplaceId: 'available', residenceId: 'home', count: 8 },
+    ]);
+  });
+
+  it('updates vacancy-based benefits for each subsequent residence', () => {
+    const homes = [
+      { id: 'a', type: 'house_poor1' as const, x: 10, y: 10, occupants: 4 },
+      { id: 'b', type: 'house_poor1' as const, x: 12, y: 10, occupants: 4 },
+    ];
+    const rich = workplace('rich', 9, 100, 5);
+    rich.y = 9;
+    const poor = workplace('poor', 9, 10, 5);
+    poor.y = 9;
+    const assignments = allocateWorkers(homes, [rich, poor]);
     assert.deepEqual(assignments, [
       { workplaceId: 'rich', residenceId: 'a', count: 4 },
-      { workplaceId: 'poor', residenceId: 'b', count: 4 },
+      { workplaceId: 'rich', residenceId: 'b', count: 1 },
+      { workplaceId: 'poor', residenceId: 'b', count: 3 },
     ]);
-    const total = (id: string) =>
-      assignments.filter((job) => job.workplaceId === id).reduce((sum, job) => sum + job.count, 0);
-    assert.equal(total('rich'), 4);
-    assert.equal(total('poor'), 4);
-    assert.equal(assignments.some((job) => job.residenceId === 'far'), false);
+    assert.equal(assignments.reduce((sum, assignment) => sum + assignment.count, 0), 8);
     assert.deepEqual(
       [...getPayroll(
         [
-          { id: 'rich', ownerId: 'u1', wage: 30 },
+          { id: 'rich', ownerId: 'u1', wage: 100 },
           { id: 'poor', ownerId: 'u1', wage: 10 },
         ],
         assignments,
       )],
-      [['u1', 160]],
+      [['u1', 530]],
     );
   });
 

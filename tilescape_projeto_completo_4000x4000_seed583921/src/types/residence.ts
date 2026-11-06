@@ -160,11 +160,14 @@ export function planConstructionMaterialWithdrawals(
 
 export function isWithinWorkerSearchRadius(
   building: { type: ResidenceType; x: number; y: number },
-  point: { x: number; y: number },
+  point: { type?: ResidenceType; x: number; y: number },
 ): boolean {
   const { width, height } = RESIDENCES[building.type];
-  const dx = point.x + 0.5 - (building.x + width / 2);
-  const dy = point.y + 0.5 - (building.y + height / 2);
+  const pointDefinition = point.type ? RESIDENCES[point.type] : null;
+  const pointCenterX = point.x + (pointDefinition ? pointDefinition.width / 2 : 0.5);
+  const pointCenterY = point.y + (pointDefinition ? pointDefinition.height / 2 : 0.5);
+  const dx = pointCenterX - (building.x + width / 2);
+  const dy = pointCenterY - (building.y + height / 2);
   return dx * dx + dy * dy <= WORKER_SEARCH_RADIUS * WORKER_SEARCH_RADIUS;
 }
 

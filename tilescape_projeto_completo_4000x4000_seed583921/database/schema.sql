@@ -175,7 +175,7 @@ ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_chec
 ALTER TABLE residential_buildings
   DROP CONSTRAINT IF EXISTS residential_buildings_building_type_check,
   ADD CONSTRAINT residential_buildings_building_type_check
-    CHECK (building_type IN ('house_poor1', 'house_poor2', 'farm_rice', 'farm_potato', 'farm_wheat', 'farm_barley', 'farm_corn', 'farm_cattle', 'farm_dairy', 'farm_cane', 'farm_spices', 'shop_rice', 'shop_potato', 'shop_corn', 'shop_barley', 'shop_wheat', 'shop_butcher', 'shop_milk', 'warehouse', 'fishery', 'shop_fish', 'salt_gatherer', 'lumber_mill', 'quarry', 'iron_mine', 'toolmaker', 'sugar_mill'));
+    CHECK (building_type IN ('house_poor1', 'house_poor2', 'farm_rice', 'farm_potato', 'farm_wheat', 'farm_barley', 'farm_corn', 'farm_cattle', 'farm_dairy', 'farm_cane', 'farm_spices', 'shop_rice', 'shop_potato', 'shop_corn', 'shop_barley', 'shop_wheat', 'shop_butcher', 'shop_milk', 'warehouse', 'fishery', 'shop_fish', 'salt_gatherer', 'lumber_mill', 'quarry', 'iron_mine', 'toolmaker', 'sugar_mill', 'charcoal_works'));
 
 CREATE TABLE IF NOT EXISTS warehouse_product_settings (
   building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,

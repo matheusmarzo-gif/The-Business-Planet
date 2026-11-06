@@ -45,6 +45,7 @@ export const PRODUCTS: ProductDefinition[] = [
   product('red_meat', 'Carne vermelha', 'carne_vermelha', 'raw_material', 'unit', 4, 0.01, 30),
   product('milk', 'Leite', 'leite', 'raw_material', 'liter', 1, 0.001, 7),
   product('sugarcane', 'Cana', 'cana', 'raw_material', 'unit', 3, 0.01, 3),
+  product('charcoal', 'Carvão', 'carvao', 'processed', 'unit', 5, 0.015, null),
   product('vegetables', 'Vegetais', 'vegetais', 'raw_material', 'unit', 3, 0.01, 10),
   product('tobacco_leaf', 'Fumo', 'fumo', 'raw_material', 'unit', 2, 0.01, 1460),
   product('cocoa', 'Cacau', 'cacau', 'raw_material', 'unit', 6, 0.01, 730),

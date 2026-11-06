@@ -366,6 +366,14 @@ Ferramentas é 0,05 por funcionário/dia, com a mesma penalidade de eficiência 
 Pesqueiro. Cana, madeira e Ferramentas são recebidas pelo armazém ligado; a cana
 armazenada na construção também está sujeita à validade de 3 dias.
 
+A **Carvoaria** (3 × 3, até 20 funcionários) custa 30 madeiras e 60 pedras e
+exige 12.000 Work Points. Armazena até 100 carvões, 10 Ferramentas e 30 madeiras
+(limite de madeira adotado como nas outras oficinas). Cada 200 Work Points
+efetivos e 1 madeira produzem 5 carvões. Ferramentas e madeira são recebidas
+pelo armazém ligado; a demanda de Ferramentas é 0,05 por funcionário/dia e
+segue a penalidade do Pesqueiro. O carvão pesa 5 kg, ocupa 0,015 m³ e tem
+validade infinita.
+
 ### Fazendas
 
 Na categoria **Fazendas**, as fazendas de arroz, batata, trigo, cevada, milho e
@@ -523,7 +531,7 @@ mostra esses mesmos dados agregados para todos os cidadãos: as quantidades
 compradas pelas residências da cidade são divididas pela população total, e os
 preços médios são ponderados pelas unidades compradas.
 
-Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
+Use **Produtos** na barra inferior para consultar os 33 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.
 Validades informadas em anos são convertidas para dias considerando 365 dias
 por ano; produtos sem deterioração aparecem com validade infinita. Carne vermelha

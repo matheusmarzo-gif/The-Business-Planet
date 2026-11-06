@@ -537,6 +537,15 @@ mapeamento e verificar todas as curvas.
   abastecida pelo armazém ligado e consumida por `planProduction`; a cana nesse
   insumo também sofre validade de 3 dias. Sprite
   `public/buildings/artisan/casa_de_engenho.png`.
+- `charcoal_works` (Carvoaria, categoria Artesanais, zona urbana) ocupa 3 × 3,
+  emprega até 20, custa 30 madeiras/60 pedras e exige 12.000 WP. Guarda 100
+  carvões, 10 Ferramentas e 30 madeiras (capacidade de insumo definida pelo
+  padrão de outras oficinas). Cada lote de 200 WP efetivos e 1 madeira produz
+  5 carvões. A demanda de Ferramentas é 0,05 por funcionário/dia, com a
+  penalidade do Pesqueiro. Usa os estoques existentes `stock`, `tool_stock` e
+  `wood_stock`; o armazém ligado abastece madeira e Ferramentas. O produto
+  `charcoal` pesa 5 kg, ocupa 0,015 m³ e não perece. Sprites
+  `public/buildings/artisan/carvoaria.png` e `public/products/carvao.png`.
 - Comércio entre armazéns (`planWarehouseTrades` em `src/types/logistics.ts`): às
   03:00 e 15:00 (`world_state.last_warehouse_trade_slot`, ex. `2026-01-01T15`,
   garante uma execução por rodada) cada armazém em modo `buy` procura armazéns

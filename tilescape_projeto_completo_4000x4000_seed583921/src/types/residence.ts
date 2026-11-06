@@ -16,6 +16,7 @@ export type ResidenceType =
   | 'farm_dairy'
   | 'salt_gatherer'
   | 'sugar_mill'
+  | 'charcoal_works'
   | 'shop_rice'
   | 'shop_potato'
   | 'shop_corn'
@@ -696,6 +697,33 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
       batchWood: 1,
       batchStockProductId: 'sugarcane',
       batchStockAmount: 6,
+    },
+  },
+  charcoal_works: {
+    type: 'charcoal_works',
+    kind: 'workshop',
+    requiredZone: 'urban',
+    requiresRoad: true,
+    name: 'Carvoaria',
+    asset: '/buildings/artisan/carvoaria.png',
+    width: 3,
+    height: 3,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 30, stone: 60 },
+    workPoints: 12000,
+    maxWorkers: 20,
+    stockProduct: 'Carvão',
+    stockProductId: 'charcoal',
+    stockCapacity: 100,
+    toolCapacity: 10,
+    toolDemandPerWorker: 0.05,
+    woodCapacity: 30,
+    production: {
+      mode: 'batch',
+      workPointsPerUnit: 200,
+      batchSize: 5,
+      batchWood: 1,
     },
   },
   shop_fish: {

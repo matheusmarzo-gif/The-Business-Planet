@@ -1633,6 +1633,20 @@ describe('recursos e ferramentaria', () => {
     assert.equal(RESIDENCES.salt_gatherer.toolDemandPerWorker, 0.05);
     assert.equal(RESIDENCES.sugar_mill.maxWorkers, 40);
     assert.equal(RESIDENCES.sugar_mill.toolDemandPerWorker, 0.05);
+    assert.deepEqual(
+      [
+        RESIDENCES.charcoal_works.width,
+        RESIDENCES.charcoal_works.height,
+        RESIDENCES.charcoal_works.maxWorkers,
+        RESIDENCES.charcoal_works.stockCapacity,
+        RESIDENCES.charcoal_works.toolCapacity,
+        RESIDENCES.charcoal_works.woodCapacity,
+        RESIDENCES.charcoal_works.workPoints,
+      ],
+      [3, 3, 20, 100, 10, 30, 12000],
+    );
+    assert.deepEqual(RESIDENCES.charcoal_works.cost, { wood: 30, stone: 60 });
+    assert.equal(RESIDENCES.charcoal_works.toolDemandPerWorker, 0.05);
   });
 
   it('uses chance production for salt below and above 400 effective Work Points', () => {
@@ -1710,6 +1724,56 @@ describe('recursos e ferramentaria', () => {
     assert.deepEqual(transfers, [
       { buildingId: 'sugar-mill', productId: 'sugarcane', quantity: 400, direction: 'in' },
     ]);
+  });
+
+  it('makes five charcoal per 200 Work Points and one wood', () => {
+    const rule = RESIDENCES.charcoal_works.production!;
+    const result = planProduction(rule, {
+      progress: 0,
+      workPoints: 200,
+      penalty: 0,
+      freeSpace: 100,
+      wood: 1,
+    });
+    assert.deepEqual([result.units, result.woodUsed], [5, 1]);
+    assert.equal(
+      planProduction(rule, {
+        progress: 0,
+        workPoints: 200,
+        penalty: 0,
+        freeSpace: 100,
+        wood: 0,
+      }).units,
+      0,
+    );
+  });
+
+  it('supplies the charcoal works with wood and tools through a warehouse', () => {
+    const transfers = planTransfers(
+      {
+        stock: new Map([['wood', 30], ['tools', 10]]),
+        minimumStock: new Map(),
+        maximumStock: new Map(),
+        capacityM3: 50,
+        workPoints: 1e6,
+      },
+      [{ buildingId: 'charcoal-works', type: 'charcoal_works', stock: 0, woodStock: 0, toolStock: 0 }],
+    );
+    assert.deepEqual(
+      transfers.map(({ productId, quantity, direction }) => [productId, quantity, direction]),
+      [['tools', 10, 'in'], ['wood', 30, 'in']],
+    );
+  });
+});
+
+describe('carvão', () => {
+  it('has the specified weight, volume, and unlimited shelf life', () => {
+    const charcoal = PRODUCTS.find(({ id }) => id === 'charcoal');
+    assert.ok(charcoal);
+    assert.deepEqual(
+      [charcoal.weightKg, charcoal.volumeM3, charcoal.shelfLifeDays],
+      [5, 0.015, null],
+    );
   });
 });
 

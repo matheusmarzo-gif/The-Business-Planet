@@ -488,12 +488,16 @@ export function getPurchaseBenefitCalculation(
 
   const preAdjustment = income - pf;
   const errorBase = preAdjustment + q;
-  const logErrorBase =
+  const logRawErrorBase =
     w < 0
       ? logAbsolutePositiveSum(qLog, preAdjustment)
       : errorBase === 0
         ? Number.NEGATIVE_INFINITY
         : Math.log(Math.abs(errorBase));
+  const logErrorBase =
+    logRawErrorBase === Number.NEGATIVE_INFINITY
+      ? Number.NEGATIVE_INFINITY
+      : logRawErrorBase - Math.log(referenceBasketCost);
   const errorBenefit = boundedExponential(4 * logErrorBase);
   const logAssociatedBenefit =
     logErrorBase === Number.NEGATIVE_INFINITY

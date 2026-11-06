@@ -399,7 +399,7 @@ describe('shop sales', () => {
     const pf = price * basicNeed;
     const w = (1 - pf * rr / income) ** 9;
     const q = (0.8 ** w - 1) * (income / rr);
-    const benefitError = (income - pf + q) ** 4;
+    const benefitError = ((income - pf + q) / rr) ** 4;
     const benefitIdeal = (income / rr - 0.125 / rr) ** 4;
     const calculation = getPurchaseBenefitCalculation(income, price, basicNeed, rr);
     assert.equal(calculation.pf, pf);
@@ -485,7 +485,7 @@ describe('shop sales', () => {
       fishShops,
       demandByProduct,
       averagePrices,
-      () => 0.99,
+      () => 0,
     );
     assert.deepEqual(
       fishShops.map((store) =>
@@ -494,8 +494,8 @@ describe('shop sales', () => {
       [13, 12, 7],
     );
     assert.deepEqual(plan.purchases, [
-      { shopId: 'fish-9', residenceId: 'home-32', productId: 'fish', quantity: 7 },
-      { shopId: 'fish-20', residenceId: 'home-32', productId: 'fish', quantity: 2 },
+      { shopId: 'fish-9', residenceId: 'home-32', productId: 'fish', quantity: 1 },
+      { shopId: 'fish-20', residenceId: 'home-32', productId: 'fish', quantity: 1 },
     ]);
   });
 

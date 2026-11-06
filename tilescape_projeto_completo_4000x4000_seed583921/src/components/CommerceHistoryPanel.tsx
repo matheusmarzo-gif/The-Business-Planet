@@ -1,5 +1,6 @@
 import { formatMoney } from '../types/wallet';
 import type { ShopResidenceTransaction } from '../types/commerce';
+import { PRODUCTS } from '../types/product';
 
 export interface CommerceDay {
   day: string;
@@ -22,11 +23,15 @@ interface CommerceHistoryPanelProps {
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const decimal = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
-const benefitFormat = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 8 });
+const benefitFormat = new Intl.NumberFormat('pt-BR', {
+  maximumSignificantDigits: 6,
+  notation: 'scientific',
+});
+const percentFormat = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 2 });
 const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
 const outcomeText = {
   purchased: 'Comprou',
-  negative_benefit: 'Benefício negativo; não comprou',
+  negative_benefit: 'Benefício associado zero; não alocado',
   no_stock: 'Sem estoque',
   no_capacity: 'Sem capacidade',
   no_stock_or_capacity: 'Sem estoque e capacidade',
@@ -97,15 +102,43 @@ export default function CommerceHistoryPanel({
                   <section key={transaction.residenceId}>
                     <strong>
                       Residência {transaction.residenceId.slice(0, 8)} · {integer.format(transaction.occupants)} moradores ·
-                      renda média {formatMoney(transaction.averageIncome)} · preço efetivo da área{' '}
-                      {formatMoney(transaction.areaAveragePrice)} · demanda esperada{' '}
-                      {decimal.format(transaction.expectedDemand)} · alvo após arredondamento{' '}
+                      {transaction.productId
+                        ? `${PRODUCTS.find((product) => product.id === transaction.productId)?.name ?? transaction.productId} · `
+                        : ''}
+                      renda média {formatMoney(transaction.averageIncome)} · RR da cesta{' '}
+                      {formatMoney(transaction.referenceBasketCost ?? transaction.areaAveragePrice)} · preço médio do produto{' '}
+                      {formatMoney(transaction.productAveragePrice ?? transaction.areaAveragePrice)} · necessidade básica{' '}
+                      {decimal.format(transaction.expectedDemand)} · quantidade desejada total{' '}
                       {integer.format(transaction.desiredQuantity)}
                     </strong>
                     <p className="commerce-candidate-list">
-                      Loja classificada #{transaction.candidate.rank} · preço C$ {transaction.candidate.price} ·
-                      distância {decimal.format(transaction.candidate.distance)} tiles · benefício{' '}
-                      {benefitFormat.format(transaction.candidate.benefit)} · demanda desta loja{' '}
+                      Loja #{transaction.candidate.rank} · preço C$ {transaction.candidate.price} ·
+                      distância {decimal.format(transaction.candidate.distance)} tiles · Pf{' '}
+                      {transaction.candidate.pf === undefined
+                        ? '—'
+                        : formatMoney(transaction.candidate.pf)} · w{' '}
+                      {transaction.candidate.w === undefined
+                        ? '—'
+                        : decimal.format(transaction.candidate.w)} · q{' '}
+                      {transaction.candidate.q === undefined
+                        ? '—'
+                        : benefitFormat.format(transaction.candidate.q)} · benefício erro{' '}
+                      {transaction.candidate.errorBenefit === undefined
+                        ? '—'
+                        : benefitFormat.format(transaction.candidate.errorBenefit)} · benefício ideal{' '}
+                      {transaction.candidate.idealBenefit === undefined
+                        ? '—'
+                        : benefitFormat.format(transaction.candidate.idealBenefit)} · associado{' '}
+                      {benefitFormat.format(
+                        transaction.candidate.associatedBenefit ?? transaction.candidate.benefit,
+                      )}
+                      {transaction.candidate.valuesSaturated
+                        ? ' (valor saturado; proporção calculada em escala logarítmica)'
+                        : ''} · participação de moradores{' '}
+                      {transaction.candidate.resultShare === undefined
+                        ? '—'
+                        : percentFormat.format(transaction.candidate.resultShare)} (
+                      {integer.format(transaction.candidate.allocatedResidents ?? 0)} pessoas) · demanda desta loja{' '}
                       {decimal.format(transaction.candidate.desiredQuantity)} · estoque disponível{' '}
                       {integer.format(transaction.candidate.stockAvailable)} · capacidade disponível{' '}
                       {integer.format(transaction.candidate.capacityAvailable)} · disponível efetivo{' '}

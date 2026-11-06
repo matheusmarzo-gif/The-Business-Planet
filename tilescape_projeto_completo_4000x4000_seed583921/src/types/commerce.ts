@@ -1,28 +1,28 @@
 import { getResidenceDefinition, isWithinWorkerSearchRadius, type ResidenceType } from './residence.js';
+import { BASIC_BASKET_PRODUCT_IDS } from './commerceDemand.js';
 
 export const DEFAULT_SHOP_PRICE = 10;
 export const MIN_SHOP_PRICE = 1;
 export const MAX_SHOP_PRICE = 100000;
 // A cada 100 Work Points gerados no dia, a loja ganha 5 unidades de capacidade de venda.
 export const SALES_PER_100_WORK_POINTS = 5;
-export const PURCHASE_RATE = 0.03;
-export const PURCHASE_MIN_RATIO = 0.125;
-export const PURCHASE_MAX_RATIO = 4;
+const MAX_DIAGNOSTIC_VALUE = Number.MAX_SAFE_INTEGER;
 
 export interface SalesShop {
   id: string;
+  cityId: string;
+  productId: string;
   type: ResidenceType;
   x: number;
   y: number;
   price: number;
-  unitsSoldLastDay: number;
-  lastDaySalePrice: number;
   stock: number;
   capacity: number;
 }
 
 export interface SalesResidence {
   id: string;
+  cityId: string;
   type: ResidenceType;
   x: number;
   y: number;
@@ -33,7 +33,15 @@ export interface SalesResidence {
 export interface StorePurchase {
   shopId: string;
   residenceId: string;
+  productId: string;
   quantity: number;
+}
+
+export interface CityProductSale {
+  cityId: string;
+  productId: string;
+  unitsSold: number;
+  price: number;
 }
 
 export interface ShopTransactionCandidate {
@@ -49,6 +57,19 @@ export interface ShopTransactionCandidate {
   demandBefore: number;
   purchased: number;
   demandAfter: number;
+  basicNeedPerPerson?: number;
+  referenceBasketCost?: number;
+  productAveragePrice?: number;
+  pf?: number;
+  q?: number;
+  w?: number;
+  errorBenefit?: number;
+  idealBenefit?: number;
+  associatedBenefit?: number;
+  resultShare?: number;
+  allocatedResidents?: number;
+  expectedQuantity?: number;
+  valuesSaturated?: boolean;
   outcome:
     | 'purchased'
     | 'negative_benefit'
@@ -65,6 +86,10 @@ export interface ShopResidenceTransaction {
   areaAveragePrice: number;
   expectedDemand: number;
   desiredQuantity: number;
+  productId?: string;
+  basicNeedPerPerson?: number;
+  referenceBasketCost?: number;
+  productAveragePrice?: number;
   candidate: ShopTransactionCandidate;
 }
 
@@ -110,6 +135,13 @@ export function isShopResidenceTransaction(value: unknown): value is ShopResiden
     !isNonNegativeNumber(transaction.areaAveragePrice) ||
     !isNonNegativeNumber(transaction.expectedDemand) ||
     !isNonNegativeNumber(transaction.desiredQuantity) ||
+    (transaction.productId !== undefined && typeof transaction.productId !== 'string') ||
+    (transaction.basicNeedPerPerson !== undefined &&
+      !isNonNegativeNumber(transaction.basicNeedPerPerson)) ||
+    (transaction.referenceBasketCost !== undefined &&
+      !isNonNegativeNumber(transaction.referenceBasketCost)) ||
+    (transaction.productAveragePrice !== undefined &&
+      !isNonNegativeNumber(transaction.productAveragePrice)) ||
     typeof transaction.candidate !== 'object' ||
     transaction.candidate === null
   ) {
@@ -130,6 +162,29 @@ export function isShopResidenceTransaction(value: unknown): value is ShopResiden
     isNonNegativeInteger(candidate.demandBefore) &&
     isNonNegativeInteger(candidate.purchased) &&
     isNonNegativeInteger(candidate.demandAfter) &&
+    (candidate.basicNeedPerPerson === undefined ||
+      isNonNegativeNumber(candidate.basicNeedPerPerson)) &&
+    (candidate.referenceBasketCost === undefined ||
+      isNonNegativeNumber(candidate.referenceBasketCost)) &&
+    (candidate.productAveragePrice === undefined ||
+      isNonNegativeNumber(candidate.productAveragePrice)) &&
+    (candidate.pf === undefined || isNonNegativeNumber(candidate.pf)) &&
+    (candidate.q === undefined || isFiniteNumber(candidate.q)) &&
+    (candidate.w === undefined || isFiniteNumber(candidate.w)) &&
+    (candidate.errorBenefit === undefined ||
+      isNonNegativeNumber(candidate.errorBenefit)) &&
+    (candidate.idealBenefit === undefined ||
+      isNonNegativeNumber(candidate.idealBenefit)) &&
+    (candidate.associatedBenefit === undefined ||
+      isNonNegativeNumber(candidate.associatedBenefit)) &&
+    (candidate.resultShare === undefined ||
+      isNonNegativeNumber(candidate.resultShare)) &&
+    (candidate.allocatedResidents === undefined ||
+      isNonNegativeInteger(candidate.allocatedResidents)) &&
+    (candidate.expectedQuantity === undefined ||
+      isNonNegativeNumber(candidate.expectedQuantity)) &&
+    (candidate.valuesSaturated === undefined ||
+      typeof candidate.valuesSaturated === 'boolean') &&
     typeof candidate.outcome === 'string' &&
     SHOP_TRANSACTION_OUTCOMES.has(candidate.outcome as ShopTransactionCandidate['outcome'])
   );
@@ -238,44 +293,235 @@ export function getShopSalesCapacity(dailyWorkPoints: number): number {
   return Math.floor(dailyWorkPoints / 100) * SALES_PER_100_WORK_POINTS;
 }
 
-// Benefício = ((Sm - preço local * (quantidade desejada / moradores)) / preço local)^3
-//            * (60 / (distância + 60))^2.
-export function getPurchaseBenefit(
+export function getCityProductKey(cityId: string, productId: string): string {
+  return `${cityId}\u0000${productId}`;
+}
+
+export function getCityProductAveragePrices(
+  shops: Pick<SalesShop, 'cityId' | 'productId' | 'price'>[],
+  history: CityProductSale[],
+): Map<string, number> {
+  const weightedSales = new Map<string, { revenue: number; units: number }>();
+  for (const sale of history) {
+    if (
+      !Number.isInteger(sale.unitsSold) ||
+      sale.unitsSold < 0 ||
+      !Number.isFinite(sale.price) ||
+      sale.price < MIN_SHOP_PRICE
+    ) {
+      throw new RangeError('O histórico mensal de preços contém uma venda inválida.');
+    }
+    if (sale.unitsSold === 0) continue;
+    const key = getCityProductKey(sale.cityId, sale.productId);
+    const totals = weightedSales.get(key) ?? { revenue: 0, units: 0 };
+    totals.revenue += sale.unitsSold * sale.price;
+    totals.units += sale.unitsSold;
+    weightedSales.set(key, totals);
+  }
+
+  const currentPrices = new Map<string, { total: number; count: number }>();
+  for (const shop of shops) {
+    if (!Number.isFinite(shop.price) || shop.price < MIN_SHOP_PRICE) {
+      throw new RangeError('Uma loja possui um preço inválido ao calcular a média da cidade.');
+    }
+    const key = getCityProductKey(shop.cityId, shop.productId);
+    const totals = currentPrices.get(key) ?? { total: 0, count: 0 };
+    totals.total += shop.price;
+    totals.count += 1;
+    currentPrices.set(key, totals);
+  }
+
+  const averagePrices = new Map<string, number>();
+  for (const [key, totals] of weightedSales) {
+    averagePrices.set(key, totals.revenue / totals.units);
+  }
+  for (const [key, totals] of currentPrices) {
+    if (!averagePrices.has(key)) averagePrices.set(key, totals.total / totals.count);
+  }
+  return averagePrices;
+}
+
+export function getBasicBasketCost(
+  cityId: string,
+  demandByProduct: ReadonlyMap<string, number>,
+  averagePrices: ReadonlyMap<string, number>,
+): number {
+  let total = 0;
+  for (const productId of BASIC_BASKET_PRODUCT_IDS) {
+    const demand = demandByProduct.get(productId);
+    if (demand === undefined) {
+      throw new Error(`A demanda básica não está configurada para ${productId}.`);
+    }
+    const averagePrice = averagePrices.get(getCityProductKey(cityId, productId));
+    if (averagePrice === undefined) continue;
+    total += demand * averagePrice;
+  }
+  return total;
+}
+
+export interface PurchaseBenefitCalculation {
+  pf: number;
+  q: number;
+  w: number;
+  errorBenefit: number;
+  idealBenefit: number;
+  associatedBenefit: number;
+  logAssociatedBenefit: number;
+  valuesSaturated: boolean;
+}
+
+function boundedDiagnosticValue(value: number): number {
+  if (Number.isNaN(value)) return 0;
+  return Math.max(-MAX_DIAGNOSTIC_VALUE, Math.min(MAX_DIAGNOSTIC_VALUE, value));
+}
+
+function boundedExponential(log: number): number {
+  if (log >= Math.log(MAX_DIAGNOSTIC_VALUE)) return MAX_DIAGNOSTIC_VALUE;
+  if (log <= Math.log(Number.MIN_VALUE)) return 0;
+  return Math.exp(log);
+}
+
+function logAbsolutePositiveSum(logPositiveTerm: number, other: number): number {
+  if (other === 0) return logPositiveTerm;
+  const logOther = Math.log(Math.abs(other));
+  if (other > 0) {
+    const max = Math.max(logPositiveTerm, logOther);
+    const min = Math.min(logPositiveTerm, logOther);
+    return max + Math.log1p(Math.exp(min - max));
+  }
+  if (logPositiveTerm === logOther) return Number.NEGATIVE_INFINITY;
+  const max = Math.max(logPositiveTerm, logOther);
+  const min = Math.min(logPositiveTerm, logOther);
+  return max + Math.log1p(-Math.exp(min - max));
+}
+
+function getExpectedStoreDemand(
+  allocatedResidents: number,
+  basicNeedPerPerson: number,
+  logAssociatedBenefit: number,
+): number {
+  if (
+    allocatedResidents === 0 ||
+    basicNeedPerPerson === 0 ||
+    logAssociatedBenefit === Number.NEGATIVE_INFINITY
+  ) {
+    return 0;
+  }
+  return boundedExponential(
+    Math.log(allocatedResidents) +
+      Math.log(basicNeedPerPerson) +
+      logAssociatedBenefit,
+  );
+}
+
+export function getPurchaseBenefitCalculation(
   income: number,
   price: number,
-  distance = 0,
-  desiredQuantityPerResident = 0,
-): number {
-  return (
-    ((income - price * desiredQuantityPerResident) / price) ** 3 *
-    (60 / (distance + 60)) ** 2
-  );
-}
+  basicNeedPerPerson: number,
+  referenceBasketCost: number,
+): PurchaseBenefitCalculation {
+  if (
+    !Number.isFinite(income) ||
+    income < 0 ||
+    !Number.isFinite(price) ||
+    price < MIN_SHOP_PRICE ||
+    !Number.isFinite(basicNeedPerPerson) ||
+    basicNeedPerPerson < 0 ||
+    !Number.isFinite(referenceBasketCost) ||
+    referenceBasketCost < 0
+  ) {
+    throw new RangeError('Os valores da cesta básica para calcular o benefício são inválidos.');
+  }
 
-// Moradores * demanda básica * max(0,125, min(4, preço médio efetivo da área / preço local)).
-export function getExpectedPurchaseQuantity(
-  occupants: number,
-  areaAveragePrice: number,
-  price: number,
-  demandBasic = PURCHASE_RATE,
-): number {
-  return (
-    occupants *
-    demandBasic *
-    Math.max(PURCHASE_MIN_RATIO, Math.min(PURCHASE_MAX_RATIO, areaAveragePrice / price))
-  );
-}
+  const pf = price * basicNeedPerPerson;
+  if (income === 0 || referenceBasketCost === 0) {
+    return {
+      pf,
+      q: 0,
+      w: 0,
+      errorBenefit: 0,
+      idealBenefit: 0,
+      associatedBenefit: 0,
+      logAssociatedBenefit: Number.NEGATIVE_INFINITY,
+      valuesSaturated: false,
+    };
+  }
 
-export function getPurchaseQuantity(
-  occupants: number,
-  areaAveragePrice: number,
-  price: number,
-  random: () => number,
-  demandBasic = PURCHASE_RATE,
-): number {
-  const expected = getExpectedPurchaseQuantity(occupants, areaAveragePrice, price, demandBasic);
-  const whole = Math.floor(expected);
-  return whole + (random() < expected - whole ? 1 : 0);
+  const w = (1 - (pf * referenceBasketCost) / income) ** 9;
+  const idealNumerator = income - 0.125;
+  const idealBase = idealNumerator / referenceBasketCost;
+  const logIdealBase =
+    idealNumerator === 0
+      ? Number.NEGATIVE_INFINITY
+      : Math.log(Math.abs(idealNumerator)) - Math.log(referenceBasketCost);
+  const directIdealBenefit = idealBase ** 4;
+  const idealBenefit =
+    Number.isFinite(directIdealBenefit) && directIdealBenefit <= MAX_DIAGNOSTIC_VALUE
+      ? directIdealBenefit
+      : boundedExponential(4 * logIdealBase);
+  const negativeWExponent = w < 0 ? -w * Math.log(1.25) : 0;
+  const qLog =
+    w < 0
+      ? negativeWExponent + Math.log(income) - Math.log(referenceBasketCost)
+      : Number.NEGATIVE_INFINITY;
+  const q =
+    w < 0
+      ? negativeWExponent < 50
+        ? Math.expm1(negativeWExponent) * (income / referenceBasketCost)
+        : boundedExponential(qLog)
+      : (0.8 ** w - 1) * (income / referenceBasketCost);
+  const qSaturated =
+    !Number.isFinite(q) || Math.abs(q) >= MAX_DIAGNOSTIC_VALUE;
+  const wSaturated = !Number.isFinite(w) || Math.abs(w) >= MAX_DIAGNOSTIC_VALUE;
+  if (income < pf || logIdealBase === Number.NEGATIVE_INFINITY || idealBenefit === 0) {
+    return {
+      pf,
+      q: boundedDiagnosticValue(q),
+      w: boundedDiagnosticValue(w),
+      errorBenefit: 0,
+      idealBenefit,
+      associatedBenefit: 0,
+      logAssociatedBenefit: Number.NEGATIVE_INFINITY,
+      valuesSaturated: qSaturated || wSaturated || idealBenefit === MAX_DIAGNOSTIC_VALUE,
+    };
+  }
+
+  const preAdjustment = income - pf;
+  const errorBase = preAdjustment + q;
+  const logErrorBase =
+    w < 0
+      ? logAbsolutePositiveSum(qLog, preAdjustment)
+      : errorBase === 0
+        ? Number.NEGATIVE_INFINITY
+        : Math.log(Math.abs(errorBase));
+  const errorBenefit = boundedExponential(4 * logErrorBase);
+  const logAssociatedBenefit =
+    logErrorBase === Number.NEGATIVE_INFINITY
+      ? Number.NEGATIVE_INFINITY
+      : 16 * (logErrorBase - logIdealBase);
+  const associatedBenefit =
+    logAssociatedBenefit === Number.POSITIVE_INFINITY
+      ? MAX_DIAGNOSTIC_VALUE
+      : logAssociatedBenefit === Number.NEGATIVE_INFINITY
+        ? 0
+        : boundedExponential(logAssociatedBenefit);
+  const valuesSaturated =
+    qSaturated ||
+    wSaturated ||
+    errorBenefit === MAX_DIAGNOSTIC_VALUE ||
+    idealBenefit === MAX_DIAGNOSTIC_VALUE ||
+    associatedBenefit === MAX_DIAGNOSTIC_VALUE;
+
+  return {
+    pf,
+    q: boundedDiagnosticValue(q),
+    w: boundedDiagnosticValue(w),
+    errorBenefit,
+    idealBenefit,
+    associatedBenefit,
+    logAssociatedBenefit,
+    valuesSaturated,
+  };
 }
 
 function getDistanceBetweenBuildings(
@@ -299,23 +545,25 @@ function getDistanceBetweenBuildings(
 }
 
 /**
- * Cada residência (por id) compra das lojas em 60 tiles, do maior benefício para
- * o menor, limitada pela capacidade de venda do dia e pelo estoque de cada loja.
+ * Distribui moradores entre lojas por produto, proporcionalmente ao benefício
+ * associado, e limita as compras pelo estoque e capacidade diários.
  */
 export function planShopSales(
   residences: SalesResidence[],
   shops: SalesShop[],
+  demandByProduct: ReadonlyMap<string, number>,
+  averagePrices: ReadonlyMap<string, number>,
   random: () => number = Math.random,
-  demandBasic = PURCHASE_RATE,
 ): StorePurchase[] {
-  return planShopSalesDetailed(residences, shops, random, demandBasic).purchases;
+  return planShopSalesDetailed(residences, shops, demandByProduct, averagePrices, random).purchases;
 }
 
 export function planShopSalesDetailed(
   residences: SalesResidence[],
   shops: SalesShop[],
+  demandByProduct: ReadonlyMap<string, number>,
+  averagePrices: ReadonlyMap<string, number>,
   random: () => number = Math.random,
-  demandBasic = PURCHASE_RATE,
 ): StoreSalesPlan {
   const remainingStock = new Map(shops.map((shop) => [shop.id, shop.stock]));
   const remainingCapacity = new Map(shops.map((shop) => [shop.id, shop.capacity]));
@@ -323,109 +571,183 @@ export function planShopSalesDetailed(
   const transactionsByShop = new Map<string, ShopResidenceTransaction[]>(
     shops.map((shop) => [shop.id, []]),
   );
-  const sorted = [...residences].sort((a, b) => a.id.localeCompare(b.id));
-
-  for (const residence of sorted) {
-    const nearby = shops.filter((shop) => isWithinWorkerSearchRadius(shop, residence));
-    if (nearby.length === 0 || residence.occupants <= 0) continue;
-    const soldUnits = nearby.reduce((sum, shop) => sum + shop.unitsSoldLastDay, 0);
-    const average =
-      soldUnits > 0
-        ? nearby.reduce((sum, shop) => sum + shop.unitsSoldLastDay * shop.lastDaySalePrice, 0) /
-          soldUnits
-        : nearby.reduce((sum, shop) => sum + shop.price, 0) / nearby.length;
-    const ranked = nearby
-      .map((shop) => {
-        const desiredQuantity = getExpectedPurchaseQuantity(
-          residence.occupants,
-          average,
-          shop.price,
-          demandBasic,
-        );
-        const distance = getDistanceBetweenBuildings(shop, residence);
-        return {
-          shop,
-          distance,
-          desiredQuantity,
-          benefit: getPurchaseBenefit(
-            residence.averageIncome,
-            shop.price,
-            distance,
-            desiredQuantity / residence.occupants,
-          ),
-        };
-      })
-      .sort((a, b) => b.benefit - a.benefit || a.shop.id.localeCompare(b.shop.id));
-
-    const expectedDemand = getExpectedPurchaseQuantity(
-      residence.occupants,
-      average,
-      ranked[0].shop.price,
-      demandBasic,
-    );
-    const desiredQuantity = getPurchaseQuantity(
-      residence.occupants,
-      average,
-      ranked[0].shop.price,
-      random,
-      demandBasic,
-    );
-    let wanted = desiredQuantity;
-    const candidates: ShopTransactionCandidate[] = [];
-    for (const [index, { shop, distance, desiredQuantity: candidateDemand, benefit }] of ranked.entries()) {
-      const stockAvailable = remainingStock.get(shop.id) ?? 0;
-      const capacityAvailable = remainingCapacity.get(shop.id) ?? 0;
-      const available = Math.min(stockAvailable, capacityAvailable);
-      const demandBefore = wanted;
-      const quantity = benefit < 0 ? 0 : Math.min(wanted, available);
-      wanted -= quantity;
-      if (quantity > 0) {
-        remainingStock.set(shop.id, stockAvailable - quantity);
-        remainingCapacity.set(shop.id, capacityAvailable - quantity);
-        purchases.push({ shopId: shop.id, residenceId: residence.id, quantity });
-      }
-      candidates.push({
-        shopId: shop.id,
-        price: shop.price,
-        distance,
-        desiredQuantity: candidateDemand,
-        benefit,
-        rank: index + 1,
-        stockAvailable,
-        capacityAvailable,
-        available,
-        demandBefore,
-        purchased: quantity,
-        demandAfter: wanted,
-        outcome:
-          quantity > 0
-            ? 'purchased'
-            : benefit < 0
-              ? 'negative_benefit'
-            : demandBefore <= 0
-              ? 'demand_fulfilled'
-              : stockAvailable <= 0 && capacityAvailable <= 0
-                ? 'no_stock_or_capacity'
-                : stockAvailable <= 0
-                  ? 'no_stock'
-                  : 'no_capacity',
-      });
+  const sortedResidences = [...residences].sort((a, b) => a.id.localeCompare(b.id));
+  for (const productId of BASIC_BASKET_PRODUCT_IDS) {
+    const basicNeedPerPerson = demandByProduct.get(productId);
+    if (basicNeedPerPerson === undefined) {
+      throw new Error(`A demanda básica não está configurada para ${productId}.`);
     }
+    const productShops = shops.filter((shop) => shop.productId === productId);
+    for (const residence of sortedResidences) {
+      if (residence.occupants <= 0) continue;
+      const nearby = productShops.filter(
+        (shop) => isWithinWorkerSearchRadius(shop, residence),
+      );
+      if (nearby.length === 0) continue;
 
-    for (const candidate of candidates) {
-      const shopTransactions = transactionsByShop.get(candidate.shopId);
-      if (!shopTransactions) {
-        throw new Error(`Não foi possível associar o diagnóstico à loja ${candidate.shopId}.`);
-      }
-      shopTransactions.push({
-        residenceId: residence.id,
-        occupants: residence.occupants,
-        averageIncome: residence.averageIncome,
-        areaAveragePrice: average,
-        expectedDemand,
-        desiredQuantity,
-        candidate,
+      const referenceBasketCost = getBasicBasketCost(
+        residence.cityId,
+        demandByProduct,
+        averagePrices,
+      );
+      const productAveragePrice =
+        averagePrices.get(getCityProductKey(residence.cityId, productId)) ?? 0;
+      const candidates = nearby.map((shop) => {
+        const distance = getDistanceBetweenBuildings(shop, residence);
+        const calculation = getPurchaseBenefitCalculation(
+          residence.averageIncome,
+          shop.price,
+          basicNeedPerPerson,
+          referenceBasketCost,
+        );
+        return { shop, distance, calculation, resultShare: 0, allocatedResidents: 0 };
       });
+
+      const infiniteCandidates = candidates.filter(
+        ({ calculation }) => calculation.logAssociatedBenefit === Number.POSITIVE_INFINITY,
+      );
+      if (infiniteCandidates.length > 0) {
+        const share = 1 / infiniteCandidates.length;
+        for (const candidate of infiniteCandidates) candidate.resultShare = share;
+      } else {
+        const maxLog = Math.max(...candidates.map(({ calculation }) => calculation.logAssociatedBenefit));
+        if (Number.isFinite(maxLog)) {
+          const weights = candidates.map(({ calculation }) =>
+            calculation.logAssociatedBenefit === Number.NEGATIVE_INFINITY
+              ? 0
+              : Math.exp(calculation.logAssociatedBenefit - maxLog),
+          );
+          const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+          candidates.forEach((candidate, index) => {
+            candidate.resultShare = weights[index] / totalWeight;
+          });
+        }
+      }
+
+      const eligible = candidates.filter((candidate) => candidate.resultShare > 0);
+      if (eligible.length > 0) {
+        let allocated = 0;
+        const fractions = eligible
+          .map((candidate) => {
+            const exact = residence.occupants * candidate.resultShare;
+            candidate.allocatedResidents = Math.floor(exact);
+            allocated += candidate.allocatedResidents;
+            return { candidate, fraction: exact - candidate.allocatedResidents };
+          })
+          .sort(
+            (a, b) =>
+              b.fraction - a.fraction ||
+              a.candidate.shop.id.localeCompare(b.candidate.shop.id),
+          );
+        for (let index = 0; index < residence.occupants - allocated; index += 1) {
+          fractions[index % fractions.length].candidate.allocatedResidents += 1;
+        }
+      }
+
+      const ranked = [...candidates].sort(
+        (a, b) =>
+          b.resultShare - a.resultShare ||
+          a.shop.id.localeCompare(b.shop.id),
+      );
+      let totalDesired = 0;
+      const residenceTransactions: {
+        shopId: string;
+        transaction: ShopResidenceTransaction;
+      }[] = [];
+      for (const [index, candidate] of ranked.entries()) {
+        const expectedQuantity = Math.min(
+          MAX_DIAGNOSTIC_VALUE,
+          getExpectedStoreDemand(
+            candidate.allocatedResidents,
+            basicNeedPerPerson,
+            candidate.calculation.logAssociatedBenefit,
+          ),
+        );
+        const whole = Math.floor(expectedQuantity);
+        const fractional = expectedQuantity - whole;
+        const randomValue = fractional > 0 ? random() : 1;
+        if (!Number.isFinite(randomValue) || randomValue < 0 || randomValue > 1) {
+          throw new RangeError('A fonte de arredondamento da demanda retornou um valor inválido.');
+        }
+        const desiredQuantity = whole + (randomValue < fractional ? 1 : 0);
+        totalDesired += desiredQuantity;
+        const stockAvailable = remainingStock.get(candidate.shop.id) ?? 0;
+        const capacityAvailable = remainingCapacity.get(candidate.shop.id) ?? 0;
+        const available = Math.min(stockAvailable, capacityAvailable);
+        const purchased = Math.min(desiredQuantity, available);
+        const demandAfter = desiredQuantity - purchased;
+        if (purchased > 0) {
+          remainingStock.set(candidate.shop.id, stockAvailable - purchased);
+          remainingCapacity.set(candidate.shop.id, capacityAvailable - purchased);
+          purchases.push({
+            shopId: candidate.shop.id,
+            residenceId: residence.id,
+            productId,
+            quantity: purchased,
+          });
+        }
+        const outcome =
+          purchased > 0
+            ? 'purchased'
+            : candidate.calculation.associatedBenefit === 0
+              ? 'negative_benefit'
+              : desiredQuantity === 0
+                ? 'demand_fulfilled'
+                : stockAvailable <= 0 && capacityAvailable <= 0
+                  ? 'no_stock_or_capacity'
+                  : stockAvailable <= 0
+                    ? 'no_stock'
+                    : 'no_capacity';
+        const boundedAssociated = candidate.calculation.associatedBenefit;
+        const transaction: ShopResidenceTransaction = {
+          residenceId: residence.id,
+          occupants: residence.occupants,
+          averageIncome: residence.averageIncome,
+          areaAveragePrice: productAveragePrice,
+          expectedDemand: residence.occupants * basicNeedPerPerson,
+          desiredQuantity: totalDesired,
+          productId,
+          basicNeedPerPerson,
+          referenceBasketCost,
+          productAveragePrice,
+          candidate: {
+            shopId: candidate.shop.id,
+            price: candidate.shop.price,
+            distance: candidate.distance,
+            desiredQuantity: expectedQuantity,
+            benefit: boundedAssociated,
+            rank: index + 1,
+            stockAvailable,
+            capacityAvailable,
+            available,
+            demandBefore: desiredQuantity,
+            purchased,
+            demandAfter,
+            basicNeedPerPerson,
+            referenceBasketCost,
+            productAveragePrice,
+            pf: candidate.calculation.pf,
+            q: candidate.calculation.q,
+            w: candidate.calculation.w,
+            errorBenefit: candidate.calculation.errorBenefit,
+            idealBenefit: candidate.calculation.idealBenefit,
+            associatedBenefit: boundedAssociated,
+            resultShare: candidate.resultShare,
+            allocatedResidents: candidate.allocatedResidents,
+            expectedQuantity,
+            valuesSaturated: candidate.calculation.valuesSaturated,
+            outcome,
+          },
+        };
+        residenceTransactions.push({ shopId: candidate.shop.id, transaction });
+      }
+      for (const { shopId, transaction } of residenceTransactions) {
+        const shopTransactions = transactionsByShop.get(shopId);
+        if (!shopTransactions) {
+          throw new Error(`Não foi possível associar o diagnóstico à loja ${shopId}.`);
+        }
+        shopTransactions.push({ ...transaction, desiredQuantity: totalDesired });
+      }
     }
   }
   return { purchases, transactionsByShop };

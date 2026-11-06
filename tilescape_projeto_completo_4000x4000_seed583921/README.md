@@ -311,10 +311,10 @@ padrão é C$ 10 e pode ser alterado pelo dono. A loja recebe leite do armazém
 ligado e vende às residências pelo mesmo cálculo de demanda e benefício usado
 para os demais produtos.
 
-O multiplicador de demanda básica pode ser ajustado em
-[`config/demanda_basica.txt`](./config/demanda_basica.txt). Os valores iniciais
-são `0.03` para arroz e peixe e `1` para leite. O servidor lê o arquivo ao
-iniciar; reinicie o serviço depois de alterá-lo.
+O consumo diário desejável por morador da **Cesta Básica** pode ser ajustado em
+[`config/demanda_basica.txt`](./config/demanda_basica.txt): 0,03 de arroz,
+trigo, cevada, milho, batata, peixe e carne vermelha; e 1 litro de leite. O
+servidor lê o arquivo ao iniciar; reinicie o serviço depois de alterá-lo.
 
 ### Recursos e Ferramentaria
 
@@ -366,29 +366,42 @@ salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). T
 1,2 com 4 h, 1 com 8 h, 0,8 com 14 h); a obra termina sozinha ao atingir o total
 necessário. Saúde e felicidade ainda são fixas em 100.
 
-Nas lojas de arroz, peixe e leite, o dono define o preço (C$ 1 ou mais). Às 00:00
-cada 100 Work Points gerados pelos funcionários no dia somam 5 unidades de
-capacidade de venda. As residências compram primeiro das lojas em até 60 tiles com maior
-benefício. A média efetiva da área é calculada com as vendas do dia anterior,
-ponderando o preço praticado em cada loja pelas unidades vendidas. Para cada
-loja, calcula-se `quantidade desejada = moradores × demanda_basica × max(0,125,
-min(4, média efetiva da área / preço local))`; o benefício é
-`((renda média por morador − preço local × (quantidade desejada / moradores))
-/ preço local)³ × (60 / (distância + 60))²`, com distância entre centros. Loja
-com benefício negativo não vende para a residência. A parte
-fracionária da quantidade é a chance de comprar uma unidade adicional. Se não houve vendas na
-área no dia anterior, usa-se a média simples dos preços atuais das lojas
-próximas. As vendas continuam limitadas pela capacidade diária e estoque
-disponível, e o dono recebe o valor da venda. A loja só vende o estoque que
-tiver (começa em 0; pode ser abastecida por um armazém ligado). No histórico do
-comércio, **Ver cálculo** detalha, por residência, renda e população, média
-efetiva da área, demanda, benefício e posição de cada loja, estoque/capacidade
-disponíveis, quanto foi comprado e se faltou estoque ou capacidade. Esse cálculo
-é enviado ao dono em tempo real e salvo somente no armazenamento local do
-navegador por até 30 dias; o navegador precisa estar conectado quando as vendas
-do dia forem processadas. Se estiver offline, o cálculo daquele dia não será
-salvo nesse navegador. Os detalhes antigos permanecem apenas até a retenção
-atual do histórico removê-los e não são reconstruídos.
+Nas lojas de arroz, peixe e leite, o dono define o preço (C$ 1 ou mais). Às
+00:00, cada 100 Work Points dos funcionários adicionam 5 unidades à capacidade
+de venda. Para cada produto, as residências consideram lojas do produto em até
+60 tiles. O custo de referência `RR` é o custo diário por pessoa de todos os
+itens da Cesta Básica disponíveis na cidade, calculado pelos preços médios
+ponderados pelas unidades vendidas nos últimos 30 dias. Produtos sem vendas no
+período usam a média dos preços atuais anunciados na cidade; produtos sem loja
+na cidade são omitidos.
+
+Para cada residência e loja, `Pf` é o preço local multiplicado pelo consumo
+básico por pessoa, e `Rf` é a renda média por morador. Se `Rf < Pf`, o benefício
+de erro é zero; caso contrário, `w = (1 − Pf × RR / Rf)^9`,
+`q = (0,8^w − 1) × (Rf / RR)` e `benefício_erro = (Rf − Pf + q)^4`.
+`benefício_ideal = (Rf / RR − 0,125 / RR)^4`; se ele for zero, o benefício de
+erro também é zerado. `benefício_associado = (benefício_erro /
+benefício_ideal)^4`. Para cada produto, os moradores são divididos entre as
+lojas proporcionalmente ao benefício associado. O arredondamento pelo método
+dos maiores restos mantém o número de moradores inteiro e igual à população da
+residência quando existe benefício positivo. Se `RR` for zero ou todas as lojas
+tiverem benefício zero, não há compra. A distância só determina se a loja está
+dentro dos 60 tiles; ela não altera o benefício nem a participação. A quantidade
+desejada em cada loja é moradores alocados × consumo
+básico × benefício associado; pode superar 100% da necessidade básica. Frações
+de unidade são arredondadas aleatoriamente, preservando a quantidade esperada
+ao longo do tempo. Estoque e capacidade limitam as vendas; moradores alocados a
+uma loja sem unidades disponíveis não são realocados para outra. O dono recebe
+o valor das vendas; moradores não são cobrados.
+
+A loja vende somente o estoque que tiver (começa em 0; pode ser abastecida por
+um armazém ligado). No histórico do comércio, **Ver cálculo** mostra `RR`,
+preço médio do produto, `Pf`, `w`, `q`, benefícios de erro/ideal/associado,
+participação e número de moradores alocados, demanda, estoque/capacidade e
+resultado. O cálculo é enviado ao dono em tempo real e salvo somente no
+armazenamento local do navegador por até 30 dias; o navegador precisa estar
+conectado quando as vendas forem processadas. Se estiver offline, o cálculo
+daquele dia não será salvo nesse navegador.
 O painel também mostra funcionários atuais,
 desejados e vagas; nas residências, as pessoas empregadas. Nos painéis de
 construções produtivas, uma descrição antes

@@ -37,12 +37,13 @@ import {
   getMaxDesiredWorkers,
 } from './employment';
 import {
+  getBasicBasketCost,
+  getCityProductAveragePrices,
+  getCityProductKey,
   getShopDailyFinancials,
-  getPurchaseBenefit,
-  getPurchaseQuantity,
+  getPurchaseBenefitCalculation,
   getShopSalesCapacity,
   parsePrice,
-  getExpectedPurchaseQuantity,
   planShopSales,
   planShopSalesDetailed,
 } from './commerce';
@@ -336,23 +337,36 @@ describe('warehouse logistics', () => {
 describe('shop sales', () => {
   const shop = (id: string, x: number, price: number, stock: number, capacity: number) => ({
     id,
+    cityId: 'city-a',
+    productId: 'rice',
     type: 'shop_rice' as const,
     x,
     y: 0,
     price,
-    unitsSoldLastDay: 0,
-    lastDaySalePrice: price,
     stock,
     capacity,
   });
   const home = (id: string, x: number, occupants: number, averageIncome: number) => ({
     id,
+    cityId: 'city-a',
     type: 'house_poor1' as const,
     x,
     y: 0,
     occupants,
     averageIncome,
   });
+  const demandByProduct = new Map([
+    ['rice', 0.03],
+    ['wheat', 0.03],
+    ['barley', 0.03],
+    ['corn', 0.03],
+    ['potato', 0.03],
+    ['fish', 0.03],
+    ['red_meat', 0.03],
+    ['milk', 1],
+  ]);
+  const cityPrices = (productId: string, price: number) =>
+    new Map([[getCityProductKey('city-a', productId), price]]);
 
   it('calculates daily shop revenue and profit from payroll and paid product costs', () => {
     assert.deepEqual(getShopDailyFinancials(20, 3, 12, 15), {
@@ -373,126 +387,160 @@ describe('shop sales', () => {
     });
   });
 
-  it('computes capacity, price, benefit and quantity', () => {
+  it('computes store benefit with the basic-basket formula and zero guards', () => {
     assert.equal(getShopSalesCapacity(99), 0);
     assert.equal(getShopSalesCapacity(250), 10);
     assert.equal(parsePrice({ price: 0 }), null);
     assert.equal(parsePrice({ price: 12 }), 12);
-    const benefit = ((50 - 10 * 0.045) / 10) ** 3;
-    assert.equal(getPurchaseBenefit(50, 10, 0, 0.045), benefit);
-    assert.equal(getPurchaseBenefit(50, 10, 60, 0.045), benefit / 4);
-    assert.ok(getPurchaseBenefit(0.1, 10, 0, 0.045) < 0);
-    // O fator de preço fica limitado a 0,125 e 4 antes do arredondamento probabilístico.
-    assert.equal(getPurchaseQuantity(10, 1000, 1, () => 0.1), 2);
-    assert.equal(getPurchaseQuantity(10, 1000, 1, () => 0.5), 1);
-    assert.equal(getPurchaseQuantity(10, 1, 100, () => 0.03), 1);
-    assert.equal(getPurchaseQuantity(10, 1, 100, () => 0.04), 0);
-    assert.equal(getPurchaseQuantity(10, 10, 10, () => 0.25), 1);
-    assert.equal(getPurchaseQuantity(10, 10, 10, () => 0.35), 0);
-  });
-
-  it('buys from the best benefit first, within capacity, stock and radius', () => {
-    const purchases = planShopSales(
-      [home('a', 10, 100, 50), home('far', 500, 100, 50)],
-      [shop('cheap', 0, 5, 100, 4), shop('dear', 4, 20, 100, 100), shop('empty', 8, 1, 0, 100)],
-      () => 0,
-    );
-    // Sem vendas no dia anterior, usa a média simples dos preços atuais da área.
-    assert.deepEqual(purchases, [
-      { shopId: 'cheap', residenceId: 'a', quantity: 4 },
-      { shopId: 'dear', residenceId: 'a', quantity: purchases[1].quantity },
-    ]);
-    assert.ok(purchases[1].quantity > 0);
-    assert.equal(purchases.some((purchase) => purchase.residenceId === 'far'), false);
-  });
-
-  it('uses yesterday weighted sales price only within the residence area', () => {
-    const distantShop = {
-      ...shop('distant', 1000, 100, 100, 100),
-      unitsSoldLastDay: 100,
-      lastDaySalePrice: 100,
-    };
-    const purchases = planShopSales(
-      [home('a', 10, 100, 50)],
-      [
-        { ...shop('near', 0, 10, 100, 100), unitsSoldLastDay: 9, lastDaySalePrice: 10 },
-        { ...shop('also-near', 4, 20, 100, 100), unitsSoldLastDay: 1, lastDaySalePrice: 20 },
-        distantShop,
-      ],
-      () => 0,
-    );
-    // Média efetiva na área = (9*10 + 1*20) / 10 = 11; demanda da loja de C$ 10 = 3,3.
-    assert.deepEqual(purchases, [{ shopId: 'near', residenceId: 'a', quantity: 4 }]);
-  });
-
-  it('records each residence demand, store benefit, availability and allocation', () => {
-    const homes = [
-      home('a', 4, 150, 10),
-      home('b', 4, 50, 10),
-    ];
-    const shops = [
-      shop('shop-9', 0, 9, 100, 7),
-      shop('shop-10', 4, 10, 0, 100),
-      shop('shop-20', 8, 20, 100, 100),
-    ];
-    const randomValues = [0, 0.99];
-    const plan = planShopSalesDetailed(homes, shops, () => randomValues.shift() ?? 0);
-
-    assert.deepEqual(plan.purchases, [
-      { shopId: 'shop-9', residenceId: 'a', quantity: 7 },
-      { shopId: 'shop-20', residenceId: 'b', quantity: 2 },
-    ]);
-
-    const secondHomeTransactions = plan.transactionsByShop.get('shop-9')?.find(
-      (transaction) => transaction.residenceId === 'b',
-    );
-    assert.ok(secondHomeTransactions);
-    assert.ok(Math.abs(secondHomeTransactions.expectedDemand - 2.166666666666667) < 1e-12);
-    assert.equal(secondHomeTransactions.desiredQuantity, 2);
-    assert.deepEqual(
-      [
-        secondHomeTransactions,
-        plan.transactionsByShop.get('shop-10')?.find((transaction) => transaction.residenceId === 'b'),
-        plan.transactionsByShop.get('shop-20')?.find((transaction) => transaction.residenceId === 'b'),
-      ].map((transaction) => {
-        assert.ok(transaction);
-        const { candidate } = transaction;
-        return [
-          candidate.shopId,
-          candidate.rank,
-          candidate.demandBefore,
-          candidate.stockAvailable,
-          candidate.capacityAvailable,
-          candidate.purchased,
-          candidate.outcome,
-        ];
-      }),
-      [
-        ['shop-9', 1, 2, 93, 0, 0, 'no_capacity'],
-        ['shop-10', 2, 2, 0, 100, 0, 'no_stock'],
-        ['shop-20', 3, 2, 100, 100, 2, 'purchased'],
-      ],
-    );
-  });
-
-  it('does not buy from any shop with a negative benefit', () => {
-    const shops = [
-      shop('shop-9', 0, 9, 100, 100),
-      shop('shop-10', 4, 10, 100, 100),
-      shop('shop-20', 8, 20, 100, 100),
-    ];
-    const plan = planShopSalesDetailed([home('low-income', 4, 100, 0.1)], shops, () => 0);
-
-    assert.deepEqual(plan.purchases, []);
-    assert.deepEqual(
-      shops.map((store) => plan.transactionsByShop.get(store.id)?.[0].candidate.outcome),
-      ['negative_benefit', 'negative_benefit', 'negative_benefit'],
-    );
+    const income = 1;
+    const price = 5;
+    const basicNeed = 0.03;
+    const rr = 0.3;
+    const pf = price * basicNeed;
+    const w = (1 - pf * rr / income) ** 9;
+    const q = (0.8 ** w - 1) * (income / rr);
+    const benefitError = (income - pf + q) ** 4;
+    const benefitIdeal = (income / rr - 0.125 / rr) ** 4;
+    const calculation = getPurchaseBenefitCalculation(income, price, basicNeed, rr);
+    assert.equal(calculation.pf, pf);
+    assert.equal(calculation.w, w);
+    assert.equal(calculation.q, q);
+    assert.ok(Math.abs(calculation.errorBenefit - benefitError) < 1e-12);
+    assert.equal(calculation.idealBenefit, benefitIdeal);
     assert.ok(
-      shops.every(
-        (store) => (plan.transactionsByShop.get(store.id)?.[0].candidate.benefit ?? 0) < 0,
-      ),
+      Math.abs(calculation.associatedBenefit - (benefitError / benefitIdeal) ** 4) < 1e-12,
     );
+    const lowerPrice = getPurchaseBenefitCalculation(25, 10, 1, 10);
+    const higherPrice = getPurchaseBenefitCalculation(25, 20, 1, 10);
+    assert.equal(lowerPrice.valuesSaturated, true);
+    assert.equal(higherPrice.valuesSaturated, true);
+    assert.ok(Number.isFinite(lowerPrice.logAssociatedBenefit));
+    assert.ok(Number.isFinite(higherPrice.logAssociatedBenefit));
+    assert.ok(higherPrice.logAssociatedBenefit > lowerPrice.logAssociatedBenefit);
+    assert.equal(getPurchaseBenefitCalculation(0.1, 10, 0.03, rr).associatedBenefit, 0);
+    assert.equal(getPurchaseBenefitCalculation(0.125, 1, 0, rr).associatedBenefit, 0);
+  });
+
+  it('uses city-wide 30-day weighted prices and current prices only when no sales exist', () => {
+    const shops = [
+      shop('rice-a', 0, 5, 10, 10),
+      shop('rice-b', 4, 15, 10, 10),
+      { ...shop('wheat', 8, 8, 10, 10), cityId: 'city-b', productId: 'wheat' },
+    ];
+    const prices = getCityProductAveragePrices(shops, [
+      { cityId: 'city-a', productId: 'rice', unitsSold: 2, price: 5 },
+      { cityId: 'city-a', productId: 'rice', unitsSold: 6, price: 15 },
+    ]);
+    assert.equal(prices.get(getCityProductKey('city-a', 'rice')), 12.5);
+    assert.equal(prices.get(getCityProductKey('city-b', 'wheat')), 8);
+    assert.equal(getBasicBasketCost('city-a', demandByProduct, prices), 0.375);
+  });
+
+  it('allocates integer residents by associated benefit and keeps their total exact', () => {
+    const shops = [
+      { ...shop('shop-5', 0, 5, 100, 100), productId: 'rice' },
+      { ...shop('shop-10', 8, 10, 100, 100), productId: 'rice' },
+      { ...shop('shop-20', 16, 20, 100, 100), productId: 'rice' },
+    ];
+    const home32 = { ...home('home-32', 4, 32, 0.3) };
+    const plan = planShopSalesDetailed(
+      [home32],
+      shops,
+      demandByProduct,
+      cityPrices('rice', 10),
+      () => 0.99,
+    );
+    const assigned = shops.map((store) => {
+      const transaction = plan.transactionsByShop.get(store.id)?.[0];
+      assert.ok(transaction);
+      return transaction.candidate.allocatedResidents ?? 0;
+    });
+    assert.equal(assigned.reduce((sum, count) => sum + count, 0), 32);
+    assert.equal(assigned[2], 0);
+    assert.ok(Math.abs((assigned[0] ?? 0) - 32 * (
+      getPurchaseBenefitCalculation(0.3, 5, 0.03, 0.3).associatedBenefit /
+      (getPurchaseBenefitCalculation(0.3, 5, 0.03, 0.3).associatedBenefit +
+        getPurchaseBenefitCalculation(0.3, 10, 0.03, 0.3).associatedBenefit)
+    )) <= 1);
+    assert.ok(plan.purchases.every((purchase) => Number.isInteger(purchase.quantity)));
+    assert.equal(
+      plan.purchases.some((purchase) => purchase.residenceId === 'home-32' && purchase.productId === 'rice'),
+      false,
+    );
+  });
+
+  it('distributes 32 residents across 9/10/20 fish shops before stock and capacity limits', () => {
+    const fishShops = [
+      { ...shop('fish-9', 0, 9, 7, 100), productId: 'fish', type: 'shop_fish' as const },
+      { ...shop('fish-10', 8, 10, 100, 0), productId: 'fish', type: 'shop_fish' as const },
+      { ...shop('fish-20', 16, 20, 100, 2), productId: 'fish', type: 'shop_fish' as const },
+    ];
+    const averagePrices = new Map([
+      [getCityProductKey('city-a', 'rice'), 10],
+      [getCityProductKey('city-a', 'fish'), 10],
+      [getCityProductKey('city-a', 'milk'), 10],
+    ]);
+    const plan = planShopSalesDetailed(
+      [home('home-32', 4, 32, 10)],
+      fishShops,
+      demandByProduct,
+      averagePrices,
+      () => 0.99,
+    );
+    assert.deepEqual(
+      fishShops.map((store) =>
+        plan.transactionsByShop.get(store.id)?.[0].candidate.allocatedResidents,
+      ),
+      [13, 12, 7],
+    );
+    assert.deepEqual(plan.purchases, [
+      { shopId: 'fish-9', residenceId: 'home-32', productId: 'fish', quantity: 7 },
+      { shopId: 'fish-20', residenceId: 'home-32', productId: 'fish', quantity: 2 },
+    ]);
+  });
+
+  it('allows consumption above basic need but enforces each store stock and capacity', () => {
+    const milkShops = [
+      {
+        ...shop('milk-a', 0, 10, 2, 3),
+        type: 'shop_milk' as const,
+        productId: 'milk',
+      },
+      {
+        ...shop('milk-b', 4, 10, 2, 3),
+        type: 'shop_milk' as const,
+        productId: 'milk',
+      },
+    ];
+    const plan = planShopSales(
+      [home('milk-home', 0, 32, 25)],
+      milkShops,
+      demandByProduct,
+      cityPrices('milk', 10),
+      () => 0,
+    );
+    assert.deepEqual(plan, [
+      { shopId: 'milk-a', residenceId: 'milk-home', productId: 'milk', quantity: 2 },
+      { shopId: 'milk-b', residenceId: 'milk-home', productId: 'milk', quantity: 2 },
+    ]);
+  });
+
+  it('allows nearby stores across city borders but respects the 60-tile range', () => {
+    const shops = [
+      { ...shop('near', 0, 10, 100, 100), productId: 'milk', type: 'shop_milk' as const },
+      { ...shop('distant', 1000, 10, 100, 100), productId: 'milk', type: 'shop_milk' as const },
+      { ...shop('other-city', 4, 10, 100, 100), cityId: 'city-b', productId: 'milk', type: 'shop_milk' as const },
+    ];
+    const plan = planShopSalesDetailed(
+      [home('home', 0, 2, 100)],
+      shops,
+      demandByProduct,
+      cityPrices('milk', 10),
+      () => 0,
+    );
+    assert.equal(plan.transactionsByShop.get('near')?.length, 1);
+    assert.equal(plan.transactionsByShop.get('distant')?.length, 0);
+    assert.equal(plan.transactionsByShop.get('other-city')?.length, 1);
   });
 });
 
@@ -531,19 +579,33 @@ describe('fazenda leiteira e demanda configurável', () => {
 
   it('uses the configured multiplier in household demand and validates the text file format', () => {
     const multipliers = parseBasicDemandConfig([
-      '# demanda básica diária',
       'demanda_basica.rice=0.03',
+      'demanda_basica.wheat=0.03',
+      'demanda_basica.barley=0.03',
+      'demanda_basica.corn=0.03',
+      'demanda_basica.potato=0.03',
       'demanda_basica.fish=0.03',
+      'demanda_basica.red_meat=0.03',
       'demanda_basica.milk=1',
     ].join('\n'));
     assert.equal(multipliers.get('rice'), 0.03);
+    assert.equal(multipliers.get('wheat'), 0.03);
+    assert.equal(multipliers.get('barley'), 0.03);
+    assert.equal(multipliers.get('corn'), 0.03);
+    assert.equal(multipliers.get('potato'), 0.03);
     assert.equal(multipliers.get('fish'), 0.03);
+    assert.equal(multipliers.get('red_meat'), 0.03);
     assert.equal(multipliers.get('milk'), 1);
-    assert.equal(getExpectedPurchaseQuantity(10, 10, 10, multipliers.get('milk')), 10);
     assert.throws(() => parseBasicDemandConfig('demanda_basica.milk=-1'), /linha 1/);
-    assert.throws(() => parseBasicDemandConfig('demanda_basica.milk=1'), /não define o produto rice/);
     assert.throws(
-      () => parseBasicDemandConfig(['demanda_basica.milk=1', 'demanda_basica.milk=2'].join('\n')),
+      () => parseBasicDemandConfig('demanda_basica.rice=0.03'),
+      /não define o produto wheat/,
+    );
+    assert.throws(
+      () => parseBasicDemandConfig([
+        'demanda_basica.rice=0.03',
+        'demanda_basica.rice=0.03',
+      ].join('\n')),
       /linha 2/,
     );
     const configFile = readFileSync(
@@ -552,34 +614,25 @@ describe('fazenda leiteira e demanda configurável', () => {
     );
     assert.deepEqual(
       [...parseBasicDemandConfig(configFile)],
-      [['rice', 0.03], ['fish', 0.03], ['milk', 1]],
+      [
+        ['rice', 0.03],
+        ['wheat', 0.03],
+        ['barley', 0.03],
+        ['corn', 0.03],
+        ['potato', 0.03],
+        ['fish', 0.03],
+        ['red_meat', 0.03],
+        ['milk', 1],
+      ],
     );
-    const milkSales = planShopSalesDetailed(
-      [{
-        id: 'milk-home',
-        type: 'house_poor1',
-        x: 0,
-        y: 0,
-        occupants: 2,
-        averageIncome: 100,
-      }],
-      [{
-        id: 'milk-store',
-        type: 'shop_milk',
-        x: 4,
-        y: 0,
-        price: 10,
-        unitsSoldLastDay: 0,
-        lastDaySalePrice: 10,
-        stock: 40,
-        capacity: 40,
-      }],
-      () => 0,
-      multipliers.get('milk'),
+    assert.equal(
+      getBasicBasketCost(
+        'city-a',
+        multipliers,
+        new Map([[getCityProductKey('city-a', 'milk'), 10]]),
+      ),
+      10,
     );
-    assert.deepEqual(milkSales.purchases, [
-      { shopId: 'milk-store', residenceId: 'milk-home', quantity: 2 },
-    ]);
   });
 
   it('defines a dairy shop with the same building parameters as the fish shop', () => {

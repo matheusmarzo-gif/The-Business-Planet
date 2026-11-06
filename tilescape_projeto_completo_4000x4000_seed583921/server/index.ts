@@ -60,11 +60,13 @@ import {
 } from '../src/types/employment.js';
 import {
   isCommerceDiagnosticsUpdate,
+  getCityProductAveragePrices,
   getShopDailyFinancials,
   getShopProfitLoss,
   getShopSalesCapacity,
   parsePrice,
   planShopSalesDetailed,
+  type CityProductSale,
   type CommerceDiagnosticsUpdate,
 } from '../src/types/commerce.js';
 import { nextEfficiencyPenalty, planProduction, rollToolDemand } from '../src/types/fishing.js';
@@ -973,7 +975,7 @@ async function runDailyEmployment(): Promise<boolean> {
       try {
       const salesDiagnostics: PendingCommerceDiagnostics[] = [];
       const salesStageSucceeded = await runStage('vendas', async () => {
-      // Vendas de arroz: capacidade do dia vem dos Work Points gerados pela loja.
+      // Vendas da Cesta Básica: capacidade diária vem dos Work Points das lojas.
       const wageOf = new Map(workplaces.map((row) => [row.id, row.wage]));
       const incomeByResidence = getAverageIncomes(
         workplaces,
@@ -984,49 +986,65 @@ async function runDailyEmployment(): Promise<boolean> {
           count: row.count,
         })),
       );
-      for (const { shopType, productId } of [
-        { shopType: 'shop_rice', productId: 'rice' },
-        { shopType: 'shop_fish', productId: 'fish' },
-        { shopType: 'shop_milk', productId: 'milk' },
-      ] as const) {
-      const demandBasic = demandBasicByProduct.get(productId);
-      if (demandBasic === undefined) {
-        throw new Error(`demanda_basica não configurada para o produto ${productId}.`);
-      }
-      const { rows: previousSalesRows } = await client.query<{
-        building_id: string;
-        units_sold: number;
-        sale_price: number;
-      }>(
-        `SELECT history.building_id, history.units_sold, history.sale_price
-         FROM commerce_history history
-         JOIN residential_buildings shop ON shop.id = history.building_id
-         WHERE history.day = $1::date - 1 AND shop.building_type = $2`,
-        [state.day, shopType],
+      const shopWorkplaces = workplaces.filter(
+        (row) =>
+          row.status === 'completed' &&
+          getResidenceDefinition(row.building_type)?.kind === 'shop' &&
+          getResidenceDefinition(row.building_type)?.stockProductId,
       );
-      const previousSales = new Map(previousSalesRows.map((row) => [row.building_id, row]));
-      const shops = workplaces
-        .filter((row) => row.status === 'completed' && row.building_type === shopType)
-        .map((row) => {
-          const previousSalesForShop = previousSales.get(row.id);
-          return {
-            id: row.id,
-            ownerId: row.created_by,
-            type: row.building_type,
-            x: row.tile_x,
-            y: row.tile_y,
-            price: row.price,
-            unitsSoldLastDay: previousSalesForShop?.units_sold ?? 0,
-            lastDaySalePrice: previousSalesForShop?.sale_price ?? row.price,
-            stock: row.stock,
-            wage: row.wage,
-            workers: workers.get(row.id) ?? 0,
-            capacity: getShopSalesCapacity(
-              (workers.get(row.id) ?? 0) *
-                getDailyWorkPoints(row.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness),
-            ),
-          };
-        });
+      const shops = shopWorkplaces.map((row) => {
+        const definition = getResidenceDefinition(row.building_type);
+        if (!definition?.stockProductId) {
+          throw new Error(`A loja ${row.id} não tem produto de venda configurado.`);
+        }
+        return {
+          id: row.id,
+          ownerId: row.created_by,
+          cityId: row.city_id,
+          productId: definition.stockProductId,
+          type: row.building_type,
+          x: row.tile_x,
+          y: row.tile_y,
+          price: row.price,
+          stock: row.stock,
+          wage: row.wage,
+          workers: workers.get(row.id) ?? 0,
+          capacity: getShopSalesCapacity(
+            (workers.get(row.id) ?? 0) *
+              getDailyWorkPoints(row.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness),
+          ),
+        };
+      });
+      const shopTypes = [...new Set(shopWorkplaces.map((shop) => shop.building_type))];
+      const { rows: monthlySalesRows } = shopTypes.length
+        ? await client.query<{
+            city_id: string;
+            building_type: ResidenceType;
+            units_sold: number;
+            sale_price: number;
+          }>(
+            `SELECT shop.city_id, shop.building_type, history.units_sold, history.sale_price
+             FROM commerce_history history
+             JOIN residential_buildings shop ON shop.id = history.building_id
+             WHERE history.day >= $1::date - 30
+               AND history.day < $1::date
+               AND shop.status = 'completed'
+               AND shop.building_type = ANY($2::text[])`,
+            [state.day, shopTypes],
+          )
+        : { rows: [] };
+      const monthlySales: CityProductSale[] = monthlySalesRows.flatMap((row) => {
+        const productId = getResidenceDefinition(row.building_type)?.stockProductId;
+        return productId
+          ? [{
+              cityId: row.city_id,
+              productId,
+              unitsSold: row.units_sold,
+              price: row.sale_price,
+            }]
+          : [];
+      });
+      const averagePrices = getCityProductAveragePrices(shops, monthlySales);
       const homes = workplaces
         .filter(
           (row) =>
@@ -1036,6 +1054,7 @@ async function runDailyEmployment(): Promise<boolean> {
         )
         .map((row) => ({
           id: row.id,
+          cityId: row.city_id,
           type: row.building_type,
           x: row.tile_x,
           y: row.tile_y,
@@ -1045,31 +1064,40 @@ async function runDailyEmployment(): Promise<boolean> {
       const sold = new Map<string, number>();
       const bought = new Map<string, { quantity: number; spent: number }>();
       const shopPrice = new Map(shops.map((shop) => [shop.id, shop.price]));
-      const salesPlan = planShopSalesDetailed(homes, shops, Math.random, demandBasic);
+      const salesPlan = planShopSalesDetailed(
+        homes,
+        shops,
+        demandBasicByProduct,
+        averagePrices,
+        Math.random,
+      );
       for (const purchase of salesPlan.purchases) {
         sold.set(purchase.shopId, (sold.get(purchase.shopId) ?? 0) + purchase.quantity);
-        const total = bought.get(purchase.residenceId) ?? { quantity: 0, spent: 0 };
+        const key = `${purchase.residenceId}\u0000${purchase.productId}`;
+        const total = bought.get(key) ?? { quantity: 0, spent: 0 };
         total.quantity += purchase.quantity;
         total.spent += purchase.quantity * (shopPrice.get(purchase.shopId) ?? 0);
-        bought.set(purchase.residenceId, total);
+        bought.set(key, total);
       }
       for (const home of homes) {
-        const total = bought.get(home.id);
-        if (!total) continue;
-        await client.query(
-          `INSERT INTO residence_consumption (building_id, product_id, day, quantity, spent, occupants)
-           VALUES ($1, $6, $2, $3, $4, $5)
-           ON CONFLICT (building_id, product_id, day) DO UPDATE
-           SET quantity = residence_consumption.quantity + $3,
-               spent = residence_consumption.spent + $4,
-               occupants = $5`,
-          [home.id, state.day, total.quantity, total.spent, home.occupants, productId],
-        );
+        for (const productId of demandBasicByProduct.keys()) {
+          const total = bought.get(`${home.id}\u0000${productId}`);
+          if (!total) continue;
+          await client.query(
+            `INSERT INTO residence_consumption (building_id, product_id, day, quantity, spent, occupants)
+             VALUES ($1, $2, $3::date, $4, $5, $6)
+             ON CONFLICT (building_id, product_id, day) DO UPDATE
+             SET quantity = residence_consumption.quantity + $4,
+                 spent = residence_consumption.spent + $5,
+                 occupants = $6`,
+            [home.id, productId, state.day, total.quantity, total.spent, home.occupants],
+          );
+        }
       }
       for (const shop of shops) {
         const quantity = sold.get(shop.id) ?? 0;
         if (quantity > 0) {
-          const owner = workplaces.find((row) => row.id === shop.id)?.created_by;
+          const owner = shop.ownerId;
           await client.query('UPDATE residential_buildings SET stock = stock - $2 WHERE id = $1', [
             shop.id,
             quantity,
@@ -1116,7 +1144,6 @@ async function runDailyEmployment(): Promise<boolean> {
         });
       }
       await client.query('DELETE FROM commerce_history WHERE day < $1::date - 30', [state.day]);
-      }
       });
       if (salesStageSucceeded) pendingCommerceDiagnostics.push(...salesDiagnostics);
       await runStage('produção', async () => {

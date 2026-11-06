@@ -1,5 +1,10 @@
-# Multiplicador diário de demanda básica por morador para cada produto.
+# Consumo diário desejável por morador para cada produto da Cesta Básica.
 # Edite os valores e reinicie o servidor para aplicar.
 demanda_basica.rice=0.03
+demanda_basica.wheat=0.03
+demanda_basica.barley=0.03
+demanda_basica.corn=0.03
+demanda_basica.potato=0.03
 demanda_basica.fish=0.03
+demanda_basica.red_meat=0.03
 demanda_basica.milk=1

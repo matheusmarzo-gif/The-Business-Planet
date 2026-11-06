@@ -309,8 +309,9 @@ mapeamento e verificar todas as curvas.
   do footprint de uma residência a remove sem confirmação; o servidor só
   permite a remoção ao autor e publica o novo estado.
 - Capacidade e apreço local são metadados; Work Points avançam obras e custos
-  debitam materiais. População, consumo das residências e produção residencial
-  ainda não são simulados.
+  debitam materiais. A população é atualizada pela imigração; o consumo da
+  Cesta Básica é simulado nas lojas, mas outras necessidades residenciais ainda
+  não são simuladas.
 - `GET /api/player/resources?x=&y=` agrega Madeira e Pedra dos armazéns
   concluídos do próprio usuário em até 60 tiles do centro da câmera. A barra
   superior atualiza esses totais quando a área muda e em intervalo regular.
@@ -360,23 +361,44 @@ mapeamento e verificar todas as curvas.
   `PATCH /api/residential-buildings/:id/price`) e estoque abastecido pelo
   armazém ligado do mesmo dono. No job das 00:00 a capacidade de venda do dia é
   `floor(WP gerados no dia / 100) · 5`
-  (WP = empregados × `getDailyWorkPoints`). `planShopSales` percorre as
-  residências por id: `Vma` = preço médio efetivamente pago nas lojas do produto
-  em 60 tiles no dia anterior (`Σ(unidades vendidas × preço praticado) /
-  Σ(unidades vendidas)`); `Sm` = salário médio por morador (soma dos salários
-  dos empregados / ocupantes). Para cada loja local, a quantidade desejada é
-  `ocupantes · demanda_basica · max(0,125, min(4, Vma / Vlocal))` (a parte
-  fracionária é a chance de +1 unidade) e o benefício é
-  `((Sm − Vlocal · (quantidade desejada / ocupantes))/Vlocal)³ ·
-  (60/(distância + 60))²`; distância entre centros. Lojas com benefício
-  negativo não vendem para aquela residência. Se não houve vendas na área no
-  dia anterior, `Vma` usa a média simples dos preços atuais das lojas próximas.
-  `demanda_basica` é carregada de `config/demanda_basica.txt` na inicialização:
-  arroz e peixe começam em `0.03`, leite em `1`; alterar o arquivo requer
-  reiniciar o servidor.
-  A residência tenta comprar a demanda arredondada probabilisticamente da loja
-  de maior benefício para a menor, limitada por capacidade e estoque. O dono
-  recebe `quantidade × preço`; moradores não são cobrados.
+  (WP = empregados × `getDailyWorkPoints`). `config/demanda_basica.txt` define
+  o consumo diário por pessoa para a Cesta Básica: arroz, trigo, cevada, milho,
+  batata, peixe e carne vermelha começam em `0.03`; leite em `1`.
+  `commerce_history` fornece os preços e unidades vendidas nos últimos 30 dias.
+  `getCityProductAveragePrices` calcula a média ponderada por unidades vendidas,
+  por produto e cidade; se ainda não houve venda do produto, usa a média dos
+  preços atuais anunciados na cidade. Produtos sem loja na cidade não entram
+  em `RR`, o custo diário por pessoa da cesta disponível.
+  `planShopSales` percorre cada produto e residência: `Pf = preço local ×
+  demanda_basica`; com `Rf` como renda média por morador,
+  `w = (1 − Pf × RR / Rf)^9`, `q = (0,8^w − 1) × (Rf / RR)`,
+  `benefício_erro = 0` se `Rf < Pf`, caso contrário
+  `(Rf − Pf + q)^4`; `benefício_ideal = (Rf / RR − 0,125 / RR)^4`.
+  Se o benefício ideal for zero, o benefício de erro também é zerado;
+  `benefício_associado = (benefício_erro / benefício_ideal)^4`.
+  Os moradores são repartidos entre as lojas do produto em 60 tiles na
+  proporção do benefício associado. O método dos maiores restos garante
+  alocações inteiras cuja soma é a população da residência quando há benefício
+  positivo; se `RR` ou todos os benefícios forem zero, não há compra. A
+  distância define apenas a elegibilidade no raio de 60 tiles e não altera o
+  benefício nem a participação. A quantidade desejada por loja é `moradores alocados × demanda
+  básica × benefício associado`, com arredondamento aleatório das frações;
+  pode exceder a necessidade básica. Não há redistribuição de moradores quando
+  estoque ou capacidade da loja é insuficiente. Vendas são limitadas pelo
+  estoque e capacidade diários; o dono recebe `quantidade × preço`.
+  `employed` em `ResidentialBuilding` é calculado por subquery em
+  `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
+  Para cada loja concluída, o job registra em `commerce_history` o salário dos
+  funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
+  preço unitário de venda. Os detalhes do diagnóstico (renda, moradores,
+  produto, `RR`, `Pf`, `w`, `q`, benefícios de erro/ideal/associado,
+  participação e moradores alocados, quantidade, estoque/capacidade, compra e
+  resultado) são encaminhados via Redis apenas aos WebSockets autenticados do
+  proprietário e ficam somente no `localStorage` do navegador. O navegador
+  precisa estar conectado durante o processamento das vendas para capturar
+  esse diagnóstico; clientes offline não o recebem. A API do histórico retorna
+  somente os dados financeiros, e os diagnósticos locais são combinados no
+  cliente.
   `employed` em `ResidentialBuilding` é calculado por subquery em
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
   Para cada loja concluída, o job registra em `commerce_history` o salário dos

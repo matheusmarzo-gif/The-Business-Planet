@@ -1,4 +1,14 @@
 const DEMAND_BASIC_PREFIX = 'demanda_basica.';
+export const BASIC_BASKET_PRODUCT_IDS = [
+  'rice',
+  'wheat',
+  'barley',
+  'corn',
+  'potato',
+  'fish',
+  'red_meat',
+  'milk',
+] as const;
 
 export function parseBasicDemandConfig(contents: string): Map<string, number> {
   const multipliers = new Map<string, number>();
@@ -30,7 +40,7 @@ export function parseBasicDemandConfig(contents: string): Map<string, number> {
   if (multipliers.size === 0) {
     throw new Error('A configuração demanda_basica não define nenhum produto.');
   }
-  for (const productId of ['rice', 'fish', 'milk']) {
+  for (const productId of BASIC_BASKET_PRODUCT_IDS) {
     if (!multipliers.has(productId)) {
       throw new Error(`A configuração demanda_basica não define o produto ${productId}.`);
     }

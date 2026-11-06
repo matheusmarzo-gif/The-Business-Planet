@@ -570,7 +570,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo médio por cidadão da cidade e preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira do usuário com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
-| `GET /api/accounting` | Autenticado | Retorna, apenas para o jogador da sessão, salários e receita de cada loja nos últimos 30 dias e salários/compra/venda por produto dos próprios armazéns; margem por produto não desconta salários. |
+| `GET /api/accounting` | Autenticado | Retorna, apenas para o jogador da sessão, salários/receita e posição/número de cada loja nos últimos 30 dias; salários, posições/números dos próprios armazéns e compra/venda por produto; margem por produto não desconta salários. |
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
 | `GET /api/residential-buildings/:id/warehouse-log` | Dono do armazém | Retorna `{ days: [{ day, workPoints }], events: [{ day, buildingType, productId, direction, wanted, moved, reason, errorDetail }] }` do armazém (tabela `warehouse_transport_log`, gravada às 00:00 na etapa de transporte, 30 dias; `reason` = `desired_reached`/`no_space`/`no_work_points`/`warehouse_empty` quando moveu menos que o desejado; erros internos registram etapa e detalhe em `errorDetail`). |
 | `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo), estoque e preço médio local ponderado por oferta acima do mínimo; espaço ocupado é calculado no cliente. |
@@ -648,9 +648,16 @@ em `world_state` registra a publicação por dia; o lock transacional da linha
 evita duplicatas entre instâncias e a marcação só é gravada após o Pub/Sub ter
 aceitado a mensagem.
 O nome do criador é obtido de `neon_auth."user"` e aparece no painel de detalhes.
-O servidor envia a cada socket apenas um booleano de propriedade para controlar
-a etiqueta sobre as construções do próprio jogador; o ID interno do proprietário
-é removido antes da transmissão ao navegador.
+Cada construção recebe um número sequencial por dono e tipo, mantido em
+`player_building_counters` e persistido em `residential_buildings.building_number`.
+Na inicialização, instalações existentes recebem números por data de criação;
+demolições não reutilizam números. O cliente formata esses números em algarismos
+romanos (`getResidentialBuildingName`) no painel e no mapa. O nome do criador é
+obtido de `neon_auth."user"` e aparece junto da etiqueta individualizada somente
+nas construções do próprio jogador. O servidor envia a cada socket apenas um
+booleano de propriedade para controlar a etiqueta; o ID interno do proprietário
+é removido antes da transmissão ao navegador. **Visualizar** no painel contábil
+centraliza a câmera e seleciona a construção pelo ID recebido.
 
 ## Variáveis de ambiente
 

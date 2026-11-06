@@ -40,6 +40,7 @@ CREATE INDEX IF NOT EXISTS city_zones_city_id_idx ON city_zones (city_id);
 CREATE TABLE IF NOT EXISTS residential_buildings (
   id UUID PRIMARY KEY,
   building_type TEXT NOT NULL,
+  building_number INTEGER,
   tile_x INTEGER NOT NULL CHECK (tile_x BETWEEN 0 AND 3999),
   tile_y INTEGER NOT NULL CHECK (tile_y BETWEEN 0 AND 3999),
   city_id UUID NOT NULL REFERENCES city_assemblies (id) ON DELETE CASCADE,
@@ -52,6 +53,42 @@ CREATE TABLE IF NOT EXISTS residential_buildings (
     (status = 'completed' AND completed_at IS NOT NULL)
   )
 );
+
+ALTER TABLE residential_buildings
+  ADD COLUMN IF NOT EXISTS building_number INTEGER;
+
+WITH numbered_buildings AS (
+  SELECT id,
+         ROW_NUMBER() OVER (
+           PARTITION BY created_by, building_type
+           ORDER BY started_at, id
+         )::integer AS building_number
+  FROM residential_buildings
+)
+UPDATE residential_buildings building
+SET building_number = numbered_buildings.building_number
+FROM numbered_buildings
+WHERE building.id = numbered_buildings.id
+  AND building.building_number IS NULL;
+
+ALTER TABLE residential_buildings
+  ALTER COLUMN building_number SET NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS residential_buildings_owner_type_number_idx
+  ON residential_buildings (created_by, building_type, building_number);
+
+CREATE TABLE IF NOT EXISTS player_building_counters (
+  user_id TEXT NOT NULL,
+  building_type TEXT NOT NULL,
+  last_number INTEGER NOT NULL CHECK (last_number > 0),
+  PRIMARY KEY (user_id, building_type)
+);
+
+INSERT INTO player_building_counters (user_id, building_type, last_number)
+SELECT created_by, building_type, MAX(building_number)
+FROM residential_buildings
+GROUP BY created_by, building_type
+ON CONFLICT (user_id, building_type) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS player_warehouse_claims (
   user_id TEXT PRIMARY KEY,

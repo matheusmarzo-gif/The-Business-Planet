@@ -31,7 +31,7 @@ import {
   MAX_CITY_ZONES,
 } from './types/city';
 import { DEFAULT_SHOP_PRICE } from './types/commerce';
-import type { AccountingSummary } from './types/accounting';
+import type { AccountingBuildingPosition, AccountingSummary } from './types/accounting';
 import {
   DEFAULT_RENT,
   DEFAULT_WAGE,
@@ -603,6 +603,28 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
+  const viewAccountingBuilding = (position: AccountingBuildingPosition) => {
+    const building = visibleResidentialBuildings.find((item) => item.id === position.id);
+    if (!building) {
+      setAccountingError('Essa construção não está disponível no mapa. Atualize a página e tente novamente.');
+      return;
+    }
+    const stage = worldStageRef.current;
+    if (stage) {
+      const { width, height } = RESIDENCES[building.type];
+      const tilePixels = BASE_TILE_SIZE * camera.zoom;
+      setCamera({
+        x: stage.clientWidth / 2 - (building.x + width / 2) * tilePixels,
+        y: stage.clientHeight / 2 - (building.y + height / 2) * tilePixels,
+        zoom: camera.zoom,
+      });
+    }
+    setSelectedTile(null);
+    setHoveredTile(null);
+    setSelectedResidenceId(building.id);
+    setIsAccountingOpen(false);
+  };
+
   const openConsumption = async (buildingId: string) => {
     setReturnToCityAfterConsumption(false);
     setConsumptionScope('RESIDÊNCIA');
@@ -1079,9 +1101,17 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   };
 
   const handleResidencePlace = async (type: ResidenceType, position: RoadPosition) => {
+    const buildingNumber =
+      Math.max(
+        0,
+        ...visibleResidentialBuildings
+          .filter((building) => building.type === type && building.isOwnedByCurrentUser)
+          .map((building) => building.buildingNumber ?? 0),
+      ) + 1;
     const pending: ResidentialBuilding = {
       id: `pending-${Date.now()}-${position.x}-${position.y}`,
       type,
+      buildingNumber,
       x: position.x,
       y: position.y,
       cityId: '',
@@ -1545,6 +1575,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             summary={accountingSummary}
             isLoading={isAccountingLoading}
             error={accountingError}
+            onViewBuilding={viewAccountingBuilding}
             onClose={() => setIsAccountingOpen(false)}
           />
         )}

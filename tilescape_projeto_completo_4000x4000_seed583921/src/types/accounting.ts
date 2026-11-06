@@ -1,8 +1,26 @@
+import type { ResidenceType } from './residence';
+
+export interface AccountingBuildingPosition {
+  id: string;
+  x: number;
+  y: number;
+}
+
 export interface AccountingShop {
   id: string;
-  type: string;
+  type: ResidenceType;
+  buildingNumber: number;
+  x: number;
+  y: number;
   employeeExpense: number;
   revenue: number;
+}
+
+export interface AccountingWarehouse {
+  id: string;
+  buildingNumber: number;
+  x: number;
+  y: number;
 }
 
 export interface AccountingWarehouseProduct {
@@ -18,6 +36,7 @@ export interface AccountingSummary {
   shops: AccountingShop[];
   warehouse: {
     employeeExpense: number;
+    buildings: AccountingWarehouse[];
     products: AccountingWarehouseProduct[];
   };
 }

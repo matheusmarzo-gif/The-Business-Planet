@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { PRODUCTS } from '../types/product';
-import { RESIDENCES } from '../types/residence';
+import { getResidentialBuildingName } from '../types/residence';
 import { formatMoney } from '../types/wallet';
-import type { AccountingSummary } from '../types/accounting';
+import type { AccountingBuildingPosition, AccountingSummary } from '../types/accounting';
 
 interface AccountingPanelProps {
   summary: AccountingSummary | null;
   isLoading: boolean;
   error: string;
+  onViewBuilding: (building: AccountingBuildingPosition) => void;
   onClose: () => void;
 }
 
@@ -17,6 +18,7 @@ export default function AccountingPanel({
   summary,
   isLoading,
   error,
+  onViewBuilding,
   onClose,
 }: AccountingPanelProps) {
   const [activeTab, setActiveTab] = useState<'shops' | 'warehouses'>('shops');
@@ -60,15 +62,19 @@ export default function AccountingPanel({
             <span>Loja</span>
             <span>Gasto com salários</span>
             <span>Receita</span>
+            <span />
           </div>
           {!isLoading && !error && (summary?.shops.length ?? 0) === 0 && (
             <p className="warehouse-summary">Você ainda não possui lojas comerciais.</p>
           )}
           {summary?.shops.map((shop) => (
             <div className="accounting-row" key={shop.id}>
-              <span>{Object.values(RESIDENCES).find((residence) => residence.type === shop.type)?.name ?? shop.type}</span>
+              <span>{getResidentialBuildingName(shop.type, shop.buildingNumber)}</span>
               <span>{formatMoney(shop.employeeExpense)}</span>
               <span>{formatMoney(shop.revenue)}</span>
+              <button type="button" className="accounting-view-button" onClick={() => onViewBuilding(shop)}>
+                Visualizar
+              </button>
             </div>
           ))}
         </div>
@@ -81,6 +87,23 @@ export default function AccountingPanel({
             O histórico de compras, vendas e salários dos armazéns começa com esta atualização; operações
             anteriores não podem ser reconstruídas.
           </p>
+          <div className="warehouse-list accounting-list">
+            <div className="accounting-row accounting-warehouse-building warehouse-head">
+              <span>Armazém</span>
+              <span />
+            </div>
+            {!isLoading && !error && (summary?.warehouse.buildings.length ?? 0) === 0 && (
+              <p className="warehouse-summary">Você ainda não possui armazéns.</p>
+            )}
+            {summary?.warehouse.buildings.map((warehouse) => (
+              <div className="accounting-row accounting-warehouse-building" key={warehouse.id}>
+                <span>{getResidentialBuildingName('warehouse', warehouse.buildingNumber)}</span>
+                <button type="button" className="accounting-view-button" onClick={() => onViewBuilding(warehouse)}>
+                  Visualizar
+                </button>
+              </div>
+            ))}
+          </div>
           <div className="warehouse-list accounting-list">
             <div className="accounting-warehouse-row warehouse-head">
               <span>Produto</span>

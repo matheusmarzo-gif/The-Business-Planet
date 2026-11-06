@@ -643,6 +643,7 @@ export interface ResidentialBuilding {
   ownerName?: string;
   isOwnedByCurrentUser?: boolean;
   type: ResidenceType;
+  buildingNumber?: number;
   x: number;
   y: number;
   cityId: string;
@@ -668,6 +669,41 @@ export interface ResidentialBuilding {
   // Funcionários empregados na construção ou, em residências, moradores empregados.
   employed: number;
   averageIncome: number;
+}
+
+const ROMAN_NUMERALS: readonly [number, string][] = [
+  [1000, 'M'],
+  [900, 'CM'],
+  [500, 'D'],
+  [400, 'CD'],
+  [100, 'C'],
+  [90, 'XC'],
+  [50, 'L'],
+  [40, 'XL'],
+  [10, 'X'],
+  [9, 'IX'],
+  [5, 'V'],
+  [4, 'IV'],
+  [1, 'I'],
+];
+
+export function toRomanNumeral(value: number): string {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new RangeError('O número da construção precisa ser um inteiro positivo.');
+  }
+  let remaining = value;
+  let numeral = '';
+  for (const [amount, symbol] of ROMAN_NUMERALS) {
+    while (remaining >= amount) {
+      numeral += symbol;
+      remaining -= amount;
+    }
+  }
+  return numeral;
+}
+
+export function getResidentialBuildingName(type: ResidenceType, buildingNumber = 1): string {
+  return `${RESIDENCES[type].name} ${toRomanNumeral(buildingNumber)}`;
 }
 
 export type ResidencePlacementError =

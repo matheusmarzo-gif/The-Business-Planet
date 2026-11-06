@@ -109,9 +109,11 @@ Para verificar a conexão com PostgreSQL e Redis, abra
 `https://<endereco-do-servico>/api/health`. A resposta esperada é
 `{"status":"ok"}`. O mapa e o WebSocket `/ws` exigem uma sessão Neon Auth
 válida; as rotas do mundo verificam os tokens no servidor.
-As construções mostram o nome do proprietário no painel de detalhes. No mapa,
-a etiqueta com esse nome aparece somente para o próprio jogador, acima das
-construções que ele criou.
+Cada tipo de construção de um jogador recebe numeração romana individual
+(por exemplo, Loja de Arroz I e Loja de Arroz II). O nome aparece no painel de
+detalhes e, junto ao nome do proprietário, na etiqueta sobre a construção,
+visível somente para o próprio jogador. Na aba **Contábil**, **Visualizar**
+fecha o painel, centraliza o mapa na construção e abre seus detalhes.
 
 Cada push para a branch conectada ao Render pode iniciar uma nova publicação.
 O relógio global e sua persistência ficam no PostgreSQL; o Redis gerencia a
@@ -538,7 +540,9 @@ transferência interna sem cobrança e aparece com gasto de produto C$ 0.
 
 O botão **Contábil** na barra inferior tem duas abas. **Lojas comerciais** lista
 todas as lojas do jogador e soma salários pagos e receita de vendas nos últimos
-30 dias do relógio do jogo. **Armazéns** mostra salários pagos e, por produto,
+30 dias do relógio do jogo; **Visualizar** centraliza a loja no mapa e abre seus
+detalhes. **Armazéns** mostra os armazéns do jogador (também com **Visualizar**),
+salários pagos e, por produto,
 quantidades e valores comprados/vendidos, além do resultado bruto (receita de
 vendas menos custo de compras). O resultado por produto não desconta salários.
 O histórico financeiro de armazéns começa com esta atualização; transações

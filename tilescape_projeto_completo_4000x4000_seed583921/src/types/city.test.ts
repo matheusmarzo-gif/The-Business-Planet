@@ -18,10 +18,12 @@ import {
   isTileInResidenceFootprint,
   parseRent,
   getResidencePlacementError,
+  getResidentialBuildingName,
   isWithinWorkerSearchRadius,
   parseWorkSettings,
   RESIDENCES,
   type ResidentialBuilding,
+  toRomanNumeral,
 } from './residence';
 import { getRoadPlacementError } from './road';
 import {
@@ -74,6 +76,23 @@ describe('wallet', () => {
   it('starts with C$ 10.000 and formats money in Brazilian style', () => {
     assert.equal(STARTING_BALANCE, 10000);
     assert.equal(formatMoney(STARTING_BALANCE).replace(/\u00a0/g, ' '), 'C$ 10.000');
+  });
+
+  describe('nomes das construções', () => {
+    it('converts sequential building numbers to Roman numerals', () => {
+      assert.deepEqual([1, 2, 4, 9, 14, 40, 99, 2026].map(toRomanNumeral), [
+        'I',
+        'II',
+        'IV',
+        'IX',
+        'XIV',
+        'XL',
+        'XCIX',
+        'MMXXVI',
+      ]);
+      assert.equal(getResidentialBuildingName('shop_rice', 2), 'Loja de Arroz II');
+      assert.throws(() => toRomanNumeral(0), RangeError);
+    });
   });
 });
 

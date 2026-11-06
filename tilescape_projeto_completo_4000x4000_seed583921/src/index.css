@@ -106,7 +106,10 @@ button { color: inherit; }
 .accounting-tabs { display: flex; gap: 8px; margin: 4px 0 10px; }
 .accounting-tabs button { padding: 8px 12px; border: 1px solid rgba(219,201,158,.18); border-radius: 7px; color: #b7b19e; background: rgba(255,255,255,.03); cursor: pointer; font-size: 11px; }
 .accounting-tabs button.active { border-color: rgba(207,178,116,.55); color: #ead9a6; background: rgba(193,162,100,.14); }
-.accounting-row { display: grid; grid-template-columns: minmax(180px, 1.5fr) repeat(2, minmax(150px, 1fr)); gap: 10px; align-items: center; min-width: 520px; padding: 7px 2px; font-size: 11px; }
+.accounting-row { display: grid; grid-template-columns: minmax(180px, 1.5fr) repeat(2, minmax(150px, 1fr)) 100px; gap: 10px; align-items: center; min-width: 620px; padding: 7px 2px; font-size: 11px; }
+.accounting-row.accounting-warehouse-building { grid-template-columns: minmax(180px, 1fr) 100px; min-width: 300px; }
+.accounting-view-button { padding: 6px 9px; border: 1px solid rgba(207,178,116,.4); border-radius: 6px; color: #ead9a6; background: rgba(193,162,100,.12); cursor: pointer; font-size: 10px; }
+.accounting-view-button:hover { background: rgba(193,162,100,.24); }
 .accounting-warehouse-row { display: grid; grid-template-columns: minmax(130px, 1.4fr) repeat(5, minmax(100px, 1fr)); gap: 8px; align-items: center; min-width: 760px; padding: 7px 2px; font-size: 11px; }
 .accounting-payroll { margin: 6px 0; color: #c9c4b1; font-size: 12px; }
 .accounting-payroll strong { color: #ead9a6; }

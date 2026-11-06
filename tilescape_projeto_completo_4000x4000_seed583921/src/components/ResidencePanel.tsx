@@ -8,6 +8,7 @@ import {
   RESIDENCE_STATS,
   WORKER_SEARCH_RADIUS,
   RESIDENCES,
+  getResidentialBuildingName,
   type ResidentialBuilding,
   type ResidenceType,
 } from '../types/residence';
@@ -227,7 +228,7 @@ export default function ResidencePanel({
                   ? 'INDÚSTRIA'
                   : 'RESIDÊNCIA'}
         </div>
-        <h1>{definition.name}</h1>
+        <h1>{getResidentialBuildingName(building.type, building.buildingNumber)}</h1>
         <button type="button" className="panel-close" aria-label="Fechar painel" onClick={onClose}>
           ×
         </button>

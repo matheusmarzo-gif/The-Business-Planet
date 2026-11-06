@@ -161,6 +161,7 @@ type CityZoneInput = CityZoneBounds & { type: CityZoneType };
 type ResidentialBuildingRow = {
   id: string;
   building_type: ResidenceType;
+  building_number: number;
   tile_x: number;
   tile_y: number;
   city_id: string;
@@ -192,7 +193,7 @@ type ResidentialBuildingRow = {
   created_by?: string;
 };
 
-const RESIDENTIAL_COLUMNS = `id, building_type, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id, tool_stock, wood_stock, iron_stock, efficiency_penalty,
+const RESIDENTIAL_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id, tool_stock, wood_stock, iron_stock, efficiency_penalty,
   crop_phase, to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day, crop_ratio_sum, crop_days,
   crop_yield, crop_harvested,
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
@@ -207,6 +208,7 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     id: row.id,
     ownerName: row.owner_name ?? undefined,
     type: row.building_type,
+    buildingNumber: row.building_number,
     x: row.tile_x,
     y: row.tile_y,
     cityId: row.city_id,
@@ -2212,14 +2214,26 @@ async function createResidentialBuilding(
       );
     }
 
+    const { rows: numberRows } = await client.query<{ last_number: number }>(
+      `INSERT INTO player_building_counters (user_id, building_type, last_number)
+       VALUES ($1, $2, 1)
+       ON CONFLICT (user_id, building_type)
+       DO UPDATE SET last_number = player_building_counters.last_number + 1
+       RETURNING last_number`,
+      [userId, type],
+    );
+    const buildingNumber = numberRows[0]?.last_number;
+    if (!buildingNumber) throw new Error('Não foi possível atribuir o número da construção.');
+
     const { rows } = await client.query<ResidentialBuildingRow>(
       `INSERT INTO residential_buildings
-         (id, building_type, tile_x, tile_y, city_id, status, completed_at, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 = 'completed' THEN clock_timestamp() ELSE NULL END, $7)
+         (id, building_type, building_number, tile_x, tile_y, city_id, status, completed_at, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7 = 'completed' THEN clock_timestamp() ELSE NULL END, $8)
        RETURNING ${RESIDENTIAL_COLUMNS}`,
       [
         randomUUID(),
         type,
+        buildingNumber,
         position.x,
         position.y,
         city.id,
@@ -2383,14 +2397,18 @@ async function start() {
         return;
       }
 
-      const [shopResult, payrollResult, productResult] = await Promise.all([
+      const [shopResult, payrollResult, warehouseBuildingsResult, productResult] = await Promise.all([
         pool.query<{
           id: string;
-          building_type: string;
+          building_type: ResidenceType;
+          building_number: number;
+          tile_x: number;
+          tile_y: number;
           employee_expense: string;
           revenue: string;
         }>(
-          `SELECT building.id, building.building_type,
+          `SELECT building.id, building.building_type, building.building_number,
+                  building.tile_x, building.tile_y,
                   COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense,
                   COALESCE(SUM(history.units_sold::bigint * history.sale_price), 0)::text AS revenue
            FROM residential_buildings building
@@ -2399,8 +2417,8 @@ async function start() {
             AND history.day BETWEEN $2::date - 29 AND $2::date
            WHERE building.created_by = $1
              AND building.building_type = ANY($3::text[])
-           GROUP BY building.id, building.building_type
-           ORDER BY building.building_type, building.id`,
+           GROUP BY building.id, building.building_type, building.building_number, building.tile_x, building.tile_y
+           ORDER BY building.building_type, building.building_number`,
           [userId, day, SHOP_TYPES],
         ),
         pool.query<{ employee_expense: string }>(
@@ -2411,6 +2429,18 @@ async function start() {
              AND building.building_type = 'warehouse'
              AND history.day BETWEEN $2::date - 29 AND $2::date`,
           [userId, day],
+        ),
+        pool.query<{
+          id: string;
+          building_number: number;
+          tile_x: number;
+          tile_y: number;
+        }>(
+          `SELECT id, building_number, tile_x, tile_y
+           FROM residential_buildings
+           WHERE created_by = $1 AND building_type = 'warehouse'
+           ORDER BY building_number`,
+          [userId],
         ),
         pool.query<{
           product_id: string;
@@ -2455,11 +2485,20 @@ async function start() {
         shops: shopResult.rows.map((row) => ({
           id: row.id,
           type: row.building_type,
+          buildingNumber: row.building_number,
+          x: row.tile_x,
+          y: row.tile_y,
           employeeExpense: Number(row.employee_expense),
           revenue: Number(row.revenue),
         })),
         warehouse: {
           employeeExpense: Number(payrollResult.rows[0]?.employee_expense ?? 0),
+          buildings: warehouseBuildingsResult.rows.map((row) => ({
+            id: row.id,
+            buildingNumber: row.building_number,
+            x: row.tile_x,
+            y: row.tile_y,
+          })),
           products,
         },
       });

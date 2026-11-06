@@ -154,7 +154,8 @@ Comerciais, Fazendas, Residências, Recursos, Indústrias e Prefeitura. As seis
 categorias de construções estão disponíveis para todos os jogadores autenticados;
 a Prefeitura aparece somente para a conta Neon Auth configurada em
 `MASTER_EMAIL`. Cadastre o mesmo e-mail nas variáveis locais e no Render; crie
-essa conta pelo formulário do jogo para ativar a permissão.
+essa conta pelo formulário do jogo para ativar a permissão. O botão **Contábil**
+abre os relatórios das lojas comerciais e dos armazéns do jogador conectado.
 
 A primeira estrutura da Prefeitura é a **Assembleia**. Escolha-a no catálogo,
 informe o nome da cidade e mova o cursor pelo mapa para ver uma prévia: verde
@@ -314,7 +315,7 @@ eficiência é de 40% nos meses 1–3, 100% nos meses 4–6, 80% nos meses 7–9
 60% nos meses 10–12. O leite produzido segue para o armazém ligado.
 
 Na categoria **Comerciais**, a **Loja de Leite** copia as características da
-Loja de Peixes: 2 × 2 tiles, até 4 funcionários, estoque máximo de 40 litros,
+Loja de Peixes: 2 × 2 tiles, até 4 funcionários, estoque máximo de 400 litros,
 custo de 30 madeiras e 10 pedras e 6.000 Work Points para construir. Seu preço
 padrão é C$ 10 e pode ser alterado pelo dono. A loja recebe leite do armazém
 ligado e vende às residências pelo mesmo cálculo de demanda e benefício usado
@@ -532,6 +533,16 @@ consultar os últimos 30 dias por dia: gasto com funcionários, gasto com produt
 efetivamente pagos, unidades vendidas, preço unitário de venda, receita e
 lucro/prejuízo. O abastecimento pelo armazém ligado do mesmo dono é uma
 transferência interna sem cobrança e aparece com gasto de produto C$ 0.
+
+## Contábil
+
+O botão **Contábil** na barra inferior tem duas abas. **Lojas comerciais** lista
+todas as lojas do jogador e soma salários pagos e receita de vendas nos últimos
+30 dias do relógio do jogo. **Armazéns** mostra salários pagos e, por produto,
+quantidades e valores comprados/vendidos, além do resultado bruto (receita de
+vendas menos custo de compras). O resultado por produto não desconta salários.
+O histórico financeiro de armazéns começa com esta atualização; transações
+anteriores não podem ser reconstruídas.
 
 - **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque máximo atingido, estoque mínimo preservado, sem espaço, Work Points insuficientes ou armazém sem estoque). Falhas internas são exibidas separadamente, com a etapa e a mensagem do erro.
 - **Validade e espaço de armazenamento:** às 18:00 de cada dia do jogo, a perda esperada de cada produto perecível é `estoque atual / validade em dias`. A parte inteira é removida e a fração vira probabilidade de perder uma unidade adicional (por exemplo, 10 unidades com validade de 100 dias: 0,1 unidade/dia, ou 10% de chance de perder uma). Não há controle por lote ou data de entrada; produtos recém-adicionados seguem a mesma regra sobre o estoque agregado. A regra cobre os estoques principais de fazendas, comércios, construções artesanais e recursos, além dos produtos nos armazéns (indústrias). Produtos sem validade, como madeira, pedra, ferro e Ferramentas, não se deterioram. O espaço ocupado é atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o armazém está selecionado.

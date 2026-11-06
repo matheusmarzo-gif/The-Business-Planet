@@ -492,7 +492,7 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     maxWorkers: 4,
     stockProduct: 'Leite',
     stockProductId: 'milk',
-    stockCapacity: 40,
+    stockCapacity: 400,
   },
   fishery: {
     type: 'fishery',

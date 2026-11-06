@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import CityAssemblyModal from './components/CityAssemblyModal';
 import ConstructionBar, { ConstructionCategory } from './components/ConstructionBar';
+import AccountingPanel from './components/AccountingPanel';
 import CityZoneEditor from './components/CityZoneEditor';
 import ProductCatalog from './components/ProductCatalog';
 import ResidencePanel from './components/ResidencePanel';
@@ -30,6 +31,7 @@ import {
   MAX_CITY_ZONES,
 } from './types/city';
 import { DEFAULT_SHOP_PRICE } from './types/commerce';
+import type { AccountingSummary } from './types/accounting';
 import {
   DEFAULT_RENT,
   DEFAULT_WAGE,
@@ -279,6 +281,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [warehouseLogError, setWarehouseLogError] = useState('');
   const [warehouseLogDays, setWarehouseLogDays] = useState<WarehouseLogDay[]>([]);
   const [warehouseLogEvents, setWarehouseLogEvents] = useState<WarehouseLogEvent[]>([]);
+  const [isAccountingOpen, setIsAccountingOpen] = useState(false);
+  const [isAccountingLoading, setIsAccountingLoading] = useState(false);
+  const [accountingError, setAccountingError] = useState('');
+  const [accountingSummary, setAccountingSummary] = useState<AccountingSummary | null>(null);
   const [isConsumptionLoading, setIsConsumptionLoading] = useState(false);
   const [consumptionError, setConsumptionError] = useState('');
   const [consumption, setConsumption] = useState<Map<string, ProductConsumption>>(new Map());
@@ -562,6 +568,38 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setCommerceHistoryError(error instanceof Error ? error.message : 'Não foi possível carregar o histórico.');
     } finally {
       setIsCommerceHistoryLoading(false);
+    }
+  };
+
+  const loadAccounting = async () => {
+    setIsAccountingOpen(true);
+    setIsAccountingLoading(true);
+    setAccountingError('');
+    setAccountingSummary(null);
+    try {
+      setAccountingSummary(await cityRequest<AccountingSummary>('/api/accounting'));
+    } catch (error) {
+      setAccountingError(error instanceof Error ? error.message : 'Não foi possível carregar o painel contábil.');
+    } finally {
+      setIsAccountingLoading(false);
+    }
+  };
+
+  const toggleAccounting = () => {
+    closeCityZoneEditor();
+    setActiveCategory(null);
+    setIsProductCatalogOpen(false);
+    setIsDemolitionMode(false);
+    setDemolitionMessage('');
+    setIsPlacingCity(false);
+    setIsPlacingRoads(false);
+    setResidencePlacementType(null);
+    setResidencePlacementMessage('');
+    setRoadPlacementMessage('');
+    if (isAccountingOpen) {
+      setIsAccountingOpen(false);
+    } else {
+      void loadAccounting();
     }
   };
 
@@ -1502,6 +1540,14 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onClose={closeConsumption}
           />
         )}
+        {isAccountingOpen && (
+          <AccountingPanel
+            summary={accountingSummary}
+            isLoading={isAccountingLoading}
+            error={accountingError}
+            onClose={() => setIsAccountingOpen(false)}
+          />
+        )}
         {selectedResidence && selectedResidenceKey && isWarehouseOpen && (
           <WarehousePanel
             building={selectedResidence}
@@ -1670,9 +1716,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         activeCategory={activeCategory}
         demolitionMode={isDemolitionMode}
         productCatalogOpen={isProductCatalogOpen}
+        accountingOpen={isAccountingOpen}
         isMaster={user.isMaster}
         onSelect={(category) => {
           closeCityZoneEditor();
+          setIsAccountingOpen(false);
           setIsProductCatalogOpen(false);
           setIsDemolitionMode(false);
           setDemolitionMessage('');
@@ -1685,6 +1733,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         }}
         onToggleProductCatalog={() => {
           closeCityZoneEditor();
+          setIsAccountingOpen(false);
           setActiveCategory(null);
           setIsDemolitionMode(false);
           setDemolitionMessage('');
@@ -1695,8 +1744,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           setRoadPlacementMessage('');
           setIsProductCatalogOpen((current) => !current);
         }}
+        onToggleAccounting={toggleAccounting}
         onToggleDemolition={() => {
           closeCityZoneEditor();
+          setIsAccountingOpen(false);
           setIsProductCatalogOpen(false);
           setActiveCategory(null);
           setIsPlacingCity(false);

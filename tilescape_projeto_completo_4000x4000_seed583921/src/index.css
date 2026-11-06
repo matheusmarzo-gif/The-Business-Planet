@@ -102,6 +102,15 @@ button { color: inherit; }
 .warehouse-empty { grid-column: 1 / -1; margin: 8px 0; color: #a6a897; font-size: 11px; }
 .warehouse-list { overflow: auto; display: grid; gap: 4px; }
 .commerce-history-panel .warehouse-list { overflow-x: auto; }
+.accounting-list { overflow-x: auto; }
+.accounting-tabs { display: flex; gap: 8px; margin: 4px 0 10px; }
+.accounting-tabs button { padding: 8px 12px; border: 1px solid rgba(219,201,158,.18); border-radius: 7px; color: #b7b19e; background: rgba(255,255,255,.03); cursor: pointer; font-size: 11px; }
+.accounting-tabs button.active { border-color: rgba(207,178,116,.55); color: #ead9a6; background: rgba(193,162,100,.14); }
+.accounting-row { display: grid; grid-template-columns: minmax(180px, 1.5fr) repeat(2, minmax(150px, 1fr)); gap: 10px; align-items: center; min-width: 520px; padding: 7px 2px; font-size: 11px; }
+.accounting-warehouse-row { display: grid; grid-template-columns: minmax(130px, 1.4fr) repeat(5, minmax(100px, 1fr)); gap: 8px; align-items: center; min-width: 760px; padding: 7px 2px; font-size: 11px; }
+.accounting-payroll { margin: 6px 0; color: #c9c4b1; font-size: 12px; }
+.accounting-payroll strong { color: #ead9a6; }
+.accounting-history-note { margin: 5px 0 10px; color: #8f9687; font-size: 10px; line-height: 1.5; }
 .commerce-history-row { display: grid; grid-template-columns: repeat(7, minmax(82px, 1fr)) minmax(150px, 1.5fr); gap: 8px; align-items: center; min-width: 860px; font-size: 11px; }
 .commerce-transaction-details { white-space: normal; }
 .commerce-transaction-details summary { color: #d7bd80; cursor: pointer; }

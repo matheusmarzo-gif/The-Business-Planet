@@ -47,6 +47,8 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/types/product.ts` | Catálogo estático dos produtos, unidades, peso, volume e validade padrão. |
 | `src/components/ProductCatalog.tsx` | Interface pesquisável para consultar as fichas de produtos. |
 | `src/components/CommerceHistoryPanel.tsx` | Histórico diário de despesas, vendas e resultado dos comércios. |
+| `src/components/AccountingPanel.tsx` | Relatórios agregados de lojas comerciais e operações de armazéns do jogador autenticado. |
+| `src/types/accounting.ts` | Tipos da resposta da API contábil. |
 | `src/components/CityZoneEditor.tsx` | Editor master das regiões urbanas e rurais de uma cidade. |
 | `src/types/map.ts` | Tipos de configuração do mundo, terrenos, tiles e informações de mapa. |
 | `src/utils/worldConfig.ts` | Configuração única do mapa usada pelo cliente e pelo servidor. |
@@ -285,7 +287,7 @@ mapeamento e verificar todas as curvas.
   Sprite: `public/buildings/farms/fazenda_leiteira.png`.
 - `shop_milk` (categoria Comerciais) usa a mesma definição, preço editável e
   fluxo de venda da Loja de Peixes: 2 × 2 tiles, 4 funcionários, estoque máximo
-  de 40 litros, custo de 30 madeiras e 10 pedras e 6.000 Work Points. Produto
+  de 400 litros, custo de 30 madeiras e 10 pedras e 6.000 Work Points. Produto
   `milk`; sprite `public/buildings/commerce/loja_leite.png`.
 - O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
   área ocupada deve ficar dentro da cidade e da zona exigida pela construção
@@ -509,7 +511,13 @@ mapeamento e verificar todas as curvas.
   em `MAX`, até o espaço livre (50 m³). As ofertas mais baratas são atendidas primeiro entre todos os
   fornecedores. O comprador gasta Work Points de transporte (mesma fórmula; cada
   rodada usa metade dos pontos diários) e paga ao vendedor (carteira pode ficar
-  negativa). Pedra exige 30 Work Points por unidade (160 kg, 0,1 m³), contra
+  negativa). Cada troca real grava produto, quantidade, preço unitário,
+  comprador, vendedor e dia em `warehouse_trade_history`; as compras/vendas
+  imediatas pela rota de fornecedores usam o mesmo registro. `runDailyEmployment`
+  grava em `warehouse_payroll_history` os salários efetivamente pagos por cada
+  armazém. Os dois históricos são limitados aos últimos 30 dias do relógio do
+  jogo; registros anteriores à instalação dessas tabelas não podem ser
+  reconstruídos. Pedra exige 30 Work Points por unidade (160 kg, 0,1 m³), contra
   16,25 por unidade de Madeira (50 kg, 0,1 m³).
 - Demanda de Work Points do armazém: `logWarehouseDemand` (server/index.ts)
   acumula por dia de jogo, na tabela `warehouse_demand (building_id, day, demand)`
@@ -562,6 +570,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo médio por cidadão da cidade e preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira do usuário com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
+| `GET /api/accounting` | Autenticado | Retorna, apenas para o jogador da sessão, salários e receita de cada loja nos últimos 30 dias e salários/compra/venda por produto dos próprios armazéns; margem por produto não desconta salários. |
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
 | `GET /api/residential-buildings/:id/warehouse-log` | Dono do armazém | Retorna `{ days: [{ day, workPoints }], events: [{ day, buildingType, productId, direction, wanted, moved, reason, errorDetail }] }` do armazém (tabela `warehouse_transport_log`, gravada às 00:00 na etapa de transporte, 30 dias; `reason` = `desired_reached`/`no_space`/`no_work_points`/`warehouse_empty` quando moveu menos que o desejado; erros internos registram etapa e detalhe em `errorDetail`). |
 | `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo), estoque e preço médio local ponderado por oferta acima do mínimo; espaço ocupado é calculado no cliente. |

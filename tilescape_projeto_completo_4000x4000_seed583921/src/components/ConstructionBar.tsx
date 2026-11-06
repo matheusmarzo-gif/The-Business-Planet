@@ -1,4 +1,5 @@
 import {
+  Calculator,
   Factory,
   Hammer,
   House,
@@ -17,9 +18,11 @@ interface ConstructionBarProps {
   activeCategory: ConstructionCategory | null;
   demolitionMode: boolean;
   productCatalogOpen: boolean;
+  accountingOpen: boolean;
   isMaster: boolean;
   onSelect: (category: ConstructionCategory) => void;
   onToggleProductCatalog: () => void;
+  onToggleAccounting: () => void;
   onToggleDemolition: () => void;
 }
 
@@ -37,13 +40,15 @@ export default function ConstructionBar({
   activeCategory,
   demolitionMode,
   productCatalogOpen,
+  accountingOpen,
   isMaster,
   onSelect,
   onToggleProductCatalog,
+  onToggleAccounting,
   onToggleDemolition,
 }: ConstructionBarProps) {
   return (
-    <nav className="construction-bar" aria-label="Categorias de construções">
+    <nav className="construction-bar" aria-label="Ações do mundo">
       {categories
         .filter((category) => !('masterOnly' in category) || isMaster)
         .map(({ id, label, Icon }) => (
@@ -59,6 +64,16 @@ export default function ConstructionBar({
             <span>{label}</span>
           </button>
         ))}
+      <button
+        className={`construction-tab${accountingOpen ? ' active' : ''}`}
+        type="button"
+        aria-label="Contábil"
+        aria-pressed={accountingOpen}
+        onClick={onToggleAccounting}
+      >
+        <Calculator size={20} strokeWidth={1.8} />
+        <span>Contábil</span>
+      </button>
       <button
         className={`construction-tab${productCatalogOpen ? ' active' : ''}`}
         type="button"

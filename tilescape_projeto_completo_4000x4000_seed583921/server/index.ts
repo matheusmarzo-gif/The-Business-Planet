@@ -765,6 +765,12 @@ async function applyWarehouseTrades(
 
     const cost = trade.quantity * trade.price;
     await client.query(
+      `INSERT INTO warehouse_trade_history
+         (day, buyer_id, seller_id, product_id, quantity, unit_price)
+       VALUES ($1::date, $2, $3, $4, $5, $6)`,
+      [day, trade.buyerId, trade.sellerId, trade.productId, trade.quantity, trade.price],
+    );
+    await client.query(
       'UPDATE warehouse_stock SET quantity = quantity - $3 WHERE building_id = $1 AND product_id = $2',
       [trade.sellerId, trade.productId, trade.quantity],
     );
@@ -931,6 +937,16 @@ async function runDailyEmployment(): Promise<boolean> {
       const workers = new Map<string, number>();
       for (const row of assignmentRows) {
         workers.set(row.workplace_id, (workers.get(row.workplace_id) ?? 0) + row.count);
+      }
+      for (const warehouse of workplaces) {
+        if (warehouse.building_type !== 'warehouse') continue;
+        await client.query(
+          `INSERT INTO warehouse_payroll_history (building_id, day, employee_expense)
+           VALUES ($1, $2::date, $3)
+           ON CONFLICT (building_id, day)
+           DO UPDATE SET employee_expense = EXCLUDED.employee_expense`,
+          [warehouse.id, state.day, (workers.get(warehouse.id) ?? 0) * warehouse.wage],
+        );
       }
       for (const site of workplaces) {
         const count = workers.get(site.id) ?? 0;
@@ -1495,6 +1511,16 @@ async function runDailyEmployment(): Promise<boolean> {
         console.error('Falha na economia diária (folha e obras foram preservadas):', economyError);
       }
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
+      await client.query(
+        `DELETE FROM warehouse_payroll_history
+         WHERE day < $1::date - 29`,
+        [state.day],
+      );
+      await client.query(
+        `DELETE FROM warehouse_trade_history
+         WHERE day < $1::date - 29`,
+        [state.day],
+      );
     }
 
     if (state.hour >= 18 && (state.last_spoilage === null || state.last_spoilage < state.day)) {
@@ -2339,6 +2365,108 @@ async function start() {
         console.error('Não foi possível consultar a carteira:', error);
         response.status(503).json({ error: 'wallet_unavailable' });
       });
+  });
+  app.get('/api/accounting', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    void (async () => {
+      const { rows: clockRows } = await pool.query<{ day: string }>(
+        `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
+         FROM world_state WHERE id = 1`,
+      );
+      const day = clockRows[0]?.day;
+      if (!day) {
+        response.status(503).json({ error: 'world_unavailable' });
+        return;
+      }
+
+      const [shopResult, payrollResult, productResult] = await Promise.all([
+        pool.query<{
+          id: string;
+          building_type: string;
+          employee_expense: string;
+          revenue: string;
+        }>(
+          `SELECT building.id, building.building_type,
+                  COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense,
+                  COALESCE(SUM(history.units_sold::bigint * history.sale_price), 0)::text AS revenue
+           FROM residential_buildings building
+           LEFT JOIN commerce_history history
+             ON history.building_id = building.id
+            AND history.day BETWEEN $2::date - 29 AND $2::date
+           WHERE building.created_by = $1
+             AND building.building_type = ANY($3::text[])
+           GROUP BY building.id, building.building_type
+           ORDER BY building.building_type, building.id`,
+          [userId, day, SHOP_TYPES],
+        ),
+        pool.query<{ employee_expense: string }>(
+          `SELECT COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense
+           FROM warehouse_payroll_history history
+           JOIN residential_buildings building ON building.id = history.building_id
+           WHERE building.created_by = $1
+             AND building.building_type = 'warehouse'
+             AND history.day BETWEEN $2::date - 29 AND $2::date`,
+          [userId, day],
+        ),
+        pool.query<{
+          product_id: string;
+          bought_quantity: string;
+          purchase_expense: string;
+          sold_quantity: string;
+          sales_revenue: string;
+        }>(
+          `SELECT history.product_id,
+                  SUM(CASE WHEN buyer.id IS NOT NULL THEN history.quantity ELSE 0 END)::text AS bought_quantity,
+                  SUM(CASE WHEN buyer.id IS NOT NULL THEN history.quantity::bigint * history.unit_price ELSE 0 END)::text
+                    AS purchase_expense,
+                  SUM(CASE WHEN seller.id IS NOT NULL THEN history.quantity ELSE 0 END)::text AS sold_quantity,
+                  SUM(CASE WHEN seller.id IS NOT NULL THEN history.quantity::bigint * history.unit_price ELSE 0 END)::text
+                    AS sales_revenue
+           FROM warehouse_trade_history history
+           LEFT JOIN residential_buildings buyer
+             ON buyer.id = history.buyer_id AND buyer.created_by = $1
+           LEFT JOIN residential_buildings seller
+             ON seller.id = history.seller_id AND seller.created_by = $1
+           WHERE history.day BETWEEN $2::date - 29 AND $2::date
+             AND (buyer.id IS NOT NULL OR seller.id IS NOT NULL)
+           GROUP BY history.product_id
+           ORDER BY history.product_id`,
+          [userId, day],
+        ),
+      ]);
+
+      const products = productResult.rows.map((row) => {
+        const purchaseExpense = Number(row.purchase_expense);
+        const salesRevenue = Number(row.sales_revenue);
+        return {
+          productId: row.product_id,
+          boughtQuantity: Number(row.bought_quantity),
+          purchaseExpense,
+          soldQuantity: Number(row.sold_quantity),
+          salesRevenue,
+          profitLoss: salesRevenue - purchaseExpense,
+        };
+      });
+      response.json({
+        shops: shopResult.rows.map((row) => ({
+          id: row.id,
+          type: row.building_type,
+          employeeExpense: Number(row.employee_expense),
+          revenue: Number(row.revenue),
+        })),
+        warehouse: {
+          employeeExpense: Number(payrollResult.rows[0]?.employee_expense ?? 0),
+          products,
+        },
+      });
+    })().catch((error: unknown) => {
+      console.error('Não foi possível consultar os dados contábeis:', error);
+      response.status(503).json({ error: 'accounting_unavailable' });
+    });
   });
   app.get('/api/player/resources', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);

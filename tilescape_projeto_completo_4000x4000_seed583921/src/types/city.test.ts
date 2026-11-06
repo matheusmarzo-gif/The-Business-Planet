@@ -746,13 +746,14 @@ describe('fazenda leiteira e demanda configurável', () => {
     );
   });
 
-  it('defines a dairy shop with the same building parameters as the fish shop', () => {
+  it('defines a dairy shop with shared building costs and increased stock capacity', () => {
     const dairyShop = RESIDENCES.shop_milk;
     const fishShop = RESIDENCES.shop_fish;
     assert.deepEqual(
-      [dairyShop.width, dairyShop.height, dairyShop.maxWorkers, dairyShop.stockCapacity, dairyShop.workPoints],
-      [fishShop.width, fishShop.height, fishShop.maxWorkers, fishShop.stockCapacity, fishShop.workPoints],
+      [dairyShop.width, dairyShop.height, dairyShop.maxWorkers, dairyShop.workPoints],
+      [fishShop.width, fishShop.height, fishShop.maxWorkers, fishShop.workPoints],
     );
+    assert.equal(dairyShop.stockCapacity, 400);
     assert.deepEqual(dairyShop.cost, fishShop.cost);
     assert.equal(dairyShop.stockProductId, 'milk');
     assert.equal(dairyShop.asset, '/buildings/commerce/loja_leite.png');

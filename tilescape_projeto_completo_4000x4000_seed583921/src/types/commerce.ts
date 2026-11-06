@@ -302,6 +302,11 @@ export function getShopSalesCapacity(
   const workPointsPerUnit = (() => {
     switch (type) {
       case 'shop_rice':
+      case 'shop_potato':
+      case 'shop_corn':
+      case 'shop_barley':
+      case 'shop_wheat':
+      case 'shop_butcher':
       case 'shop_fish':
         return SHOP_SALES_WORK_POINTS_PER_UNIT;
       case 'shop_milk':

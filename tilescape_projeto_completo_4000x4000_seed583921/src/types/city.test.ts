@@ -457,6 +457,8 @@ describe('shop sales', () => {
   it('computes store benefit with the basic-basket formula and zero guards', () => {
     assert.equal(getShopSalesCapacity('shop_rice', 19), 0);
     assert.equal(getShopSalesCapacity('shop_rice', 20), 1);
+    const newShopTypes = ['shop_potato', 'shop_corn', 'shop_barley', 'shop_wheat', 'shop_butcher'] as const;
+    assert.deepEqual(newShopTypes.map((type) => getShopSalesCapacity(type, 40)), [2, 2, 2, 2, 2]);
     assert.equal(getShopSalesCapacity('shop_fish', 40), 2);
     assert.equal(getShopSalesCapacity('shop_milk', 1), 1);
     assert.equal(getShopSalesCapacity('shop_milk', 0.9), 0);
@@ -498,6 +500,30 @@ describe('shop sales', () => {
     const fartherStore = getPurchaseBenefitCalculation(income, price, basicNeed, rr, 40);
     assert.ok(fartherStore.errorBenefit < calculation.errorBenefit);
     assert.ok(fartherStore.associatedBenefit < calculation.associatedBenefit);
+  });
+
+  it('sells the new food products through the shared residence-demand planner', () => {
+    const newShops = [
+      { ...shop('potato', 0, 1, 20, 20), productId: 'potato', type: 'shop_potato' as const },
+      { ...shop('corn', 0, 1, 20, 20), productId: 'corn', type: 'shop_corn' as const },
+      { ...shop('barley', 0, 1, 20, 20), productId: 'barley', type: 'shop_barley' as const },
+      { ...shop('wheat', 0, 1, 20, 20), productId: 'wheat', type: 'shop_wheat' as const },
+      { ...shop('red-meat', 0, 1, 20, 20), productId: 'red_meat', type: 'shop_butcher' as const },
+    ];
+    const averagePrices = new Map(
+      [...demandByProduct.keys()].map((productId) => [getCityProductKey('city-a', productId), 1]),
+    );
+    const plan = planShopSalesDetailed(
+      [home('new-food-home', 0, 32, 10)],
+      newShops,
+      demandByProduct,
+      averagePrices,
+      () => 0,
+    );
+    assert.deepEqual(
+      plan.purchases.map((purchase) => purchase.productId).sort(),
+      ['barley', 'corn', 'potato', 'red_meat', 'wheat'],
+    );
   });
 
   it('uses city-wide 30-day weighted prices and current prices only when no sales exist', () => {
@@ -758,6 +784,30 @@ describe('fazenda leiteira e demanda configurável', () => {
       ),
       [{ buildingId: 'milk-store', productId: 'milk', quantity: 20, direction: 'in' }],
     );
+  });
+
+  it('defines the new food shops with rice-shop construction and stock capacity', () => {
+    const riceShop = RESIDENCES.shop_rice;
+    const expectedShops = [
+      ['shop_potato', 'potato', 'Loja de Batata', '/buildings/commerce/loja_batata.png'],
+      ['shop_corn', 'corn', 'Loja de Milho', '/buildings/commerce/loja_milho.png'],
+      ['shop_barley', 'barley', 'Loja de Cevada', '/buildings/commerce/loja_cevada.png'],
+      ['shop_wheat', 'wheat', 'Loja de Trigo', '/buildings/commerce/loja_trigo.png'],
+      ['shop_butcher', 'red_meat', 'Açougue', '/buildings/commerce/loja_acougue.png'],
+    ] as const;
+    for (const [type, productId, name, asset] of expectedShops) {
+      const shop = RESIDENCES[type];
+      assert.equal(shop.kind, 'shop');
+      assert.deepEqual(
+        [shop.width, shop.height, shop.maxWorkers, shop.stockCapacity, shop.workPoints],
+        [riceShop.width, riceShop.height, riceShop.maxWorkers, riceShop.stockCapacity, riceShop.workPoints],
+      );
+      assert.deepEqual(shop.cost, riceShop.cost);
+      assert.equal(shop.stockProductId, productId);
+      assert.equal(shop.name, name);
+      assert.equal(shop.asset, asset);
+      assert.equal(canLinkToWarehouse(type), true);
+    }
   });
 });
 

@@ -36,6 +36,7 @@ import {
   parseWorkSettings,
   RESIDENCES,
   RESIDENCE_STATS,
+  SHOP_TYPES,
   WORKER_SEARCH_RADIUS,
   type ResidentialBuilding,
   type ResidenceType,
@@ -2664,8 +2665,8 @@ async function start() {
     void (async () => {
       const { rows: owners } = await pool.query<{ created_by: string }>(
         `SELECT created_by FROM residential_buildings
-         WHERE id = $1 AND building_type IN ('shop_rice', 'shop_fish', 'shop_milk')`,
-        [request.params.id],
+         WHERE id = $1 AND building_type = ANY($2::text[])`,
+        [request.params.id, SHOP_TYPES],
       );
       if (!owners[0]) {
         response.status(404).json({ error: 'shop_not_found' });
@@ -3128,9 +3129,9 @@ async function start() {
       .query<ResidentialBuildingRow>(
         `UPDATE residential_buildings
          SET price = $3
-         WHERE id = $1 AND created_by = $2 AND building_type IN ('shop_rice', 'shop_fish', 'shop_milk')
+         WHERE id = $1 AND created_by = $2 AND building_type = ANY($4::text[])
          RETURNING ${RESIDENTIAL_COLUMNS}`,
-        [request.params.id, userId, price],
+        [request.params.id, userId, price, SHOP_TYPES],
       )
       .then(async ({ rows }) => {
         if (!rows[0]) {

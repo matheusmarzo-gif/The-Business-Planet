@@ -14,6 +14,11 @@ export type ResidenceType =
   | FarmCropType
   | 'farm_dairy'
   | 'shop_rice'
+  | 'shop_potato'
+  | 'shop_corn'
+  | 'shop_barley'
+  | 'shop_wheat'
+  | 'shop_butcher'
   | 'shop_milk'
   | 'warehouse'
   | 'fishery'
@@ -22,6 +27,17 @@ export type ResidenceType =
   | 'quarry'
   | 'iron_mine'
   | 'toolmaker';
+
+export const SHOP_TYPES = [
+  'shop_rice',
+  'shop_potato',
+  'shop_corn',
+  'shop_barley',
+  'shop_wheat',
+  'shop_butcher',
+  'shop_fish',
+  'shop_milk',
+] as const satisfies readonly ResidenceType[];
 export type BuildingKind =
   | 'residence'
   | 'farm'
@@ -365,6 +381,96 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     maxWorkers: 4,
     stockProduct: 'Arroz',
     stockProductId: 'rice',
+    stockCapacity: 20,
+  },
+  shop_potato: {
+    type: 'shop_potato',
+    kind: 'shop',
+    requiredZone: 'urban',
+    requiresRoad: true,
+    name: 'Loja de Batata',
+    asset: '/buildings/commerce/loja_batata.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 100, stone: 20 },
+    workPoints: 9000,
+    maxWorkers: 4,
+    stockProduct: 'Batata',
+    stockProductId: 'potato',
+    stockCapacity: 20,
+  },
+  shop_corn: {
+    type: 'shop_corn',
+    kind: 'shop',
+    requiredZone: 'urban',
+    requiresRoad: true,
+    name: 'Loja de Milho',
+    asset: '/buildings/commerce/loja_milho.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 100, stone: 20 },
+    workPoints: 9000,
+    maxWorkers: 4,
+    stockProduct: 'Milho',
+    stockProductId: 'corn',
+    stockCapacity: 20,
+  },
+  shop_barley: {
+    type: 'shop_barley',
+    kind: 'shop',
+    requiredZone: 'urban',
+    requiresRoad: true,
+    name: 'Loja de Cevada',
+    asset: '/buildings/commerce/loja_cevada.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 100, stone: 20 },
+    workPoints: 9000,
+    maxWorkers: 4,
+    stockProduct: 'Cevada',
+    stockProductId: 'barley',
+    stockCapacity: 20,
+  },
+  shop_wheat: {
+    type: 'shop_wheat',
+    kind: 'shop',
+    requiredZone: 'urban',
+    requiresRoad: true,
+    name: 'Loja de Trigo',
+    asset: '/buildings/commerce/loja_trigo.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 100, stone: 20 },
+    workPoints: 9000,
+    maxWorkers: 4,
+    stockProduct: 'Trigo',
+    stockProductId: 'wheat',
+    stockCapacity: 20,
+  },
+  shop_butcher: {
+    type: 'shop_butcher',
+    kind: 'shop',
+    requiredZone: 'urban',
+    requiresRoad: true,
+    name: 'Açougue',
+    asset: '/buildings/commerce/loja_acougue.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 100, stone: 20 },
+    workPoints: 9000,
+    maxWorkers: 4,
+    stockProduct: 'Carne vermelha',
+    stockProductId: 'red_meat',
     stockCapacity: 20,
   },
   shop_milk: {

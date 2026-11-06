@@ -260,6 +260,14 @@ mapeamento e verificar todas as curvas.
   estoque máximo de 20 de Arroz, 100 madeiras e 20 pedras, 9.000 Work Points.
   Exige zona urbana e estrada adjacente; sem moradores nem aluguel. Sprite:
   `public/buildings/commerce/loja_arroz.png`.
+- `shop_potato`, `shop_corn`, `shop_barley`, `shop_wheat` e `shop_butcher`
+  (Lojas de Batata, Milho, Cevada, Trigo e Açougue) são lojas urbanas 2 × 2,
+  com até 4 funcionários, estoque máximo de 20 unidades e os mesmos custos da
+  Loja de Arroz: 100 madeiras, 20 pedras e 9.000 Work Points. Vendem,
+  respectivamente, `potato`, `corn`, `barley`, `wheat` e `red_meat`, recebem
+  estoque do armazém ligado e têm preço editável pelo dono. Os sprites ficam em
+  `public/buildings/commerce/loja_batata.png`, `loja_milho.png`,
+  `loja_cevada.png`, `loja_trigo.png` e `loja_acougue.png`.
 - `farm_rice` (categoria Fazendas, área rural) usa o mesmo catálogo e a mesma
   tabela `residential_buildings`: 4 × 4, até 30 funcionários, estoque máximo de
   300 de Arroz, custo de 200 madeiras e 20 pedras, 12.000 Work Points. Exige
@@ -355,13 +363,15 @@ mapeamento e verificar todas as curvas.
   fator 1,2 em 4 h, 1 em 8 h, 0,8 em 14 h, linear entre eles; saúde e felicidade
   fixas em 100 por enquanto) e é concluída automaticamente ao atingir os Work
   Points necessários.
-- Vendas de arroz, peixe e leite (`src/types/commerce.ts`): `shop_rice`,
-  `shop_fish` e `shop_milk`
-  têm `price` (padrão C$ 10, editável pelo dono via
+- Vendas da Cesta Básica (`src/types/commerce.ts`): lojas cujo catálogo tem
+  `kind: 'shop'` e `stockProductId` participam das vendas; incluem arroz,
+  batata, milho, cevada, trigo, peixe, carne vermelha e leite. Todas têm `price`
+  (padrão C$ 10, editável pelo dono via
   `PATCH /api/residential-buildings/:id/price`) e estoque abastecido pelo
-  armazém ligado do mesmo dono. No job das 00:00, arroz/peixe têm capacidade
-  `floor(WP do dia / 20)` unidades e leite `floor(WP do dia / 1)` litros
-  (WP = empregados × `getDailyWorkPoints`). `config/demanda_basica.txt` define
+  armazém ligado do mesmo dono. No job das 00:00, lojas de produtos por unidade
+  têm capacidade `floor(WP do dia / 20)` unidades e leite
+  `floor(WP do dia / 1)` litros (WP = empregados × `getDailyWorkPoints`).
+  `config/demanda_basica.txt` define
   o consumo diário por pessoa para a Cesta Básica: arroz, trigo, cevada, milho,
   batata, peixe e carne vermelha começam em `0.03`; leite em `1`.
   `commerce_history` fornece os preços e unidades vendidas nos últimos 30 dias.
@@ -436,7 +446,8 @@ mapeamento e verificar todas as curvas.
   terminar, o plantio é limpo e um novo pode ser feito. `ResidentialBuilding.crop`
   expõe o estado ao cliente.
 - `red_meat` tem validade padrão de 30 dias em `src/types/product.ts`.
-- Consumo das residências: as compras de arroz, peixe e leite das 00:00 são gravadas em
+- Consumo das residências: as compras de todos os produtos disponíveis da Cesta
+  Básica (arroz, trigo, cevada, milho, batata, peixe, carne vermelha e leite) das 00:00 são gravadas em
   `residence_consumption (building_id, product_id, day, quantity, spent,
   occupants)` (cascata). `GET /api/residential-buildings/:id/consumption`
   devolve por produto o consumo por pessoa no último dia e a média diária por
@@ -459,12 +470,14 @@ mapeamento e verificar todas as curvas.
   penalidade vai a 30% e sobe 10 pontos/dia até 90%; atendida, cai 10/dia
   (`nextEfficiencyPenalty`). Produção: 100 Work Points por peixe, reduzidos pela
   penalidade, com o resto acumulado. As regras `accumulate` usam o custo por
-  unidade de `ProductionRule.workPointsPerUnit`. A Loja de Peixes reutiliza as
-  vendas/benefício da Loja de Arroz e grava consumo `fish`; a Loja de Leite usa
-  o mesmo planner com multiplicador próprio e grava `milk`. Ferramentas (`tools`) é um produto novo (5 kg, 0,01 m³,
+  unidade de `ProductionRule.workPointsPerUnit`. Todas as lojas usam o planner
+  compartilhado de vendas; cada uma vende seu `stockProductId`, incluindo as
+  novas lojas de batata, milho, cevada, trigo e carne vermelha. Ferramentas
+  (`tools`) é um produto novo (5 kg, 0,01 m³,
   validade infinita); `planTransfers` leva peixe do Pesqueiro ao armazém e
   Ferramentas do armazém ao Pesqueiro (`Transfer.productId === 'tools'` grava em
-  `  tool_stock`). A rota de preço vale para `shop_rice`, `shop_fish` e `shop_milk`.
+  `  tool_stock`). A rota de preço e o histórico financeiro atendem todos os
+  tipos em `SHOP_TYPES`.
 - Produção leiteira: `getDairyFarmEfficiency` (`src/types/dairy.ts`) aplica
   fatores mensais de 40%, 100%, 80% e 60% à produção diária de `farm_dairy`.
   O produto existente `milk` (litro, 0,001 m³, validade de 7 dias) deteriora

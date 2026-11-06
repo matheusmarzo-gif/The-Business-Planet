@@ -65,7 +65,7 @@ function getProductionDescription(type: ResidenceType): string | null {
   }
   if (definition.kind === 'shop') {
     const workPointsPerUnit = type === 'shop_milk' ? 1 : 20;
-    const unit = type === 'shop_milk' ? 'litro' : 'unidade';
+    const unit = definition.stockProductId === 'milk' ? 'litro' : 'unidade';
     return `A cada ${number.format(workPointsPerUnit)} Work Point${workPointsPerUnit === 1 ? '' : 's'} gerados pelos funcionários, a loja ganha capacidade para vender até 1 ${unit}. As vendas dependem da demanda e do estoque disponível, abastecido pelo armazém ligado.`;
   }
   if (definition.kind === 'warehouse') {
@@ -373,7 +373,7 @@ export default function ResidencePanel({
           {error && <p role="alert">{error}</p>}
         </form>
       )}
-      {(building.type === 'shop_rice' || building.type === 'shop_fish' || building.type === 'shop_milk') && (
+      {definition.kind === 'shop' && (
         <form
           className="work-settings"
           onSubmit={(event) => {
@@ -382,7 +382,7 @@ export default function ResidencePanel({
           }}
         >
           <label>
-            Preço do {building.type === 'shop_fish' ? 'peixe' : building.type === 'shop_milk' ? 'leite' : 'arroz'} (C$ por {building.type === 'shop_milk' ? 'litro' : 'unidade'})
+            Preço do {definition.stockProduct?.toLocaleLowerCase('pt-BR') ?? 'produto'} (C$ por {definition.stockProductId === 'milk' ? 'litro' : 'unidade'})
             <input
               type="number"
               min={1}

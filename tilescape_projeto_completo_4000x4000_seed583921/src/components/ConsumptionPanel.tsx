@@ -1,5 +1,6 @@
 import { PRODUCTS } from '../types/product';
 import { formatMoney } from '../types/wallet';
+import { BASIC_BASKET_PRODUCT_IDS } from '../types/commerceDemand';
 
 export interface ProductConsumption {
   productId: string;
@@ -9,8 +10,7 @@ export interface ProductConsumption {
   monthAveragePrice: number | null;
 }
 
-// Produtos consumidos pelas residências (mesma fórmula de compra para todos).
-export const CONSUMED_PRODUCT_IDS = ['rice', 'fish', 'milk'];
+export const CONSUMED_PRODUCT_IDS = BASIC_BASKET_PRODUCT_IDS;
 
 interface ConsumptionPanelProps {
   consumption: Map<string, ProductConsumption>;

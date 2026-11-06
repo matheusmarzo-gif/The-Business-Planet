@@ -279,6 +279,15 @@ sem sobrepor outras construções. O fluxo (prévia, obra, demolição, painel
 lateral com raio de busca de 60 tiles) é o mesmo das fazendas. As vendas usam
 arroz entregue pelo armazém ligado e o preço configurado pelo dono.
 
+As **Lojas de Batata, Milho, Cevada e Trigo** e o **Açougue** usam os mesmos
+parâmetros de construção e estoque da Loja de Arroz: 2 × 2 tiles, até 4
+funcionários, estoque máximo de 20 unidades, custo de 100 madeiras e 20 pedras
+e 9.000 Work Points. Cada uma vende, respectivamente, batata, milho, cevada,
+trigo ou carne vermelha. Todas devem ficar em área urbana, ao lado de uma
+estrada, recebem estoque do armazém ligado e permitem ao dono configurar o
+preço. O trabalho dos funcionários gera capacidade de venda à razão de 1
+unidade por 20 Work Points.
+
 ### Pesqueiro e Loja de Peixes
 
 Na categoria **Construções Artesanais**, o **Pesqueiro** (2 × 2 tiles, até 10
@@ -381,9 +390,11 @@ salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). T
 1,2 com 4 h, 1 com 8 h, 0,8 com 14 h); a obra termina sozinha ao atingir o total
 necessário. Saúde e felicidade ainda são fixas em 100.
 
-Nas lojas de arroz, peixe e leite, o dono define o preço (C$ 1 ou mais). Às 00:00, a capacidade de venda considera os Work Points gerados pelos
-funcionários no dia: lojas de arroz e peixe ganham 1 unidade por 20 Work Points;
-a Loja de Leite ganha 1 litro por Work Point. Para cada produto, as residências consideram lojas do produto em até
+Nas lojas de arroz, batata, milho, cevada, trigo, peixe, leite e no Açougue, o
+dono define o preço (C$ 1 ou mais). Às 00:00, a capacidade de venda considera os
+Work Points gerados pelos funcionários no dia: as lojas de produtos por unidade
+(arroz, batata, milho, cevada, trigo, peixe e carne vermelha) ganham 1 unidade
+por 20 Work Points; a Loja de Leite ganha 1 litro por Work Point. Para cada produto, as residências consideram lojas do produto em até
 60 tiles. O custo de referência `RR` é o custo diário por pessoa de todos os
 itens da Cesta Básica disponíveis na cidade, calculado pelos preços médios
 ponderados pelas unidades vendidas nos últimos 30 dias. Produtos sem vendas no
@@ -468,8 +479,9 @@ indicados, limitada ao estoque livre (300; ligar a um armazém libera espaço); 
 depois de colher tudo é possível iniciar um novo ciclo.
 
 **Consumo:** em residências concluídas, **Ver consumo da casa** mostra o consumo
-por pessoa de arroz, peixe e leite no último dia e a média diária por pessoa nos últimos
-30 dias, além do preço médio pago no dia e no mês. No painel da cidade, **Consumo**
+por pessoa de todos os produtos da Cesta Básica (arroz, trigo, cevada, milho,
+batata, peixe, carne vermelha e leite) no último dia e a média diária por pessoa
+nos últimos 30 dias, além do preço médio pago no dia e no mês. No painel da cidade, **Consumo**
 mostra esses mesmos dados agregados para todos os cidadãos: as quantidades
 compradas pelas residências da cidade são divididas pela população total, e os
 preços médios são ponderados pelas unidades compradas.
@@ -509,7 +521,12 @@ Fazendas, recursos e construções artesanais concluídas têm o botão **Histó
 
 ## Histórico do comércio
 
-O dono de uma Loja de Arroz, Loja de Peixes ou Loja de Leite concluída pode abrir **Histórico do comércio** para consultar os últimos 30 dias por dia: gasto com funcionários, gasto com produtos efetivamente pagos, unidades vendidas, preço unitário de venda, receita e lucro/prejuízo. O abastecimento pelo armazém ligado do mesmo dono é uma transferência interna sem cobrança e aparece com gasto de produto C$ 0.
+O dono de qualquer loja de alimentos concluída — arroz, batata, milho, cevada,
+trigo, peixe, leite ou Açougue — pode abrir **Histórico do comércio** para
+consultar os últimos 30 dias por dia: gasto com funcionários, gasto com produtos
+efetivamente pagos, unidades vendidas, preço unitário de venda, receita e
+lucro/prejuízo. O abastecimento pelo armazém ligado do mesmo dono é uma
+transferência interna sem cobrança e aparece com gasto de produto C$ 0.
 
 - **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque máximo atingido, estoque mínimo preservado, sem espaço, Work Points insuficientes ou armazém sem estoque). Falhas internas são exibidas separadamente, com a etapa e a mensagem do erro.
 - **Validade e espaço de armazenamento:** às 18:00 de cada dia do jogo, a perda esperada de cada produto perecível é `estoque atual / validade em dias`. A parte inteira é removida e a fração vira probabilidade de perder uma unidade adicional (por exemplo, 10 unidades com validade de 100 dias: 0,1 unidade/dia, ou 10% de chance de perder uma). Não há controle por lote ou data de entrada; produtos recém-adicionados seguem a mesma regra sobre o estoque agregado. A regra cobre os estoques principais de fazendas, comércios, construções artesanais e recursos, além dos produtos nos armazéns (indústrias). Produtos sem validade, como madeira, pedra, ferro e Ferramentas, não se deterioram. O espaço ocupado é atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o armazém está selecionado.

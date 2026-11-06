@@ -1538,6 +1538,7 @@ async function runDailyEmployment(): Promise<boolean> {
         demandBasicByProduct,
         averagePrices,
         Math.random,
+        monthlySales,
       );
       for (const purchase of salesPlan.purchases) {
         sold.set(purchase.shopId, (sold.get(purchase.shopId) ?? 0) + purchase.quantity);

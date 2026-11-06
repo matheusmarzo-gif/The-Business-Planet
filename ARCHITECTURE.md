@@ -419,8 +419,10 @@ mapeamento e verificar todas as curvas.
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
   preço unitário de venda. Os detalhes do diagnóstico (renda, moradores,
   produto, `RR`, `Pf`, `w`, `q`, benefícios de erro/ideal/associado,
-  participação e moradores alocados, quantidade, estoque/capacidade, compra e
-  resultado) são encaminhados via Redis apenas aos WebSockets autenticados do
+  participação e moradores alocados, quantidade, estoque/capacidade, resultado
+  e decomposição de `RR` por produto (necessidade diária, preço médio, origem
+  do preço, vendas/receita do período e contribuição)) são
+  encaminhados via Redis apenas aos WebSockets autenticados do
   proprietário e ficam somente no `localStorage` do navegador. O navegador
   precisa estar conectado durante o processamento das vendas para capturar
   esse diagnóstico; clientes offline não o recebem. A API do histórico retorna

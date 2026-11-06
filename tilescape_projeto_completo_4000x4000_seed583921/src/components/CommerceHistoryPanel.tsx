@@ -23,12 +23,18 @@ interface CommerceHistoryPanelProps {
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const decimal = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
+const preciseDecimal = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 6 });
+const preciseMoney = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 4,
+  maximumFractionDigits: 6,
+});
 const benefitFormat = new Intl.NumberFormat('pt-BR', {
   maximumSignificantDigits: 6,
   notation: 'scientific',
 });
 const percentFormat = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 2 });
 const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
+const formatPreciseMoney = (amount: number) => `C$ ${preciseMoney.format(amount)}`;
 const outcomeText = {
   purchased: 'Comprou',
   negative_benefit: 'Benefício associado zero; não alocado',
@@ -111,6 +117,49 @@ export default function CommerceHistoryPanel({
                       {decimal.format(transaction.expectedDemand)} · quantidade desejada total{' '}
                       {integer.format(transaction.desiredQuantity)}
                     </strong>
+                    {transaction.basketBreakdown ? (
+                      <details className="commerce-basket-breakdown">
+                        <summary>Composição do RR (soma diária por morador)</summary>
+                        <p>
+                          Cada contribuição é consumo diário configurado × preço médio municipal.
+                          Os subtotais são somados sem arredondamento intermediário.
+                        </p>
+                        {transaction.basketBreakdown.map((item) => {
+                          const product = PRODUCTS.find(({ id }) => id === item.productId);
+                          const unit = product?.unit === 'liter' ? 'L' : 'un.';
+                          const priceSource =
+                            item.priceSource === 'weighted_sales'
+                              ? `média ponderada de ${integer.format(item.historicalUnitsSold)} unidades vendidas, receita ${formatPreciseMoney(item.historicalRevenue)}`
+                              : item.priceSource === 'current_shop_prices'
+                                ? `média dos preços anunciados em ${integer.format(item.currentShopCount)} loja(s)`
+                                : 'indisponível: sem vendas nem loja/preço na cidade';
+                          return (
+                            <p key={item.productId}>
+                              {product?.name ?? item.productId}: {preciseDecimal.format(item.dailyNeedPerPerson)}{' '}
+                              {unit}/morador/dia ×{' '}
+                              {item.averagePrice === null
+                                ? 'sem preço'
+                                : formatPreciseMoney(item.averagePrice)}{' '}
+                              ={' '}
+                              {item.basketContribution === null
+                                ? 'não entra no RR'
+                                : formatPreciseMoney(item.basketContribution)}{' '}
+                              · {priceSource}
+                            </p>
+                          );
+                        })}
+                        <strong>
+                          RR calculado: {formatPreciseMoney(
+                            transaction.basketBreakdown.reduce(
+                              (total, item) => total + (item.basketContribution ?? 0),
+                              0,
+                            ),
+                          )}
+                        </strong>
+                      </details>
+                    ) : (
+                      <p>Composição detalhada do RR não foi registrada neste diagnóstico.</p>
+                    )}
                     <p className="commerce-candidate-list">
                       Loja #{transaction.candidate.rank} · preço {formatMoney(transaction.candidate.price)} ·
                       distância {decimal.format(transaction.candidate.distance)} tiles · Dᵢ{' '}

@@ -91,8 +91,20 @@ export interface ShopResidenceTransaction {
   productId?: string;
   basicNeedPerPerson?: number;
   referenceBasketCost?: number;
+  basketBreakdown?: BasketProductBreakdown[];
   productAveragePrice?: number;
   candidate: ShopTransactionCandidate;
+}
+
+export interface BasketProductBreakdown {
+  productId: string;
+  dailyNeedPerPerson: number;
+  averagePrice: number | null;
+  priceSource: 'weighted_sales' | 'current_shop_prices' | 'unavailable';
+  historicalUnitsSold: number;
+  historicalRevenue: number;
+  currentShopCount: number;
+  basketContribution: number | null;
 }
 
 export interface CommerceDiagnosticsUpdate {
@@ -142,6 +154,9 @@ export function isShopResidenceTransaction(value: unknown): value is ShopResiden
       !isNonNegativeNumber(transaction.basicNeedPerPerson)) ||
     (transaction.referenceBasketCost !== undefined &&
       !isNonNegativeNumber(transaction.referenceBasketCost)) ||
+    (transaction.basketBreakdown !== undefined &&
+      (!Array.isArray(transaction.basketBreakdown) ||
+        !transaction.basketBreakdown.every(isBasketProductBreakdown))) ||
     (transaction.productAveragePrice !== undefined &&
       !isNonNegativeNumber(transaction.productAveragePrice)) ||
     typeof transaction.candidate !== 'object' ||
@@ -192,6 +207,23 @@ export function isShopResidenceTransaction(value: unknown): value is ShopResiden
       typeof candidate.valuesSaturated === 'boolean') &&
     typeof candidate.outcome === 'string' &&
     SHOP_TRANSACTION_OUTCOMES.has(candidate.outcome as ShopTransactionCandidate['outcome'])
+  );
+}
+
+function isBasketProductBreakdown(value: unknown): value is BasketProductBreakdown {
+  if (typeof value !== 'object' || value === null) return false;
+  const item = value as Record<string, unknown>;
+  return (
+    typeof item.productId === 'string' &&
+    isNonNegativeNumber(item.dailyNeedPerPerson) &&
+    (item.averagePrice === null || isNonNegativeNumber(item.averagePrice)) &&
+    (item.priceSource === 'weighted_sales' ||
+      item.priceSource === 'current_shop_prices' ||
+      item.priceSource === 'unavailable') &&
+    isNonNegativeInteger(item.historicalUnitsSold) &&
+    isNonNegativeNumber(item.historicalRevenue) &&
+    isNonNegativeInteger(item.currentShopCount) &&
+    (item.basketContribution === null || isNonNegativeNumber(item.basketContribution))
   );
 }
 
@@ -375,17 +407,54 @@ export function getBasicBasketCost(
   demandByProduct: ReadonlyMap<string, number>,
   averagePrices: ReadonlyMap<string, number>,
 ): number {
-  let total = 0;
-  for (const productId of BASIC_BASKET_PRODUCT_IDS) {
+  return getBasicBasketBreakdown(cityId, demandByProduct, averagePrices, [], []).reduce(
+    (total, item) => total + (item.basketContribution ?? 0),
+    0,
+  );
+}
+
+export function getBasicBasketBreakdown(
+  cityId: string,
+  demandByProduct: ReadonlyMap<string, number>,
+  averagePrices: ReadonlyMap<string, number>,
+  shops: Pick<SalesShop, 'cityId' | 'productId' | 'price'>[],
+  history: CityProductSale[],
+): BasketProductBreakdown[] {
+  return BASIC_BASKET_PRODUCT_IDS.map((productId) => {
     const demand = demandByProduct.get(productId);
     if (demand === undefined) {
       throw new Error(`A demanda básica não está configurada para ${productId}.`);
     }
-    const averagePrice = averagePrices.get(getCityProductKey(cityId, productId));
-    if (averagePrice === undefined) continue;
-    total += demand * averagePrice;
-  }
-  return total;
+    const key = getCityProductKey(cityId, productId);
+    const sales = history.filter((sale) => getCityProductKey(sale.cityId, sale.productId) === key);
+    const historicalUnitsSold = sales.reduce((total, sale) => total + sale.unitsSold, 0);
+    const historicalRevenue = sales.reduce(
+      (total, sale) => total + sale.unitsSold * sale.price,
+      0,
+    );
+    const currentProductShops = shops.filter(
+      (shop) => getCityProductKey(shop.cityId, shop.productId) === key,
+    );
+    const averagePrice = averagePrices.get(key);
+    const priceSource: BasketProductBreakdown['priceSource'] =
+      historicalUnitsSold > 0
+        ? 'weighted_sales'
+        : currentProductShops.length > 0
+          ? 'current_shop_prices'
+          : 'unavailable';
+    const availablePrice = averagePrice ?? null;
+
+    return {
+      productId,
+      dailyNeedPerPerson: demand,
+      averagePrice: availablePrice,
+      priceSource,
+      historicalUnitsSold,
+      historicalRevenue,
+      currentShopCount: currentProductShops.length,
+      basketContribution: availablePrice === null ? null : demand * availablePrice,
+    };
+  });
 }
 
 export interface PurchaseBenefitCalculation {
@@ -585,8 +654,16 @@ export function planShopSales(
   demandByProduct: ReadonlyMap<string, number>,
   averagePrices: ReadonlyMap<string, number>,
   random: () => number = Math.random,
+  history: CityProductSale[] = [],
 ): StorePurchase[] {
-  return planShopSalesDetailed(residences, shops, demandByProduct, averagePrices, random).purchases;
+  return planShopSalesDetailed(
+    residences,
+    shops,
+    demandByProduct,
+    averagePrices,
+    random,
+    history,
+  ).purchases;
 }
 
 export function planShopSalesDetailed(
@@ -595,6 +672,7 @@ export function planShopSalesDetailed(
   demandByProduct: ReadonlyMap<string, number>,
   averagePrices: ReadonlyMap<string, number>,
   random: () => number = Math.random,
+  history: CityProductSale[] = [],
 ): StoreSalesPlan {
   const remainingStock = new Map(shops.map((shop) => [shop.id, shop.stock]));
   const remainingCapacity = new Map(shops.map((shop) => [shop.id, shop.capacity]));
@@ -603,6 +681,21 @@ export function planShopSalesDetailed(
     shops.map((shop) => [shop.id, []]),
   );
   const sortedResidences = [...residences].sort((a, b) => a.id.localeCompare(b.id));
+  const basketBreakdownByCity = new Map<string, BasketProductBreakdown[]>();
+  for (const residence of sortedResidences) {
+    if (!basketBreakdownByCity.has(residence.cityId)) {
+      basketBreakdownByCity.set(
+        residence.cityId,
+        getBasicBasketBreakdown(
+          residence.cityId,
+          demandByProduct,
+          averagePrices,
+          shops,
+          history,
+        ),
+      );
+    }
+  }
   for (const productId of BASIC_BASKET_PRODUCT_IDS) {
     const basicNeedPerPerson = demandByProduct.get(productId);
     if (basicNeedPerPerson === undefined) {
@@ -616,10 +709,13 @@ export function planShopSalesDetailed(
       );
       if (nearby.length === 0) continue;
 
-      const referenceBasketCost = getBasicBasketCost(
-        residence.cityId,
-        demandByProduct,
-        averagePrices,
+      const basketBreakdown = basketBreakdownByCity.get(residence.cityId);
+      if (!basketBreakdown) {
+        throw new Error(`Não foi possível calcular a cesta da cidade ${residence.cityId}.`);
+      }
+      const referenceBasketCost = basketBreakdown.reduce(
+        (total, item) => total + (item.basketContribution ?? 0),
+        0,
       );
       const productAveragePrice =
         averagePrices.get(getCityProductKey(residence.cityId, productId)) ?? 0;
@@ -741,6 +837,7 @@ export function planShopSalesDetailed(
           productId,
           basicNeedPerPerson,
           referenceBasketCost,
+          basketBreakdown,
           productAveragePrice,
           candidate: {
             shopId: candidate.shop.id,

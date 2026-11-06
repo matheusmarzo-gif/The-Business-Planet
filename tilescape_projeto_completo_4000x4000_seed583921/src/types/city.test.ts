@@ -40,6 +40,7 @@ import {
   getMaxDesiredWorkers,
 } from './employment';
 import {
+  getBasicBasketBreakdown,
   getBasicBasketCost,
   getCityProductAveragePrices,
   getCityProductKey,
@@ -610,6 +611,63 @@ describe('shop sales', () => {
     assert.equal(prices.get(getCityProductKey('city-a', 'rice')), 12.5);
     assert.equal(prices.get(getCityProductKey('city-b', 'wheat')), 8);
     assert.equal(getBasicBasketCost('city-a', demandByProduct, prices), 0.375);
+  });
+
+  it('records every basket item, price source, and precise contribution to RR', () => {
+    const basketShops = [
+      { ...shop('rice', 0, 8.36, 10, 10), productId: 'rice' },
+      { ...shop('fish', 0, 8.45, 10, 10), productId: 'fish' },
+      { ...shop('milk', 0, 1.41, 10, 10), productId: 'milk' },
+    ];
+    const history = basketShops.map((store) => ({
+      cityId: 'city-a',
+      productId: store.productId,
+      unitsSold: 1,
+      price: store.price,
+    }));
+    const prices = getCityProductAveragePrices(basketShops, history);
+    const breakdown = getBasicBasketBreakdown(
+      'city-a',
+      demandByProduct,
+      prices,
+      basketShops,
+      history,
+    );
+
+    assert.equal(breakdown.length, 8);
+    assert.deepEqual(
+      breakdown
+        .filter((item) => item.averagePrice !== null)
+        .map(({ productId, priceSource, basketContribution }) => ({
+          productId,
+          priceSource,
+          basketContribution,
+        })),
+      [
+        { productId: 'rice', priceSource: 'weighted_sales', basketContribution: 8.36 * 0.03 },
+        { productId: 'fish', priceSource: 'weighted_sales', basketContribution: 8.45 * 0.03 },
+        { productId: 'milk', priceSource: 'weighted_sales', basketContribution: 1.41 },
+      ],
+    );
+    assert.equal(getBasicBasketCost('city-a', demandByProduct, prices), 1.9143);
+    assert.ok(
+      breakdown
+        .filter((item) => item.basketContribution !== null)
+        .reduce((total, item) => total + (item.basketContribution ?? 0), 0) === 1.9143,
+    );
+    const plan = planShopSalesDetailed(
+      [home('basket-home', 0, 32, 10)],
+      basketShops,
+      demandByProduct,
+      prices,
+      () => 0,
+      history,
+    );
+    const diagnostic = plan.transactionsByShop.get('rice')?.[0];
+    assert.ok(diagnostic);
+    assert.equal(isShopResidenceTransaction(diagnostic), true);
+    assert.deepEqual(diagnostic.basketBreakdown, breakdown);
+    assert.equal(diagnostic.referenceBasketCost, 1.9143);
   });
 
   it('allocates integer residents by associated benefit and keeps their total exact', () => {

@@ -438,10 +438,15 @@ uma loja sem unidades disponíveis não são realocados para outra. O dono receb
 o valor das vendas; moradores não são cobrados.
 
 A loja vende somente o estoque que tiver (começa em 0; pode ser abastecida por
-um armazém ligado). No histórico do comércio, **Ver cálculo** mostra `RR`,
-preço médio do produto, `Pf`, `w`, `q`, benefícios de erro/ideal/associado,
-participação e número de moradores alocados, demanda, estoque/capacidade e
-resultado. O cálculo é enviado ao dono em tempo real e salvo somente no
+um armazém ligado). No histórico do comércio, **Ver cálculo** mostra `RR` e uma composição por
+produto da cesta: consumo diário por morador, preço médio usado, subtotal,
+origem do preço (vendas ponderadas ou média dos anúncios), unidades vendidas e
+receita no período; itens sem preço disponível aparecem como fora do `RR`.
+Também mostra preço médio do produto, `Pf`, `w`, `q`, benefícios de
+erro/ideal/associado, participação e número de moradores alocados, demanda,
+estoque/capacidade e resultado. Os subtotais da cesta são exibidos com maior
+precisão, sem arredondamento intermediário. O cálculo é enviado ao dono em
+tempo real e salvo somente no
 armazenamento local do navegador por até 30 dias; o navegador precisa estar
 conectado quando as vendas forem processadas. Se estiver offline, o cálculo
 daquele dia não será salvo nesse navegador.

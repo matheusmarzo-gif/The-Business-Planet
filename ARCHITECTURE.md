@@ -371,9 +371,9 @@ mapeamento e verificar todas as curvas.
   em `RR`, o custo diário por pessoa da cesta disponível.
   `planShopSales` percorre cada produto e residência: `Pf = preço local ×
   demanda_basica`; com `Rf` como renda média por morador,
-  `w = (1 − Pf × RR / Rf)^9`, `q = (0,8^w − 1) × (Rf / RR)`,
+  `w = (1 − Pf / RR)^4`, `q = (0,8^w − 1) × Rf`,
   `benefício_erro = 0` se `Rf < Pf`, caso contrário
-  `((Rf − Pf + q) / RR)^4`; `benefício_ideal = (Rf / RR − 0,125 / RR)^4`.
+  `((Rf − Pf − q) / RR)^4`; `benefício_ideal = (Rf / RR − 0,125 / RR)^4`.
   Se o benefício ideal for zero, o benefício de erro também é zerado;
   `benefício_associado = (benefício_erro / benefício_ideal)^4`.
   Os moradores são repartidos entre as lojas do produto em 60 tiles na

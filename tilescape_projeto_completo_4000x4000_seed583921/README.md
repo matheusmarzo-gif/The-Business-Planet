@@ -377,9 +377,9 @@ na cidade são omitidos.
 
 Para cada residência e loja, `Pf` é o preço local multiplicado pelo consumo
 básico por pessoa, e `Rf` é a renda média por morador. Se `Rf < Pf`, o benefício
-de erro é zero; caso contrário, `w = (1 − Pf × RR / Rf)^9`,
-`q = (0,8^w − 1) × (Rf / RR)` e
-`benefício_erro = ((Rf − Pf + q) / RR)^4`.
+de erro é zero; caso contrário, `w = (1 − Pf / RR)^4`,
+`q = (0,8^w − 1) × Rf` e
+`benefício_erro = ((Rf − Pf − q) / RR)^4`.
 `benefício_ideal = (Rf / RR − 0,125 / RR)^4`; se ele for zero, o benefício de
 erro também é zerado. `benefício_associado = (benefício_erro /
 benefício_ideal)^4`. Para cada produto, os moradores são divididos entre as

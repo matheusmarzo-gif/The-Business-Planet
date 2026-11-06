@@ -447,7 +447,7 @@ export function getPurchaseBenefitCalculation(
     };
   }
 
-  const w = (1 - (pf * referenceBasketCost) / income) ** 9;
+  const w = (1 - pf / referenceBasketCost) ** 4;
   const idealNumerator = income - 0.125;
   const idealBase = idealNumerator / referenceBasketCost;
   const logIdealBase =
@@ -459,17 +459,7 @@ export function getPurchaseBenefitCalculation(
     Number.isFinite(directIdealBenefit) && directIdealBenefit <= MAX_DIAGNOSTIC_VALUE
       ? directIdealBenefit
       : boundedExponential(4 * logIdealBase);
-  const negativeWExponent = w < 0 ? -w * Math.log(1.25) : 0;
-  const qLog =
-    w < 0
-      ? negativeWExponent + Math.log(income) - Math.log(referenceBasketCost)
-      : Number.NEGATIVE_INFINITY;
-  const q =
-    w < 0
-      ? negativeWExponent < 50
-        ? Math.expm1(negativeWExponent) * (income / referenceBasketCost)
-        : boundedExponential(qLog)
-      : (0.8 ** w - 1) * (income / referenceBasketCost);
+  const q = Math.expm1(w * Math.log(0.8)) * income;
   const qSaturated =
     !Number.isFinite(q) || Math.abs(q) >= MAX_DIAGNOSTIC_VALUE;
   const wSaturated = !Number.isFinite(w) || Math.abs(w) >= MAX_DIAGNOSTIC_VALUE;
@@ -487,13 +477,12 @@ export function getPurchaseBenefitCalculation(
   }
 
   const preAdjustment = income - pf;
-  const errorBase = preAdjustment + q;
   const logRawErrorBase =
-    w < 0
-      ? logAbsolutePositiveSum(qLog, preAdjustment)
-      : errorBase === 0
+    preAdjustment === 0
+      ? q === 0
         ? Number.NEGATIVE_INFINITY
-        : Math.log(Math.abs(errorBase));
+        : Math.log(-q)
+      : logAbsolutePositiveSum(Math.log(preAdjustment), -q);
   const logErrorBase =
     logRawErrorBase === Number.NEGATIVE_INFINITY
       ? Number.NEGATIVE_INFINITY

@@ -4,8 +4,8 @@ import { BASIC_BASKET_PRODUCT_IDS } from './commerceDemand.js';
 export const DEFAULT_SHOP_PRICE = 10;
 export const MIN_SHOP_PRICE = 1;
 export const MAX_SHOP_PRICE = 100000;
-// A cada 100 Work Points gerados no dia, a loja ganha 5 unidades de capacidade de venda.
-export const SALES_PER_100_WORK_POINTS = 5;
+export const SHOP_SALES_WORK_POINTS_PER_UNIT = 20;
+export const MILK_SALES_WORK_POINTS_PER_LITER = 1;
 const MAX_DIAGNOSTIC_VALUE = Number.MAX_SAFE_INTEGER;
 
 export interface SalesShop {
@@ -292,8 +292,25 @@ export function parsePrice(value: unknown): number | null {
   return price;
 }
 
-export function getShopSalesCapacity(dailyWorkPoints: number): number {
-  return Math.floor(dailyWorkPoints / 100) * SALES_PER_100_WORK_POINTS;
+export function getShopSalesCapacity(
+  type: ResidenceType,
+  dailyWorkPoints: number,
+): number {
+  if (!Number.isFinite(dailyWorkPoints) || dailyWorkPoints < 0) {
+    throw new RangeError('Work Points diários inválidos para calcular a capacidade de vendas.');
+  }
+  const workPointsPerUnit = (() => {
+    switch (type) {
+      case 'shop_rice':
+      case 'shop_fish':
+        return SHOP_SALES_WORK_POINTS_PER_UNIT;
+      case 'shop_milk':
+        return MILK_SALES_WORK_POINTS_PER_LITER;
+      default:
+        throw new RangeError('Tipo inválido para calcular a capacidade diária de vendas.');
+    }
+  })();
+  return Math.floor(dailyWorkPoints / workPointsPerUnit);
 }
 
 export function getCityProductKey(cityId: string, productId: string): string {
@@ -441,7 +458,7 @@ export function getPurchaseBenefitCalculation(
   }
 
   const pf = price * basicNeedPerPerson;
-  const distanceFactor = 60 / Math.sqrt(60 + distance);
+  const distanceFactor = Math.sqrt(60 / (60 + distance));
   if (income === 0 || referenceBasketCost === 0) {
     return {
       pf,

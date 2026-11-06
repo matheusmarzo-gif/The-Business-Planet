@@ -388,8 +388,11 @@ describe('shop sales', () => {
   });
 
   it('computes store benefit with the basic-basket formula and zero guards', () => {
-    assert.equal(getShopSalesCapacity(99), 0);
-    assert.equal(getShopSalesCapacity(250), 10);
+    assert.equal(getShopSalesCapacity('shop_rice', 19), 0);
+    assert.equal(getShopSalesCapacity('shop_rice', 20), 1);
+    assert.equal(getShopSalesCapacity('shop_fish', 40), 2);
+    assert.equal(getShopSalesCapacity('shop_milk', 1), 1);
+    assert.equal(getShopSalesCapacity('shop_milk', 0.9), 0);
     assert.equal(parsePrice({ price: 0 }), null);
     assert.equal(parsePrice({ price: 12 }), 12);
     const income = 1;
@@ -400,7 +403,7 @@ describe('shop sales', () => {
     const w = (1 - pf / rr) ** 4;
     const q = (0.8 ** w - 1) * income;
     const distance = 0;
-    const distanceFactor = 60 / Math.sqrt(60 + distance);
+    const distanceFactor = Math.sqrt(60 / (60 + distance));
     const benefitError = distanceFactor * ((income - pf - q) / rr) ** 4;
     const benefitIdeal = (income / rr - 0.125 / rr) ** 4;
     const calculation = getPurchaseBenefitCalculation(income, price, basicNeed, rr, distance);
@@ -509,8 +512,8 @@ describe('shop sales', () => {
       [14, 13, 5],
     );
     assert.deepEqual(plan.purchases, [
-      { shopId: 'fish-9', residenceId: 'home-32', productId: 'fish', quantity: 7 },
-      { shopId: 'fish-20', residenceId: 'home-32', productId: 'fish', quantity: 2 },
+      { shopId: 'fish-9', residenceId: 'home-32', productId: 'fish', quantity: 5 },
+      { shopId: 'fish-20', residenceId: 'home-32', productId: 'fish', quantity: 1 },
     ]);
   });
 

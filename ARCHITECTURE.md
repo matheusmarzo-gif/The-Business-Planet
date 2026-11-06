@@ -359,8 +359,8 @@ mapeamento e verificar todas as curvas.
   `shop_fish` e `shop_milk`
   têm `price` (padrão C$ 10, editável pelo dono via
   `PATCH /api/residential-buildings/:id/price`) e estoque abastecido pelo
-  armazém ligado do mesmo dono. No job das 00:00 a capacidade de venda do dia é
-  `floor(WP gerados no dia / 100) · 5`
+  armazém ligado do mesmo dono. No job das 00:00, arroz/peixe têm capacidade
+  `floor(WP do dia / 20)` unidades e leite `floor(WP do dia / 1)` litros
   (WP = empregados × `getDailyWorkPoints`). `config/demanda_basica.txt` define
   o consumo diário por pessoa para a Cesta Básica: arroz, trigo, cevada, milho,
   batata, peixe e carne vermelha começam em `0.03`; leite em `1`.
@@ -374,7 +374,7 @@ mapeamento e verificar todas as curvas.
   `w = (1 − Pf / RR)^4`, `q = (0,8^w − 1) × Rf`,
   `benefício_erro = 0` se `Rf < Pf`, caso contrário
   `Dᵢ × ((Rf − Pf − q) / RR)^4`, onde
-  `Dᵢ = 60 / √(60 + dᵢ)` e `dᵢ` é a distância entre residência e loja;
+  `Dᵢ = √(60 / (60 + dᵢ))` e `dᵢ` é a distância entre residência e loja;
   `benefício_ideal = (Rf / RR − 0,125 / RR)^4`.
   Se o benefício ideal for zero, o benefício de erro também é zerado;
   `benefício_associado = (benefício_erro / benefício_ideal)^4`.

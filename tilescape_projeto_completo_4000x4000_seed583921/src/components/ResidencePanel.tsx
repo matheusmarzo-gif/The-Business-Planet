@@ -60,7 +60,9 @@ function getProductionDescription(type: ResidenceType): string | null {
     return `Ciclo de 6 meses: ${number.format(FARM_DAILY_WORK_POINTS)} Work Points por dia garantem produtividade plena; na colheita, cada unidade consome ${number.format(HARVEST_WORK_POINTS_PER_UNIT)} Work Points. O rendimento também varia conforme o mês do plantio.`;
   }
   if (definition.kind === 'shop') {
-    return `A cada 100 Work Points gerados pelos funcionários, a loja ganha capacidade para vender até 5 unidades. As vendas dependem da demanda e do estoque disponível, abastecido pelo armazém ligado.`;
+    const workPointsPerUnit = type === 'shop_milk' ? 1 : 20;
+    const unit = type === 'shop_milk' ? 'litro' : 'unidade';
+    return `A cada ${number.format(workPointsPerUnit)} Work Point${workPointsPerUnit === 1 ? '' : 's'} gerados pelos funcionários, a loja ganha capacidade para vender até 1 ${unit}. As vendas dependem da demanda e do estoque disponível, abastecido pelo armazém ligado.`;
   }
   if (definition.kind === 'warehouse') {
     return 'Não fabrica produtos: os Work Points dos funcionários são usados no transporte de mercadorias; cada carga consome 100 Work Points por m³ e 0,125 por kg.';

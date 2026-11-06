@@ -1010,6 +1010,7 @@ async function runDailyEmployment(): Promise<boolean> {
           wage: row.wage,
           workers: workers.get(row.id) ?? 0,
           capacity: getShopSalesCapacity(
+            row.building_type,
             (workers.get(row.id) ?? 0) *
               getDailyWorkPoints(row.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness),
           ),

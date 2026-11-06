@@ -366,9 +366,9 @@ salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). T
 1,2 com 4 h, 1 com 8 h, 0,8 com 14 h); a obra termina sozinha ao atingir o total
 necessário. Saúde e felicidade ainda são fixas em 100.
 
-Nas lojas de arroz, peixe e leite, o dono define o preço (C$ 1 ou mais). Às
-00:00, cada 100 Work Points dos funcionários adicionam 5 unidades à capacidade
-de venda. Para cada produto, as residências consideram lojas do produto em até
+Nas lojas de arroz, peixe e leite, o dono define o preço (C$ 1 ou mais). Às 00:00, a capacidade de venda considera os Work Points gerados pelos
+funcionários no dia: lojas de arroz e peixe ganham 1 unidade por 20 Work Points;
+a Loja de Leite ganha 1 litro por Work Point. Para cada produto, as residências consideram lojas do produto em até
 60 tiles. O custo de referência `RR` é o custo diário por pessoa de todos os
 itens da Cesta Básica disponíveis na cidade, calculado pelos preços médios
 ponderados pelas unidades vendidas nos últimos 30 dias. Produtos sem vendas no
@@ -379,7 +379,7 @@ Para cada residência e loja, `Pf` é o preço local multiplicado pelo consumo
 básico por pessoa, e `Rf` é a renda média por morador. Se `Rf < Pf`, o benefício
 de erro é zero; caso contrário, `w = (1 − Pf / RR)^4`,
 `q = (0,8^w − 1) × Rf` e
-`Dᵢ = 60 / √(60 + dᵢ)`, `benefício_erro = Dᵢ × ((Rf − Pf − q) / RR)^4`,
+`Dᵢ = √(60 / (60 + dᵢ))`, `benefício_erro = Dᵢ × ((Rf − Pf − q) / RR)^4`,
 onde `dᵢ` é a distância entre a residência e a loja.
 `benefício_ideal = (Rf / RR − 0,125 / RR)^4`; se ele for zero, o benefício de
 erro também é zerado. `benefício_associado = (benefício_erro /

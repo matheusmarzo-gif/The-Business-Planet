@@ -166,7 +166,8 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS efficiency_penalty INTEGER NOT NULL DEFAULT 0 CHECK (efficiency_penalty BETWEEN 0 AND 90),
   ADD COLUMN IF NOT EXISTS production_progress DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (production_progress >= 0),
   ADD COLUMN IF NOT EXISTS wood_stock INTEGER NOT NULL DEFAULT 0 CHECK (wood_stock >= 0),
-  ADD COLUMN IF NOT EXISTS iron_stock INTEGER NOT NULL DEFAULT 0 CHECK (iron_stock >= 0);
+  ADD COLUMN IF NOT EXISTS iron_stock INTEGER NOT NULL DEFAULT 0 CHECK (iron_stock >= 0),
+  ADD COLUMN IF NOT EXISTS sugarcane_stock INTEGER NOT NULL DEFAULT 0 CHECK (sugarcane_stock >= 0);
 
 -- O caixa dos jogadores pode ficar negativo (folha de pagamento).
 ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_check;
@@ -174,7 +175,7 @@ ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_chec
 ALTER TABLE residential_buildings
   DROP CONSTRAINT IF EXISTS residential_buildings_building_type_check,
   ADD CONSTRAINT residential_buildings_building_type_check
-    CHECK (building_type IN ('house_poor1', 'house_poor2', 'farm_rice', 'farm_potato', 'farm_wheat', 'farm_barley', 'farm_corn', 'farm_cattle', 'farm_dairy', 'shop_rice', 'shop_potato', 'shop_corn', 'shop_barley', 'shop_wheat', 'shop_butcher', 'shop_milk', 'warehouse', 'fishery', 'shop_fish', 'lumber_mill', 'quarry', 'iron_mine', 'toolmaker'));
+    CHECK (building_type IN ('house_poor1', 'house_poor2', 'farm_rice', 'farm_potato', 'farm_wheat', 'farm_barley', 'farm_corn', 'farm_cattle', 'farm_dairy', 'farm_cane', 'farm_spices', 'shop_rice', 'shop_potato', 'shop_corn', 'shop_barley', 'shop_wheat', 'shop_butcher', 'shop_milk', 'warehouse', 'fishery', 'shop_fish', 'salt_gatherer', 'lumber_mill', 'quarry', 'iron_mine', 'toolmaker', 'sugar_mill'));
 
 CREATE TABLE IF NOT EXISTS warehouse_product_settings (
   building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,

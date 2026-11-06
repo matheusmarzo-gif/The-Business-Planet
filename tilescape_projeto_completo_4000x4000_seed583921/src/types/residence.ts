@@ -14,6 +14,8 @@ export type ResidenceType =
   | 'house_poor2'
   | FarmCropType
   | 'farm_dairy'
+  | 'salt_gatherer'
+  | 'sugar_mill'
   | 'shop_rice'
   | 'shop_potato'
   | 'shop_corn'
@@ -68,6 +70,8 @@ export interface ProductionRule {
   batchSize?: number;
   batchWood?: number;
   batchIron?: number;
+  batchStockProductId?: string;
+  batchStockAmount?: number;
 }
 export type ResidentialBuildingStatus = 'under_construction' | 'completed';
 
@@ -106,15 +110,18 @@ export interface ResidenceDefinition {
   stockProductId?: string;
   stockCapacity?: number;
   cropRule?: FarmCropRule;
-  // Estoques máximos de insumos (Ferramentas, madeira, ferro) guardados pela construção.
+  // Estoques máximos de insumos guardados pela construção.
   toolCapacity?: number;
   woodCapacity?: number;
   ironCapacity?: number;
+  // Estoque de cana recebido por armazém e consumido pela Casa de Engenho.
+  sugarcaneCapacity?: number;
   // Demanda diária de Ferramentas por funcionário (valores abaixo de 1 são probabilidade).
   toolDemandPerWorker?: number;
   production?: ProductionRule;
   // Exige pelo menos um tile sobre água (o restante pode ser terra).
   requiresWater?: boolean;
+  requiresAdjacentWater?: boolean;
   storageCapacityM3?: number;
 }
 
@@ -369,6 +376,44 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     stockCapacity: 400,
     production: { mode: 'accumulate', workPointsPerUnit: 5 },
   },
+  farm_cane: {
+    type: 'farm_cane',
+    kind: 'farm',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Fazenda de Cana',
+    asset: '/buildings/farms/fazenda_cana.png',
+    width: 3,
+    height: 3,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 60, stone: 60 },
+    workPoints: 12000,
+    maxWorkers: 10,
+    stockProduct: 'Cana',
+    stockProductId: 'sugarcane',
+    stockCapacity: 2000,
+    cropRule: FARM_CROP_RULES.farm_cane,
+  },
+  farm_spices: {
+    type: 'farm_spices',
+    kind: 'farm',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Fazenda de Especiarias',
+    asset: '/buildings/farms/fazenda_especiarias.png',
+    width: 3,
+    height: 3,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 60, stone: 60 },
+    workPoints: 12000,
+    maxWorkers: 50,
+    stockProduct: 'Especiarias',
+    stockProductId: 'spices',
+    stockCapacity: 400,
+    cropRule: FARM_CROP_RULES.farm_spices,
+  },
   shop_rice: {
     type: 'shop_rice',
     kind: 'shop',
@@ -517,6 +562,28 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     production: { mode: 'accumulate', workPointsPerUnit: 100 },
     requiresWater: true,
   },
+  salt_gatherer: {
+    type: 'salt_gatherer',
+    kind: 'resource',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Coleta de Sal',
+    asset: '/buildings/resources/coleta_sal.png',
+    width: 2,
+    height: 2,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 30, stone: 20 },
+    workPoints: 6000,
+    maxWorkers: 10,
+    stockProduct: 'Sal',
+    stockProductId: 'salt',
+    stockCapacity: 100,
+    toolCapacity: 5,
+    toolDemandPerWorker: 0.05,
+    production: { mode: 'chance', workPointsPerUnit: 400 },
+    requiresAdjacentWater: true,
+  },
   lumber_mill: {
     type: 'lumber_mill',
     kind: 'resource',
@@ -601,6 +668,36 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     ironCapacity: 5,
     production: { mode: 'batch', workPointsPerUnit: 1000, batchSize: 100, batchWood: 5, batchIron: 1 },
   },
+  sugar_mill: {
+    type: 'sugar_mill',
+    kind: 'workshop',
+    requiredZone: 'urban',
+    requiresRoad: true,
+    name: 'Casa de Engenho',
+    asset: '/buildings/artisan/casa_de_engenho.png',
+    width: 3,
+    height: 3,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 30, stone: 80 },
+    workPoints: 12000,
+    maxWorkers: 40,
+    stockProduct: 'Açúcar',
+    stockProductId: 'sugar',
+    stockCapacity: 200,
+    toolCapacity: 5,
+    toolDemandPerWorker: 0.05,
+    sugarcaneCapacity: 400,
+    woodCapacity: 30,
+    production: {
+      mode: 'batch',
+      workPointsPerUnit: 600,
+      batchSize: 1,
+      batchWood: 1,
+      batchStockProductId: 'sugarcane',
+      batchStockAmount: 6,
+    },
+  },
   shop_fish: {
     type: 'shop_fish',
     kind: 'shop',
@@ -660,10 +757,11 @@ export interface ResidentialBuilding {
   price: number;
   stock: number;
   warehouseId: string | null;
-  // Pesqueiro: Ferramentas em estoque e penalidade de eficiência (0–90, em %).
+  // Ferramentas em estoque e penalidade de eficiência (0–90, em %) para construções que as usam.
   toolStock: number;
   woodStock: number;
   ironStock: number;
+  sugarcaneStock: number;
   efficiencyPenalty: number;
   // Plantio/ciclo das fazendas agrícolas; null quando não há plantio.
   crop: Crop | null;
@@ -715,6 +813,7 @@ export type ResidencePlacementError =
   | 'outside_rural_zone'
   | 'water'
   | 'not_on_water'
+  | 'not_adjacent_to_water'
   | 'building_overlap'
   | 'road_overlap'
   | 'not_adjacent_to_road';
@@ -781,6 +880,13 @@ export function getResidencePlacementError(
   const roadKeys = new Set(roads.map((road) => `${road.x},${road.y}`));
   let adjacentToRoad = false;
   let hasWater = false;
+  let adjacentToWater = false;
+  const mapDirections = [
+    { x: -1, y: 0 },
+    { x: 1, y: 0 },
+    { x: 0, y: -1 },
+    { x: 0, y: 1 },
+  ];
   for (let y = position.y; y <= maxY; y += 1) {
     for (let x = position.x; x <= maxX; x += 1) {
       if (!isLandAt(x, y)) {
@@ -810,8 +916,23 @@ export function getResidencePlacementError(
       ) {
         adjacentToRoad = true;
       }
+      if (definition.requiresAdjacentWater) {
+        adjacentToWater ||= mapDirections.some(({ x: dx, y: dy }) => {
+          const waterX = x + dx;
+          const waterY = y + dy;
+          return (
+            waterX >= 0 &&
+            waterY >= 0 &&
+            waterX < map.width &&
+            waterY < map.height &&
+            !isLandAt(waterX, waterY)
+          );
+        });
+      }
     }
   }
+
+  if (definition.requiresAdjacentWater && !adjacentToWater) return 'not_adjacent_to_water';
 
   for (const building of buildings) {
     const existing = RESIDENCES[building.type];

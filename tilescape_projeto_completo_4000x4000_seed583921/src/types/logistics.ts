@@ -28,9 +28,10 @@ export interface LogisticsLink {
   toolStock?: number;
   woodStock?: number;
   ironStock?: number;
+  sugarcaneStock?: number;
 }
 
-export type InputProduct = 'tools' | 'wood' | 'iron';
+export type InputProduct = 'tools' | 'wood' | 'iron' | 'sugarcane';
 
 export interface WarehouseLogistics {
   stock: Map<string, number>;
@@ -152,10 +153,20 @@ export function planTransfersDetailed(
     const product = PRODUCTS.find((item) => item.id === (input ?? definition?.stockProductId));
     if (!definition || !product) return;
     const current = input
-      ? { tools: link.toolStock, wood: link.woodStock, iron: link.ironStock }[input] ?? 0
+      ? {
+          tools: link.toolStock,
+          wood: link.woodStock,
+          iron: link.ironStock,
+          sugarcane: link.sugarcaneStock,
+        }[input] ?? 0
       : link.stock;
     const capacity = input
-      ? { tools: definition.toolCapacity, wood: definition.woodCapacity, iron: definition.ironCapacity }[input] ?? 0
+      ? {
+          tools: definition.toolCapacity,
+          wood: definition.woodCapacity,
+          iron: definition.ironCapacity,
+          sugarcane: definition.sugarcaneCapacity,
+        }[input] ?? 0
       : (definition.stockCapacity ?? 0);
     const inWarehouse = stock.get(product.id) ?? 0;
     const unitDemand = getTransportDemand(product.id, 1);
@@ -216,6 +227,13 @@ export function planTransfersDetailed(
     if (definition?.toolCapacity) addDemand(link, 'tools', definition.toolCapacity - (link.toolStock ?? 0));
     if (definition?.woodCapacity) addDemand(link, 'wood', definition.woodCapacity - (link.woodStock ?? 0));
     if (definition?.ironCapacity) addDemand(link, 'iron', definition.ironCapacity - (link.ironStock ?? 0));
+    if (definition?.sugarcaneCapacity) {
+      addDemand(
+        link,
+        'sugarcane',
+        definition.sugarcaneCapacity - (link.sugarcaneStock ?? 0),
+      );
+    }
   }
   const linkedAllocations = new Map<string, number>();
   for (const [productId, demands] of linkedDemands) {
@@ -240,6 +258,9 @@ export function planTransfersDetailed(
     if (definition?.toolCapacity) move(link, 'in', 'tools', allocationFor('tools'));
     if (definition?.woodCapacity) move(link, 'in', 'wood', allocationFor('wood'));
     if (definition?.ironCapacity) move(link, 'in', 'iron', allocationFor('iron'));
+    if (definition?.sugarcaneCapacity) {
+      move(link, 'in', 'sugarcane', allocationFor('sugarcane'));
+    }
   }
   return { transfers, attempts };
 }

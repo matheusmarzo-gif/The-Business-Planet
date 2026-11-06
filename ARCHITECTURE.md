@@ -288,6 +288,15 @@ mapeamento e verificar todas as curvas.
   cada 5 Work Points efetivos, com eficiência mensal de 40%, 100%, 80% e 60%
   nos respectivos trimestres. Seu leite é transferido ao armazém ligado.
   Sprite: `public/buildings/farms/fazenda_leiteira.png`.
+- `farm_cane` e `farm_spices` (categoria Fazendas) usam o ciclo agrícola comum
+  em áreas rurais: 3 × 3, 60 madeiras e 60 pedras, 12.000 Work Points.
+  Respectivamente, empregam até 10/50 pessoas, armazenam 2.000 canas/400
+  especiarias e têm requisitos diários de 100/5.000 WP, crescimento de seis
+  meses, colheita de 25/10 WP por unidade, rendimento de 2.000/600 e eficiências
+  sazonais 90/80/100/90% e 100/60/60/60%. O excedente da colheita permanece
+  pendente até haver espaço no estoque.
+  Sprites: `public/buildings/farms/fazenda_cana.png` e
+  `public/buildings/farms/fazenda_especiarias.png`.
 - `shop_milk` (categoria Comerciais) usa a mesma definição, preço editável e
   fluxo de venda da Loja de Peixes: 2 × 2 tiles, 4 funcionários, estoque máximo
   de 400 litros, custo de 30 madeiras e 10 pedras e 6.000 Work Points. Produto
@@ -454,12 +463,13 @@ mapeamento e verificar todas as curvas.
   grava `crop_phase`, `crop_planted_day` (dia do relógio do mundo),
   `crop_ratio_sum`, `crop_days`, `crop_yield`, `crop_harvested`. O job das
   00:00 (antes do transporte) usa as regras específicas da fazenda: arroz,
-  batata, trigo, cevada e milho crescem por 6 meses; a fazenda bovina por 24.
+  batata, trigo, cevada, milho, cana e especiarias crescem por 6 meses; a
+  fazenda bovina por 24.
   Durante `growing`, soma `min(1, WP do dia / requisito diário)`; no dia de
   colheita/corte a produção é `floor(rendimento máximo · fator do mês do plantio
   · média diária)`. Os requisitos diários, rendimentos, eficiência sazonal e
   Work Points por unidade colhida/cortada estão em `FARM_CROP_RULES`. A fase
-  passa a `harvesting`; a produção é limitada ao espaço livre do estoque (300); ao
+  passa a `harvesting`; a produção é limitada ao espaço livre do estoque; ao
   terminar, o plantio é limpo e um novo pode ser feito. `ResidentialBuilding.crop`
   expõe o estado ao cliente.
 - `red_meat` tem validade padrão de 30 dias em `src/types/product.ts`.
@@ -511,6 +521,22 @@ mapeamento e verificar todas as curvas.
   penalidade do Pesqueiro. Ferramentaria: lote de 1000 WP + 5 madeiras + 1 ferro
   = 100 Ferramentas, sem penalidade. Colunas novas `wood_stock` e `iron_stock`;
   `planTransfers` leva madeira/ferro do armazém à Ferramentaria (`InputProduct`).
+- `salt_gatherer` (categoria Recursos, zona rural) ocupa 2 × 2, emprega até 10,
+  guarda 100 sal e 5 Ferramentas, custa 30 madeiras/20 pedras e exige 6.000 WP.
+  Precisa de estrada adjacente e água adjacente, sem ocupar água. A categoria
+  de mapa ainda não distingue rios de outros tiles aquáticos, então qualquer
+  água adjacente atende ao requisito. Produz sal pelo modo `chance`: 1 unidade
+  por 400 WP efetivos, com fração como chance diária; demanda de Ferramentas
+  0,05 por funcionário e penalidade igual à do Pesqueiro. Sprite
+  `public/buildings/resources/coleta_sal.png`.
+- `sugar_mill` (Casa de Engenho, categoria Artesanais, zona urbana) ocupa 3 × 3,
+  emprega até 40, custa 30 madeiras/80 pedras e exige 12.000 WP. Guarda 200
+  açúcares, 400 canas, 30 madeiras e 5 Ferramentas. Cada lote de 600 WP efetivos
+  + 6 canas + 1 madeira produz 1 açúcar; a penalidade por Ferramentas é igual à
+  do Pesqueiro. `sugarcane_stock` é coluna aditiva no schema, exibida no painel,
+  abastecida pelo armazém ligado e consumida por `planProduction`; a cana nesse
+  insumo também sofre validade de 3 dias. Sprite
+  `public/buildings/artisan/casa_de_engenho.png`.
 - Comércio entre armazéns (`planWarehouseTrades` em `src/types/logistics.ts`): às
   03:00 e 15:00 (`world_state.last_warehouse_trade_slot`, ex. `2026-01-01T15`,
   garante uma execução por rodada) cada armazém em modo `buy` procura armazéns

@@ -77,7 +77,14 @@ function getProductionDescription(type: ResidenceType): string | null {
   if (!rule || !definition.stockProduct) return null;
   const product = definition.stockProduct.toLocaleLowerCase('pt-BR');
   if (rule.mode === 'batch') {
-    return `A cada ${number.format(rule.workPointsPerUnit)} Work Points + ${rule.batchWood ?? 0} madeiras + ${rule.batchIron ?? 0} ferro, produz ${number.format(rule.batchSize ?? 1)} ${product}.`;
+    const inputs = [
+      rule.batchStockProductId
+        ? `${number.format(rule.batchStockAmount ?? 0)} ${PRODUCTS.find(({ id }) => id === rule.batchStockProductId)?.name.toLocaleLowerCase('pt-BR') ?? rule.batchStockProductId}`
+        : '',
+      rule.batchWood ? `${number.format(rule.batchWood)} madeiras` : '',
+      rule.batchIron ? `${number.format(rule.batchIron)} ferro` : '',
+    ].filter(Boolean);
+    return `A cada ${number.format(rule.workPointsPerUnit)} Work Points${inputs.length ? ` + ${inputs.join(' + ')}` : ''}, produz ${number.format(rule.batchSize ?? 1)} ${product}.`;
   }
   if (rule.mode === 'chance') {
     return `Cada bloco completo de ${number.format(rule.workPointsPerUnit)} Work Points efetivos produz 1 ${product}; o restante dá chance proporcional de produzir mais uma unidade.`;
@@ -194,6 +201,9 @@ export default function ResidencePanel({
               : []),
             ...(definition.ironCapacity
               ? ([['Estoque de Ferro', `${number.format(building.ironStock)} / ${number.format(definition.ironCapacity)}`]] as [string, string][])
+              : []),
+            ...(definition.sugarcaneCapacity
+              ? ([['Estoque de Cana', `${number.format(building.sugarcaneStock)} / ${number.format(definition.sugarcaneCapacity)}`]] as [string, string][])
               : []),
           ]
         : [

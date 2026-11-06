@@ -343,16 +343,28 @@ Na categoria **Recursos** (área rural, ao lado de estrada):
 | Madeireira | 2 × 2 | 10 | 30 madeiras, 5 Ferramentas | 60 madeira, 10 pedra | 6.000 | 1 madeira / 1000 WP |
 | Pedreira | 2 × 2 | 30 | 10 pedras, 5 Ferramentas | 60 madeira, 10 pedra | 6.000 | 1 pedra / 3000 WP |
 | Mina de Ferro | 3 × 3 | 30 | 5 ferro, 5 Ferramentas | 120 madeira, 60 pedra | 24.000 | 1 ferro / 3000 WP |
+| Coleta de Sal | 2 × 2 | 10 | 100 sal, 5 Ferramentas | 30 madeira, 20 pedra | 6.000 | 1 sal / 400 WP efetivos; fração é chance diária |
 
 Abaixo do mínimo de WP, a fração vira probabilidade de produzir 1 unidade. A
 demanda de Ferramentas é 0,05 por funcionário/dia (0,15 na Mina) com a mesma
-penalidade do Pesqueiro, que reduz os WP efetivos.
+penalidade do Pesqueiro, que reduz os WP efetivos. A Coleta de Sal deve ficar ao
+lado de uma estrada e de um tile de água; ela ocupa somente terra. Como o mapa
+ainda não diferencia rios de outros tiles aquáticos, qualquer água adjacente é
+aceita.
 
 Na categoria **Artesanais** (área urbana, ao lado de estrada), a **Ferramentaria**
 (2 × 2, 30 funcionários, estoque máx. 100 Ferramentas, 30 madeiras e 5 ferro)
 custa 60 madeiras e 60 pedras e exige 12.000 Work Points. Por dia, cada lote de
 1000 WP + 5 madeiras + 1 ferro produz 100 Ferramentas. Madeira e ferro chegam por
 armazém ligado.
+
+Na mesma categoria **Artesanais**, a **Casa de Engenho** (3 × 3, até 40
+funcionários) custa 30 madeiras e 80 pedras e exige 12.000 Work Points.
+Armazena até 200 unidades de açúcar, 400 de cana e 5 Ferramentas. Cada lote de
+600 Work Points efetivos, 6 canas e 1 madeira produz 1 açúcar. A demanda de
+Ferramentas é 0,05 por funcionário/dia, com a mesma penalidade de eficiência do
+Pesqueiro. Cana, madeira e Ferramentas são recebidas pelo armazém ligado; a cana
+armazenada na construção também está sujeita à validade de 3 dias.
 
 ### Fazendas
 
@@ -373,13 +385,18 @@ moradores nem aluguel.
 | Cevada | Cevada | 30 % / 70 % / 100 % / 60 % | 6 meses | 1.000 / 20 | 1.000 |
 | Milho | Milho | 80 % / 100 % / 10 % / 10 % | 6 meses | 1.000 / 20 | 1.000 |
 | Bovina | Carne vermelha | 40 % / 100 % / 80 % / 60 % | 24 meses | 500 / 40 | 1.000 |
+| Cana | Cana | 90 % / 80 % / 100 % / 90 % | 6 meses | 100 / 25 | 2.000 |
+| Especiarias | Especiarias | 100 % / 60 % / 60 % / 60 % | 6 meses | 5.000 / 10 | 600 |
 
 O mês em que o plantio começa define a eficiência sazonal do ciclo. A média diária
 de `min(1, Work Points / requisito diário)` durante o crescimento também reduz
 proporcionalmente o rendimento. O botão do painel inicia ou reinicia o ciclo;
 durante a colheita (ou corte, na fazenda bovina), cada unidade exige os Work
 Points indicados e a produção é limitada ao estoque livre. A carne vermelha tem
-validade de 30 dias.
+validade de 30 dias. A Fazenda de Cana e a Fazenda de Especiarias ocupam 3 × 3,
+empregam até 10 e 50 funcionários, respectivamente, custam 60 madeiras e 60
+pedras e exigem 12.000 Work Points. Seus estoques máximos são 2.000 canas e 400
+especiarias; o excedente da colheita aguarda no campo até haver espaço livre.
 
 ### Empregos e salários
 

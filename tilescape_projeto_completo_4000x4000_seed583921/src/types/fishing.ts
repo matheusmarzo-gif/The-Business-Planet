@@ -53,6 +53,7 @@ export interface ProductionInput {
   freeSpace: number;
   wood?: number;
   iron?: number;
+  batchStock?: number;
 }
 
 export interface ProductionResult {
@@ -60,6 +61,7 @@ export interface ProductionResult {
   progress: number;
   woodUsed: number;
   ironUsed: number;
+  batchStockUsed: number;
 }
 
 /**
@@ -82,18 +84,26 @@ export function planProduction(
       progress: units < possible ? 0 : Math.max(0, total - units * rule.workPointsPerUnit),
       woodUsed: 0,
       ironUsed: 0,
+      batchStockUsed: 0,
     };
   }
   if (rule.mode === 'chance') {
     const expected = effective / rule.workPointsPerUnit;
     const whole = Math.floor(expected + 1e-9);
     const units = whole + (random() < expected - whole ? 1 : 0);
-    return { units: Math.min(units, free), progress: 0, woodUsed: 0, ironUsed: 0 };
+    return {
+      units: Math.min(units, free),
+      progress: 0,
+      woodUsed: 0,
+      ironUsed: 0,
+      batchStockUsed: 0,
+    };
   }
   const batchSize = rule.batchSize ?? 1;
   const batchWood = rule.batchWood ?? 0;
   const batchIron = rule.batchIron ?? 0;
-  const total = input.progress + Math.max(0, input.workPoints);
+  const batchStock = rule.batchStockAmount ?? 0;
+  const total = input.progress + effective;
   const wanted = Math.floor(total / rule.workPointsPerUnit + 1e-9);
   const batches = Math.max(
     0,
@@ -102,6 +112,7 @@ export function planProduction(
       Math.floor(free / batchSize),
       batchWood > 0 ? Math.floor((input.wood ?? 0) / batchWood) : Infinity,
       batchIron > 0 ? Math.floor((input.iron ?? 0) / batchIron) : Infinity,
+      batchStock > 0 ? Math.floor((input.batchStock ?? 0) / batchStock) : Infinity,
     ),
   );
   return {
@@ -109,5 +120,6 @@ export function planProduction(
     progress: batches < wanted ? 0 : total - batches * rule.workPointsPerUnit,
     woodUsed: batches * batchWood,
     ironUsed: batches * batchIron,
+    batchStockUsed: batches * batchStock,
   };
 }

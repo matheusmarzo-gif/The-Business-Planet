@@ -107,6 +107,8 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'A construção só pode ser colocada em terra.';
         } else if (body.error === 'not_on_water') {
           error = 'O Pesqueiro precisa ter pelo menos um tile sobre a água.';
+        } else if (body.error === 'not_adjacent_to_water') {
+          error = 'A Coleta de Sal precisa ficar ao lado de um tile de água.';
         } else if (body.error === 'building_overlap') {
           error = 'Esse local já está ocupado por outra construção.';
         } else if (body.error === 'municipal_area_overlap') {
@@ -1121,6 +1123,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       outside_rural_zone: 'A construção precisa ficar inteiramente dentro de uma área rural.',
       water: 'A residência só pode ser construída em terra.',
       not_on_water: 'O Pesqueiro precisa ter pelo menos um tile sobre a água.',
+      not_adjacent_to_water: 'A Coleta de Sal precisa ficar ao lado de um tile de água.',
       building_overlap: 'A residência não pode ocupar o espaço de outra construção.',
       road_overlap: 'A residência não pode ocupar o espaço de uma estrada.',
       not_adjacent_to_road: 'A residência precisa ficar ao lado de uma estrada.',
@@ -1158,6 +1161,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       toolStock: 0,
       woodStock: 0,
       ironStock: 0,
+      sugarcaneStock: 0,
       averageIncome: 0,
       efficiencyPenalty: 0,
       crop: null,

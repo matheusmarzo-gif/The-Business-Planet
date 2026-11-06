@@ -242,6 +242,8 @@ describe('other crop farms', () => {
       farm_barley: [0.3, 0.7, 1, 0.6],
       farm_corn: [0.8, 1, 0.1, 0.1],
       farm_cattle: [0.4, 1, 0.8, 0.6],
+      farm_cane: [0.9, 0.8, 1, 0.9],
+      farm_spices: [1, 0.6, 0.6, 0.6],
     } as const;
     for (const [farmType, efficiencies] of Object.entries(seasonalEfficiencies)) {
       assert.deepEqual(
@@ -256,12 +258,21 @@ describe('other crop farms', () => {
     assert.equal(grow('2026-10-10', 'farm_wheat', 1000).yieldUnits, 1000);
     assert.equal(grow('2026-07-10', 'farm_barley', 1000).yieldUnits, 1000);
     assert.equal(grow('2026-10-10', 'farm_corn', 1000).yieldUnits, 100);
+    assert.equal(grow('2026-01-10', 'farm_cane', 100).yieldUnits, 1800);
+    assert.equal(grow('2026-01-10', 'farm_spices', 5000).yieldUnits, 600);
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_cattle.growthMonths), '2028-01-31');
     assert.equal(grow('2026-04-10', 'farm_cattle', 500).yieldUnits, 1000);
   });
 
   it('matches the rice farm construction and storage limits', () => {
-    for (const farmType of Object.keys(FARM_CROP_RULES) as (keyof typeof FARM_CROP_RULES)[]) {
+    for (const farmType of [
+      'farm_rice',
+      'farm_potato',
+      'farm_wheat',
+      'farm_barley',
+      'farm_corn',
+      'farm_cattle',
+    ] as const) {
       const farm = RESIDENCES[farmType];
       assert.equal(farm.width, 4);
       assert.equal(farm.height, 4);
@@ -284,6 +295,17 @@ describe('other crop farms', () => {
     };
     assert.deepEqual(planHarvest(cattleCrop, 400, 100, FARM_CROP_RULES.farm_cattle), { units: 10, done: false });
     assert.equal(PRODUCTS.find((product) => product.id === 'red_meat')?.shelfLifeDays, 30);
+    assert.deepEqual(
+      [
+        FARM_CROP_RULES.farm_cane.dailyWorkPoints,
+        FARM_CROP_RULES.farm_cane.harvestWorkPointsPerUnit,
+        FARM_CROP_RULES.farm_cane.baseYield,
+        FARM_CROP_RULES.farm_spices.dailyWorkPoints,
+        FARM_CROP_RULES.farm_spices.harvestWorkPointsPerUnit,
+        FARM_CROP_RULES.farm_spices.baseYield,
+      ],
+      [100, 25, 2000, 5000, 10, 600],
+    );
   });
 });
 
@@ -806,7 +828,7 @@ describe('fazenda leiteira e demanda configurável', () => {
         dairy.production!,
         { progress: 2, workPoints: 11, penalty: 0, freeSpace: 4 },
       ),
-      { units: 2, progress: 3, woodUsed: 0, ironUsed: 0 },
+      { units: 2, progress: 3, woodUsed: 0, ironUsed: 0, batchStockUsed: 0 },
     );
     assert.equal(
       planProduction(
@@ -1304,6 +1326,7 @@ describe('municipal zones', () => {
         toolStock: 0,
         woodStock: 0,
         ironStock: 0,
+        sugarcaneStock: 0,
         averageIncome: 0,
         efficiencyPenalty: 0,
         crop: null,
@@ -1352,6 +1375,7 @@ describe('municipal zones', () => {
         toolStock: 0,
         woodStock: 0,
         ironStock: 0,
+        sugarcaneStock: 0,
         averageIncome: 0,
         efficiencyPenalty: 0,
         crop: null,
@@ -1466,6 +1490,47 @@ describe('fishery', () => {
     );
   });
 
+  describe('salt gathering', () => {
+    const city = {
+      id: 'rural-city',
+      name: 'Rural City',
+      centerX: 100,
+      centerY: 100,
+      population: 0,
+      wellbeing: 0,
+      economy: 0,
+      zones: [{ id: 'r', cityId: 'rural-city', type: 'rural' as const, minX: 0, minY: 0, maxX: 300, maxY: 300 }],
+    };
+    const position = { x: 20, y: 20 };
+    const road = [{ x: 19, y: 20 }];
+    const map = { width: 4000, height: 4000 };
+    const landByRiver = (x: number, y: number) => !(x === 20 && y === 19);
+
+    it('requires a rural lot adjacent to water and a road', () => {
+      assert.equal(getResidencePlacementError('salt_gatherer', position, [city], [], road, landByRiver, map), null);
+      assert.equal(
+        getResidencePlacementError('salt_gatherer', position, [city], [], road, () => true, map),
+        'not_adjacent_to_water',
+      );
+      assert.equal(
+        getResidencePlacementError('salt_gatherer', position, [city], [], [], landByRiver, map),
+        'not_adjacent_to_road',
+      );
+      assert.equal(RESIDENCES.salt_gatherer.production?.workPointsPerUnit, 400);
+      assert.equal(RESIDENCES.salt_gatherer.stockCapacity, 100);
+      assert.equal(RESIDENCES.salt_gatherer.toolCapacity, 5);
+      assert.deepEqual(
+        [
+          RESIDENCES.salt_gatherer.width,
+          RESIDENCES.salt_gatherer.height,
+          RESIDENCES.salt_gatherer.maxWorkers,
+          RESIDENCES.salt_gatherer.workPoints,
+        ],
+        [2, 2, 10, 6000],
+      );
+    });
+  });
+
   it('rolls tool demand as a probability below one', () => {
     assert.equal(rollToolDemand(10, () => 0.4), 1);
     assert.equal(rollToolDemand(10, () => 0.6), 0);
@@ -1499,7 +1564,7 @@ describe('fishery', () => {
         RESIDENCES.fishery.production!,
         { progress: 50, workPoints: 1000, penalty: 30, freeSpace: 300 },
       ),
-      { units: 7, progress: 50, woodUsed: 0, ironUsed: 0 },
+      { units: 7, progress: 50, woodUsed: 0, ironUsed: 0, batchStockUsed: 0 },
     );
     assert.equal(planFishing({ progress: 0, workPoints: 1000, penalty: 0, freeSpace: 4 }).fish, 4);
   });
@@ -1547,6 +1612,36 @@ describe('recursos e ferramentaria', () => {
     assert.equal(RESIDENCES.iron_mine.toolDemandPerWorker, 0.15);
     assert.equal(RESIDENCES.lumber_mill.toolDemandPerWorker, 0.05);
     assert.equal(RESIDENCES.iron_mine.width, 3);
+    assert.deepEqual(
+      [
+        RESIDENCES.farm_cane.width,
+        RESIDENCES.farm_cane.maxWorkers,
+        RESIDENCES.farm_cane.stockCapacity,
+        RESIDENCES.farm_cane.workPoints,
+        RESIDENCES.farm_spices.width,
+        RESIDENCES.farm_spices.maxWorkers,
+        RESIDENCES.farm_spices.stockCapacity,
+        RESIDENCES.farm_spices.workPoints,
+      ],
+      [3, 10, 2000, 12000, 3, 50, 400, 12000],
+    );
+    assert.deepEqual(RESIDENCES.farm_cane.cost, { wood: 60, stone: 60 });
+    assert.deepEqual(RESIDENCES.farm_spices.cost, { wood: 60, stone: 60 });
+    assert.deepEqual(RESIDENCES.salt_gatherer.cost, { wood: 30, stone: 20 });
+    assert.deepEqual(RESIDENCES.sugar_mill.cost, { wood: 30, stone: 80 });
+    assert.equal(RESIDENCES.salt_gatherer.maxWorkers, 10);
+    assert.equal(RESIDENCES.salt_gatherer.toolDemandPerWorker, 0.05);
+    assert.equal(RESIDENCES.sugar_mill.maxWorkers, 40);
+    assert.equal(RESIDENCES.sugar_mill.toolDemandPerWorker, 0.05);
+  });
+
+  it('uses chance production for salt below and above 400 effective Work Points', () => {
+    const rule = RESIDENCES.salt_gatherer.production!;
+    const input = { progress: 0, penalty: 0, freeSpace: 100 };
+    assert.equal(planProduction(rule, { ...input, workPoints: 200 }, () => 0.49).units, 1);
+    assert.equal(planProduction(rule, { ...input, workPoints: 200 }, () => 0.5).units, 0);
+    assert.equal(planProduction(rule, { ...input, workPoints: 800 }, () => 0.99).units, 2);
+    assert.equal(planProduction(rule, { ...input, workPoints: 200, penalty: 50 }, () => 0.3).units, 0);
   });
 
   it('supplies wood and iron to a toolmaker through a warehouse', () => {
@@ -1558,6 +1653,63 @@ describe('recursos e ferramentaria', () => {
       transfers.map((t) => [t.productId, t.quantity, t.direction]),
       [['wood', 20, 'in'], ['iron', 3, 'in']].map(([p, q, d]) => [p, Math.min(q as number, p === 'wood' ? 20 : 3), d]),
     );
+  });
+
+  it('makes sugar using canes, wood, Work Points, and available stock space', () => {
+    const rule = RESIDENCES.sugar_mill.production!;
+    const input = {
+      progress: 0,
+      workPoints: 600,
+      penalty: 0,
+      freeSpace: 200,
+      wood: 1,
+      batchStock: 6,
+    };
+    const result = planProduction(rule, input);
+    assert.deepEqual(
+      [result.units, result.woodUsed, result.batchStockUsed],
+      [1, 1, 6],
+    );
+    assert.equal(
+      planProduction(rule, { ...input, batchStock: 5 }).units,
+      0,
+    );
+    assert.equal(
+      planProduction(rule, { ...input, freeSpace: 0 }).units,
+      0,
+    );
+    assert.deepEqual(
+      [
+        RESIDENCES.sugar_mill.width,
+        RESIDENCES.sugar_mill.height,
+        RESIDENCES.sugar_mill.maxWorkers,
+        RESIDENCES.sugar_mill.stockCapacity,
+        RESIDENCES.sugar_mill.sugarcaneCapacity,
+        RESIDENCES.sugar_mill.toolCapacity,
+        RESIDENCES.sugar_mill.workPoints,
+      ],
+      [3, 3, 40, 200, 400, 5, 12000],
+    );
+    assert.equal(
+      planProduction(rule, { ...input, workPoints: 600, penalty: 50 }).units,
+      0,
+    );
+  });
+
+  it('supplies the sugar mill with cane from a linked warehouse', () => {
+    const transfers = planTransfers(
+      {
+        stock: new Map([['sugarcane', 400]]),
+        minimumStock: new Map(),
+        maximumStock: new Map(),
+        capacityM3: 50,
+        workPoints: 1e6,
+      },
+      [{ buildingId: 'sugar-mill', type: 'sugar_mill', stock: 0, sugarcaneStock: 0 }],
+    );
+    assert.deepEqual(transfers, [
+      { buildingId: 'sugar-mill', productId: 'sugarcane', quantity: 400, direction: 'in' },
+    ]);
   });
 });
 

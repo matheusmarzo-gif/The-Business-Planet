@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { resolve } from 'node:path';
+import { performance } from 'node:perf_hooks';
 import type { Duplex } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { config as loadDotEnv } from 'dotenv';
@@ -132,13 +134,112 @@ const PRESENCE_KEY = 'valdora:presence';
 const SNAPSHOT_CHANNEL = 'valdora:world:snapshots';
 const CITIES_CHANNEL = 'valdora:world:cities';
 const COMMERCE_DIAGNOSTICS_CHANNEL = 'valdora:world:commerce-diagnostics';
+const PERFORMANCE_LOGS_KEY = 'valdora:world:performance-logs';
+const PERFORMANCE_LOG_LIMIT = 100;
+const PERFORMANCE_LOG_TTL_SECONDS = 7 * 24 * 60 * 60;
 const INSTANCE_ID = randomUUID();
 const PRESENCE_TTL_MS = 35_000;
 types.setTypeParser(types.builtins.NUMERIC, (value) => Number(value));
 
-const pool = new Pool({
+interface PerformanceEntityCounts {
+  residences: number;
+  workplaces: number;
+  shops: number;
+  warehouses: number;
+}
+
+interface PerformanceLogRecord {
+  id: string;
+  cycleId: string;
+  gameDay: string;
+  phase: string;
+  stage: string;
+  recordedAt: string;
+  durationMs: number;
+  databaseMs: number;
+  lockWaitMs: number;
+  queryCount: number;
+  counts: PerformanceEntityCounts;
+  status: 'ok' | 'error';
+}
+
+const performanceMetricsContext = new AsyncLocalStorage<PerformanceLogRecord>();
+
+function trackDatabaseQuery(method: Function, target: object, args: unknown[]): unknown {
+  const metrics = performanceMetricsContext.getStore();
+  if (!metrics || args.some((argument) => typeof argument === 'function')) {
+    return Reflect.apply(method, target, args);
+  }
+  metrics.queryCount += 1;
+  const startedAt = performance.now();
+  const finish = () => {
+    metrics.databaseMs += performance.now() - startedAt;
+  };
+  try {
+    const result = Reflect.apply(method, target, args);
+    if (
+      result !== null &&
+      (typeof result === 'object' || typeof result === 'function') &&
+      'then' in result &&
+      typeof Reflect.get(result, 'then') === 'function'
+    ) {
+      return Reflect.apply(Reflect.get(result, 'then'), result, [
+        (value: unknown) => {
+          finish();
+          return value;
+        },
+        (error: unknown) => {
+          finish();
+          throw error;
+        },
+      ]);
+    }
+    finish();
+    return result;
+  } catch (error) {
+    finish();
+    throw error;
+  }
+}
+
+function instrumentPoolClient(client: PoolClient): PoolClient {
+  return new Proxy(client, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (property === 'query' && typeof value === 'function') {
+        return (...args: unknown[]) => trackDatabaseQuery(value, target, args);
+      }
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+const rawPool = new Pool({
   connectionString:
     process.env.DATABASE_URL ?? 'postgres://valdora:valdora_dev_password@localhost:5432/valdora',
+});
+const pool = new Proxy(rawPool, {
+  get(target, property) {
+    const value = Reflect.get(target, property, target);
+    if (property === 'query' && typeof value === 'function') {
+      return (...args: unknown[]) => trackDatabaseQuery(value, target, args);
+    }
+    if (property === 'connect' && typeof value === 'function') {
+      return (...args: unknown[]) => {
+        const result = Reflect.apply(value, target, args);
+        if (result !== null && typeof result === 'object' && 'then' in result) {
+          const then = Reflect.get(result, 'then');
+          if (typeof then === 'function') {
+            return Reflect.apply(then, result, [
+              (client: PoolClient) => instrumentPoolClient(client),
+            ]);
+          }
+        }
+        return result;
+      };
+    }
+    return typeof value === 'function' ? value.bind(target) : value;
+  },
 });
 const redis = createClient({ url: process.env.REDIS_URL ?? 'redis://localhost:6379' });
 const subscriber = redis.duplicate();
@@ -146,6 +247,95 @@ const clients = new Set<WebSocket>();
 const app = express();
 const server = createServer(app);
 const websocketServer = new WebSocketServer({ noServer: true });
+
+function emptyPerformanceCounts(): PerformanceEntityCounts {
+  return { residences: 0, workplaces: 0, shops: 0, warehouses: 0 };
+}
+
+function getPerformanceEntityCounts(
+  buildings: { building_type: ResidenceType; desired_workers: number; status: string }[],
+): PerformanceEntityCounts {
+  return buildings.reduce((counts, building) => {
+    const definition = getResidenceDefinition(building.building_type);
+    if (definition?.kind === 'residence') counts.residences += 1;
+    if (definition?.kind === 'shop') counts.shops += 1;
+    if (building.building_type === 'warehouse') counts.warehouses += 1;
+    if (
+      building.desired_workers > 0 &&
+      (definition?.kind !== 'residence' || building.status === 'under_construction')
+    ) {
+      counts.workplaces += 1;
+    }
+    return counts;
+  }, emptyPerformanceCounts());
+}
+
+function getWorldPerformanceEntityCounts(buildings: ResidentialBuilding[]): PerformanceEntityCounts {
+  return buildings.reduce((counts, building) => {
+    const definition = getResidenceDefinition(building.type);
+    if (definition?.kind === 'residence') counts.residences += 1;
+    if (definition?.kind === 'shop') counts.shops += 1;
+    if (building.type === 'warehouse') counts.warehouses += 1;
+    if (
+      building.desiredWorkers > 0 &&
+      (definition?.kind !== 'residence' || building.status === 'under_construction')
+    ) {
+      counts.workplaces += 1;
+    }
+    return counts;
+  }, emptyPerformanceCounts());
+}
+
+async function persistPerformanceLog(log: PerformanceLogRecord): Promise<void> {
+  await redis
+    .multi()
+    .lPush(PERFORMANCE_LOGS_KEY, JSON.stringify(log))
+    .lTrim(PERFORMANCE_LOGS_KEY, 0, PERFORMANCE_LOG_LIMIT - 1)
+    .expire(PERFORMANCE_LOGS_KEY, PERFORMANCE_LOG_TTL_SECONDS)
+    .exec();
+}
+
+async function measurePerformanceStage<T>(
+  stage: string,
+  phase: string,
+  gameDay: string,
+  cycleId: string,
+  counts: PerformanceEntityCounts,
+  operation: () => Promise<T>,
+  lockWaitMs = 0,
+  falseResultIsError = false,
+  initialQueryCount = 0,
+): Promise<T> {
+  const log: PerformanceLogRecord = {
+    id: randomUUID(),
+    cycleId,
+    gameDay,
+    phase,
+    stage,
+    recordedAt: new Date().toISOString(),
+    durationMs: 0,
+    databaseMs: 0,
+    lockWaitMs: Math.round(lockWaitMs * 10) / 10,
+    queryCount: initialQueryCount,
+    counts,
+    status: 'ok',
+  };
+  const startedAt = performance.now();
+  try {
+    const result = await performanceMetricsContext.run(log, operation);
+    if (falseResultIsError && result === false) log.status = 'error';
+    return result;
+  } catch (error) {
+    log.status = 'error';
+    throw error;
+  } finally {
+    log.durationMs = Math.round((performance.now() - startedAt) * 10) / 10;
+    log.databaseMs = Math.round(log.databaseMs * 10) / 10;
+    void persistPerformanceLog(log).catch((error: unknown) => {
+      console.error(`Não foi possível registrar a métrica da etapa ${stage}:`, error);
+    });
+  }
+}
 
 interface AuthConfig {
   jwks: ReturnType<typeof createRemoteJWKSet>;
@@ -454,6 +644,7 @@ async function publishDailyFullWorldStateIfDue(): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const stateReadStartedAt = performance.now();
     const { rows } = await client.query<{
       day: string;
       hour: number;
@@ -468,6 +659,7 @@ async function publishDailyFullWorldStateIfDue(): Promise<void> {
        WHERE id = 1
        FOR UPDATE`,
     );
+    const stateReadLockMs = performance.now() - stateReadStartedAt;
     const state = rows[0];
     if (!state) throw new Error('O relógio global ainda não foi inicializado.');
     if (
@@ -478,12 +670,25 @@ async function publishDailyFullWorldStateIfDue(): Promise<void> {
       return;
     }
 
-    await publishCities();
-    await client.query(
-      'UPDATE world_state SET last_full_world_sync_day = $1::date WHERE id = 1',
-      [state.day],
+    const publicationCounts = emptyPerformanceCounts();
+    await measurePerformanceStage(
+      'publicação completa do mundo',
+      `${String(state.hour).padStart(2, '0')}:${String(state.minute).padStart(2, '0')}`,
+      state.day,
+      randomUUID(),
+      publicationCounts,
+      async () => {
+        Object.assign(publicationCounts, await publishCities());
+        await client.query(
+          'UPDATE world_state SET last_full_world_sync_day = $1::date WHERE id = 1',
+          [state.day],
+        );
+        await client.query('COMMIT');
+      },
+      stateReadLockMs,
+      false,
+      2,
     );
-    await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK').catch((rollbackError: unknown) => {
       console.error('Não foi possível reverter a sincronização diária do mundo:', rollbackError);
@@ -596,20 +801,23 @@ async function getResidentialBuildings(): Promise<WorldResidentialBuilding[]> {
   }));
 }
 
-async function publishCities() {
+async function publishCities(): Promise<PerformanceEntityCounts> {
   const [cities, roads, buildings] = await Promise.all([
     getCities(),
     getRoadTiles(),
     getResidentialBuildings(),
   ]);
   await redis.publish(CITIES_CHANNEL, JSON.stringify({ type: 'cities', cities, roads, buildings }));
+  return getWorldPerformanceEntityCounts(buildings);
 }
 
 async function runDailyImmigration(): Promise<boolean> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const lockStartedAt = performance.now();
     await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const lockWaitMs = performance.now() - lockStartedAt;
     const { rows: stateRows } = await client.query<{ day: string; last_day: string | null }>(
       `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
               to_char(last_immigration_day, 'YYYY-MM-DD') AS last_day
@@ -631,9 +839,18 @@ async function runDailyImmigration(): Promise<boolean> {
       return false;
     }
 
+    const immigrationCounts = emptyPerformanceCounts();
+    return await measurePerformanceStage(
+      'imigração',
+      '00:00',
+      state.day,
+      randomUUID(),
+      immigrationCounts,
+      async () => {
     const { rows } = await client.query<ResidentialBuildingRow>(
       `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings WHERE status = 'completed'`,
     );
+    Object.assign(immigrationCounts, getPerformanceEntityCounts(rows));
     const byCity = new Map<string, ResidentialBuilding[]>();
     for (const building of rows.map(mapResidentialBuilding)) {
       byCity.set(building.cityId, [...(byCity.get(building.cityId) ?? []), building]);
@@ -659,6 +876,11 @@ async function runDailyImmigration(): Promise<boolean> {
     await client.query('UPDATE world_state SET last_immigration_day = $1 WHERE id = 1', [state.day]);
     await client.query('COMMIT');
     return changed;
+      },
+      lockWaitMs,
+      false,
+      3,
+    );
   } catch (error) {
     await client.query('ROLLBACK').catch((rollbackError: unknown) => {
       console.error('Não foi possível reverter a imigração diária:', rollbackError);
@@ -879,7 +1101,9 @@ async function runDailyEmployment(): Promise<boolean> {
   const pendingCommerceDiagnostics: PendingCommerceDiagnostics[] = [];
   try {
     await client.query('BEGIN');
+    const lockStartedAt = performance.now();
     await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const lockWaitMs = performance.now() - lockStartedAt;
     const { rows: stateRows } = await client.query<{
       day: string;
       hour: number;
@@ -903,13 +1127,23 @@ async function runDailyEmployment(): Promise<boolean> {
     }
 
     let changed = false;
+    const performanceCycleId = randomUUID();
     if (state.last_payroll === null) {
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
     } else if (state.last_payroll < state.day) {
+      const payrollCounts = emptyPerformanceCounts();
+      const { workplaces, workers, assignmentRows } = await measurePerformanceStage(
+        'folha e aluguel',
+        '00:00',
+        state.day,
+        performanceCycleId,
+        payrollCounts,
+        async () => {
       const { rows: workplaces } = await client.query<{
         id: string;
         created_by: string;
         city_id: string;
+        desired_workers: number;
         wage: number;
         status: string;
         building_type: ResidenceType;
@@ -922,10 +1156,11 @@ async function runDailyEmployment(): Promise<boolean> {
         occupants: number;
         rent: number;
       }>(
-        `SELECT id, created_by, city_id, wage, status, building_type, work_hours_per_day, work_points_done,
+        `SELECT id, created_by, city_id, desired_workers, wage, status, building_type, work_hours_per_day, work_points_done,
                 tile_x, tile_y, price, stock, occupants, rent
          FROM residential_buildings`,
       );
+      Object.assign(payrollCounts, getPerformanceEntityCounts(workplaces));
       const { rows: assignmentRows } = await client.query<{
         workplace_id: string;
         residence_id: string;
@@ -1031,10 +1266,17 @@ async function runDailyEmployment(): Promise<boolean> {
         }
         changed = true;
       }
+      return { workplaces, workers, assignmentRows };
+        },
+        lockWaitMs,
+        false,
+        3,
+      );
       // Falhas na economia (vendas, produção, transporte) não devem desfazer folha e obras do dia.
       await client.query('SAVEPOINT daily_economy');
       // Cada etapa tem seu próprio savepoint: uma falha nas vendas ou no transporte não desfaz a produção.
-      const runStage = async (name: string, stage: () => Promise<void>): Promise<boolean> => {
+      const runStage = async (name: string, stage: () => Promise<void>): Promise<boolean> =>
+        measurePerformanceStage(name, '00:00', state.day, performanceCycleId, payrollCounts, async () => {
         await client.query('SAVEPOINT economy_stage');
         try {
           await stage();
@@ -1045,7 +1287,7 @@ async function runDailyEmployment(): Promise<boolean> {
           console.error(`Falha na economia diária (${name}):`, stageError);
           return false;
         }
-      };
+      }, 0, true);
       try {
       const salesDiagnostics: PendingCommerceDiagnostics[] = [];
       const salesStageSucceeded = await runStage('vendas', async () => {
@@ -1603,9 +1845,18 @@ async function runDailyEmployment(): Promise<boolean> {
     }
 
     if (state.hour >= 12 && (state.last_alloc === null || state.last_alloc < state.day)) {
+      const allocationCounts = emptyPerformanceCounts();
+      await measurePerformanceStage(
+        'alocação de empregos',
+        '12:00',
+        state.day,
+        performanceCycleId,
+        allocationCounts,
+        async () => {
       const { rows } = await client.query<ResidentialBuildingRow>(
         `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings`,
       );
+      Object.assign(allocationCounts, getPerformanceEntityCounts(rows));
       const buildings = rows.map(mapResidentialBuilding);
       const residences = buildings.filter(
         (building) =>
@@ -1629,6 +1880,11 @@ async function runDailyEmployment(): Promise<boolean> {
       }
       await client.query('UPDATE world_state SET last_job_allocation_day = $1 WHERE id = 1', [state.day]);
       changed = true;
+        },
+        lockWaitMs,
+        false,
+        3,
+      );
     }
 
     // Às 03:00 e 15:00 os armazéns compram de armazéns de outros donos em até 60 tiles.
@@ -1680,24 +1936,52 @@ async function runDailyEmployment(): Promise<boolean> {
 }
 
 async function advanceClock() {
-  await pool.query(
+  const { rows: clockRows } = await pool.query<{ day: string; hour: number }>(
     `UPDATE world_state
      SET world_time = world_time
            + GREATEST(0, EXTRACT(EPOCH FROM (clock_timestamp() - last_real_at)))
              * time_scale * INTERVAL '1 second',
          last_real_at = clock_timestamp()
-     WHERE id = 1`,
+     WHERE id = 1
+     RETURNING to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+               EXTRACT(HOUR FROM world_time AT TIME ZONE 'UTC')::int AS hour`,
   );
+  const clock = clockRows[0];
+  if (!clock) throw new Error('O relógio global ainda não foi inicializado.');
   const employmentChanged = await runDailyEmployment();
-  if ((await runDailyImmigration()) || employmentChanged) {
-    await publishCities().catch((error: unknown) => {
-      console.error('A atualização diária foi aplicada, mas a atualização do mundo falhou:', error);
+  const immigrationChanged = await runDailyImmigration();
+  if (immigrationChanged || employmentChanged) {
+    const publicationCounts = emptyPerformanceCounts();
+    await measurePerformanceStage(
+      'publicação de cidades e snapshot',
+      clock.hour >= 12 ? '12:00' : '00:00',
+      clock.day,
+      randomUUID(),
+      publicationCounts,
+      async () => {
+        let succeeded = true;
+        const counts = await publishCities().catch((error: unknown) => {
+          console.error('A atualização diária foi aplicada, mas a atualização do mundo falhou:', error);
+          succeeded = false;
+          return null;
+        });
+        if (counts) Object.assign(publicationCounts, counts);
+        await publishDailyFullWorldStateIfDue().catch((error: unknown) => {
+          console.error('Não foi possível forçar a sincronização diária do mundo:', error);
+          succeeded = false;
+        });
+        await publishSnapshot();
+        return succeeded;
+      },
+      0,
+      true,
+    );
+  } else {
+    await publishDailyFullWorldStateIfDue().catch((error: unknown) => {
+      console.error('Não foi possível forçar a sincronização diária do mundo:', error);
     });
+    await publishSnapshot();
   }
-  await publishDailyFullWorldStateIfDue().catch((error: unknown) => {
-    console.error('Não foi possível forçar a sincronização diária do mundo:', error);
-  });
-  await publishSnapshot();
 }
 
 function getAuthConfig(): AuthConfig {
@@ -2643,6 +2927,22 @@ async function start() {
       console.error('Não foi possível consultar os dados contábeis:', error);
       response.status(503).json({ error: 'accounting_unavailable' });
     });
+  });
+  app.get('/api/performance-logs', requireAuth, (request, response) => {
+    if (!authenticatedUserIds.get(request)) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    void redis
+      .lRange(PERFORMANCE_LOGS_KEY, 0, PERFORMANCE_LOG_LIMIT - 1)
+      .then((entries) => {
+        const logs = entries.map((entry) => JSON.parse(entry) as PerformanceLogRecord);
+        response.json({ logs });
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível consultar os logs de desempenho:', error);
+        response.status(503).json({ error: 'performance_logs_unavailable' });
+      });
   });
   app.get('/api/player/resources', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);

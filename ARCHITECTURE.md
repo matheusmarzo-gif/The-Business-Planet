@@ -50,6 +50,8 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/components/CommerceHistoryPanel.tsx` | Histórico diário de despesas, vendas e resultado dos comércios. |
 | `src/components/AccountingPanel.tsx` | Relatórios agregados de lojas comerciais e operações de armazéns do jogador autenticado. |
 | `src/types/accounting.ts` | Tipos da resposta da API contábil. |
+| `src/components/PerformanceLogPanel.tsx` | Exibição das medições recentes das etapas do processamento diário. |
+| `src/types/performanceLog.ts` | Tipos dos registros de desempenho retornados pela API. |
 | `src/components/CityZoneEditor.tsx` | Editor master das regiões urbanas e rurais de uma cidade. |
 | `src/types/map.ts` | Tipos de configuração do mundo, terrenos, tiles e informações de mapa. |
 | `src/utils/worldConfig.ts` | Configuração única do mapa usada pelo cliente e pelo servidor. |
@@ -572,6 +574,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | --- | --- | --- |
 | `GET /api/health` | Público | Verifica conectividade com PostgreSQL e Redis. |
 | `GET /api/me` | Autenticado | Retorna se o usuário é master. |
+| `GET /api/performance-logs` | Autenticado | Retorna até 100 medições recentes de etapas globais, armazenadas no Redis por até sete dias. |
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo médio por cidadão da cidade e preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira do usuário com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
@@ -656,6 +659,16 @@ Redis exerce três funções:
 3. Canais Pub/Sub distribuem snapshots e atualizações de cidades, estradas e
    residências entre processos; cada processo retransmite as mensagens a seus
    próprios sockets.
+4. A lista `valdora:world:performance-logs` mantém até 100 medições globais,
+   com expiração de sete dias, acessível ao botão **Log** por usuários
+   autenticados. Os registros incluem duração, tempo acumulado das consultas
+   PostgreSQL, espera por lock, quantidade de consultas, contagens de entidades
+   e sucesso/falha; não incluem SQL nem dados pessoais.
+
+O servidor mede as etapas de alocação de empregos, folha e aluguel, vendas,
+produção, fazendas, transporte, imigração e publicação. O tempo de consulta é
+medido como duração observada no cliente PostgreSQL; o tempo restante é uma
+diferença aproximada e pode incluir cálculo e outras esperas, não somente CPU.
 
 O WebSocket `/ws` exige JWT. Ao conectar, o servidor envia o snapshot e o
 estado atual de cidades, estradas e residências. Atualizações compartilham um
@@ -728,4 +741,5 @@ atualizado.
   de entrada atual.
 
 - Obras e economia diária: às 00:00 o progresso das obras usa `advanceConstruction` (employment.ts; conclui quando Work Points >= necessários, para todos os tipos). Vendas, produção, fazendas e transporte rodam, cada etapa, sob seu próprio SAVEPOINT (`runStage`): se uma falhar, as demais, a folha e as obras do dia são preservadas e o erro é registrado com o nome da etapa.
+- Métricas do processamento diário: as etapas de economia, alocação, imigração e publicação registram duração, consultas PostgreSQL, espera pelo lock, contagens globais de residências/locais de trabalho/lojas/armazéns e status; a lista Redis tem limite de 100 registros e expira após sete dias.
 - Sincronização diária: a partir de 00:30 UTC do relógio do jogo, uma mensagem completa de cidades, estradas e construções é publicada pelo Redis para os jogadores conectados, no máximo uma vez por dia. A atualização não recarrega a página; `worldClient.ts` aplica o estado recebido.

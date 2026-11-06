@@ -4,6 +4,7 @@ import {
   Compass,
   Map as MapIcon,
   Radio,
+  Activity,
 } from 'lucide-react';
 import CityAssemblyModal from './components/CityAssemblyModal';
 import ConstructionBar, { ConstructionCategory } from './components/ConstructionBar';
@@ -17,6 +18,7 @@ import ConsumptionPanel, { type ProductConsumption } from './components/Consumpt
 import ProductionHistoryPanel, { type ProductionDay } from './components/ProductionHistoryPanel';
 import CommerceHistoryPanel, { type CommerceDay } from './components/CommerceHistoryPanel';
 import WarehouseLogPanel, { type WarehouseLogDay, type WarehouseLogEvent } from './components/WarehouseLogPanel';
+import PerformanceLogPanel from './components/PerformanceLogPanel';
 import type { WarehouseDemand, WarehouseProductSetting } from './types/warehouse';
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
@@ -45,6 +47,7 @@ import {
 import type { RoadPlacementError, RoadPosition, RoadTile } from './types/road';
 import { TileInfo } from './types/map';
 import { formatMoney } from './types/wallet';
+import type { PerformanceLogRecord } from './types/performanceLog';
 import { loadCommerceDiagnostics, saveCommerceDiagnostics } from './utils/commerceDiagnosticsStorage';
 import { createMapGenerator } from './utils/mapGenerator';
 import { DEFAULT_TILE_LIST } from './utils/tileAssets';
@@ -285,6 +288,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isAccountingLoading, setIsAccountingLoading] = useState(false);
   const [accountingError, setAccountingError] = useState('');
   const [accountingSummary, setAccountingSummary] = useState<AccountingSummary | null>(null);
+  const [isPerformanceLogOpen, setIsPerformanceLogOpen] = useState(false);
+  const [isPerformanceLogLoading, setIsPerformanceLogLoading] = useState(false);
+  const [performanceLogError, setPerformanceLogError] = useState('');
+  const [performanceLogs, setPerformanceLogs] = useState<PerformanceLogRecord[]>([]);
   const [isConsumptionLoading, setIsConsumptionLoading] = useState(false);
   const [consumptionError, setConsumptionError] = useState('');
   const [consumption, setConsumption] = useState<Map<string, ProductConsumption>>(new Map());
@@ -583,6 +590,27 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     } finally {
       setIsAccountingLoading(false);
     }
+  };
+
+  const loadPerformanceLogs = async () => {
+    setIsPerformanceLogLoading(true);
+    setPerformanceLogError('');
+    try {
+      const result = await cityRequest<{ logs: PerformanceLogRecord[] }>('/api/performance-logs');
+      setPerformanceLogs(result.logs);
+    } catch (error) {
+      setPerformanceLogError(error instanceof Error ? error.message : 'Não foi possível carregar os logs.');
+    } finally {
+      setIsPerformanceLogLoading(false);
+    }
+  };
+
+  const togglePerformanceLogs = () => {
+    const shouldOpen = !isPerformanceLogOpen;
+    setIsAccountingOpen(false);
+    setIsMasterPanelOpen(false);
+    setIsPerformanceLogOpen(shouldOpen);
+    if (shouldOpen) void loadPerformanceLogs();
   };
 
   const toggleAccounting = () => {
@@ -1416,6 +1444,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             </span>
           </div>
           <div className="player-count"><span className="status-dot" />{snapshot?.onlinePlayers ?? '—'} <span>viajantes</span></div>
+          <button
+            type="button"
+            className={`master-button${isPerformanceLogOpen ? ' active' : ''}`}
+            aria-expanded={isPerformanceLogOpen}
+            onClick={togglePerformanceLogs}
+          >
+            <Activity size={14} />
+            Log
+          </button>
           {user.isMaster && (
             <button
               type="button"
@@ -1531,6 +1568,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onGrantMoney={grantMoney}
             onRefreshPlayers={refreshOnlinePlayers}
             onClose={() => setIsMasterPanelOpen(false)}
+          />
+        )}
+        {isPerformanceLogOpen && (
+          <PerformanceLogPanel
+            logs={performanceLogs}
+            isLoading={isPerformanceLogLoading}
+            error={performanceLogError}
+            onRefresh={() => void loadPerformanceLogs()}
+            onClose={() => setIsPerformanceLogOpen(false)}
           />
         )}
         {selectedResidence && isWarehouseLogOpen && (

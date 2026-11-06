@@ -562,3 +562,18 @@ transações anteriores não podem ser reconstruídas.
 
 - **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque máximo atingido, estoque mínimo preservado, sem espaço, Work Points insuficientes ou armazém sem estoque). Falhas internas são exibidas separadamente, com a etapa e a mensagem do erro.
 - **Validade e espaço de armazenamento:** às 18:00 de cada dia do jogo, a perda esperada de cada produto perecível é `estoque atual / validade em dias`. A parte inteira é removida e a fração vira probabilidade de perder uma unidade adicional (por exemplo, 10 unidades com validade de 100 dias: 0,1 unidade/dia, ou 10% de chance de perder uma). Não há controle por lote ou data de entrada; produtos recém-adicionados seguem a mesma regra sobre o estoque agregado. A regra cobre os estoques principais de fazendas, comércios, construções artesanais e recursos, além dos produtos nos armazéns (indústrias). Produtos sem validade, como madeira, pedra, ferro e Ferramentas, não se deterioram. O espaço ocupado é atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o armazém está selecionado.
+
+## Logs do processamento diário
+
+O botão **Log**, na barra superior, mostra as medições mais recentes do
+processamento do mundo: alocação de empregos, folha e aluguel, vendas,
+produção, fazendas, transporte, imigração e publicação. Cada registro inclui
+duração total, tempo acumulado das consultas ao PostgreSQL (inclui o tempo de
+resposta), espera por lock, quantidade de consultas, contagens de residências,
+locais de trabalho, lojas e armazéns, além do estado da etapa. **Fora do banco**
+é uma estimativa que também pode incluir esperas que não são consultas.
+
+Os registros são compartilhados entre instâncias pelo Redis e ficam limitados
+aos 100 mais recentes, com expiração após sete dias. A rota é acessível somente
+a usuários autenticados. As medições aparecem quando cada etapa é executada;
+use **Atualizar** no painel para consultar os registros novamente.

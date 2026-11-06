@@ -115,6 +115,17 @@ button { color: inherit; }
 .accounting-payroll { margin: 6px 0; color: #c9c4b1; font-size: 12px; }
 .accounting-payroll strong { color: #ead9a6; }
 .accounting-history-note { margin: 5px 0 10px; color: #8f9687; font-size: 10px; line-height: 1.5; }
+.performance-log-panel { width: min(940px, calc(100vw - 32px)); }
+.performance-log-actions { display: flex; align-items: center; gap: 8px; }
+.performance-log-actions .accounting-view-button { display: inline-flex; align-items: center; gap: 5px; }
+.performance-log-list { gap: 7px; }
+.performance-log-entry { padding: 10px; border: 1px solid rgba(219,201,158,.14); border-radius: 8px; background: rgba(255,255,255,.025); }
+.performance-log-heading, .performance-log-metrics, .performance-log-counts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; font-size: 10px; }
+.performance-log-heading { justify-content: space-between; color: #a6a897; }
+.performance-log-heading strong { display: inline-flex; align-items: center; gap: 5px; color: #ead9a6; font-size: 12px; }
+.performance-log-metrics { margin-top: 8px; color: #a6a897; }
+.performance-log-metrics strong { margin-left: 4px; color: #eee7d6; font-weight: 600; }
+.performance-log-counts { margin-top: 6px; color: #8f9687; }
 .commerce-history-row { display: grid; grid-template-columns: repeat(7, minmax(82px, 1fr)) minmax(150px, 1.5fr); gap: 8px; align-items: center; min-width: 860px; font-size: 11px; }
 .commerce-transaction-details { white-space: normal; }
 .commerce-transaction-details summary { color: #d7bd80; cursor: pointer; }

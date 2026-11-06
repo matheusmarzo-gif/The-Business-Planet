@@ -48,6 +48,7 @@ export interface ShopTransactionCandidate {
   shopId: string;
   price: number;
   distance: number;
+  distanceFactor?: number;
   desiredQuantity: number;
   benefit: number;
   rank: number;
@@ -153,6 +154,8 @@ export function isShopResidenceTransaction(value: unknown): value is ShopResiden
     typeof candidate.shopId === 'string' &&
     isPositiveInteger(candidate.price) &&
     isNonNegativeNumber(candidate.distance) &&
+    (candidate.distanceFactor === undefined ||
+      (isFiniteNumber(candidate.distanceFactor) && candidate.distanceFactor > 0)) &&
     isNonNegativeNumber(candidate.desiredQuantity) &&
     isFiniteNumber(candidate.benefit) &&
     isPositiveInteger(candidate.rank) &&
@@ -361,6 +364,7 @@ export function getBasicBasketCost(
 
 export interface PurchaseBenefitCalculation {
   pf: number;
+  distanceFactor: number;
   q: number;
   w: number;
   errorBenefit: number;
@@ -419,6 +423,7 @@ export function getPurchaseBenefitCalculation(
   price: number,
   basicNeedPerPerson: number,
   referenceBasketCost: number,
+  distance: number,
 ): PurchaseBenefitCalculation {
   if (
     !Number.isFinite(income) ||
@@ -428,15 +433,19 @@ export function getPurchaseBenefitCalculation(
     !Number.isFinite(basicNeedPerPerson) ||
     basicNeedPerPerson < 0 ||
     !Number.isFinite(referenceBasketCost) ||
-    referenceBasketCost < 0
+    referenceBasketCost < 0 ||
+    !Number.isFinite(distance) ||
+    distance < 0
   ) {
     throw new RangeError('Os valores da cesta básica para calcular o benefício são inválidos.');
   }
 
   const pf = price * basicNeedPerPerson;
+  const distanceFactor = 60 / Math.sqrt(60 + distance);
   if (income === 0 || referenceBasketCost === 0) {
     return {
       pf,
+      distanceFactor,
       q: 0,
       w: 0,
       errorBenefit: 0,
@@ -466,6 +475,7 @@ export function getPurchaseBenefitCalculation(
   if (income < pf || logIdealBase === Number.NEGATIVE_INFINITY || idealBenefit === 0) {
     return {
       pf,
+      distanceFactor,
       q: boundedDiagnosticValue(q),
       w: boundedDiagnosticValue(w),
       errorBenefit: 0,
@@ -487,11 +497,12 @@ export function getPurchaseBenefitCalculation(
     logRawErrorBase === Number.NEGATIVE_INFINITY
       ? Number.NEGATIVE_INFINITY
       : logRawErrorBase - Math.log(referenceBasketCost);
-  const errorBenefit = boundedExponential(4 * logErrorBase);
+  const logDistanceFactor = Math.log(distanceFactor);
+  const errorBenefit = boundedExponential(logDistanceFactor + 4 * logErrorBase);
   const logAssociatedBenefit =
     logErrorBase === Number.NEGATIVE_INFINITY
       ? Number.NEGATIVE_INFINITY
-      : 16 * (logErrorBase - logIdealBase);
+      : 4 * logDistanceFactor + 16 * (logErrorBase - logIdealBase);
   const associatedBenefit =
     logAssociatedBenefit === Number.POSITIVE_INFINITY
       ? MAX_DIAGNOSTIC_VALUE
@@ -507,6 +518,7 @@ export function getPurchaseBenefitCalculation(
 
   return {
     pf,
+    distanceFactor,
     q: boundedDiagnosticValue(q),
     w: boundedDiagnosticValue(w),
     errorBenefit,
@@ -592,6 +604,7 @@ export function planShopSalesDetailed(
           shop.price,
           basicNeedPerPerson,
           referenceBasketCost,
+          distance,
         );
         return { shop, distance, calculation, resultShare: 0, allocatedResidents: 0 };
       });
@@ -707,6 +720,7 @@ export function planShopSalesDetailed(
             shopId: candidate.shop.id,
             price: candidate.shop.price,
             distance: candidate.distance,
+            distanceFactor: candidate.calculation.distanceFactor,
             desiredQuantity: expectedQuantity,
             benefit: boundedAssociated,
             rank: index + 1,

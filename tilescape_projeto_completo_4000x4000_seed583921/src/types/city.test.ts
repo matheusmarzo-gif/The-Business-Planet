@@ -399,26 +399,35 @@ describe('shop sales', () => {
     const pf = price * basicNeed;
     const w = (1 - pf / rr) ** 4;
     const q = (0.8 ** w - 1) * income;
-    const benefitError = ((income - pf - q) / rr) ** 4;
+    const distance = 0;
+    const distanceFactor = 60 / Math.sqrt(60 + distance);
+    const benefitError = distanceFactor * ((income - pf - q) / rr) ** 4;
     const benefitIdeal = (income / rr - 0.125 / rr) ** 4;
-    const calculation = getPurchaseBenefitCalculation(income, price, basicNeed, rr);
+    const calculation = getPurchaseBenefitCalculation(income, price, basicNeed, rr, distance);
     assert.equal(calculation.pf, pf);
+    assert.equal(calculation.distanceFactor, distanceFactor);
     assert.equal(calculation.w, w);
     assert.ok(Math.abs(calculation.q - q) < 1e-12);
     assert.ok(Math.abs(calculation.errorBenefit - benefitError) < 1e-12);
     assert.equal(calculation.idealBenefit, benefitIdeal);
+    const expectedAssociatedBenefit = (benefitError / benefitIdeal) ** 4;
     assert.ok(
-      Math.abs(calculation.associatedBenefit - (benefitError / benefitIdeal) ** 4) < 1e-12,
+      Math.abs(calculation.associatedBenefit - expectedAssociatedBenefit) /
+        expectedAssociatedBenefit <
+        1e-12,
     );
-    const lowerPrice = getPurchaseBenefitCalculation(25, 10, 1, 10);
-    const higherPrice = getPurchaseBenefitCalculation(25, 20, 1, 10);
+    const lowerPrice = getPurchaseBenefitCalculation(25, 10, 1, 10, 0);
+    const higherPrice = getPurchaseBenefitCalculation(25, 20, 1, 10, 0);
     assert.equal(lowerPrice.valuesSaturated, false);
     assert.equal(higherPrice.valuesSaturated, false);
     assert.ok(Number.isFinite(lowerPrice.logAssociatedBenefit));
     assert.ok(Number.isFinite(higherPrice.logAssociatedBenefit));
     assert.ok(higherPrice.logAssociatedBenefit < lowerPrice.logAssociatedBenefit);
-    assert.equal(getPurchaseBenefitCalculation(0.1, 10, 0.03, rr).associatedBenefit, 0);
-    assert.equal(getPurchaseBenefitCalculation(0.125, 1, 0, rr).associatedBenefit, 0);
+    assert.equal(getPurchaseBenefitCalculation(0.1, 10, 0.03, rr, 0).associatedBenefit, 0);
+    assert.equal(getPurchaseBenefitCalculation(0.125, 1, 0, rr, 0).associatedBenefit, 0);
+    const fartherStore = getPurchaseBenefitCalculation(income, price, basicNeed, rr, 40);
+    assert.ok(fartherStore.errorBenefit < calculation.errorBenefit);
+    assert.ok(fartherStore.associatedBenefit < calculation.associatedBenefit);
   });
 
   it('uses city-wide 30-day weighted prices and current prices only when no sales exist', () => {
@@ -458,14 +467,20 @@ describe('shop sales', () => {
     assert.equal(assigned.reduce((sum, count) => sum + count, 0), 32);
     assert.equal(assigned[2], 0);
     assert.ok(Math.abs((assigned[0] ?? 0) - 32 * (
-      getPurchaseBenefitCalculation(0.3, 5, 0.03, 0.3).associatedBenefit /
-      (getPurchaseBenefitCalculation(0.3, 5, 0.03, 0.3).associatedBenefit +
-        getPurchaseBenefitCalculation(0.3, 10, 0.03, 0.3).associatedBenefit)
+      getPurchaseBenefitCalculation(0.3, 5, 0.03, 0.3, 4).associatedBenefit /
+      (getPurchaseBenefitCalculation(0.3, 5, 0.03, 0.3, 4).associatedBenefit +
+        getPurchaseBenefitCalculation(0.3, 10, 0.03, 0.3, 4).associatedBenefit)
     )) <= 1);
     assert.ok(plan.purchases.every((purchase) => Number.isInteger(purchase.quantity)));
-    assert.equal(
-      plan.purchases.some((purchase) => purchase.residenceId === 'home-32' && purchase.productId === 'rice'),
-      false,
+    assert.ok(
+      plan.purchases.every((purchase) => {
+        const store = shops.find((candidate) => candidate.id === purchase.shopId);
+        return (
+          store !== undefined &&
+          purchase.quantity <= store.stock &&
+          purchase.quantity <= store.capacity
+        );
+      }),
     );
   });
 
@@ -491,10 +506,10 @@ describe('shop sales', () => {
       fishShops.map((store) =>
         plan.transactionsByShop.get(store.id)?.[0].candidate.allocatedResidents,
       ),
-      [13, 13, 6],
+      [14, 13, 5],
     );
     assert.deepEqual(plan.purchases, [
-      { shopId: 'fish-9', residenceId: 'home-32', productId: 'fish', quantity: 5 },
+      { shopId: 'fish-9', residenceId: 'home-32', productId: 'fish', quantity: 7 },
       { shopId: 'fish-20', residenceId: 'home-32', productId: 'fish', quantity: 2 },
     ]);
   });
@@ -502,21 +517,21 @@ describe('shop sales', () => {
   it('allows consumption above basic need but enforces each store stock and capacity', () => {
     const milkShops = [
       {
-        ...shop('milk-a', 0, 50, 2, 3),
+        ...shop('milk-a', 0, 10, 2, 3),
         type: 'shop_milk' as const,
         productId: 'milk',
       },
       {
-        ...shop('milk-b', 4, 50, 2, 3),
+        ...shop('milk-b', 4, 10, 2, 3),
         type: 'shop_milk' as const,
         productId: 'milk',
       },
     ];
     const plan = planShopSales(
-      [home('milk-home', 0, 32, 60)],
+      [home('milk-home', 0, 32, 10)],
       milkShops,
       demandByProduct,
-      cityPrices('milk', 10),
+      cityPrices('milk', 1),
       () => 0,
     );
     assert.deepEqual(plan, [

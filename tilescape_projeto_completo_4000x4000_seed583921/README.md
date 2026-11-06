@@ -379,16 +379,17 @@ Para cada residência e loja, `Pf` é o preço local multiplicado pelo consumo
 básico por pessoa, e `Rf` é a renda média por morador. Se `Rf < Pf`, o benefício
 de erro é zero; caso contrário, `w = (1 − Pf / RR)^4`,
 `q = (0,8^w − 1) × Rf` e
-`benefício_erro = ((Rf − Pf − q) / RR)^4`.
+`Dᵢ = 60 / √(60 + dᵢ)`, `benefício_erro = Dᵢ × ((Rf − Pf − q) / RR)^4`,
+onde `dᵢ` é a distância entre a residência e a loja.
 `benefício_ideal = (Rf / RR − 0,125 / RR)^4`; se ele for zero, o benefício de
 erro também é zerado. `benefício_associado = (benefício_erro /
 benefício_ideal)^4`. Para cada produto, os moradores são divididos entre as
 lojas proporcionalmente ao benefício associado. O arredondamento pelo método
 dos maiores restos mantém o número de moradores inteiro e igual à população da
 residência quando existe benefício positivo. Se `RR` for zero ou todas as lojas
-tiverem benefício zero, não há compra. A distância só determina se a loja está
-dentro dos 60 tiles; ela não altera o benefício nem a participação. A quantidade
-desejada em cada loja é moradores alocados × consumo
+tiverem benefício zero, não há compra. A distância também define a elegibilidade
+no raio de 60 tiles e reduz o benefício conforme `Dᵢ`. A quantidade desejada em
+cada loja é moradores alocados × consumo
 básico × benefício associado; pode superar 100% da necessidade básica. Frações
 de unidade são arredondadas aleatoriamente, preservando a quantidade esperada
 ao longo do tempo. Estoque e capacidade limitam as vendas; moradores alocados a

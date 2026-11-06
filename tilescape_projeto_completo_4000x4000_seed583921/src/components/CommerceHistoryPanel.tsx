@@ -113,7 +113,10 @@ export default function CommerceHistoryPanel({
                     </strong>
                     <p className="commerce-candidate-list">
                       Loja #{transaction.candidate.rank} · preço C$ {transaction.candidate.price} ·
-                      distância {decimal.format(transaction.candidate.distance)} tiles · Pf{' '}
+                      distância {decimal.format(transaction.candidate.distance)} tiles · Dᵢ{' '}
+                      {transaction.candidate.distanceFactor === undefined
+                        ? '—'
+                        : decimal.format(transaction.candidate.distanceFactor)} · Pf{' '}
                       {transaction.candidate.pf === undefined
                         ? '—'
                         : formatMoney(transaction.candidate.pf)} · w{' '}

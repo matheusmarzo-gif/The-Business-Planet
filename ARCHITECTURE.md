@@ -373,15 +373,17 @@ mapeamento e verificar todas as curvas.
   demanda_basica`; com `Rf` como renda média por morador,
   `w = (1 − Pf / RR)^4`, `q = (0,8^w − 1) × Rf`,
   `benefício_erro = 0` se `Rf < Pf`, caso contrário
-  `((Rf − Pf − q) / RR)^4`; `benefício_ideal = (Rf / RR − 0,125 / RR)^4`.
+  `Dᵢ × ((Rf − Pf − q) / RR)^4`, onde
+  `Dᵢ = 60 / √(60 + dᵢ)` e `dᵢ` é a distância entre residência e loja;
+  `benefício_ideal = (Rf / RR − 0,125 / RR)^4`.
   Se o benefício ideal for zero, o benefício de erro também é zerado;
   `benefício_associado = (benefício_erro / benefício_ideal)^4`.
   Os moradores são repartidos entre as lojas do produto em 60 tiles na
   proporção do benefício associado. O método dos maiores restos garante
   alocações inteiras cuja soma é a população da residência quando há benefício
   positivo; se `RR` ou todos os benefícios forem zero, não há compra. A
-  distância define apenas a elegibilidade no raio de 60 tiles e não altera o
-  benefício nem a participação. A quantidade desejada por loja é `moradores alocados × demanda
+  distância define a elegibilidade no raio de 60 tiles e também reduz o
+  benefício por `Dᵢ`. A quantidade desejada por loja é `moradores alocados × demanda
   básica × benefício associado`, com arredondamento aleatório das frações;
   pode exceder a necessidade básica. Não há redistribuição de moradores quando
   estoque ou capacidade da loja é insuficiente. Vendas são limitadas pelo

@@ -4150,7 +4150,7 @@ async function start() {
         const { rowCount: sourceUpdated } = await client.query(
           `UPDATE warehouse_stock
            SET quantity = quantity - $3
-           WHERE building_id = $1 AND product_id = $2 AND quantity >= $3 + $4`,
+           WHERE building_id = $1 AND product_id = $2 AND quantity >= $3::integer + $4::integer`,
           [request.params.id, productId, quantity, result.quote.sourceMinimumStock],
         );
         if (sourceUpdated !== 1) {

@@ -155,7 +155,7 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'harvest_in_progress') {
           error = 'A colheita está em andamento; só é possível plantar de novo ao terminar.';
         } else if (body.error === 'cannot_plant') {
-          error = 'Somente fazendas de arroz concluídas podem plantar.';
+          error = 'Somente fazendas agrícolas concluídas podem plantar.';
         } else if (body.error === 'invalid_warehouse_link') {
           error = 'Essa construção não pode ser ligada a esse destino.';
         } else if (body.error === 'warehouse_out_of_range') {

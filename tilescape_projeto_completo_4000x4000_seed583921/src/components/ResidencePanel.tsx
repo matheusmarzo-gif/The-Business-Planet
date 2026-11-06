@@ -15,11 +15,9 @@ import { getMaxDesiredWorkers } from '../types/employment';
 import { canLinkToWarehouse } from '../types/logistics';
 import { PRODUCTS } from '../types/product';
 import {
-  FARM_DAILY_WORK_POINTS,
   getHarvestDay,
   getMonthOfDay,
   getPlantingFactor,
-  HARVEST_WORK_POINTS_PER_UNIT,
 } from '../types/farming';
 import { getDairyFarmEfficiency } from '../types/dairy';
 
@@ -57,7 +55,13 @@ function getProductionDescription(type: ResidenceType): string | null {
     if (type === 'farm_dairy' && definition.production) {
       return `Produção sazonal de leite: ${number.format(definition.production.workPointsPerUnit)} Work Points efetivos por litro. Eficiência: meses 1–3, ${number.format(getDairyFarmEfficiency(1) * 100)}%; 4–6, ${number.format(getDairyFarmEfficiency(4) * 100)}%; 7–9, ${number.format(getDairyFarmEfficiency(7) * 100)}%; 10–12, ${number.format(getDairyFarmEfficiency(10) * 100)}%.`;
     }
-    return `Ciclo de 6 meses: ${number.format(FARM_DAILY_WORK_POINTS)} Work Points por dia garantem produtividade plena; na colheita, cada unidade consome ${number.format(HARVEST_WORK_POINTS_PER_UNIT)} Work Points. O rendimento também varia conforme o mês do plantio.`;
+    const cropRule = definition.cropRule;
+    if (cropRule) {
+      const seasonalEfficiency = cropRule.plantingEfficiencyByQuarter
+        .map((efficiency, index) => `${index * 3 + 1}–${index * 3 + 3}: ${number.format(efficiency * 100)}%`)
+        .join(', ');
+      return `Ciclo de ${number.format(cropRule.growthMonths)} meses: ${number.format(cropRule.dailyWorkPoints)} Work Points por dia garantem produtividade plena; na colheita ou corte, cada unidade consome ${number.format(cropRule.harvestWorkPointsPerUnit)} Work Points. Eficiência pelo mês do plantio: ${seasonalEfficiency}.`;
+    }
   }
   if (definition.kind === 'shop') {
     const workPointsPerUnit = type === 'shop_milk' ? 1 : 20;
@@ -137,6 +141,10 @@ export default function ResidencePanel({
 
   const isResidence = definition.kind === 'residence';
   const isFarm = !isResidence;
+  const cropRule = definition.cropRule;
+  const cropProduct = definition.stockProduct ?? 'produto';
+  const cropAction =
+    building.type === 'farm_cattle' ? 'Iniciar criação' : `Plantar ${cropProduct.toLowerCase()}`;
   const productionDescription = getProductionDescription(building.type);
   const maxDesiredWorkers = getMaxDesiredWorkers(building.type, building.status);
   const openJobs = Math.max(0, Math.min(building.desiredWorkers, maxDesiredWorkers) - building.employed);
@@ -264,28 +272,36 @@ export default function ResidencePanel({
           Histórico do armazém
         </button>
       )}
-      {building.type === 'farm_rice' && building.status === 'completed' && (
+      {cropRule && building.status === 'completed' && (
         <div className="crop-panel">
           {building.crop === null ? (
-            <p>Nenhum plantio. Plante para iniciar o ciclo de 6 meses.</p>
+            <p>Nenhum ciclo ativo. {cropAction} para iniciar o ciclo de {cropRule.growthMonths} meses.</p>
           ) : building.crop.phase === 'growing' ? (
             <p>
-              Crescendo desde {formatDay(building.crop.plantedDay)}; colheita em{' '}
-              {formatDay(getHarvestDay(building.crop.plantedDay))}. Fator do mês do plantio:{' '}
-              {Math.round(getPlantingFactor(getMonthOfDay(building.crop.plantedDay)) * 100)}%
+              {building.type === 'farm_cattle' ? 'Em criação' : 'Crescendo'} desde{' '}
+              {formatDay(building.crop.plantedDay)};{' '}
+              {building.type === 'farm_cattle' ? 'corte' : 'colheita'} em{' '}
+              {formatDay(getHarvestDay(building.crop.plantedDay, cropRule.growthMonths))}. Fator do mês do plantio:{' '}
+              {Math.round(
+                getPlantingFactor(
+                  getMonthOfDay(building.crop.plantedDay),
+                  cropRule.plantingEfficiencyByQuarter,
+                ) * 100,
+              )}%
               {building.crop.days > 0 &&
-                ` · Work Points até agora: ${Math.round((building.crop.ratioSum / building.crop.days) * 100)}% de ${number.format(FARM_DAILY_WORK_POINTS)}/dia`}
+                ` · Work Points até agora: ${Math.round((building.crop.ratioSum / building.crop.days) * 100)}% de ${number.format(cropRule.dailyWorkPoints)}/dia`}
               .
             </p>
           ) : (
             <p>
-              Colhendo: {number.format(building.crop.harvested)} / {number.format(building.crop.yieldUnits)}{' '}
-              unidades ({number.format(HARVEST_WORK_POINTS_PER_UNIT)} Work Points por unidade).
+              {building.type === 'farm_cattle' ? 'Cortando' : 'Colhendo'}: {number.format(building.crop.harvested)} /{' '}
+              {number.format(building.crop.yieldUnits)} unidades de {cropProduct.toLowerCase()} (
+              {number.format(cropRule.harvestWorkPointsPerUnit)} Work Points por unidade).
             </p>
           )}
           {isOwner && building.crop?.phase !== 'harvesting' && (
             <button type="button" disabled={isSaving} onClick={onPlant}>
-              {building.crop ? 'Replantar (zera o contador)' : 'Plantar arroz'}
+              {building.crop ? 'Reiniciar ciclo (zera o contador)' : cropAction}
             </button>
           )}
         </div>

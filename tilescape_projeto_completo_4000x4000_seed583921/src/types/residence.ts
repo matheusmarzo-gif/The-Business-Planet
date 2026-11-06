@@ -1,12 +1,17 @@
 import type { CityAssembly, ConstructionCategory } from './city.js';
-import type { Crop } from './farming.js';
+import {
+  FARM_CROP_RULES,
+  type Crop,
+  type FarmCropRule,
+  type FarmCropType,
+} from './farming.js';
 import { ASSEMBLY_SIZE, isFootprintInCityZone, MUNICIPAL_AREA_RADIUS } from './city.js';
 import type { RoadTile } from './road.js';
 
 export type ResidenceType =
   | 'house_poor1'
   | 'house_poor2'
-  | 'farm_rice'
+  | FarmCropType
   | 'farm_dairy'
   | 'shop_rice'
   | 'shop_milk'
@@ -83,6 +88,7 @@ export interface ResidenceDefinition {
   stockProduct?: string;
   stockProductId?: string;
   stockCapacity?: number;
+  cropRule?: FarmCropRule;
   // Estoques máximos de insumos (Ferramentas, madeira, ferro) guardados pela construção.
   toolCapacity?: number;
   woodCapacity?: number;
@@ -227,6 +233,102 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     stockProduct: 'Arroz',
     stockProductId: 'rice',
     stockCapacity: 300,
+    cropRule: FARM_CROP_RULES.farm_rice,
+  },
+  farm_potato: {
+    type: 'farm_potato',
+    kind: 'farm',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Fazenda de Batata',
+    asset: '/buildings/farms/fazenda_batata.png',
+    width: 4,
+    height: 4,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 200, stone: 20 },
+    workPoints: 12000,
+    maxWorkers: 30,
+    stockProduct: 'Batata',
+    stockProductId: 'potato',
+    stockCapacity: 300,
+    cropRule: FARM_CROP_RULES.farm_potato,
+  },
+  farm_wheat: {
+    type: 'farm_wheat',
+    kind: 'farm',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Fazenda de Trigo',
+    asset: '/buildings/farms/fazenda_trigo.png',
+    width: 4,
+    height: 4,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 200, stone: 20 },
+    workPoints: 12000,
+    maxWorkers: 30,
+    stockProduct: 'Trigo',
+    stockProductId: 'wheat',
+    stockCapacity: 300,
+    cropRule: FARM_CROP_RULES.farm_wheat,
+  },
+  farm_barley: {
+    type: 'farm_barley',
+    kind: 'farm',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Fazenda de Cevada',
+    asset: '/buildings/farms/fazenda_cevada.png',
+    width: 4,
+    height: 4,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 200, stone: 20 },
+    workPoints: 12000,
+    maxWorkers: 30,
+    stockProduct: 'Cevada',
+    stockProductId: 'barley',
+    stockCapacity: 300,
+    cropRule: FARM_CROP_RULES.farm_barley,
+  },
+  farm_corn: {
+    type: 'farm_corn',
+    kind: 'farm',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Fazenda de Milho',
+    asset: '/buildings/farms/fazenda_milho.png',
+    width: 4,
+    height: 4,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 200, stone: 20 },
+    workPoints: 12000,
+    maxWorkers: 30,
+    stockProduct: 'Milho',
+    stockProductId: 'corn',
+    stockCapacity: 300,
+    cropRule: FARM_CROP_RULES.farm_corn,
+  },
+  farm_cattle: {
+    type: 'farm_cattle',
+    kind: 'farm',
+    requiredZone: 'rural',
+    requiresRoad: true,
+    name: 'Fazenda Bovina',
+    asset: '/buildings/farms/fazenda_bovina.png',
+    width: 4,
+    height: 4,
+    capacity: 0,
+    localAppeal: 0,
+    cost: { wood: 200, stone: 20 },
+    workPoints: 12000,
+    maxWorkers: 30,
+    stockProduct: 'Carne Vermelha',
+    stockProductId: 'red_meat',
+    stockCapacity: 300,
+    cropRule: FARM_CROP_RULES.farm_cattle,
   },
   farm_dairy: {
     type: 'farm_dairy',
@@ -452,7 +554,7 @@ export interface ResidentialBuilding {
   woodStock: number;
   ironStock: number;
   efficiencyPenalty: number;
-  // Plantação da fazenda de arroz; null quando não há plantio.
+  // Plantio/ciclo das fazendas agrícolas; null quando não há plantio.
   crop: Crop | null;
   // Funcionários empregados na construção ou, em residências, moradores empregados.
   employed: number;

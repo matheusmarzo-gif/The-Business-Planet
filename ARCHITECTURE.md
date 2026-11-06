@@ -421,18 +421,21 @@ mapeamento e verificar todas as curvas.
   comércio. Os diagnósticos locais também conservam até 30 dias. A coluna
   `transaction_details` de instalações anteriores não é mais lida ou atualizada;
   os registros existentes expiram junto com o histórico financeiro.
-- Produção da fazenda de arroz (`src/types/farming.ts`): `POST
-  /api/residential-buildings/:id/plant` (só dono, fazenda concluída; plantar ou
+- Produção das fazendas agrícolas (`src/types/farming.ts`): `POST
+  /api/residential-buildings/:id/plant` (só dono, fazenda concluída; iniciar ou
   replantar durante o crescimento zera o contador; bloqueado na colheita)
   grava `crop_phase`, `crop_planted_day` (dia do relógio do mundo),
-  `crop_ratio_sum`, `crop_days`, `crop_yield`, `crop_harvested`. No job das
-  00:00 (antes do transporte): em `growing` soma `min(1, WP do dia / 1000)`;
-  no dia da colheita (plantio + 6 meses de calendário) a produção vira
-  `floor(1000 · fator do mês do plantio · média diária)` (meses 1–3: 100 %,
-  4–6: 60 %, 7–9: 40 %, 10–12: 20 %) e a fase passa a `harvesting`; nela,
-  20 WP por unidade colhida, limitado ao espaço livre do estoque (300); ao
+  `crop_ratio_sum`, `crop_days`, `crop_yield`, `crop_harvested`. O job das
+  00:00 (antes do transporte) usa as regras específicas da fazenda: arroz,
+  batata, trigo, cevada e milho crescem por 6 meses; a fazenda bovina por 24.
+  Durante `growing`, soma `min(1, WP do dia / requisito diário)`; no dia de
+  colheita/corte a produção é `floor(rendimento máximo · fator do mês do plantio
+  · média diária)`. Os requisitos diários, rendimentos, eficiência sazonal e
+  Work Points por unidade colhida/cortada estão em `FARM_CROP_RULES`. A fase
+  passa a `harvesting`; a produção é limitada ao espaço livre do estoque (300); ao
   terminar, o plantio é limpo e um novo pode ser feito. `ResidentialBuilding.crop`
   expõe o estado ao cliente.
+- `red_meat` tem validade padrão de 30 dias em `src/types/product.ts`.
 - Consumo das residências: as compras de arroz, peixe e leite das 00:00 são gravadas em
   `residence_consumption (building_id, product_id, day, quantity, spent,
   occupants)` (cascata). `GET /api/residential-buildings/:id/consumption`
@@ -656,7 +659,7 @@ atualizado.
 ## Limites e próximos passos já conhecidos
 
 - Ainda não há evolução de população ou simulação dinâmica de bem-estar.
-- O catálogo habilita casas, armazéns, fazendas de arroz e leite, lojas de
+- O catálogo habilita casas, armazéns, fazendas agrícolas e leite, lojas de
   arroz, peixe e leite, pesqueiro, recursos e ferramentaria para todos os
   jogadores autenticados. Custos de materiais de construção ainda não são
   debitados; obras progridem por Work Points e a conta master pode concluí-las

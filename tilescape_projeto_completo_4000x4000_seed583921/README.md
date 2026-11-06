@@ -338,15 +338,30 @@ armazém ligado.
 
 ### Fazendas
 
-Na categoria **Fazendas**, a **Fazenda de arroz** (4 × 4 tiles, até 30 funcionários,
-estoque máximo de 300 unidades de arroz) custa 200 madeiras e 20 pedras e exige
-12.000 Work Points. Ela só pode ser construída inteiramente em área rural, sem
-sobrepor estradas ou construções e precisa ficar ao lado de uma estrada. Toda obra
-e a fazenda concluída terão uma área de 60 tiles de raio para procurar
-trabalhadores (exibida no painel; veja "Empregos e salários"). O
-funcionamento é o mesmo das residências (prévia, obra, demolição e painel
-lateral), mas sem moradores nem aluguel; consulte a regra de crescimento e
-colheita da fazenda de arroz abaixo.
+Na categoria **Fazendas**, as fazendas de arroz, batata, trigo, cevada, milho e
+bovina têm 4 × 4 tiles, até 30 funcionários, estoque máximo de 300 unidades,
+custo de 200 madeiras e 20 pedras e exigem 12.000 Work Points. Todas devem ficar
+inteiramente em área rural, sem sobrepor estradas ou construções, e ao lado de
+uma estrada. Toda obra e fazenda concluída têm um raio de 60 tiles para procurar
+trabalhadores (exibido no painel; veja "Empregos e salários"). O funcionamento
+é o mesmo das residências (prévia, obra, demolição e painel lateral), mas sem
+moradores nem aluguel.
+
+| Fazenda | Produto | Eficiência pelo mês de plantio (1–3 / 4–6 / 7–9 / 10–12) | Crescimento | Work Points por dia / por unidade colhida | Rendimento máximo |
+|---|---|---|---:|---:|---:|
+| Arroz | Arroz | 100 % / 60 % / 40 % / 20 % | 6 meses | 1.000 / 20 | 1.000 |
+| Batata | Batata | 50 % / 100 % / 20 % / 80 % | 6 meses | 1.000 / 20 | 1.000 |
+| Trigo | Trigo | 40 % / 50 % / 60 % / 100 % | 6 meses | 1.000 / 20 | 1.000 |
+| Cevada | Cevada | 30 % / 70 % / 100 % / 60 % | 6 meses | 1.000 / 20 | 1.000 |
+| Milho | Milho | 80 % / 100 % / 10 % / 10 % | 6 meses | 1.000 / 20 | 1.000 |
+| Bovina | Carne vermelha | 40 % / 100 % / 80 % / 60 % | 24 meses | 500 / 40 | 1.000 |
+
+O mês em que o plantio começa define a eficiência sazonal do ciclo. A média diária
+de `min(1, Work Points / requisito diário)` durante o crescimento também reduz
+proporcionalmente o rendimento. O botão do painel inicia ou reinicia o ciclo;
+durante a colheita (ou corte, na fazenda bovina), cada unidade exige os Work
+Points indicados e a produção é limitada ao estoque livre. A carne vermelha tem
+validade de 30 dias.
 
 ### Empregos e salários
 
@@ -443,14 +458,14 @@ painel para executar uma tentativa imediata com as mesmas regras e limites.
 último dia, a média do último mês (30 dias de jogo) e a previsão de pontos que
 os funcionários atuais gerarão no próximo dia, para decidir se é preciso contratar.
 
-**Fazenda de arroz:** o dono usa **Plantar arroz** no painel da fazenda concluída.
-A colheita ocorre 6 meses (de calendário do jogo) depois e rende até 1.000
-unidades. O mês do plantio define a produtividade (meses 1–3: 100 %, 4–6: 60 %,
-7–9: 40 %, 10–12: 20 %). A fazenda precisa de 1.000 Work Points por dia; a
-média diária de `min(1, pontos/1000)` durante o crescimento multiplica a
-produção (800 pontos por dia = −20 %). **Replantar** durante o crescimento zera
-o contador. Na colheita cada unidade custa 20 Work Points, limitados ao espaço
-livre do estoque (300; ligar a um armazém libera espaço); só depois de colher tudo é possível plantar de novo.
+**Fazendas agrícolas:** o dono inicia ou reinicia o ciclo no painel da fazenda
+concluída. O crescimento dura 6 meses, exceto a fazenda bovina, que leva 24
+meses até o corte. A eficiência sazonal, o requisito de Work Points diários e o
+custo de colheita/corte são mostrados no painel e detalhados na tabela acima.
+O rendimento é ajustado pela média de `min(1, Work Points / requisito diário)`
+durante o crescimento. Na colheita ou corte, cada unidade consome os Work Points
+indicados, limitada ao estoque livre (300; ligar a um armazém libera espaço); só
+depois de colher tudo é possível iniciar um novo ciclo.
 
 **Consumo:** em residências concluídas, **Ver consumo da casa** mostra o consumo
 por pessoa de arroz, peixe e leite no último dia e a média diária por pessoa nos últimos
@@ -462,7 +477,8 @@ preços médios são ponderados pelas unidades compradas.
 Use **Produtos** na barra inferior para consultar os 32 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.
 Validades informadas em anos são convertidas para dias considerando 365 dias
-por ano; produtos sem deterioração aparecem com validade infinita. A validade
+por ano; produtos sem deterioração aparecem com validade infinita. Carne vermelha
+tem validade de 30 dias. A validade
 também é usada para calcular a perda diária dos estoques às 18:00, conforme
 descrito em **Validade e espaço de armazenamento**. Produtos cujos atributos
 ainda não foram definidos não aparecem.

@@ -57,13 +57,14 @@ import {
 } from './logistics';
 import {
   advanceGrowth,
+  FARM_CROP_RULES,
   getHarvestDay,
   getPlantingFactor,
   planHarvest,
   type Crop,
 } from './farming';
 import { parseWarehouseSetting } from './warehouse';
-import { planDailySpoilage } from './product';
+import { planDailySpoilage, PRODUCTS } from './product';
 import { getDairyFarmEfficiency } from './dairy';
 import { parseBasicDemandConfig } from './commerceDemand';
 
@@ -169,7 +170,10 @@ describe('rice farming', () => {
   };
 
   it('applies the planting month factor', () => {
-    assert.deepEqual([1, 3, 4, 6, 7, 9, 10, 12].map(getPlantingFactor), [1, 1, 0.6, 0.6, 0.4, 0.4, 0.2, 0.2]);
+    assert.deepEqual(
+      [1, 3, 4, 6, 7, 9, 10, 12].map((month) => getPlantingFactor(month)),
+      [1, 1, 0.6, 0.6, 0.4, 0.4, 0.2, 0.2],
+    );
     assert.equal(getHarvestDay('2026-03-15'), '2026-09-15');
     assert.equal(getHarvestDay('2026-08-31'), '2027-02-28');
   });
@@ -190,6 +194,69 @@ describe('rice farming', () => {
     assert.deepEqual(planHarvest(crop, 5000, 10), { units: 10, done: false });
     assert.deepEqual(planHarvest({ ...crop, harvested: 990 }, 99999, 300), { units: 10, done: true });
     assert.deepEqual(planHarvest(crop, 100, 300), { units: 5, done: false });
+  });
+});
+
+describe('other crop farms', () => {
+  const grow = (plantedDay: string, farmType: keyof typeof FARM_CROP_RULES, workPoints: number) => {
+    let crop: Crop = { phase: 'growing', plantedDay, ratioSum: 0, days: 0, yieldUnits: 0, harvested: 0 };
+    const rule = FARM_CROP_RULES[farmType];
+    for (let day = new Date(plantedDay + 'T00:00:00Z'); crop.phase === 'growing'; ) {
+      day = new Date(day.getTime() + 86_400_000);
+      crop = advanceGrowth(crop, day.toISOString().slice(0, 10), workPoints, rule);
+    }
+    return crop;
+  };
+
+  it('uses the requested seasonal planting efficiencies and crop yields', () => {
+    const seasonalEfficiencies = {
+      farm_potato: [0.5, 1, 0.2, 0.8],
+      farm_wheat: [0.4, 0.5, 0.6, 1],
+      farm_barley: [0.3, 0.7, 1, 0.6],
+      farm_corn: [0.8, 1, 0.1, 0.1],
+      farm_cattle: [0.4, 1, 0.8, 0.6],
+    } as const;
+    for (const [farmType, efficiencies] of Object.entries(seasonalEfficiencies)) {
+      assert.deepEqual(
+        [1, 4, 7, 10].map((month) =>
+          getPlantingFactor(month, FARM_CROP_RULES[farmType as keyof typeof FARM_CROP_RULES].plantingEfficiencyByQuarter),
+        ),
+        efficiencies,
+      );
+    }
+    assert.equal(grow('2026-01-10', 'farm_potato', 1000).yieldUnits, 500);
+    assert.equal(grow('2026-04-10', 'farm_potato', 1000).yieldUnits, 1000);
+    assert.equal(grow('2026-10-10', 'farm_wheat', 1000).yieldUnits, 1000);
+    assert.equal(grow('2026-07-10', 'farm_barley', 1000).yieldUnits, 1000);
+    assert.equal(grow('2026-10-10', 'farm_corn', 1000).yieldUnits, 100);
+    assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_cattle.growthMonths), '2028-01-31');
+    assert.equal(grow('2026-04-10', 'farm_cattle', 500).yieldUnits, 1000);
+  });
+
+  it('matches the rice farm construction and storage limits', () => {
+    for (const farmType of Object.keys(FARM_CROP_RULES) as (keyof typeof FARM_CROP_RULES)[]) {
+      const farm = RESIDENCES[farmType];
+      assert.equal(farm.width, 4);
+      assert.equal(farm.height, 4);
+      assert.deepEqual(farm.cost, { wood: 200, stone: 20 });
+      assert.equal(farm.stockCapacity, 300);
+      assert.equal(farm.maxWorkers, 30);
+      assert.equal(farm.workPoints, 12000);
+    }
+  });
+
+  it('uses the configured daily and per-unit Work Point requirements', () => {
+    assert.equal(FARM_CROP_RULES.farm_cattle.dailyWorkPoints, 500);
+    const cattleCrop: Crop = {
+      phase: 'harvesting',
+      plantedDay: '2026-04-10',
+      ratioSum: 0,
+      days: 0,
+      yieldUnits: 1000,
+      harvested: 0,
+    };
+    assert.deepEqual(planHarvest(cattleCrop, 400, 100, FARM_CROP_RULES.farm_cattle), { units: 10, done: false });
+    assert.equal(PRODUCTS.find((product) => product.id === 'red_meat')?.shelfLifeDays, 30);
   });
 });
 

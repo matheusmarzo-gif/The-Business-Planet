@@ -1,10 +1,69 @@
-// Produção da fazenda de arroz: plantio, crescimento de 6 meses e colheita.
-export const FARM_DAILY_WORK_POINTS = 1000;
-export const GROWTH_MONTHS = 6;
-export const HARVEST_WORK_POINTS_PER_UNIT = 20;
-export const BASE_YIELD = 1000;
+export interface FarmCropRule {
+  growthMonths: number;
+  dailyWorkPoints: number;
+  harvestWorkPointsPerUnit: number;
+  baseYield: number;
+  plantingEfficiencyByQuarter: readonly [number, number, number, number];
+}
+
+export const FARM_CROP_RULES = {
+  farm_rice: {
+    growthMonths: 6,
+    dailyWorkPoints: 1000,
+    harvestWorkPointsPerUnit: 20,
+    baseYield: 1000,
+    plantingEfficiencyByQuarter: [1, 0.6, 0.4, 0.2],
+  },
+  farm_potato: {
+    growthMonths: 6,
+    dailyWorkPoints: 1000,
+    harvestWorkPointsPerUnit: 20,
+    baseYield: 1000,
+    plantingEfficiencyByQuarter: [0.5, 1, 0.2, 0.8],
+  },
+  farm_wheat: {
+    growthMonths: 6,
+    dailyWorkPoints: 1000,
+    harvestWorkPointsPerUnit: 20,
+    baseYield: 1000,
+    plantingEfficiencyByQuarter: [0.4, 0.5, 0.6, 1],
+  },
+  farm_barley: {
+    growthMonths: 6,
+    dailyWorkPoints: 1000,
+    harvestWorkPointsPerUnit: 20,
+    baseYield: 1000,
+    plantingEfficiencyByQuarter: [0.3, 0.7, 1, 0.6],
+  },
+  farm_corn: {
+    growthMonths: 6,
+    dailyWorkPoints: 1000,
+    harvestWorkPointsPerUnit: 20,
+    baseYield: 1000,
+    plantingEfficiencyByQuarter: [0.8, 1, 0.1, 0.1],
+  },
+  farm_cattle: {
+    growthMonths: 24,
+    dailyWorkPoints: 500,
+    harvestWorkPointsPerUnit: 40,
+    baseYield: 1000,
+    plantingEfficiencyByQuarter: [0.4, 1, 0.8, 0.6],
+  },
+} as const satisfies Record<string, FarmCropRule>;
+
+export type FarmCropType = keyof typeof FARM_CROP_RULES;
+export const FARM_CROP_TYPES = Object.keys(FARM_CROP_RULES) as FarmCropType[];
+
+export const FARM_DAILY_WORK_POINTS = FARM_CROP_RULES.farm_rice.dailyWorkPoints;
+export const GROWTH_MONTHS = FARM_CROP_RULES.farm_rice.growthMonths;
+export const HARVEST_WORK_POINTS_PER_UNIT = FARM_CROP_RULES.farm_rice.harvestWorkPointsPerUnit;
+export const BASE_YIELD = FARM_CROP_RULES.farm_rice.baseYield;
 
 export type CropPhase = 'growing' | 'harvesting';
+
+export function isFarmCropType(value: string): value is FarmCropType {
+  return Object.prototype.hasOwnProperty.call(FARM_CROP_RULES, value);
+}
 
 export interface Crop {
   phase: CropPhase;
@@ -24,12 +83,15 @@ export function isGameDay(value: unknown): value is string {
   return typeof value === 'string' && DAY_PATTERN.test(value) && !Number.isNaN(Date.parse(value));
 }
 
-// Meses 1-3: 100%; 4-6: 60%; 7-9: 40%; 10-12: 20%.
-export function getPlantingFactor(month: number): number {
-  if (month <= 3) return 1;
-  if (month <= 6) return 0.6;
-  if (month <= 9) return 0.4;
-  return 0.2;
+export function getPlantingFactor(
+  month: number,
+  efficiencies: FarmCropRule['plantingEfficiencyByQuarter'] =
+    FARM_CROP_RULES.farm_rice.plantingEfficiencyByQuarter,
+): number {
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    throw new RangeError('O mês de plantio precisa estar entre 1 e 12.');
+  }
+  return efficiencies[Math.floor((month - 1) / 3)];
 }
 
 export function getMonthOfDay(day: string): number {
@@ -37,7 +99,7 @@ export function getMonthOfDay(day: string): number {
 }
 
 // Dia da colheita: 6 meses de calendário depois, limitado ao último dia do mês.
-export function getHarvestDay(plantedDay: string, months = GROWTH_MONTHS): string {
+export function getHarvestDay(plantedDay: string, months: number = GROWTH_MONTHS): string {
   const year = Number(plantedDay.slice(0, 4));
   const month = Number(plantedDay.slice(5, 7)) - 1 + months;
   const day = Number(plantedDay.slice(8, 10));
@@ -45,42 +107,65 @@ export function getHarvestDay(plantedDay: string, months = GROWTH_MONTHS): strin
   return new Date(Date.UTC(year, month, Math.min(day, lastDay))).toISOString().slice(0, 10);
 }
 
-export function getDailyWorkRatio(workPoints: number): number {
-  return Math.max(0, Math.min(1, workPoints / FARM_DAILY_WORK_POINTS));
+export function getDailyWorkRatio(
+  workPoints: number,
+  requiredDailyWorkPoints: number = FARM_DAILY_WORK_POINTS,
+): number {
+  return Math.max(0, Math.min(1, workPoints / requiredDailyWorkPoints));
 }
 
-export function getHarvestYield(plantedDay: string, ratioSum: number, days: number): number {
+export function getHarvestYield(
+  plantedDay: string,
+  ratioSum: number,
+  days: number,
+  rule: FarmCropRule = FARM_CROP_RULES.farm_rice,
+): number {
   const ratio = days > 0 ? ratioSum / days : 0;
-  return Math.floor(BASE_YIELD * getPlantingFactor(getMonthOfDay(plantedDay)) * ratio + 1e-9);
+  return Math.floor(
+    rule.baseYield *
+      getPlantingFactor(getMonthOfDay(plantedDay), rule.plantingEfficiencyByQuarter) *
+      ratio +
+      1e-9,
+  );
 }
 
 // Avança um dia de crescimento; ao chegar ao dia da colheita calcula a produção total.
-export function advanceGrowth(crop: Crop, today: string, workPoints: number): Crop {
+export function advanceGrowth(
+  crop: Crop,
+  today: string,
+  workPoints: number,
+  rule: FarmCropRule = FARM_CROP_RULES.farm_rice,
+): Crop {
   if (crop.phase !== 'growing') return crop;
   const next = {
     ...crop,
-    ratioSum: crop.ratioSum + getDailyWorkRatio(workPoints),
+    ratioSum: crop.ratioSum + getDailyWorkRatio(workPoints, rule.dailyWorkPoints),
     days: crop.days + 1,
   };
-  if (today < getHarvestDay(crop.plantedDay)) return next;
+  if (today < getHarvestDay(crop.plantedDay, rule.growthMonths)) return next;
   return {
     ...next,
     phase: 'harvesting',
-    yieldUnits: getHarvestYield(crop.plantedDay, next.ratioSum, next.days),
+    yieldUnits: getHarvestYield(crop.plantedDay, next.ratioSum, next.days, rule),
     harvested: 0,
   };
 }
 
-// Colheita diária: 20 Work Points por unidade, limitada ao espaço livre no estoque.
+// Colheita diária limitada pelos Work Points e pelo espaço livre no estoque.
 export function planHarvest(
   crop: Crop,
   workPoints: number,
   freeStock: number,
+  rule: FarmCropRule = FARM_CROP_RULES.farm_rice,
 ): { units: number; done: boolean } {
   const remaining = Math.max(0, crop.yieldUnits - crop.harvested);
   const units = Math.max(
     0,
-    Math.min(remaining, Math.floor(workPoints / HARVEST_WORK_POINTS_PER_UNIT + 1e-9), freeStock),
+    Math.min(
+      remaining,
+      Math.floor(workPoints / rule.harvestWorkPointsPerUnit + 1e-9),
+      freeStock,
+    ),
   );
   return { units, done: crop.harvested + units >= crop.yieldUnits };
 }

@@ -84,9 +84,12 @@ import {
 } from '../src/types/logistics.js';
 import {
   advanceGrowth,
+  FARM_CROP_TYPES,
   getDailyWorkRatio,
+  isFarmCropType,
   planHarvest,
   type Crop,
+  type FarmCropType,
 } from '../src/types/farming.js';
 import { parseWarehouseSetting } from '../src/types/warehouse.js';
 import { planDailySpoilage, PRODUCTS, type ProductDefinition } from '../src/types/product.js';
@@ -1214,9 +1217,10 @@ async function runDailyEmployment(): Promise<boolean> {
       }
       });
       await runStage('fazendas', async () => {
-      // Fazendas de arroz: crescimento (produtividade pelos Work Points) e colheita.
+      // Crescimento e colheita/corte das fazendas agrícolas.
       const { rows: farmRows } = await client.query<{
         id: string;
+        building_type: FarmCropType;
         work_hours_per_day: number;
         stock: number;
         crop_phase: Crop['phase'];
@@ -1226,13 +1230,18 @@ async function runDailyEmployment(): Promise<boolean> {
         crop_yield: number;
         crop_harvested: number;
       }>(
-        `SELECT id, work_hours_per_day, stock, crop_phase,
+        `SELECT id, building_type, work_hours_per_day, stock, crop_phase,
                 to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day,
                 crop_ratio_sum, crop_days, crop_yield, crop_harvested
          FROM residential_buildings
-         WHERE building_type = 'farm_rice' AND status = 'completed' AND crop_phase IS NOT NULL`,
+         WHERE building_type = ANY($1::text[]) AND status = 'completed' AND crop_phase IS NOT NULL`,
+        [FARM_CROP_TYPES],
       );
       for (const farm of farmRows) {
+        const cropRule = RESIDENCES[farm.building_type].cropRule;
+        if (!cropRule) {
+          throw new Error(`A fazenda ${farm.id} não tem regras de cultivo configuradas.`);
+        }
         const farmPoints =
           (workers.get(farm.id) ?? 0) *
           getDailyWorkPoints(farm.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness);
@@ -1246,7 +1255,7 @@ async function runDailyEmployment(): Promise<boolean> {
         };
         let farmProduced = 0;
         if (crop.phase === 'growing') {
-          const next = advanceGrowth(crop, state.day, farmPoints);
+          const next = advanceGrowth(crop, state.day, farmPoints, cropRule);
           await client.query(
             `UPDATE residential_buildings
              SET crop_phase = $2, crop_ratio_sum = $3, crop_days = $4, crop_yield = $5, crop_harvested = $6
@@ -1254,8 +1263,13 @@ async function runDailyEmployment(): Promise<boolean> {
             [farm.id, next.phase, next.ratioSum, next.days, next.yieldUnits, next.harvested],
           );
         } else {
-          const capacity = RESIDENCES.farm_rice.stockCapacity ?? 0;
-          const { units, done } = planHarvest(crop, farmPoints, Math.max(0, capacity - farm.stock));
+          const capacity = RESIDENCES[farm.building_type].stockCapacity ?? 0;
+          const { units, done } = planHarvest(
+            crop,
+            farmPoints,
+            Math.max(0, capacity - farm.stock),
+            cropRule,
+          );
           farmProduced = units;
           await client.query(
             `UPDATE residential_buildings
@@ -1273,7 +1287,7 @@ async function runDailyEmployment(): Promise<boolean> {
         await logProduction(client, farm.id, state.day, {
           workPoints: farmPoints,
           produced: farmProduced,
-          efficiency: getDailyWorkRatio(farmPoints) * 100,
+          efficiency: getDailyWorkRatio(farmPoints, cropRule.dailyWorkPoints) * 100,
         });
         changed = true;
       }
@@ -3150,17 +3164,17 @@ async function start() {
       return;
     }
 
-    // Plantar ou replantar durante o crescimento zera o contador; durante a colheita não é permitido.
+    // Iniciar ou reiniciar durante o crescimento zera o contador; durante a colheita não é permitido.
     void pool
       .query<ResidentialBuildingRow>(
         `UPDATE residential_buildings
          SET crop_phase = 'growing',
              crop_planted_day = (SELECT (world_time AT TIME ZONE 'UTC')::date FROM world_state WHERE id = 1),
              crop_ratio_sum = 0, crop_days = 0, crop_yield = 0, crop_harvested = 0
-         WHERE id = $1 AND created_by = $2 AND building_type = 'farm_rice' AND status = 'completed'
+         WHERE id = $1 AND created_by = $2 AND building_type = ANY($3::text[]) AND status = 'completed'
            AND (crop_phase IS NULL OR crop_phase = 'growing')
          RETURNING ${RESIDENTIAL_COLUMNS}`,
-        [request.params.id, userId],
+        [request.params.id, userId, FARM_CROP_TYPES],
       )
       .then(async ({ rows }) => {
         if (!rows[0]) {
@@ -3175,7 +3189,7 @@ async function start() {
             response.status(404).json({ error: 'residence_not_found' });
           } else if (existing[0].created_by !== userId) {
             response.status(403).json({ error: 'residence_not_owned' });
-          } else if (existing[0].building_type !== 'farm_rice' || existing[0].status !== 'completed') {
+          } else if (!isFarmCropType(existing[0].building_type) || existing[0].status !== 'completed') {
             response.status(400).json({ error: 'cannot_plant' });
           } else {
             response.status(409).json({ error: 'harvest_in_progress' });

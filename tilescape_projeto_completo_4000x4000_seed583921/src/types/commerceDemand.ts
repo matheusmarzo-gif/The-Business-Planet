@@ -6,6 +6,10 @@ export const BASIC_BASKET_PRODUCT_IDS = [
   'corn',
   'potato',
   'fish',
+  'sugar',
+  'vegetables',
+  'salt',
+  'spices',
   'red_meat',
   'milk',
 ] as const;

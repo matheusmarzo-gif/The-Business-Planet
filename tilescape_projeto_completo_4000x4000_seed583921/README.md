@@ -329,10 +329,16 @@ padrão é C$ 10 e pode ser alterado pelo dono. A loja recebe leite do armazém
 ligado e vende às residências pelo mesmo cálculo de demanda e benefício usado
 para os demais produtos.
 
+As **Lojas de Açúcar, Vegetais, Sal e Especiarias** também seguem o modelo da
+Loja de Peixes: cada uma ocupa 2 × 2 tiles, emprega até 4 funcionários, guarda
+até 40 unidades, custa 30 madeiras e 10 pedras e exige 6.000 Work Points. Cada
+loja recebe seu produto do armazém ligado e vende por preço definido pelo dono.
+
 O consumo diário desejável por morador da **Cesta Básica** pode ser ajustado em
 [`config/demanda_basica.txt`](./config/demanda_basica.txt): 0,03 de arroz,
-trigo, cevada, milho, batata, peixe e carne vermelha; e 1 litro de leite. O
-servidor lê o arquivo ao iniciar; reinicie o serviço depois de alterá-lo.
+trigo, cevada, milho, batata, peixe, açúcar, vegetais, sal, especiarias e carne
+vermelha; e 1 litro de leite. O servidor lê o arquivo ao iniciar; reinicie o
+serviço depois de alterá-lo.
 
 ### Recursos e Ferramentaria
 
@@ -395,6 +401,7 @@ moradores nem aluguel.
 | Bovina | Carne vermelha | 40 % / 100 % / 80 % / 60 % | 24 meses | 500 / 40 | 1.000 |
 | Cana | Cana | 90 % / 80 % / 100 % / 90 % | 6 meses | 100 / 25 | 2.000 |
 | Especiarias | Especiarias | 100 % / 60 % / 60 % / 60 % | 6 meses | 5.000 / 10 | 600 |
+| Vegetais | Vegetais | 20 % / 40 % / 100 % / 80 % | 2 meses | 800 / 8 | 100 |
 
 O mês em que o plantio começa define a eficiência sazonal do ciclo. A média diária
 de `min(1, Work Points / requisito diário)` durante o crescimento também reduz
@@ -405,6 +412,8 @@ validade de 30 dias. A Fazenda de Cana e a Fazenda de Especiarias ocupam 3 × 3,
 empregam até 10 e 50 funcionários, respectivamente, custam 60 madeiras e 60
 pedras e exigem 12.000 Work Points. Seus estoques máximos são 2.000 canas e 400
 especiarias; o excedente da colheita aguarda no campo até haver espaço livre.
+A Fazenda de Vegetais também ocupa 3 × 3, emprega até 10 funcionários, custa
+60 madeiras e 60 pedras, exige 12.000 Work Points e guarda até 100 vegetais.
 
 ### Empregos e salários
 
@@ -429,13 +438,14 @@ salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). T
 1,2 com 4 h, 1 com 8 h, 0,8 com 14 h); a obra termina sozinha ao atingir o total
 necessário. Saúde e felicidade ainda são fixas em 100.
 
-Nas lojas de arroz, batata, milho, cevada, trigo, peixe, leite e no Açougue, o
-dono define o preço (a partir de C$ 0,01, com até duas casas decimais). Às
-00:00, a capacidade de venda considera os
-Work Points gerados pelos funcionários no dia: as lojas de produtos por unidade
-(arroz, batata, milho, cevada, trigo, peixe e carne vermelha) ganham 1 unidade
-por 20 Work Points; a Loja de Leite ganha 1 litro por Work Point. Para cada produto, as residências consideram lojas do produto em até
-60 tiles. O custo de referência `RR` é o custo diário por pessoa de todos os
+Nas lojas de arroz, batata, milho, cevada, trigo, peixe, leite, açúcar, vegetais,
+sal, especiarias e no Açougue, o dono define o preço (a partir de C$ 0,01, com
+até duas casas decimais). Às 00:00, a capacidade de venda considera os Work
+Points gerados pelos funcionários no dia: as lojas de produtos por unidade
+(arroz, batata, milho, cevada, trigo, peixe, açúcar, vegetais, sal, especiarias
+e carne vermelha) ganham 1 unidade por 20 Work Points; a Loja de Leite ganha 1
+litro por Work Point. Para cada produto, as residências consideram lojas do
+produto em até 60 tiles. O custo de referência `RR` é o custo diário por pessoa de todos os
 itens da Cesta Básica disponíveis na cidade, calculado pelos preços médios
 ponderados pelas unidades vendidas nos últimos 30 dias. Produtos sem vendas no
 período usam a média dos preços atuais anunciados na cidade; produtos sem loja
@@ -527,8 +537,8 @@ painel para executar uma tentativa imediata com as mesmas regras e limites.
 os funcionários atuais gerarão no próximo dia, para decidir se é preciso contratar.
 
 **Fazendas agrícolas:** o dono inicia ou reinicia o ciclo no painel da fazenda
-concluída. O crescimento dura 6 meses, exceto a fazenda bovina, que leva 24
-meses até o corte. A eficiência sazonal, o requisito de Work Points diários e o
+concluída. O crescimento dura 6 meses (2 meses para vegetais), exceto a fazenda
+bovina, que leva 24 meses até o corte. A eficiência sazonal, o requisito de Work Points diários e o
 custo de colheita/corte são mostrados no painel e detalhados na tabela acima.
 O rendimento é ajustado pela média de `min(1, Work Points / requisito diário)`
 durante o crescimento. Na colheita ou corte, cada unidade consome os Work Points
@@ -537,8 +547,9 @@ depois de colher tudo é possível iniciar um novo ciclo.
 
 **Consumo:** em residências concluídas, **Ver consumo da casa** mostra o consumo
 por pessoa de todos os produtos da Cesta Básica (arroz, trigo, cevada, milho,
-batata, peixe, carne vermelha e leite) no último dia e a média diária por pessoa
-nos últimos 30 dias, além do preço médio pago no dia e no mês. No painel da cidade, **Consumo**
+batata, peixe, açúcar, vegetais, sal, especiarias, carne vermelha e leite) no
+último dia e a média diária por pessoa nos últimos 30 dias, além do preço médio
+pago no dia e no mês. No painel da cidade, **Consumo**
 mostra esses mesmos dados agregados para todos os cidadãos: as quantidades
 compradas pelas residências da cidade são divididas pela população total, e os
 preços médios são ponderados pelas unidades compradas.

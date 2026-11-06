@@ -23,6 +23,7 @@ import {
   isWithinWorkerSearchRadius,
   parseWorkSettings,
   RESIDENCES,
+  SHOP_TYPES,
   type ResidentialBuilding,
   toRomanNumeral,
 } from './residence';
@@ -244,6 +245,7 @@ describe('other crop farms', () => {
       farm_cattle: [0.4, 1, 0.8, 0.6],
       farm_cane: [0.9, 0.8, 1, 0.9],
       farm_spices: [1, 0.6, 0.6, 0.6],
+      farm_vegetables: [0.2, 0.4, 1, 0.8],
     } as const;
     for (const [farmType, efficiencies] of Object.entries(seasonalEfficiencies)) {
       assert.deepEqual(
@@ -260,6 +262,9 @@ describe('other crop farms', () => {
     assert.equal(grow('2026-10-10', 'farm_corn', 1000).yieldUnits, 100);
     assert.equal(grow('2026-01-10', 'farm_cane', 100).yieldUnits, 1800);
     assert.equal(grow('2026-01-10', 'farm_spices', 5000).yieldUnits, 600);
+    assert.equal(grow('2026-01-10', 'farm_vegetables', 800).yieldUnits, 20);
+    assert.equal(grow('2026-07-10', 'farm_vegetables', 800).yieldUnits, 100);
+    assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_vegetables.growthMonths), '2026-03-31');
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_cattle.growthMonths), '2028-01-31');
     assert.equal(grow('2026-04-10', 'farm_cattle', 500).yieldUnits, 1000);
   });
@@ -303,8 +308,20 @@ describe('other crop farms', () => {
         FARM_CROP_RULES.farm_spices.dailyWorkPoints,
         FARM_CROP_RULES.farm_spices.harvestWorkPointsPerUnit,
         FARM_CROP_RULES.farm_spices.baseYield,
+        FARM_CROP_RULES.farm_vegetables.dailyWorkPoints,
+        FARM_CROP_RULES.farm_vegetables.harvestWorkPointsPerUnit,
+        FARM_CROP_RULES.farm_vegetables.baseYield,
       ],
-      [100, 25, 2000, 5000, 10, 600],
+      [100, 25, 2000, 5000, 10, 600, 800, 8, 100],
+    );
+    assert.deepEqual(
+      planHarvest(
+        { phase: 'harvesting', plantedDay: '2026-07-10', ratioSum: 0, days: 0, yieldUnits: 100, harvested: 0 },
+        80,
+        100,
+        FARM_CROP_RULES.farm_vegetables,
+      ),
+      { units: 10, done: false },
     );
   });
 });
@@ -478,6 +495,10 @@ describe('shop sales', () => {
     ['corn', 0.03],
     ['potato', 0.03],
     ['fish', 0.03],
+    ['sugar', 0.03],
+    ['vegetables', 0.03],
+    ['salt', 0.03],
+    ['spices', 0.03],
     ['red_meat', 0.03],
     ['milk', 1],
   ]);
@@ -656,7 +677,7 @@ describe('shop sales', () => {
       history,
     );
 
-    assert.equal(breakdown.length, 8);
+    assert.equal(breakdown.length, 12);
     assert.deepEqual(
       breakdown
         .filter((item) => item.averagePrice !== null)
@@ -847,6 +868,10 @@ describe('fazenda leiteira e demanda configurável', () => {
       'demanda_basica.corn=0.03',
       'demanda_basica.potato=0.03',
       'demanda_basica.fish=0.03',
+      'demanda_basica.sugar=0.03',
+      'demanda_basica.vegetables=0.03',
+      'demanda_basica.salt=0.03',
+      'demanda_basica.spices=0.03',
       'demanda_basica.red_meat=0.03',
       'demanda_basica.milk=1',
     ].join('\n'));
@@ -856,6 +881,10 @@ describe('fazenda leiteira e demanda configurável', () => {
     assert.equal(multipliers.get('corn'), 0.03);
     assert.equal(multipliers.get('potato'), 0.03);
     assert.equal(multipliers.get('fish'), 0.03);
+    assert.equal(multipliers.get('sugar'), 0.03);
+    assert.equal(multipliers.get('vegetables'), 0.03);
+    assert.equal(multipliers.get('salt'), 0.03);
+    assert.equal(multipliers.get('spices'), 0.03);
     assert.equal(multipliers.get('red_meat'), 0.03);
     assert.equal(multipliers.get('milk'), 1);
     assert.throws(() => parseBasicDemandConfig('demanda_basica.milk=-1'), /linha 1/);
@@ -883,6 +912,10 @@ describe('fazenda leiteira e demanda configurável', () => {
         ['corn', 0.03],
         ['potato', 0.03],
         ['fish', 0.03],
+        ['sugar', 0.03],
+        ['vegetables', 0.03],
+        ['salt', 0.03],
+        ['spices', 0.03],
         ['red_meat', 0.03],
         ['milk', 1],
       ],
@@ -960,6 +993,68 @@ describe('fazenda leiteira e demanda configurável', () => {
       assert.equal(shop.asset, asset);
       assert.equal(canLinkToWarehouse(type), true);
     }
+  });
+
+  it('defines sugar, vegetable, salt, and spice shops like the fish shop', () => {
+    const fishShop = RESIDENCES.shop_fish;
+    const expectedShops = [
+      ['shop_sugar', 'sugar', 'Loja de Açúcar', '/buildings/commerce/loja_acucar.png'],
+      ['shop_vegetables', 'vegetables', 'Loja de Vegetais', '/buildings/commerce/loja_vegetais.png'],
+      ['shop_salt', 'salt', 'Loja de Sal', '/buildings/commerce/loja_sal.png'],
+      ['shop_spices', 'spices', 'Loja de Especiarias', '/buildings/commerce/loja_especiarias.png'],
+    ] as const;
+    for (const [type, productId, name, asset] of expectedShops) {
+      const shop = RESIDENCES[type];
+      assert.equal(shop.kind, 'shop');
+      assert.deepEqual(
+        [shop.width, shop.height, shop.maxWorkers, shop.stockCapacity, shop.workPoints],
+        [fishShop.width, fishShop.height, fishShop.maxWorkers, fishShop.stockCapacity, fishShop.workPoints],
+      );
+      assert.deepEqual(shop.cost, fishShop.cost);
+      assert.equal(shop.stockProductId, productId);
+      assert.equal(shop.name, name);
+      assert.equal(shop.asset, asset);
+      assert.equal(getShopSalesCapacity(type, 40), 2);
+      assert.equal(SHOP_TYPES.includes(type), true);
+      assert.equal(canLinkToWarehouse(type), true);
+      assert.deepEqual(
+        planTransfers(
+          {
+            stock: new Map([[productId, 40]]),
+            minimumStock: new Map(),
+            maximumStock: new Map(),
+            capacityM3: 50,
+            workPoints: 100000,
+          },
+          [{ buildingId: 'warehouse-shop', type, stock: 0 }],
+        ),
+        [{ buildingId: 'warehouse-shop', productId, quantity: 40, direction: 'in' }],
+      );
+    }
+  });
+
+  it('defines the vegetable farm crop cycle and construction limits', () => {
+    const farm = RESIDENCES.farm_vegetables;
+    assert.deepEqual([farm.width, farm.height, farm.maxWorkers, farm.stockCapacity, farm.workPoints], [
+      3, 3, 10, 100, 12000,
+    ]);
+    assert.deepEqual(farm.cost, { wood: 60, stone: 60 });
+    assert.equal(farm.stockProductId, 'vegetables');
+    assert.deepEqual(farm.cropRule, FARM_CROP_RULES.farm_vegetables);
+    assert.equal(canLinkToWarehouse('farm_vegetables'), true);
+    assert.deepEqual(
+      planTransfers(
+        {
+          stock: new Map(),
+          minimumStock: new Map(),
+          maximumStock: new Map([['vegetables', 100]]),
+          capacityM3: 50,
+          workPoints: 100000,
+        },
+        [{ buildingId: 'vegetable-farm', type: 'farm_vegetables', stock: 12 }],
+      ),
+      [{ buildingId: 'vegetable-farm', productId: 'vegetables', quantity: 12, direction: 'out' }],
+    );
   });
 });
 

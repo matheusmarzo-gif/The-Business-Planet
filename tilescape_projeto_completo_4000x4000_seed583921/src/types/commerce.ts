@@ -344,6 +344,10 @@ export function getShopSalesCapacity(
       case 'shop_wheat':
       case 'shop_butcher':
       case 'shop_fish':
+      case 'shop_sugar':
+      case 'shop_vegetables':
+      case 'shop_salt':
+      case 'shop_spices':
         return SHOP_SALES_WORK_POINTS_PER_UNIT;
       case 'shop_milk':
         return MILK_SALES_WORK_POINTS_PER_LITER;

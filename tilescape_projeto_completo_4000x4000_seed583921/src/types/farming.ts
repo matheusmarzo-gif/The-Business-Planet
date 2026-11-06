@@ -63,6 +63,13 @@ export const FARM_CROP_RULES = {
     baseYield: 600,
     plantingEfficiencyByQuarter: [1, 0.6, 0.6, 0.6],
   },
+  farm_vegetables: {
+    growthMonths: 2,
+    dailyWorkPoints: 800,
+    harvestWorkPointsPerUnit: 8,
+    baseYield: 100,
+    plantingEfficiencyByQuarter: [0.2, 0.4, 1, 0.8],
+  },
 } as const satisfies Record<string, FarmCropRule>;
 
 export type FarmCropType = keyof typeof FARM_CROP_RULES;

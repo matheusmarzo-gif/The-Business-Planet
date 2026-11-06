@@ -288,19 +288,27 @@ mapeamento e verificar todas as curvas.
   cada 5 Work Points efetivos, com eficiência mensal de 40%, 100%, 80% e 60%
   nos respectivos trimestres. Seu leite é transferido ao armazém ligado.
   Sprite: `public/buildings/farms/fazenda_leiteira.png`.
-- `farm_cane` e `farm_spices` (categoria Fazendas) usam o ciclo agrícola comum
+- `farm_cane`, `farm_spices` e `farm_vegetables` (categoria Fazendas) usam o ciclo agrícola comum
   em áreas rurais: 3 × 3, 60 madeiras e 60 pedras, 12.000 Work Points.
-  Respectivamente, empregam até 10/50 pessoas, armazenam 2.000 canas/400
+  Cana e especiarias empregam até 10/50 pessoas, armazenam 2.000 canas/400
   especiarias e têm requisitos diários de 100/5.000 WP, crescimento de seis
   meses, colheita de 25/10 WP por unidade, rendimento de 2.000/600 e eficiências
-  sazonais 90/80/100/90% e 100/60/60/60%. O excedente da colheita permanece
-  pendente até haver espaço no estoque.
-  Sprites: `public/buildings/farms/fazenda_cana.png` e
-  `public/buildings/farms/fazenda_especiarias.png`.
+  sazonais 90/80/100/90% e 100/60/60/60%. Vegetais emprega até 10 pessoas,
+  armazena 100 unidades, requer 800 WP/dia, cresce por dois meses, colhe a 8 WP
+  por unidade, rende até 100 e tem eficiências sazonais 20/40/100/80%. O
+  excedente da colheita permanece pendente até haver espaço no estoque.
+  Sprites: `public/buildings/farms/fazenda_cana.png`,
+  `public/buildings/farms/fazenda_especiarias.png` e
+  `public/buildings/farms/fazenda_vegetais.png`.
 - `shop_milk` (categoria Comerciais) usa a mesma definição, preço editável e
   fluxo de venda da Loja de Peixes: 2 × 2 tiles, 4 funcionários, estoque máximo
   de 400 litros, custo de 30 madeiras e 10 pedras e 6.000 Work Points. Produto
   `milk`; sprite `public/buildings/commerce/loja_leite.png`.
+- `shop_sugar`, `shop_vegetables`, `shop_salt` e `shop_spices` seguem os
+  parâmetros da Loja de Peixes: 2 × 2 tiles, até 4 funcionários, estoque máximo
+  de 40 unidades, 30 madeiras, 10 pedras e 6.000 Work Points. Vendem,
+  respectivamente, `sugar`, `vegetables`, `salt` e `spices`, abastecidas pelo
+  armazém ligado. Seus sprites ficam em `public/buildings/commerce/`.
 - O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
   área ocupada deve ficar dentro da cidade e da zona exigida pela construção
   (urbana ou rural), em terra, sem
@@ -389,15 +397,16 @@ mapeamento e verificar todas as curvas.
   Points necessários.
 - Vendas da Cesta Básica (`src/types/commerce.ts`): lojas cujo catálogo tem
   `kind: 'shop'` e `stockProductId` participam das vendas; incluem arroz,
-  batata, milho, cevada, trigo, peixe, carne vermelha e leite. Todas têm `price`
-  (padrão C$ 10, editável pelo dono em centavos via
+  batata, milho, cevada, trigo, peixe, carne vermelha, leite, açúcar, vegetais,
+  sal e especiarias. Todas têm `price` (padrão C$ 10, editável pelo dono em centavos via
   `PATCH /api/residential-buildings/:id/price`) e estoque abastecido pelo
   armazém ligado do mesmo dono. No job das 00:00, lojas de produtos por unidade
   têm capacidade `floor(WP do dia / 20)` unidades e leite
   `floor(WP do dia / 1)` litros (WP = empregados × `getDailyWorkPoints`).
   `config/demanda_basica.txt` define
   o consumo diário por pessoa para a Cesta Básica: arroz, trigo, cevada, milho,
-  batata, peixe e carne vermelha começam em `0.03`; leite em `1`.
+  batata, peixe, carne vermelha, açúcar, vegetais, sal e especiarias começam em
+  `0.03`; leite em `1`.
   `commerce_history` fornece os preços e unidades vendidas nos últimos 30 dias.
   `getCityProductAveragePrices` calcula a média ponderada por unidades vendidas,
   por produto e cidade; se ainda não houve venda do produto, usa a média dos
@@ -463,8 +472,8 @@ mapeamento e verificar todas as curvas.
   grava `crop_phase`, `crop_planted_day` (dia do relógio do mundo),
   `crop_ratio_sum`, `crop_days`, `crop_yield`, `crop_harvested`. O job das
   00:00 (antes do transporte) usa as regras específicas da fazenda: arroz,
-  batata, trigo, cevada, milho, cana e especiarias crescem por 6 meses; a
-  fazenda bovina por 24.
+  batata, trigo, cevada, milho, cana e especiarias crescem por 6 meses;
+  vegetais por 2 meses; a fazenda bovina por 24.
   Durante `growing`, soma `min(1, WP do dia / requisito diário)`; no dia de
   colheita/corte a produção é `floor(rendimento máximo · fator do mês do plantio
   · média diária)`. Os requisitos diários, rendimentos, eficiência sazonal e
@@ -474,7 +483,8 @@ mapeamento e verificar todas as curvas.
   expõe o estado ao cliente.
 - `red_meat` tem validade padrão de 30 dias em `src/types/product.ts`.
 - Consumo das residências: as compras de todos os produtos disponíveis da Cesta
-  Básica (arroz, trigo, cevada, milho, batata, peixe, carne vermelha e leite) das 00:00 são gravadas em
+  Básica (arroz, trigo, cevada, milho, batata, peixe, açúcar, vegetais, sal,
+  especiarias, carne vermelha e leite) das 00:00 são gravadas em
   `residence_consumption (building_id, product_id, day, quantity, spent,
   occupants)` (cascata). `GET /api/residential-buildings/:id/consumption`
   devolve por produto o consumo por pessoa no último dia e a média diária por
@@ -483,7 +493,9 @@ mapeamento e verificar todas as curvas.
   A rota da cidade agrega os mesmos registros para todas as casas municipais,
   divide pelo total atual de moradores para obter a média diária por cidadão e
   pondera os preços pelas unidades compradas.
-- Pesqueiro e lojas de peixes/leite (`fishery`, `shop_fish`, `shop_milk`):
+- Pesqueiro e lojas de peixes/leite/açúcar/vegetais/sal/especiarias (`fishery`,
+  `shop_fish`, `shop_milk`, `shop_sugar`, `shop_vegetables`, `shop_salt`,
+  `shop_spices`):
   `src/types/fishing.ts`
   concentra as regras puras. O Pesqueiro (categoria Artesanais, `kind: 'fishery'`,
   2 × 2, 10 funcionários, estoque de 300 peixes e 10 Ferramentas) precisa de área
@@ -499,7 +511,10 @@ mapeamento e verificar todas as curvas.
   penalidade, com o resto acumulado. As regras `accumulate` usam o custo por
   unidade de `ProductionRule.workPointsPerUnit`. Todas as lojas usam o planner
   compartilhado de vendas; cada uma vende seu `stockProductId`, incluindo as
-  novas lojas de batata, milho, cevada, trigo e carne vermelha. Ferramentas
+  lojas de batata, milho, cevada, trigo, carne vermelha, açúcar, vegetais, sal e
+  especiarias. Os quatro produtos também são necessidades básicas configuradas
+  em `config/demanda_basica.txt` (0,03 unidade desejável por morador/dia), assim
+  as lojas participam do cálculo de venda e da cesta de referência. Ferramentas
   (`tools`) é um produto novo (5 kg, 0,01 m³,
   validade infinita); `planTransfers` leva peixe do Pesqueiro ao armazém e
   Ferramentas do armazém ao Pesqueiro (`Transfer.productId === 'tools'` grava em

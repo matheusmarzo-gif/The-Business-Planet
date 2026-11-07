@@ -1159,7 +1159,7 @@ describe('fazenda leiteira e demanda configurável', () => {
   it('defines the vegetable farm crop cycle and construction limits', () => {
     const farm = RESIDENCES.farm_vegetables;
     assert.deepEqual([farm.width, farm.height, farm.maxWorkers, farm.stockCapacity, farm.workPoints], [
-      3, 3, 10, 100, 12000,
+      3, 3, 50, 100, 12000,
     ]);
     assert.deepEqual(farm.cost, { wood: 60, stone: 60 });
     assert.equal(farm.stockProductId, 'vegetables');

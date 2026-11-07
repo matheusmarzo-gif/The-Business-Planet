@@ -14,7 +14,7 @@
                  "stone":  60
              },
     "workPoints":  12000,
-    "maxWorkers":  10,
+    "maxWorkers":  50,
     "stockProduct":  "Vegetais",
     "stockProductId":  "vegetables",
     "stockCapacity":  100,

@@ -473,7 +473,7 @@ validade de 30 dias. A Fazenda de Cana e a Fazenda de Especiarias ocupam 3 × 3,
 empregam até 10 e 50 funcionários, respectivamente, custam 60 madeiras e 60
 pedras e exigem 12.000 Work Points. Seus estoques máximos são 2.000 canas e 400
 especiarias; o excedente da colheita aguarda no campo até haver espaço livre.
-A Fazenda de Vegetais também ocupa 3 × 3, emprega até 10 funcionários, custa
+A Fazenda de Vegetais também ocupa 3 × 3, emprega até 50 funcionários, custa
 60 madeiras e 60 pedras, exige 12.000 Work Points e guarda até 100 vegetais.
 Nas fazendas agrícolas com ciclo de cultivo, **Configurações avançadas** permite
 automatizar o replantio: selecione os meses permitidos e quantos funcionários

@@ -1,0 +1,27 @@
+{
+    "type":  "lumber_mill",
+    "kind":  "resource",
+    "requiredZone":  "rural",
+    "requiresRoad":  true,
+    "name":  "Madeireira",
+    "asset":  "/buildings/resources/madeireira.png",
+    "width":  2,
+    "height":  2,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  60,
+                 "stone":  10
+             },
+    "workPoints":  6000,
+    "maxWorkers":  10,
+    "stockProduct":  "Madeira",
+    "stockProductId":  "wood",
+    "stockCapacity":  30,
+    "toolCapacity":  5,
+    "toolDemandPerWorker":  0.05,
+    "production":  {
+                       "mode":  "chance",
+                       "workPointsPerUnit":  1000
+                   }
+}

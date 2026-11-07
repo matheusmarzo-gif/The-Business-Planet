@@ -21,6 +21,7 @@ import {
   getPlantingFactor,
 } from '../types/farming';
 import { getDairyFarmEfficiency } from '../types/dairy';
+import { GAME_RULES } from '../generated/gameConfig';
 
 interface ResidencePanelProps {
   building: ResidentialBuilding;
@@ -65,12 +66,15 @@ function getProductionDescription(type: ResidenceType): string | null {
     }
   }
   if (definition.kind === 'shop') {
-    const workPointsPerUnit = type === 'shop_milk' ? 1 : 20;
+    const workPointsPerUnit =
+      type === 'shop_milk'
+        ? GAME_RULES.consumption.salesCapacity.literWorkPointsPerSale
+        : GAME_RULES.consumption.salesCapacity.unitWorkPointsPerSale;
     const unit = definition.stockProductId === 'milk' ? 'litro' : 'unidade';
     return `A cada ${number.format(workPointsPerUnit)} Work Point${workPointsPerUnit === 1 ? '' : 's'} gerados pelos funcionários, a loja ganha capacidade para vender até 1 ${unit}. As vendas dependem da demanda e do estoque disponível, abastecido pelo armazém ligado.`;
   }
   if (definition.kind === 'warehouse') {
-    return 'Não fabrica produtos: os Work Points dos funcionários são usados no transporte de mercadorias; cada carga consome 100 Work Points por m³ e 0,125 por kg.';
+    return `Não fabrica produtos: os Work Points dos funcionários são usados no transporte de mercadorias; cada carga consome ${number.format(GAME_RULES.transport.workPointsPerCubicMeter)} Work Points por m³ e ${number.format(GAME_RULES.transport.workPointsPerKilogram)} por kg.`;
   }
 
   const rule = definition.production;

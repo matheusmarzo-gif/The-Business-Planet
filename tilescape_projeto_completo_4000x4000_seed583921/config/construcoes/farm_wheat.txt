@@ -1,0 +1,33 @@
+{
+    "type":  "farm_wheat",
+    "kind":  "farm",
+    "requiredZone":  "rural",
+    "requiresRoad":  true,
+    "name":  "Fazenda de Trigo",
+    "asset":  "/buildings/farms/fazenda_trigo.png",
+    "width":  4,
+    "height":  4,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  200,
+                 "stone":  20
+             },
+    "workPoints":  12000,
+    "maxWorkers":  30,
+    "stockProduct":  "Trigo",
+    "stockProductId":  "wheat",
+    "stockCapacity":  300,
+    "cropRule":  {
+                     "growthMonths":  6,
+                     "dailyWorkPoints":  1000,
+                     "harvestWorkPointsPerUnit":  20,
+                     "baseYield":  1000,
+                     "plantingEfficiencyByQuarter":  [
+                                                         0.4,
+                                                         0.5,
+                                                         0.6,
+                                                         1
+                                                     ]
+                 }
+}

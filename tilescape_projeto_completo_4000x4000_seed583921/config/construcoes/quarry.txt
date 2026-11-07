@@ -1,0 +1,27 @@
+{
+    "type":  "quarry",
+    "kind":  "resource",
+    "requiredZone":  "rural",
+    "requiresRoad":  true,
+    "name":  "Pedreira",
+    "asset":  "/buildings/resources/pedreira.png",
+    "width":  2,
+    "height":  2,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  60,
+                 "stone":  10
+             },
+    "workPoints":  6000,
+    "maxWorkers":  30,
+    "stockProduct":  "Pedra",
+    "stockProductId":  "stone",
+    "stockCapacity":  10,
+    "toolCapacity":  5,
+    "toolDemandPerWorker":  0.05,
+    "production":  {
+                       "mode":  "chance",
+                       "workPointsPerUnit":  3000
+                   }
+}

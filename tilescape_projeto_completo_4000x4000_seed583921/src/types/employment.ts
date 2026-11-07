@@ -5,6 +5,7 @@ import {
   MAX_CONSTRUCTION_WORKERS,
 } from './residence.js';
 import { roundCurrency } from './currency.js';
+import { GAME_RULES } from '../generated/gameConfig.js';
 
 export interface EmploymentResidence {
   id: string;
@@ -45,22 +46,42 @@ export interface JobAssignment {
   count: number;
 }
 
-// Fator de carga horária: 1 em 8 h, caindo até 0,5 nos extremos de 4 h e 14 h.
 export function getHoursFactor(hours: number): number {
-  const deviation = (hours - 8) / 6;
-  return 1 - 0.5 * deviation * deviation;
+  const { optimalHours, deviationScaleHours, penalty } = GAME_RULES.work.hoursFactor;
+  const deviation = (hours - optimalHours) / deviationScaleHours;
+  return 1 - penalty * deviation * deviation;
 }
 
-// Fator de descanso: 1,2 com 4 h, 1 com 8 h e 0,8 com 14 h (linear entre os pontos).
 export function getRestFactor(hours: number): number {
-  return hours <= 8 ? 1.2 - (0.2 * (hours - 4)) / 4 : 1 - (0.2 * (hours - 8)) / 6;
+  const {
+    shortDayHours,
+    standardDayHours,
+    longDayHours,
+    shortDayValue,
+    standardDayValue,
+    longDayValue,
+  } = GAME_RULES.work.restFactor;
+  return hours <= standardDayHours
+    ? shortDayValue -
+        ((shortDayValue - standardDayValue) * (hours - shortDayHours)) /
+          (standardDayHours - shortDayHours)
+    : standardDayValue -
+        ((standardDayValue - longDayValue) * (hours - standardDayHours)) /
+          (longDayHours - standardDayHours);
 }
 
-export const WORK_POINTS_RATE = 12.5;
+export const WORK_POINTS_RATE = GAME_RULES.work.workPointsPerHour;
 
 // Work Points diários de um funcionário (saúde e felicidade em 0–100).
 export function getDailyWorkPoints(hours: number, health: number, happiness: number): number {
-  return WORK_POINTS_RATE * hours * (health / 100) * (happiness / 100) * getRestFactor(hours);
+  const { health: healthScale, happiness: happinessScale } = GAME_RULES.work.residentStats;
+  return (
+    WORK_POINTS_RATE *
+    hours *
+    (health / healthScale) *
+    (happiness / happinessScale) *
+    getRestFactor(hours)
+  );
 }
 
 export function getWorkBenefit(
@@ -73,8 +94,12 @@ export function getWorkBenefit(
     throw new RangeError('A distância até o trabalho precisa ser não negativa.');
   }
   const factor = getHoursFactor(hours);
-  const distanceFactor = Math.sqrt(60 / (60 + distance));
-  return ((openJobs * factor * factor * wage) / hours) * distanceFactor;
+  const { radiusTiles, radicandNumerator } = GAME_RULES.work.distanceFactor;
+  const distanceFactor = Math.sqrt(radicandNumerator / (radiusTiles + distance));
+  return (
+    (openJobs * factor ** GAME_RULES.work.hoursFactor.benefitExponent * wage * distanceFactor) /
+    hours
+  );
 }
 
 export function getMaxDesiredWorkers(

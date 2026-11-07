@@ -160,6 +160,34 @@ essa conta pelo formulário do jogo para ativar a permissão. O botão **Contáb
 abre os relatórios das lojas comerciais, dos armazéns, das residências e da
 produção do jogador conectado.
 
+### Configuração editável do jogo
+
+Os dados das 33 construções existentes ficam em arquivos individuais
+[`config/construcoes/`](./config/construcoes/), um JSON válido por arquivo
+`.txt` nomeado pelo tipo interno (por exemplo, `farm_rice.txt`). É possível
+ajustar dimensões, zona, estrada/água exigida, custo de Madeira/Pedra, Work
+Points de construção, funcionários, capacidade e estoques de produtos e
+insumos, receitas, regras de produção e safras sazonais. Os parâmetros das
+fórmulas residem em [`config/formulas/consumo.txt`](./config/formulas/consumo.txt),
+[`trabalho.txt`](./config/formulas/trabalho.txt) e
+[`transporte.txt`](./config/formulas/transporte.txt); as demandas por produto
+continuam em [`config/demanda_basica.txt`](./config/demanda_basica.txt).
+
+Edite somente valores, mantendo a sintaxe JSON, os nomes dos campos e os tipos
+de construção existentes. A estrutura das fórmulas e o comportamento especial
+de cada tipo continuam no código; coeficientes, limites e dados podem ser
+alterados nos arquivos. Para adicionar um tipo de construção ou uma nova regra
+de comportamento, ainda é necessário alterar o código. O gerador valida as
+configurações e cria o módulo compartilhado pelo cliente e servidor; se algum
+arquivo estiver inválido, o comando falha em vez de iniciar com valores
+alternativos.
+
+As configurações não são recarregadas a quente. No desenvolvimento, reinicie
+`npm.cmd run dev` após editar os arquivos; `predev` os valida e gera novamente
+o módulo. No Render, publique a alteração para executar o build e aplicar os
+valores juntos no cliente e no servidor. Os scripts `build`, `lint` e `test`
+também validam e geram esse módulo automaticamente.
+
 A primeira estrutura da Prefeitura é a **Assembleia**. Escolha-a no catálogo,
 informe o nome da cidade e mova o cursor pelo mapa para ver uma prévia: verde
 indica um local válido e vermelho indica água, outra construção ou uma área
@@ -341,7 +369,8 @@ vermelha; e 1 litro de leite. Na cesta intermediária: 0,01 de açúcar, 0,05 de
 vegetais, 0,04 de sal e 0,01 de especiarias. O servidor lê o arquivo ao iniciar;
 reinicie o serviço depois de alterá-lo.
 
-O preço médio de cada produto é ponderado pelas vendas dos últimos 30 dias ou,
+O preço médio de cada produto é ponderado pelas vendas do período definido em
+`config/formulas/consumo.txt` (30 dias por padrão) ou,
 na ausência de vendas, pela média dos preços anunciados na cidade. `RR` é a soma
 de necessidade diária × preço médio dos produtos básicos com preço disponível;
 `RR2` é a mesma soma para os produtos intermediários.
@@ -357,6 +386,11 @@ necessidade`, `w = (1 − Pf/RR)^4`, `q = (0,8^w − 1) × Rf`, benefício de er
 continua sendo `(benefício de erro / benefício ideal)^4`. `Rf` é a renda média
 por morador e `Dᵢ = √(60/(60 + distância))`. A demanda efetiva ainda depende da
 distribuição de moradores entre lojas, estoque e capacidade de venda.
+As necessidades e os parâmetros dessas fórmulas, inclusive as eficiências
+usadas no benefício do trabalho e os Work Points por distância, estão nos
+arquivos de configuração indicados acima. O transporte usa
+`quantidade × (Work Points por m³ × volume + Work Points por kg × peso)` e um
+raio configurável para ligações e transferências.
 
 ### Recursos e Ferramentaria
 

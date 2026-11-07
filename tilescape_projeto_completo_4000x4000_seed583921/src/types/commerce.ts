@@ -1,16 +1,19 @@
-import { getResidenceDefinition, isWithinWorkerSearchRadius, type ResidenceType } from './residence.js';
+import { getResidenceDefinition, type ResidenceType } from './residence.js';
 import {
   BASIC_BASKET_PRODUCT_IDS,
   CONSUMPTION_PRODUCT_IDS,
   INTERMEDIATE_BASKET_PRODUCT_IDS,
 } from './commerceDemand.js';
 import { isCurrencyAmount, roundCurrency } from './currency.js';
+import { GAME_RULES } from '../generated/gameConfig.js';
 
 export const DEFAULT_SHOP_PRICE = 10;
 export const MIN_SHOP_PRICE = 0.01;
 export const MAX_SHOP_PRICE = 100000;
-export const SHOP_SALES_WORK_POINTS_PER_UNIT = 20;
-export const MILK_SALES_WORK_POINTS_PER_LITER = 1;
+export const SHOP_SALES_WORK_POINTS_PER_UNIT =
+  GAME_RULES.consumption.salesCapacity.unitWorkPointsPerSale;
+export const MILK_SALES_WORK_POINTS_PER_LITER =
+  GAME_RULES.consumption.salesCapacity.literWorkPointsPerSale;
 const MAX_DIAGNOSTIC_VALUE = Number.MAX_SAFE_INTEGER;
 
 export interface SalesShop {
@@ -575,9 +578,10 @@ function logMagnitude(value: number): number {
   return Math.min(Math.log(MAX_DIAGNOSTIC_VALUE), Math.log(Math.abs(value)));
 }
 
-function boundedSignedPower(value: number, exponent: number): number {
+function boundedPower(value: number, exponent: number): number {
   if (value === 0) return 0;
-  return Math.sign(value) * boundedExponential(exponent * logMagnitude(value));
+  const magnitude = boundedExponential(exponent * logMagnitude(value));
+  return Number.isInteger(exponent) && exponent % 2 === 1 ? Math.sign(value) * magnitude : magnitude;
 }
 
 function logAbsolutePositiveSum(logPositiveTerm: number, other: number): number {
@@ -640,8 +644,10 @@ export function getPurchaseBenefitCalculation(
   }
 
   const pf = price * basicNeedPerPerson;
-  const distanceFactor = Math.sqrt(60 / (60 + distance));
+  const { radiusTiles, radicandNumerator } = GAME_RULES.consumption.distance;
+  const distanceFactor = Math.sqrt(radicandNumerator / (radiusTiles + distance));
   if (options.basketType === 'intermediate') {
+    const formula = GAME_RULES.consumption.intermediate;
     const intermediateBasketCost = options.intermediateBasketCost ?? 0;
     const combinedBasketCost = referenceBasketCost + intermediateBasketCost;
     if (
@@ -665,25 +671,31 @@ export function getPurchaseBenefitCalculation(
       };
     }
 
-    const w = (1 - pf / combinedBasketCost) ** 3;
-    const rawQ = Math.expm1(w * Math.log(0.8)) * income;
+    const w = (1 - pf / combinedBasketCost) ** formula.wExponent;
+    const rawQ = Math.expm1(w * Math.log(formula.discountBase)) * income;
     const q = boundedDiagnosticValue(rawQ);
-    const idealBase = (income - 1 / 6) / combinedBasketCost - 1 / 110;
-    const idealBenefit = boundedSignedPower(idealBase, 3);
+    const idealBase =
+      (income - formula.idealIncomeOffset) / combinedBasketCost -
+      1 / formula.idealBasketDivisor;
+    const idealBenefit = boundedPower(idealBase, formula.idealExponent);
     const eligible =
-      income > pf + 1 &&
-      income > referenceBasketCost / 6 + intermediateBasketCost / 3;
+      income > pf + formula.minimumIncomeAboveProductCost &&
+      income >
+        referenceBasketCost / formula.basicBasketThresholdDivisor +
+          intermediateBasketCost / formula.intermediateBasketThresholdDivisor;
     const errorBase = eligible
       ? (income - pf - q) / combinedBasketCost
       : 0;
     const errorBenefit = boundedDiagnosticValue(
-      distanceFactor * boundedSignedPower(errorBase, 3),
+      distanceFactor * boundedPower(errorBase, formula.errorExponent),
     );
     const logAssociatedBenefit =
       errorBase === 0 || idealBase === 0
         ? Number.NEGATIVE_INFINITY
-        : 4 * Math.log(distanceFactor) +
-          12 * (logMagnitude(errorBase) - logMagnitude(idealBase));
+        : GAME_RULES.consumption.associatedBenefitExponent *
+          (Math.log(distanceFactor) +
+            formula.errorExponent * logMagnitude(errorBase) -
+            formula.idealExponent * logMagnitude(idealBase));
     const associatedBenefit = boundedExponential(logAssociatedBenefit);
     const valuesSaturated =
       !Number.isFinite(rawQ) ||
@@ -719,23 +731,29 @@ export function getPurchaseBenefitCalculation(
     };
   }
 
-  const w = (1 - pf / referenceBasketCost) ** 4;
-  const idealNumerator = income - 0.125;
+  const formula = GAME_RULES.consumption.basic;
+  const associatedExponent = GAME_RULES.consumption.associatedBenefitExponent;
+  const w = (1 - pf / referenceBasketCost) ** formula.wExponent;
+  const idealNumerator = income - formula.idealIncomeOffset;
   const idealBase = idealNumerator / referenceBasketCost;
   const logIdealBase =
     idealNumerator === 0
       ? Number.NEGATIVE_INFINITY
       : Math.log(Math.abs(idealNumerator)) - Math.log(referenceBasketCost);
-  const directIdealBenefit = idealBase ** 4;
+  const directIdealBenefit = Math.abs(idealBase) ** formula.idealExponent;
   const idealBenefit =
     Number.isFinite(directIdealBenefit) && directIdealBenefit <= MAX_DIAGNOSTIC_VALUE
       ? directIdealBenefit
-      : boundedExponential(4 * logIdealBase);
-  const q = Math.expm1(w * Math.log(0.8)) * income;
+      : boundedExponential(formula.idealExponent * logIdealBase);
+  const q = Math.expm1(w * Math.log(formula.discountBase)) * income;
   const qSaturated =
     !Number.isFinite(q) || Math.abs(q) >= MAX_DIAGNOSTIC_VALUE;
   const wSaturated = !Number.isFinite(w) || Math.abs(w) >= MAX_DIAGNOSTIC_VALUE;
-  if (income < pf || logIdealBase === Number.NEGATIVE_INFINITY || idealBenefit === 0) {
+  if (
+    income < pf * formula.minimumIncomePriceMultiplier ||
+    logIdealBase === Number.NEGATIVE_INFINITY ||
+    idealBenefit === 0
+  ) {
     return {
       pf,
       distanceFactor,
@@ -761,11 +779,16 @@ export function getPurchaseBenefitCalculation(
       ? Number.NEGATIVE_INFINITY
       : logRawErrorBase - Math.log(referenceBasketCost);
   const logDistanceFactor = Math.log(distanceFactor);
-  const errorBenefit = boundedExponential(logDistanceFactor + 4 * logErrorBase);
+  const errorBenefit = boundedExponential(
+    logDistanceFactor + formula.errorExponent * logErrorBase,
+  );
   const logAssociatedBenefit =
     logErrorBase === Number.NEGATIVE_INFINITY
       ? Number.NEGATIVE_INFINITY
-      : 4 * logDistanceFactor + 16 * (logErrorBase - logIdealBase);
+      : associatedExponent *
+        (logDistanceFactor +
+          formula.errorExponent * logErrorBase -
+          formula.idealExponent * logIdealBase);
   const associatedBenefit =
     logAssociatedBenefit === Number.POSITIVE_INFINITY
       ? MAX_DIAGNOSTIC_VALUE
@@ -873,7 +896,9 @@ export function planShopSalesDetailed(
     for (const residence of sortedResidences) {
       if (residence.occupants <= 0) continue;
       const nearby = productShops.filter(
-        (shop) => isWithinWorkerSearchRadius(shop, residence),
+        (shop) =>
+          getDistanceBetweenBuildings(shop, residence) <=
+          GAME_RULES.consumption.distance.radiusTiles,
       );
       if (nearby.length === 0) continue;
 

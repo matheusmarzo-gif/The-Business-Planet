@@ -1,0 +1,19 @@
+{
+    "type":  "warehouse",
+    "kind":  "warehouse",
+    "requiredZone":  "rural",
+    "requiresRoad":  true,
+    "name":  "Armazém",
+    "asset":  "/buildings/industrial/armazem.png",
+    "width":  4,
+    "height":  4,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  300,
+                 "stone":  60
+             },
+    "workPoints":  20000,
+    "maxWorkers":  100,
+    "storageCapacityM3":  50
+}

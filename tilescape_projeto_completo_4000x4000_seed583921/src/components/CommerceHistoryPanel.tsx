@@ -1,6 +1,7 @@
 import { formatMoney } from '../types/wallet';
 import type { ShopResidenceTransaction } from '../types/commerce';
 import { PRODUCTS } from '../types/product';
+import { GAME_RULES } from '../generated/gameConfig';
 
 export interface CommerceDay {
   day: string;
@@ -43,6 +44,7 @@ const outcomeText = {
   no_stock_or_capacity: 'Sem estoque e capacidade',
   demand_fulfilled: 'Demanda já atendida',
 } as const;
+const consumptionRules = GAME_RULES.consumption;
 
 export default function CommerceHistoryPanel({
   title,
@@ -176,12 +178,34 @@ export default function CommerceHistoryPanel({
                     ) : (
                       <p>Composição detalhada de RR e RR2 não foi registrada neste diagnóstico.</p>
                     )}
-                    {transaction.basketType === 'intermediate' && (
+                    {transaction.basketType === 'intermediate' ? (
                       <p>
-                        Cesta intermediária: w = (1 − Pf / (RR + RR2))³; q = (0,8ʷ − 1) × Rf;
-                        benefício de erro = Dᵢ × ((Rf − Pf − q) / (RR + RR2))³ quando Rf &gt;
-                        Pf + 1 e Rf &gt; RR/6 + RR2/3; caso contrário, zero. Benefício ideal =
-                        ((Rf − 1/6) / (RR + RR2) − 1/110)³; associado = (erro / ideal)⁴.
+                        Cesta intermediária: w = (1 − Pf / (RR + RR2))
+                        <sup>{consumptionRules.intermediate.wExponent}</sup>; q = (
+                        {preciseDecimal.format(consumptionRules.intermediate.discountBase)}<sup>w</sup> − 1) × Rf;
+                        benefício de erro = Dᵢ × ((Rf − Pf − q) / (RR + RR2))
+                        <sup>{consumptionRules.intermediate.errorExponent}</sup> quando Rf &gt;
+                        Pf + {preciseDecimal.format(consumptionRules.intermediate.minimumIncomeAboveProductCost)} e
+                        Rf &gt; RR/{preciseDecimal.format(consumptionRules.intermediate.basicBasketThresholdDivisor)} +
+                        RR2/{preciseDecimal.format(consumptionRules.intermediate.intermediateBasketThresholdDivisor)};
+                        caso contrário, zero. Benefício ideal = ((Rf −
+                        {preciseDecimal.format(consumptionRules.intermediate.idealIncomeOffset)}) / (RR + RR2) −
+                        1/{preciseDecimal.format(consumptionRules.intermediate.idealBasketDivisor)})
+                        <sup>{consumptionRules.intermediate.idealExponent}</sup>; associado = (erro / ideal)
+                        <sup>{consumptionRules.associatedBenefitExponent}</sup>.
+                      </p>
+                    ) : (
+                      <p>
+                        Cesta básica: w = (1 − Pf / RR)
+                        <sup>{consumptionRules.basic.wExponent}</sup>; q = (
+                        {preciseDecimal.format(consumptionRules.basic.discountBase)}<sup>w</sup> − 1) × Rf;
+                        benefício de erro = Dᵢ × ((Rf − Pf − q) / RR)
+                        <sup>{consumptionRules.basic.errorExponent}</sup> quando Rf ≥ Pf ×
+                        {preciseDecimal.format(consumptionRules.basic.minimumIncomePriceMultiplier)}; caso contrário,
+                        zero. Benefício ideal = (|Rf −
+                        {preciseDecimal.format(consumptionRules.basic.idealIncomeOffset)}| / RR)
+                        <sup>{consumptionRules.basic.idealExponent}</sup>; associado = (erro / ideal)
+                        <sup>{consumptionRules.associatedBenefitExponent}</sup>.
                       </p>
                     )}
                     <p className="commerce-candidate-list">

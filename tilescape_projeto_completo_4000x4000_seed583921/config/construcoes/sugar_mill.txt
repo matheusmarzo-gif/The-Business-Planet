@@ -1,0 +1,33 @@
+{
+    "type":  "sugar_mill",
+    "kind":  "workshop",
+    "requiredZone":  "urban",
+    "requiresRoad":  true,
+    "name":  "Casa de Engenho",
+    "asset":  "/buildings/artisan/casa_de_engenho.png",
+    "width":  3,
+    "height":  3,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  30,
+                 "stone":  80
+             },
+    "workPoints":  12000,
+    "maxWorkers":  60,
+    "stockProduct":  "Açúcar",
+    "stockProductId":  "sugar",
+    "stockCapacity":  200,
+    "toolCapacity":  5,
+    "toolDemandPerWorker":  0.05,
+    "sugarcaneCapacity":  400,
+    "charcoalCapacity":  30,
+    "production":  {
+                       "mode":  "batch",
+                       "workPointsPerUnit":  600,
+                       "batchSize":  1,
+                       "batchCharcoal":  3,
+                       "batchStockProductId":  "sugarcane",
+                       "batchStockAmount":  6
+                   }
+}

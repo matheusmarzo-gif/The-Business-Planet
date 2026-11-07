@@ -1,0 +1,48 @@
+{
+  "workerSearchRadiusTiles": 60,
+  "maxConstructionWorkers": 100,
+  "workPointsPerHour": 12.5,
+  "hoursFactor": {
+    "optimalHours": 8,
+    "deviationScaleHours": 6,
+    "penalty": 0.5,
+    "benefitExponent": 2
+  },
+  "distanceFactor": {
+    "radiusTiles": 60,
+    "radicandNumerator": 60
+  },
+  "restFactor": {
+    "shortDayHours": 4,
+    "standardDayHours": 8,
+    "longDayHours": 14,
+    "shortDayValue": 1.2,
+    "standardDayValue": 1,
+    "longDayValue": 0.8
+  },
+  "hours": {
+    "minimum": 4,
+    "maximum": 14,
+    "default": 8
+  },
+  "wage": {
+    "default": 10,
+    "maximum": 100000
+  },
+  "rent": {
+    "default": 10,
+    "minimum": 0.01,
+    "maximum": 100000
+  },
+  "residentStats": {
+    "skill": 10,
+    "health": 100,
+    "happiness": 100
+  },
+  "tools": {
+    "demandPerWorkerPerDay": 0.05,
+    "initialEfficiencyPenalty": 30,
+    "efficiencyPenaltyStep": 10,
+    "maximumEfficiencyPenalty": 90
+  }
+}

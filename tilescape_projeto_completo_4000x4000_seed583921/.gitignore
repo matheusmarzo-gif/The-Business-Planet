@@ -1,5 +1,6 @@
 .neon
 node_modules/
+src/generated/
 .env
 .env.*
 !.env.example

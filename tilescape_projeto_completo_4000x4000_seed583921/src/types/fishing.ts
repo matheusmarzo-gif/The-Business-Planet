@@ -1,10 +1,11 @@
 import type { ProductionRule } from './residence.js';
+import { BUILDING_CONFIGS, GAME_RULES } from '../generated/gameConfig.js';
 
-export const FISH_WORK_POINTS = 100;
-export const TOOL_DEMAND_PER_WORKER = 0.05;
-export const INITIAL_PENALTY = 30;
-export const PENALTY_STEP = 10;
-export const MAX_PENALTY = 90;
+export const FISH_WORK_POINTS = BUILDING_CONFIGS.fishery.production.workPointsPerUnit;
+export const TOOL_DEMAND_PER_WORKER = GAME_RULES.work.tools.demandPerWorkerPerDay;
+export const INITIAL_PENALTY = GAME_RULES.work.tools.initialEfficiencyPenalty;
+export const PENALTY_STEP = GAME_RULES.work.tools.efficiencyPenaltyStep;
+export const MAX_PENALTY = GAME_RULES.work.tools.maximumEfficiencyPenalty;
 
 /**
  * Demanda diária de Ferramentas: 0,05 por funcionário. A parte inteira é certa e a

@@ -42,7 +42,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/game/worldClient.ts` | Autentica o WebSocket, valida mensagens recebidas e atualiza o estado compartilhado. |
 | `src/types/city.ts` | Tipos, dimensões e regras geométricas de cidades/Assembleias. |
 | `src/types/road.ts` | Tipos, limites, validação, interpolação e escolha das peças de estrada. |
-| `src/types/residence.ts` | Catálogo, atributos e validação compartilhada das residências. |
+| `src/types/residence.ts` | Tipos, validação compartilhada e regras geométricas das construções. |
 | `src/types/commerceDemand.ts` | Parsing e validação dos multiplicadores de demanda básica configurados no servidor. |
 | `src/types/dairy.ts` | Eficiência mensal da produção leiteira. |
 | `src/types/product.ts` | Catálogo estático dos produtos, unidades, peso, volume e validade padrão. |
@@ -60,6 +60,10 @@ Os comandos de npm devem ser executados nessa pasta.
 | `server/index.ts` | API Express, autenticação de tokens, banco, Redis, relógio e WebSocket. |
 | `database/schema.sql` | DDL aplicado pelo servidor durante a inicialização. |
 | `config/demanda_basica.txt` | Multiplicadores de demanda residencial por produto, carregados na inicialização do servidor. |
+| `config/construcoes/*.txt` | Dados editáveis das 33 construções existentes, um JSON por arquivo. |
+| `config/formulas/*.txt` | Parâmetros editáveis de consumo, trabalho e transporte. |
+| `server/generate-game-config.ts` | Valida os TXT e gera o módulo de configuração compartilhado. |
+| `src/generated/gameConfig.ts` | Saída ignorada pelo Git, regenerada pelos comandos npm antes de uso. |
 | `public/` | Imagens servidas pelo Vite/Express por URLs públicas. |
 | `README.md` | Instalação, configuração local, publicação e instruções para jogadores. |
 
@@ -454,6 +458,30 @@ mapeamento e verificar todas as curvas.
   esse diagnóstico; clientes offline não o recebem. A API do histórico retorna
   somente os dados financeiros, e os diagnósticos locais são combinados no
   cliente.
+
+  ## Configuração editável das regras
+
+  Os 33 arquivos `config/construcoes/<tipo>.txt` são a fonte dos dados do catálogo:
+  nome, imagem pública, categoria funcional, zona e requisitos de posicionamento,
+  dimensões, custos, Work Points de obra, capacidade de trabalhadores, estoques
+  de produtos/insumos, receitas, regras de produção e safras sazonais. Os arquivos
+  `config/formulas/consumo.txt`, `trabalho.txt` e `transporte.txt` guardam as
+  necessidades e os coeficientes/limites usados pelas fórmulas de cesta, busca e
+  alocação de empregos, Work Points e transporte. `config/demanda_basica.txt`
+  continua definindo as quantidades diárias desejadas de cada produto.
+
+  Os TXT de construções e fórmulas usam sintaxe JSON, apesar da extensão `.txt`.
+  `server/generate-game-config.ts` valida conteúdo, tipos, limites e catálogo e
+  gera `src/generated/gameConfig.ts`, ignorado pelo Git. Vite e Node importam o
+  mesmo módulo gerado para manter cliente e servidor consistentes. `predev`,
+  `prebuild`, `prelint` e `pretest` executam a validação e geração; configuração
+  inválida interrompe o comando sem aplicar valores padrão silenciosos. As regras
+  matemáticas e o comportamento específico de cada tipo continuam implementados
+  em código; apenas dados e parâmetros expostos nos arquivos são editáveis. Novos
+  tipos ou comportamentos exigem alteração do código e do validador.
+
+  Não há recarga a quente. Reinicie o processo de desenvolvimento com `npm run
+  dev` ou gere um novo build/redeploy de produção para aplicar as alterações.
   `employed` em `ResidentialBuilding` é calculado por subquery em
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
   Para cada loja concluída, o job registra em `commerce_history` o salário dos

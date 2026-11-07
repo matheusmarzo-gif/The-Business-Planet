@@ -1,0 +1,33 @@
+{
+    "type":  "farm_vegetables",
+    "kind":  "farm",
+    "requiredZone":  "rural",
+    "requiresRoad":  true,
+    "name":  "Fazenda de Vegetais",
+    "asset":  "/buildings/farms/fazenda_vegetais.png",
+    "width":  3,
+    "height":  3,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  60,
+                 "stone":  60
+             },
+    "workPoints":  12000,
+    "maxWorkers":  10,
+    "stockProduct":  "Vegetais",
+    "stockProductId":  "vegetables",
+    "stockCapacity":  100,
+    "cropRule":  {
+                     "growthMonths":  2,
+                     "dailyWorkPoints":  5000,
+                     "harvestWorkPointsPerUnit":  10,
+                     "baseYield":  1000,
+                     "plantingEfficiencyByQuarter":  [
+                                                         0.2,
+                                                         0.4,
+                                                         1,
+                                                         0.8
+                                                     ]
+                 }
+}

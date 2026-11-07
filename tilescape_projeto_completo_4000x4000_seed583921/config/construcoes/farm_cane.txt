@@ -1,0 +1,33 @@
+{
+    "type":  "farm_cane",
+    "kind":  "farm",
+    "requiredZone":  "rural",
+    "requiresRoad":  true,
+    "name":  "Fazenda de Cana",
+    "asset":  "/buildings/farms/fazenda_cana.png",
+    "width":  3,
+    "height":  3,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  60,
+                 "stone":  60
+             },
+    "workPoints":  12000,
+    "maxWorkers":  10,
+    "stockProduct":  "Cana",
+    "stockProductId":  "sugarcane",
+    "stockCapacity":  2000,
+    "cropRule":  {
+                     "growthMonths":  6,
+                     "dailyWorkPoints":  100,
+                     "harvestWorkPointsPerUnit":  25,
+                     "baseYield":  2000,
+                     "plantingEfficiencyByQuarter":  [
+                                                         0.9,
+                                                         0.8,
+                                                         1,
+                                                         0.9
+                                                     ]
+                 }
+}

@@ -1,0 +1,21 @@
+{
+    "type":  "shop_potato",
+    "kind":  "shop",
+    "requiredZone":  "urban",
+    "requiresRoad":  true,
+    "name":  "Loja de Batata",
+    "asset":  "/buildings/commerce/loja_batata.png",
+    "width":  2,
+    "height":  2,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  100,
+                 "stone":  20
+             },
+    "workPoints":  9000,
+    "maxWorkers":  4,
+    "stockProduct":  "Batata",
+    "stockProductId":  "potato",
+    "stockCapacity":  20
+}

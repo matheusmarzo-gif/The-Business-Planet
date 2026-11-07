@@ -1,0 +1,21 @@
+{
+    "type":  "shop_salt",
+    "kind":  "shop",
+    "requiredZone":  "urban",
+    "requiresRoad":  true,
+    "name":  "Loja de Sal",
+    "asset":  "/buildings/commerce/loja_sal.png",
+    "width":  2,
+    "height":  2,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  30,
+                 "stone":  10
+             },
+    "workPoints":  6000,
+    "maxWorkers":  4,
+    "stockProduct":  "Sal",
+    "stockProductId":  "salt",
+    "stockCapacity":  40
+}

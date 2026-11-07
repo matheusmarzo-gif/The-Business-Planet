@@ -1,0 +1,5 @@
+{
+  "workPointsPerCubicMeter": 100,
+  "workPointsPerKilogram": 0.125,
+  "linkRadiusTiles": 60
+}

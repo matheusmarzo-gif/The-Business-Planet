@@ -4,14 +4,19 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "config:generate": "tsx server/generate-game-config.ts",
+    "predev": "npm run config:generate",
     "dev": "concurrently -k -n SERVER,WEB \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "vite --port=3000 --host=0.0.0.0",
     "start": "tsx server/index.ts",
+    "prebuild": "npm run config:generate",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
+    "pretest": "npm run config:generate",
     "test": "tsx --test src/types/accounting.test.ts src/types/city.test.ts src/types/logistics.test.ts src/types/residence-construction.test.ts src/utils/commerceDiagnosticsStorage.test.ts",
+    "prelint": "npm run config:generate",
     "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
   },
   "dependencies": {

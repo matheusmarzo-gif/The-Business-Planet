@@ -1,0 +1,21 @@
+{
+    "type":  "shop_butcher",
+    "kind":  "shop",
+    "requiredZone":  "urban",
+    "requiresRoad":  true,
+    "name":  "Açougue",
+    "asset":  "/buildings/commerce/loja_acougue.png",
+    "width":  2,
+    "height":  2,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  100,
+                 "stone":  20
+             },
+    "workPoints":  9000,
+    "maxWorkers":  4,
+    "stockProduct":  "Carne vermelha",
+    "stockProductId":  "red_meat",
+    "stockCapacity":  20
+}

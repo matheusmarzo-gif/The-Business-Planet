@@ -39,7 +39,6 @@ import {
   RESIDENCES,
   RESIDENCE_STATS,
   SHOP_TYPES,
-  WORKER_SEARCH_RADIUS,
   type ResidentialBuilding,
   type ResidenceType,
   type ResidencePlacementError,
@@ -85,6 +84,7 @@ import {
   parseWarehouseLink,
   planTransfersDetailed,
   planWarehouseTrades,
+  LINK_RADIUS,
   type TradeWarehouse,
   type WarehouseTrade,
 } from '../src/types/logistics.js';
@@ -98,6 +98,7 @@ import {
   type FarmCropType,
 } from '../src/types/farming.js';
 import { parseWarehouseSetting } from '../src/types/warehouse.js';
+import { GAME_RULES } from '../src/generated/gameConfig.js';
 import { planDailySpoilage, PRODUCTS, type ProductDefinition } from '../src/types/product.js';
 import {
   allocateImmigrants,
@@ -1727,11 +1728,11 @@ async function runDailyEmployment(): Promise<boolean> {
             `SELECT shop.city_id, shop.building_type, history.units_sold, history.sale_price
              FROM commerce_history history
              JOIN residential_buildings shop ON shop.id = history.building_id
-             WHERE history.day >= $1::date - 30
+             WHERE history.day >= $1::date - $3::integer
                AND history.day < $1::date
                AND shop.status = 'completed'
                AND shop.building_type = ANY($2::text[])`,
-            [state.day, shopTypes],
+            [state.day, shopTypes, GAME_RULES.consumption.averagePriceWindowDays],
           )
         : { rows: [] };
       const monthlySales: CityProductSale[] = monthlySalesRows.flatMap((row) => {
@@ -1892,7 +1893,10 @@ async function runDailyEmployment(): Promise<boolean> {
           transactions: salesPlan.transactionsByShop.get(shop.id) ?? [],
         });
       }
-      await client.query('DELETE FROM commerce_history WHERE day < $1::date - 30', [state.day]);
+      await client.query(
+        'DELETE FROM commerce_history WHERE day < $1::date - $2::integer',
+        [state.day, GAME_RULES.consumption.averagePriceWindowDays],
+      );
       });
       if (salesStageSucceeded) pendingCommerceDiagnostics.push(...salesDiagnostics);
       await runStage('produção', async () => {
@@ -3213,7 +3217,7 @@ async function createResidentialBuilding(
           constructionCenterX,
           constructionCenterY,
           RESIDENCES.warehouse.width / 2,
-          WORKER_SEARCH_RADIUS * WORKER_SEARCH_RADIUS,
+          LINK_RADIUS * LINK_RADIUS,
         ],
       );
       const withdrawals = planConstructionMaterialWithdrawals(
@@ -4393,8 +4397,8 @@ async function start() {
                   COALESCE((SELECT SUM(count) FROM job_assignments j WHERE j.workplace_id = b.id), 0)::int AS workers
            FROM residential_buildings b
            WHERE b.building_type = 'warehouse' AND b.status = 'completed'
-             AND (b.id = $1 OR (ABS(b.tile_x - $2) <= 60 AND ABS(b.tile_y - $3) <= 60))`,
-          [target.id, target.tile_x, target.tile_y],
+             AND (b.id = $1 OR (ABS(b.tile_x - $2) <= $4 AND ABS(b.tile_y - $3) <= $4))`,
+          [target.id, target.tile_x, target.tile_y, LINK_RADIUS],
         );
         const warehouseIds = warehouseRows.map((row) => row.id);
         const { rows: stockRows } = await client.query<WarehouseTradeStockRow>(

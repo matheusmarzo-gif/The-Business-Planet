@@ -34,8 +34,12 @@ import {
   MAX_CITY_ZONES,
 } from './types/city';
 import { DEFAULT_SHOP_PRICE } from './types/commerce';
+import { LINK_RADIUS } from './types/logistics';
 import type { AccountingBuildingPosition, AccountingSummary } from './types/accounting';
 import {
+  MAX_WAGE,
+  MAX_WORK_HOURS,
+  MIN_WORK_HOURS,
   DEFAULT_RENT,
   DEFAULT_WAGE,
   DEFAULT_WORK_HOURS,
@@ -182,9 +186,9 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'invalid_residence') {
           error = 'A construção ou o local escolhido é inválido.';
         } else if (body.error === 'insufficient_materials') {
-          error = 'Estoque próximo insuficiente de Madeira e/ou Pedra. Os materiais devem estar em armazéns concluídos a até 60 tiles da construção.';
+          error = `Estoque próximo insuficiente de Madeira e/ou Pedra. Os materiais devem estar em armazéns concluídos a até ${LINK_RADIUS} tiles da construção.`;
         } else if (body.error === 'invalid_work_settings') {
-          error = 'Informe funcionários desejados (até o máximo da construção), salário (C$ 0 a C$ 100.000, com até 2 casas decimais) e carga horária de 4 a 14 horas.';
+          error = `Informe funcionários desejados (até o máximo da construção), salário (C$ 0 a C$ ${MAX_WAGE.toLocaleString('pt-BR')}, com até 2 casas decimais) e carga horária de ${MIN_WORK_HOURS} a ${MAX_WORK_HOURS} horas.`;
         } else if (body.error === 'harvest_in_progress') {
           error = 'A colheita está em andamento; só é possível plantar de novo ao terminar.';
         } else if (body.error === 'cannot_plant') {
@@ -192,7 +196,7 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'invalid_warehouse_link') {
           error = 'Essa construção não pode ser ligada a esse destino.';
         } else if (body.error === 'warehouse_out_of_range') {
-          error = 'O armazém precisa estar a até 60 tiles da construção.';
+          error = `O armazém precisa estar a até ${LINK_RADIUS} tiles da construção.`;
         } else if (body.error === 'warehouse_not_owned') {
           error = 'Você só pode ligar a armazéns que construiu.';
         } else if (body.error === 'invalid_price') {
@@ -214,7 +218,7 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'transfer_destination_not_completed') {
           error = 'A construção de destino precisa estar concluída.';
         } else if (body.error === 'transfer_out_of_range') {
-          error = 'O destino precisa estar a até 60 tiles do armazém.';
+          error = `O destino precisa estar a até ${LINK_RADIUS} tiles do armazém.`;
         } else if (body.error === 'transfer_product_not_storable') {
           error = 'Essa construção não armazena esse produto.';
         } else if (body.error === 'transfer_limit_exceeded') {
@@ -1652,7 +1656,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           </div>
           <div
             className="player-resources"
-            aria-label={`Madeira ${localResources?.wood ?? 'indisponível'} e Pedra ${localResources?.stone ?? 'indisponível'} nos armazéns próprios a até 60 tiles da área visível`}
+            aria-label={`Madeira ${localResources?.wood ?? 'indisponível'} e Pedra ${localResources?.stone ?? 'indisponível'} nos armazéns próprios a até ${LINK_RADIUS} tiles da área visível`}
           >
             <span title="Madeira nos armazéns próximos">
               <img src="/products/madeira.png" alt="" />
@@ -1868,7 +1872,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             {warehouseTransfer.error ||
               (warehouseTransfer.isLoadingQuote
                 ? 'Verificando estoque, espaço e Work Points disponíveis…'
-                : 'Clique em uma construção sua, concluída e a até 60 tiles, para escolher o destino.')}
+                : `Clique em uma construção sua, concluída e a até ${LINK_RADIUS} tiles, para escolher o destino.`)}
             <button type="button" onClick={() => setWarehouseTransfer(null)}>Cancelar</button>
           </div>
         )}

@@ -2,14 +2,13 @@ import { PRODUCTS } from './product.js';
 import {
   getResidenceDefinition,
   RESIDENCES,
-  WORKER_SEARCH_RADIUS,
   type ResidenceType,
 } from './residence.js';
+import { GAME_RULES } from '../generated/gameConfig.js';
 
-// Demanda de Work Points do armazém: 100 por m³ e 0,125 por kg transportados.
-export const TRANSPORT_WORK_POINTS_PER_M3 = 100;
-export const TRANSPORT_WORK_POINTS_PER_KG = 0.125;
-export const LINK_RADIUS = WORKER_SEARCH_RADIUS;
+export const TRANSPORT_WORK_POINTS_PER_M3 = GAME_RULES.transport.workPointsPerCubicMeter;
+export const TRANSPORT_WORK_POINTS_PER_KG = GAME_RULES.transport.workPointsPerKilogram;
+export const LINK_RADIUS = GAME_RULES.transport.linkRadiusTiles;
 
 export type TransferDirection = 'in' | 'out';
 
@@ -321,7 +320,7 @@ export interface WarehouseTrade {
 }
 
 /**
- * Compras entre armazéns de donos diferentes em até 60 tiles. O vendedor oferece o que
+ * Compras entre armazéns de donos diferentes dentro de LINK_RADIUS. O vendedor oferece o que
  * excede seu estoque mínimo (modo venda) ao preço dele; o comprador (modo compra) quer
  * chegar ao estoque máximo, limitado pela capacidade natural quando usa MAX, e só paga se
  * o preço for menor que o seu limite. As ofertas

@@ -1,0 +1,33 @@
+{
+    "type":  "farm_cattle",
+    "kind":  "farm",
+    "requiredZone":  "rural",
+    "requiresRoad":  true,
+    "name":  "Fazenda Bovina",
+    "asset":  "/buildings/farms/fazenda_bovina.png",
+    "width":  4,
+    "height":  4,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  200,
+                 "stone":  20
+             },
+    "workPoints":  12000,
+    "maxWorkers":  30,
+    "stockProduct":  "Carne Vermelha",
+    "stockProductId":  "red_meat",
+    "stockCapacity":  300,
+    "cropRule":  {
+                     "growthMonths":  24,
+                     "dailyWorkPoints":  500,
+                     "harvestWorkPointsPerUnit":  40,
+                     "baseYield":  1000,
+                     "plantingEfficiencyByQuarter":  [
+                                                         0.4,
+                                                         1,
+                                                         0.8,
+                                                         0.6
+                                                     ]
+                 }
+}

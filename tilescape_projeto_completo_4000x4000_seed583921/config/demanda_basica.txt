@@ -1,5 +1,5 @@
 # Consumo diário desejável por morador para as cestas básica e intermediária.
-# Edite os valores e reinicie o servidor para aplicar.
+# Edite os valores e reinicie o app ou publique um novo build para aplicar.
 demanda_basica.rice=0.03
 demanda_basica.wheat=0.03
 demanda_basica.barley=0.03

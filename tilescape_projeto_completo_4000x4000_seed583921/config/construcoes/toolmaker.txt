@@ -1,0 +1,30 @@
+{
+    "type":  "toolmaker",
+    "kind":  "workshop",
+    "requiredZone":  "urban",
+    "requiresRoad":  true,
+    "name":  "Ferramentaria",
+    "asset":  "/buildings/artisan/ferramentaria.png",
+    "width":  2,
+    "height":  2,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  60,
+                 "stone":  60
+             },
+    "workPoints":  12000,
+    "maxWorkers":  30,
+    "stockProduct":  "Ferramentas",
+    "stockProductId":  "tools",
+    "stockCapacity":  100,
+    "ironCapacity":  5,
+    "charcoalCapacity":  30,
+    "production":  {
+                       "mode":  "batch",
+                       "workPointsPerUnit":  1000,
+                       "batchSize":  100,
+                       "batchCharcoal":  5,
+                       "batchIron":  1
+                   }
+}

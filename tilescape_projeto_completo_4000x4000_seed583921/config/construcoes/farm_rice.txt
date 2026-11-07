@@ -1,0 +1,33 @@
+{
+    "type":  "farm_rice",
+    "kind":  "farm",
+    "requiredZone":  "rural",
+    "requiresRoad":  true,
+    "name":  "Fazenda de arroz",
+    "asset":  "/buildings/farms/fazenda_arroz.png",
+    "width":  4,
+    "height":  4,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  200,
+                 "stone":  20
+             },
+    "workPoints":  12000,
+    "maxWorkers":  30,
+    "stockProduct":  "Arroz",
+    "stockProductId":  "rice",
+    "stockCapacity":  300,
+    "cropRule":  {
+                     "growthMonths":  6,
+                     "dailyWorkPoints":  1000,
+                     "harvestWorkPointsPerUnit":  20,
+                     "baseYield":  1000,
+                     "plantingEfficiencyByQuarter":  [
+                                                         1,
+                                                         0.6,
+                                                         0.4,
+                                                         0.2
+                                                     ]
+                 }
+}

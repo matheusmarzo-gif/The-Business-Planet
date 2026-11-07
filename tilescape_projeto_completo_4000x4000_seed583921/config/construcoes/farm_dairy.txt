@@ -1,0 +1,31 @@
+{
+    "type":  "farm_dairy",
+    "kind":  "farm",
+    "requiredZone":  "rural",
+    "requiresRoad":  true,
+    "name":  "Fazenda leiteira",
+    "asset":  "/buildings/farms/fazenda_leiteira.png",
+    "width":  3,
+    "height":  3,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  60,
+                 "stone":  60
+             },
+    "workPoints":  12000,
+    "maxWorkers":  10,
+    "stockProduct":  "Leite",
+    "stockProductId":  "milk",
+    "stockCapacity":  400,
+    "production":  {
+                       "mode":  "accumulate",
+                       "workPointsPerUnit":  5
+                   },
+    "dairyEfficiencyByQuarter":  [
+                                     0.4,
+                                     1,
+                                     0.8,
+                                     0.6
+                                 ]
+}

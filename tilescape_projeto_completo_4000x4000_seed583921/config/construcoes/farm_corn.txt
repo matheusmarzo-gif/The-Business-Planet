@@ -1,0 +1,33 @@
+{
+    "type":  "farm_corn",
+    "kind":  "farm",
+    "requiredZone":  "rural",
+    "requiresRoad":  true,
+    "name":  "Fazenda de Milho",
+    "asset":  "/buildings/farms/fazenda_milho.png",
+    "width":  4,
+    "height":  4,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  200,
+                 "stone":  20
+             },
+    "workPoints":  12000,
+    "maxWorkers":  30,
+    "stockProduct":  "Milho",
+    "stockProductId":  "corn",
+    "stockCapacity":  300,
+    "cropRule":  {
+                     "growthMonths":  6,
+                     "dailyWorkPoints":  1000,
+                     "harvestWorkPointsPerUnit":  20,
+                     "baseYield":  1000,
+                     "plantingEfficiencyByQuarter":  [
+                                                         0.8,
+                                                         1,
+                                                         0.1,
+                                                         0.1
+                                                     ]
+                 }
+}

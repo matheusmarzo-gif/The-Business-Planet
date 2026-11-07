@@ -1,0 +1,31 @@
+{
+  "averagePriceWindowDays": 30,
+  "distance": {
+    "radiusTiles": 60,
+    "radicandNumerator": 60
+  },
+  "salesCapacity": {
+    "unitWorkPointsPerSale": 20,
+    "literWorkPointsPerSale": 1
+  },
+  "basic": {
+    "discountBase": 0.8,
+    "wExponent": 4,
+    "errorExponent": 4,
+    "minimumIncomePriceMultiplier": 1,
+    "idealIncomeOffset": 0.125,
+    "idealExponent": 4
+  },
+  "intermediate": {
+    "discountBase": 0.8,
+    "wExponent": 3,
+    "errorExponent": 3,
+    "minimumIncomeAboveProductCost": 1,
+    "basicBasketThresholdDivisor": 6,
+    "intermediateBasketThresholdDivisor": 3,
+    "idealIncomeOffset": 0.16666666666666666,
+    "idealBasketDivisor": 110,
+    "idealExponent": 3
+  },
+  "associatedBenefitExponent": 4
+}

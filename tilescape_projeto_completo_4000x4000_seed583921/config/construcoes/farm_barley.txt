@@ -1,0 +1,33 @@
+{
+    "type":  "farm_barley",
+    "kind":  "farm",
+    "requiredZone":  "rural",
+    "requiresRoad":  true,
+    "name":  "Fazenda de Cevada",
+    "asset":  "/buildings/farms/fazenda_cevada.png",
+    "width":  4,
+    "height":  4,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  200,
+                 "stone":  20
+             },
+    "workPoints":  12000,
+    "maxWorkers":  30,
+    "stockProduct":  "Cevada",
+    "stockProductId":  "barley",
+    "stockCapacity":  300,
+    "cropRule":  {
+                     "growthMonths":  6,
+                     "dailyWorkPoints":  1000,
+                     "harvestWorkPointsPerUnit":  20,
+                     "baseYield":  1000,
+                     "plantingEfficiencyByQuarter":  [
+                                                         0.3,
+                                                         0.7,
+                                                         1,
+                                                         0.6
+                                                     ]
+                 }
+}

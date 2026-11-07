@@ -1,0 +1,27 @@
+{
+    "type":  "iron_mine",
+    "kind":  "resource",
+    "requiredZone":  "rural",
+    "requiresRoad":  true,
+    "name":  "Mina de Ferro",
+    "asset":  "/buildings/resources/mina_ferro.png",
+    "width":  3,
+    "height":  3,
+    "capacity":  0,
+    "localAppeal":  0,
+    "cost":  {
+                 "wood":  120,
+                 "stone":  60
+             },
+    "workPoints":  24000,
+    "maxWorkers":  30,
+    "stockProduct":  "Ferro",
+    "stockProductId":  "iron",
+    "stockCapacity":  5,
+    "toolCapacity":  5,
+    "toolDemandPerWorker":  0.15,
+    "production":  {
+                       "mode":  "chance",
+                       "workPointsPerUnit":  3000
+                   }
+}

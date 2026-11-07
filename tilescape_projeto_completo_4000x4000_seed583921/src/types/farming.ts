@@ -1,3 +1,5 @@
+import { FARM_CROP_RULES as GENERATED_FARM_CROP_RULES } from '../generated/gameConfig.js';
+
 export interface FarmCropRule {
   growthMonths: number;
   dailyWorkPoints: number;
@@ -6,71 +8,7 @@ export interface FarmCropRule {
   plantingEfficiencyByQuarter: readonly [number, number, number, number];
 }
 
-export const FARM_CROP_RULES = {
-  farm_rice: {
-    growthMonths: 6,
-    dailyWorkPoints: 1000,
-    harvestWorkPointsPerUnit: 20,
-    baseYield: 1000,
-    plantingEfficiencyByQuarter: [1, 0.6, 0.4, 0.2],
-  },
-  farm_potato: {
-    growthMonths: 6,
-    dailyWorkPoints: 1000,
-    harvestWorkPointsPerUnit: 20,
-    baseYield: 1000,
-    plantingEfficiencyByQuarter: [0.5, 1, 0.2, 0.8],
-  },
-  farm_wheat: {
-    growthMonths: 6,
-    dailyWorkPoints: 1000,
-    harvestWorkPointsPerUnit: 20,
-    baseYield: 1000,
-    plantingEfficiencyByQuarter: [0.4, 0.5, 0.6, 1],
-  },
-  farm_barley: {
-    growthMonths: 6,
-    dailyWorkPoints: 1000,
-    harvestWorkPointsPerUnit: 20,
-    baseYield: 1000,
-    plantingEfficiencyByQuarter: [0.3, 0.7, 1, 0.6],
-  },
-  farm_corn: {
-    growthMonths: 6,
-    dailyWorkPoints: 1000,
-    harvestWorkPointsPerUnit: 20,
-    baseYield: 1000,
-    plantingEfficiencyByQuarter: [0.8, 1, 0.1, 0.1],
-  },
-  farm_cattle: {
-    growthMonths: 24,
-    dailyWorkPoints: 500,
-    harvestWorkPointsPerUnit: 40,
-    baseYield: 1000,
-    plantingEfficiencyByQuarter: [0.4, 1, 0.8, 0.6],
-  },
-  farm_cane: {
-    growthMonths: 6,
-    dailyWorkPoints: 100,
-    harvestWorkPointsPerUnit: 25,
-    baseYield: 2000,
-    plantingEfficiencyByQuarter: [0.9, 0.8, 1, 0.9],
-  },
-  farm_spices: {
-    growthMonths: 6,
-    dailyWorkPoints: 5000,
-    harvestWorkPointsPerUnit: 10,
-    baseYield: 600,
-    plantingEfficiencyByQuarter: [1, 0.6, 0.6, 0.6],
-  },
-  farm_vegetables: {
-    growthMonths: 2,
-    dailyWorkPoints: 5000,
-    harvestWorkPointsPerUnit: 10,
-    baseYield: 1000,
-    plantingEfficiencyByQuarter: [0.2, 0.4, 1, 0.8],
-  },
-} as const satisfies Record<string, FarmCropRule>;
+export const FARM_CROP_RULES = GENERATED_FARM_CROP_RULES satisfies Record<string, FarmCropRule>;
 
 export type FarmCropType = keyof typeof FARM_CROP_RULES;
 export const FARM_CROP_TYPES = Object.keys(FARM_CROP_RULES) as FarmCropType[];

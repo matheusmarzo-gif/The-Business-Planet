@@ -40,6 +40,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/GameApp.tsx` | Tela ativa do mundo, interface, estado de interação e chamadas da API. |
 | `src/game/GameMap.tsx` | Renderização PixiJS, câmera, seleção de tiles, prévias e interação com cidades, estradas e residências. |
 | `src/game/worldClient.ts` | Autentica o WebSocket, valida mensagens recebidas e atualiza o estado compartilhado. |
+| `src/components/ConstructionBar.tsx` | Barra inferior de categorias; a seleção abre o catálogo de construções no painel lateral direito. |
 | `src/types/city.ts` | Tipos, dimensões e regras geométricas de cidades/Assembleias. |
 | `src/types/road.ts` | Tipos, limites, validação, interpolação e escolha das peças de estrada. |
 | `src/types/residence.ts` | Tipos, validação compartilhada e regras geométricas das construções. |
@@ -644,7 +645,9 @@ mapeamento e verificar todas as curvas.
   rural) recebem seus insumos pelo armazém ligado. O Moinho ocupa 3 × 3, emprega
   até 60, custa 60 madeiras/20 pedras e exige 60.000 WP; armazena 100 farinhas e
   até 20 unidades de cada grão elegível, mas só recebe o item selecionado pelo
-  dono (trigo por padrão). Cada 300 WP + 1 grão produz 5 farinhas. Trocar a
+  dono no painel lateral do Moinho concluído (trigo por padrão). O seletor e sua
+  ação de salvar são renderizados independentemente do formulário de preço das
+  lojas. Cada 300 WP + 1 grão produz 5 farinhas. Trocar a
   matéria-prima remove o saldo anterior de `building_input_stock`. A Fábrica de
   Pães ocupa 3 × 3, emprega 60, custa 60 madeiras/30 pedras, exige 80.000 WP,
   armazena 300 pães/30 farinhas e produz 10 pães por farinha + 200 WP. A

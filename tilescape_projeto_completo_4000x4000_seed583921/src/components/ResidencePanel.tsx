@@ -615,51 +615,51 @@ export default function ResidencePanel({
           ) : (
             <small>Somente o dono da loja pode editar.</small>
           )}
-          {definition.selectableInputProductIds && (
-            <form
-              className="work-settings"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (inputProductId) onSaveInputProduct(inputProductId);
-              }}
+        </form>
+      )}
+      {definition.selectableInputProductIds && (
+        <form
+          className="work-settings"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (inputProductId) onSaveInputProduct(inputProductId);
+          }}
+        >
+          <label>
+            Matéria-prima do moinho
+            <select
+              value={inputProductId}
+              disabled={!isOwner || isSaving || building.status !== 'completed'}
+              onChange={(event) => setInputProductId(event.target.value)}
             >
-              <label>
-                Matéria-prima do moinho
-                <select
-                  value={inputProductId}
-                  disabled={!isOwner || isSaving || building.status !== 'completed'}
-                  onChange={(event) => setInputProductId(event.target.value)}
-                >
-                  {definition.selectableInputProductIds.map((productId) => (
-                    <option key={productId} value={productId}>
-                      {PRODUCTS.find((product) => product.id === productId)?.name ?? productId}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {inputProductId !== building.selectedInputProductId &&
-                (building.inputStocks[building.selectedInputProductId ?? ''] ?? 0) > 0 && (
-                  <small>
-                    Ao salvar, as{' '}
-                    {number.format(building.inputStocks[building.selectedInputProductId ?? ''] ?? 0)} unidades
-                    restantes da matéria-prima atual serão descartadas.
-                  </small>
-                )}
-              {isOwner ? (
-                <button
-                  type="submit"
-                  disabled={
-                    isSaving ||
-                    building.status !== 'completed' ||
-                    inputProductId === building.selectedInputProductId
-                  }
-                >
-                  {isSaving ? 'Salvando…' : 'Salvar matéria-prima'}
-                </button>
-              ) : (
-                <small>Somente o dono do moinho pode alterar a matéria-prima.</small>
-              )}
-            </form>
+              {definition.selectableInputProductIds.map((productId) => (
+                <option key={productId} value={productId}>
+                  {PRODUCTS.find((product) => product.id === productId)?.name ?? productId}
+                </option>
+              ))}
+            </select>
+          </label>
+          {inputProductId !== building.selectedInputProductId &&
+            (building.inputStocks[building.selectedInputProductId ?? ''] ?? 0) > 0 && (
+              <small>
+                Ao salvar, as{' '}
+                {number.format(building.inputStocks[building.selectedInputProductId ?? ''] ?? 0)} unidades
+                restantes da matéria-prima atual serão descartadas.
+              </small>
+            )}
+          {isOwner ? (
+            <button
+              type="submit"
+              disabled={
+                isSaving ||
+                building.status !== 'completed' ||
+                inputProductId === building.selectedInputProductId
+              }
+            >
+              {isSaving ? 'Salvando…' : 'Salvar matéria-prima'}
+            </button>
+          ) : (
+            <small>Somente o dono do moinho pode alterar a matéria-prima.</small>
           )}
         </form>
       )}

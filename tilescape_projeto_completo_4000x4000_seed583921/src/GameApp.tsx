@@ -2124,6 +2124,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         isMaster={user.isMaster}
         onSelect={(category) => {
           closeCityZoneEditor();
+          setSelectedResidenceId(null);
+          setSelectedTile(null);
           setIsAccountingOpen(false);
           setIsProductCatalogOpen(false);
           setIsDemolitionMode(false);

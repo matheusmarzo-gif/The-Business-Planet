@@ -159,7 +159,9 @@ a Prefeitura aparece somente para a conta Neon Auth configurada em
 `MASTER_EMAIL`. Cadastre o mesmo e-mail nas variáveis locais e no Render; crie
 essa conta pelo formulário do jogo para ativar a permissão. O botão **Contábil**
 abre os relatórios das lojas comerciais, dos armazéns, das residências e da
-produção do jogador conectado.
+produção do jogador conectado. Ao selecionar uma categoria de construção na
+barra inferior, o catálogo abre em um painel lateral à direita; escolha um
+edifício no painel e clique no mapa para posicioná-lo.
 
 ### Configuração editável do jogo
 
@@ -318,8 +320,9 @@ pesada; cada compra é limitada aos Work Points disponíveis naquela rodada.
 O **Moinho**, a **Fábrica de Pães** e a **Fábrica de Queijo** também ficam na
 categoria Indústrias. O Moinho (3 × 3, 60 funcionários) custa 60 madeiras e 20
 pedras, exige 60.000 Work Points e guarda até 100 farinhas. Seu dono escolhe no
-painel se o insumo será trigo, cevada ou milho; somente a matéria-prima escolhida
-é recebida do armazém ligado, até 20 unidades. Trocar a seleção descarta o
+painel lateral da construção concluída se o insumo será trigo, cevada ou milho;
+somente a matéria-prima escolhida é recebida do armazém ligado, até 20 unidades.
+Trocar a seleção descarta o
 estoque restante da matéria-prima anterior. Cada unidade de grão e 300 Work
 Points produz 5 farinhas. A Fábrica de Pães (3 × 3, 60 funcionários) custa 60
 madeiras e 30 pedras, exige 80.000 Work Points e guarda 30 farinhas e 300 pães;

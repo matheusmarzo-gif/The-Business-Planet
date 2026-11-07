@@ -1002,6 +1002,27 @@ async function logWarehouseDemand(
   );
 }
 
+async function logWarehouseDemandBatch(
+  client: { query: (text: string, values: unknown[]) => Promise<unknown> },
+  entries: { warehouseId: string; day: string; demand: number }[],
+) {
+  const positiveEntries = entries.filter((entry) => entry.demand > 0);
+  if (positiveEntries.length === 0) return;
+  await client.query(
+    `INSERT INTO warehouse_demand (building_id, day, demand)
+     SELECT batch.building_id, batch.day, batch.demand
+     FROM UNNEST($1::uuid[], $2::date[], $3::double precision[])
+       AS batch(building_id, day, demand)
+     ON CONFLICT (building_id, day) DO UPDATE
+     SET demand = warehouse_demand.demand + EXCLUDED.demand`,
+    [
+      positiveEntries.map((entry) => entry.warehouseId),
+      positiveEntries.map((entry) => entry.day),
+      positiveEntries.map((entry) => entry.demand),
+    ],
+  );
+}
+
 interface ManualWarehouseTransferQuote {
   maxQuantity: number;
   workPoints: number;
@@ -2300,60 +2321,135 @@ async function runDailyEmployment(): Promise<boolean> {
          WHERE building_type = 'warehouse' AND status = 'completed'`,
       );
       const workplaceById = new Map(workplaces.map((workplace) => [workplace.id, workplace]));
-      await logProductionBatch(
-        client,
-        state.day,
-        warehouseRows.map((warehouse) => {
-          const warehouseSite = workplaceById.get(warehouse.id);
-          return {
-            buildingId: warehouse.id,
-            workPoints:
-              (workers.get(warehouse.id) ?? 0) *
-              getDailyWorkPoints(
-                warehouseSite?.work_hours_per_day ?? 8,
-                RESIDENCE_STATS.health,
-                RESIDENCE_STATS.happiness,
-              ),
-          };
-        }),
-      );
+      type LinkedBuildingRow = {
+        id: string;
+        warehouse_id: string;
+        building_type: ResidenceType;
+        stock: number;
+        tool_stock: number;
+        wood_stock: number;
+        iron_stock: number;
+        charcoal_stock: number;
+        sugarcane_stock: number;
+        selected_input_product_id: string | null;
+      };
+      type WarehouseInventoryRow = {
+        warehouse_id: string;
+        product_id: string;
+        quantity: number;
+        minimum_stock: number;
+        maximum_stock: number | null;
+      };
+      const warehouseIds = warehouseRows.map((warehouse) => warehouse.id);
+      const { rows: linked } = warehouseIds.length > 0
+        ? await client.query<LinkedBuildingRow>(
+            `SELECT id, warehouse_id, building_type, stock, tool_stock, wood_stock, iron_stock,
+                    charcoal_stock, sugarcane_stock, selected_input_product_id
+             FROM residential_buildings
+             WHERE warehouse_id = ANY($1::uuid[]) AND status = 'completed'
+             ORDER BY warehouse_id, id`,
+            [warehouseIds],
+          )
+        : { rows: [] as LinkedBuildingRow[] };
+      const linkedIds = linked.map((building) => building.id);
+      const { rows: linkedInputStocks } = linkedIds.length > 0
+        ? await client.query<{ building_id: string; product_id: string; quantity: number }>(
+            `SELECT building_id, product_id, quantity
+             FROM building_input_stock
+             WHERE building_id = ANY($1::uuid[])`,
+            [linkedIds],
+          )
+        : { rows: [] as { building_id: string; product_id: string; quantity: number }[] };
+      const { rows: inventoryRows } = warehouseIds.length > 0
+        ? await client.query<WarehouseInventoryRow>(
+            `SELECT COALESCE(stock.building_id, settings.building_id) AS warehouse_id,
+                    COALESCE(stock.product_id, settings.product_id) AS product_id,
+                    COALESCE(stock.quantity, 0) AS quantity,
+                    COALESCE(settings.minimum_stock, 0) AS minimum_stock,
+                    settings.maximum_stock
+             FROM warehouse_stock stock
+             FULL OUTER JOIN warehouse_product_settings settings
+               ON settings.building_id = stock.building_id
+              AND settings.product_id = stock.product_id
+             WHERE COALESCE(stock.building_id, settings.building_id) = ANY($1::uuid[])`,
+            [warehouseIds],
+          )
+        : { rows: [] as WarehouseInventoryRow[] };
+
+      const linkedByWarehouse = new Map<string, LinkedBuildingRow[]>();
+      const linkedById = new Map(linked.map((building) => [building.id, building]));
+      for (const building of linked) {
+        const buildings = linkedByWarehouse.get(building.warehouse_id) ?? [];
+        buildings.push(building);
+        linkedByWarehouse.set(building.warehouse_id, buildings);
+      }
+      const inputStocksByBuilding = new Map<string, Record<string, number>>();
+      for (const stock of linkedInputStocks) {
+        const buildingStocks = inputStocksByBuilding.get(stock.building_id) ?? {};
+        buildingStocks[stock.product_id] = stock.quantity;
+        inputStocksByBuilding.set(stock.building_id, buildingStocks);
+      }
+      const inventoryByWarehouse = new Map<string, {
+        stock: Map<string, number>;
+        minimumStock: Map<string, number>;
+        maximumStock: Map<string, number | null>;
+      }>();
       for (const warehouse of warehouseRows) {
-        let transportPhase = 'loading_linked_buildings';
-        // Uma falha em um armazém não pode desfazer o histórico nem o transporte dos demais.
-        await client.query('SAVEPOINT warehouse_transport');
-        try {
-        const { rows: linked } = await client.query<{
-          id: string;
-          building_type: ResidenceType;
-          stock: number;
-          tool_stock: number;
-          wood_stock: number;
-          iron_stock: number;
-          charcoal_stock: number;
-          sugarcane_stock: number;
-          selected_input_product_id: string | null;
-        }>(
-          `SELECT id, building_type, stock, tool_stock, wood_stock, iron_stock, charcoal_stock,
-                  sugarcane_stock, selected_input_product_id
-           FROM residential_buildings
-           WHERE warehouse_id = $1 AND status = 'completed'`,
-          [warehouse.id],
-        );
-        const { rows: linkedInputStocks } = linked.length > 0
-          ? await client.query<{ building_id: string; product_id: string; quantity: number }>(
-              `SELECT building_id, product_id, quantity
-               FROM building_input_stock
-               WHERE building_id = ANY($1::uuid[])`,
-              [linked.map((row) => row.id)],
-            )
-          : { rows: [] };
-        const inputStocksByLinked = new Map<string, Record<string, number>>();
-        for (const stock of linkedInputStocks) {
-          const current = inputStocksByLinked.get(stock.building_id) ?? {};
-          current[stock.product_id] = stock.quantity;
-          inputStocksByLinked.set(stock.building_id, current);
-        }
-        transportPhase = 'loading_stock';
+        inventoryByWarehouse.set(warehouse.id, {
+          stock: new Map(),
+          minimumStock: new Map(),
+          maximumStock: new Map(),
+        });
+      }
+      for (const row of inventoryRows) {
+        const inventory = inventoryByWarehouse.get(row.warehouse_id);
+        if (!inventory) continue;
+        inventory.stock.set(row.product_id, row.quantity);
+        inventory.minimumStock.set(row.product_id, row.minimum_stock);
+        inventory.maximumStock.set(row.product_id, row.maximum_stock);
+      }
+
+      const transportLogRows: {
+        warehouseId: string;
+        buildingId: string;
+        buildingType: string;
+        productId: string;
+        direction: 'in' | 'out';
+        wanted: number;
+        moved: number;
+        reason: string | null;
+        errorDetail: string | null;
+      }[] = [];
+      const transportDemandByWarehouse = new Map<string, number>();
+      const warehouseStockDeltas = new Map<string, Map<string, number>>();
+      const buildingChanges = new Map<string, {
+        stock: number;
+        tools: number;
+        wood: number;
+        iron: number;
+        charcoal: number;
+        sugarcane: number;
+        inputStocks: Map<string, number>;
+      }>();
+      const transportedByBuilding = new Map<string, number>();
+      const productionByBuilding = new Map<string, ProductionHistoryEntry>();
+      for (const warehouse of warehouseRows) {
+        const warehouseSite = workplaceById.get(warehouse.id);
+        productionByBuilding.set(warehouse.id, {
+          buildingId: warehouse.id,
+          workPoints:
+            (workers.get(warehouse.id) ?? 0) *
+            getDailyWorkPoints(
+              warehouseSite?.work_hours_per_day ?? 8,
+              RESIDENCE_STATS.health,
+              RESIDENCE_STATS.happiness,
+            ),
+        });
+      }
+
+      for (const warehouse of warehouseRows) {
+        const linkedBuildings = linkedByWarehouse.get(warehouse.id) ?? [];
+        if (linkedBuildings.length === 0) continue;
         const warehouseSite = workplaceById.get(warehouse.id);
         const workPoints =
           (workers.get(warehouse.id) ?? 0) *
@@ -2362,304 +2458,117 @@ async function runDailyEmployment(): Promise<boolean> {
             RESIDENCE_STATS.health,
             RESIDENCE_STATS.happiness,
           );
-        if (linked.length === 0) {
-          await client.query('RELEASE SAVEPOINT warehouse_transport');
-          continue;
-        }
-        const { rows: [warehouseInventory] } = await client.query<{
-          stock: { product_id: string; quantity: number }[];
-          settings: {
-            product_id: string;
-            minimum_stock: number;
-            maximum_stock: number | null;
-          }[];
-        }>(
-          `SELECT
-             COALESCE((
-               SELECT json_agg(stock)
-               FROM (
-                 SELECT product_id, quantity
-                 FROM warehouse_stock WHERE building_id = $1
-               ) stock
-             ), '[]'::json) AS stock,
-             COALESCE((
-               SELECT json_agg(settings)
-               FROM (
-                 SELECT product_id, minimum_stock, maximum_stock
-                 FROM warehouse_product_settings WHERE building_id = $1
-               ) settings
-             ), '[]'::json) AS settings`,
-          [warehouse.id],
-        );
-        if (!warehouseInventory) {
+        const inventory = inventoryByWarehouse.get(warehouse.id);
+        if (!inventory) {
           throw new Error(`Não foi possível carregar o estoque do armazém ${warehouse.id}.`);
         }
-        const { stock: stockRows, settings: settingRows } = warehouseInventory;
-        const types = new Map(linked.map((row) => [row.id, row.building_type]));
-        transportPhase = 'planning_transfers';
-        const { transfers, attempts } = planTransfersDetailed(
-          {
-            stock: new Map(stockRows.map((row) => [row.product_id, row.quantity])),
-            minimumStock: new Map(settingRows.map((row) => [row.product_id, row.minimum_stock])),
-            maximumStock: new Map(settingRows.map((row) => [row.product_id, row.maximum_stock])),
-            capacityM3: RESIDENCES.warehouse.storageCapacityM3 ?? 0,
-            workPoints,
-          },
-          linked.map((row) => ({
-            buildingId: row.id,
-            type: row.building_type,
-            stock: row.stock,
-            toolStock: row.tool_stock,
-            woodStock: row.wood_stock,
-            ironStock: row.iron_stock,
-            charcoalStock: row.charcoal_stock,
-            sugarcaneStock: row.sugarcane_stock,
-            inputStocks: inputStocksByLinked.get(row.id) ?? {},
-            selectedInputProductId: row.selected_input_product_id,
-          })),
-        );
-        transportPhase = 'writing_attempts';
-        await client.query('SAVEPOINT transport_log');
         try {
-          if (attempts.length > 0) {
-            await client.query(
-              `INSERT INTO warehouse_transport_log
-                 (warehouse_id, day, linked_id, linked_type, product_id, direction, wanted, moved, reason)
-               SELECT $1, $2::date, batch.building_id, batch.building_type,
-                      batch.product_id, batch.direction, batch.wanted, batch.moved, batch.reason
-               FROM UNNEST(
-                 $3::uuid[], $4::text[], $5::text[], $6::text[],
-                 $7::integer[], $8::integer[], $9::text[]
-               ) WITH ORDINALITY AS batch(
-                 building_id, building_type, product_id, direction, wanted, moved, reason, position
-               )
-               ORDER BY batch.position`,
-              [
-                warehouse.id,
-                state.day,
-                attempts.map((attempt) => attempt.buildingId),
-                attempts.map((attempt) => types.get(attempt.buildingId) ?? ''),
-                attempts.map((attempt) => attempt.productId),
-                attempts.map((attempt) => attempt.direction),
-                attempts.map((attempt) => attempt.wanted),
-                attempts.map((attempt) => attempt.moved),
-                attempts.map((attempt) => attempt.reason),
-              ],
-            );
-          }
-          await client.query(
-            `DELETE FROM warehouse_transport_log WHERE warehouse_id = $1 AND day < $2::date - 30`,
-            [warehouse.id, state.day],
-          );
-          await client.query('RELEASE SAVEPOINT transport_log');
-        } catch (logError) {
-          await client.query('ROLLBACK TO SAVEPOINT transport_log');
-          console.error('Não foi possível gravar o histórico do armazém:', logError);
-        }
-        transportPhase = 'applying_transfers';
-        const stockAddedByProduct = new Map<string, number>();
-        const stockWithdrawnByProduct = new Map<string, number>();
-        const buildingChanges = new Map<string, {
-          stock: number;
-          tools: number;
-          wood: number;
-          iron: number;
-          charcoal: number;
-          sugarcane: number;
-          inputStocks: Map<string, number>;
-        }>();
-        const transportedByBuilding = new Map<string, number>();
-        const availableStock = new Map(stockRows.map((row) => [row.product_id, row.quantity]));
-        for (const transfer of transfers) {
-          const totals = transfer.direction === 'out' ? stockAddedByProduct : stockWithdrawnByProduct;
-          totals.set(
-            transfer.productId,
-            (totals.get(transfer.productId) ?? 0) + transfer.quantity,
-          );
-          if (transfer.direction === 'out') {
-            availableStock.set(
-              transfer.productId,
-              (availableStock.get(transfer.productId) ?? 0) + transfer.quantity,
-            );
-          }
-        }
-        for (const transfer of transfers) {
-          if (transfer.direction !== 'in') continue;
-          const available = availableStock.get(transfer.productId) ?? 0;
-          if (available < transfer.quantity) {
-            throw new Error(
-              `Estoque insuficiente no armazém ${warehouse.id} para ${transfer.productId}: ${transfer.quantity}.`,
-            );
-          }
-          availableStock.set(transfer.productId, available - transfer.quantity);
-        }
-        if (stockAddedByProduct.size > 0) {
-          const products = [...stockAddedByProduct.keys()];
-          await client.query(
-            `INSERT INTO warehouse_stock (building_id, product_id, quantity)
-             SELECT $1, batch.product_id, batch.quantity
-             FROM UNNEST($2::text[], $3::integer[]) AS batch(product_id, quantity)
-             WHERE TRUE
-             ON CONFLICT (building_id, product_id) DO UPDATE
-             SET quantity = warehouse_stock.quantity + EXCLUDED.quantity`,
-            [
-              warehouse.id,
-              products,
-              products.map((productId) => stockAddedByProduct.get(productId) ?? 0),
-            ],
-          );
-        }
-        if (stockWithdrawnByProduct.size > 0) {
-          const products = [...stockWithdrawnByProduct.keys()];
-          const quantities = products.map(
-            (productId) => stockWithdrawnByProduct.get(productId) ?? 0,
-          );
-          const result = await client.query<{ product_id: string }>(
-            `UPDATE warehouse_stock stock
-             SET quantity = stock.quantity - withdrawal.quantity
-             FROM UNNEST($1::text[], $2::integer[])
-               AS withdrawal(product_id, quantity)
-             WHERE stock.building_id = $3
-               AND stock.product_id = withdrawal.product_id
-               AND stock.quantity >= withdrawal.quantity
-             RETURNING stock.product_id`,
-            [products, quantities, warehouse.id],
-          );
-          const updatedProducts = new Set(result.rows.map((row) => row.product_id));
-          if (updatedProducts.size !== products.length) {
-            const failedTransfer = transfers.find(
-              (transfer) =>
-                transfer.direction === 'in' && !updatedProducts.has(transfer.productId),
-            );
-            if (failedTransfer) {
-              throw new Error(
-                `Estoque insuficiente no armazém ${warehouse.id} para ${failedTransfer.productId}: ${failedTransfer.quantity}.`,
-              );
-            }
-            throw new Error(`Não foi possível atualizar o estoque do armazém ${warehouse.id}.`);
-          }
-        }
-        for (const transfer of transfers) {
-          const kind = getResidenceDefinition(types.get(transfer.buildingId) ?? '')?.kind;
-          const definition = getResidenceDefinition(types.get(transfer.buildingId) ?? '');
-          const genericInput =
-            transfer.direction === 'in' &&
-            definition?.inputCapacities?.[transfer.productId] !== undefined &&
-            (!definition.selectableInputProductIds ||
-              linked.find((row) => row.id === transfer.buildingId)?.selected_input_product_id ===
-                transfer.productId);
-          // 'in' em comércios repõe o estoque principal; nas demais construções é um insumo.
-          const column = genericInput
-            ? 'input_stock'
-            : transfer.direction === 'out' || kind === 'shop'
-              ? 'stock'
-              : ({
-                  tools: 'tool_stock',
-                  wood: 'wood_stock',
-                  iron: 'iron_stock',
-                  charcoal: 'charcoal_stock',
-                  sugarcane: 'sugarcane_stock',
-                } as Record<string, string>)[
-                  transfer.productId
-                ];
-          if (!column) continue;
-          if (transfer.direction === 'out') {
-            transportedByBuilding.set(
-              transfer.buildingId,
-              (transportedByBuilding.get(transfer.buildingId) ?? 0) + transfer.quantity,
-            );
-          }
-          const changes = buildingChanges.get(transfer.buildingId) ?? {
-            stock: 0,
-            tools: 0,
-            wood: 0,
-            iron: 0,
-            charcoal: 0,
-            sugarcane: 0,
-            inputStocks: new Map<string, number>(),
-          };
-          const delta = transfer.direction === 'out' ? -transfer.quantity : transfer.quantity;
-          if (column === 'stock') changes.stock += delta;
-          else if (column === 'tool_stock') changes.tools += delta;
-          else if (column === 'wood_stock') changes.wood += delta;
-          else if (column === 'iron_stock') changes.iron += delta;
-          else if (column === 'charcoal_stock') changes.charcoal += delta;
-          else if (column === 'sugarcane_stock') changes.sugarcane += delta;
-          else if (column === 'input_stock') {
-            changes.inputStocks.set(
-              transfer.productId,
-              (changes.inputStocks.get(transfer.productId) ?? 0) + delta,
-            );
-          }
-          buildingChanges.set(transfer.buildingId, changes);
-        }
-        if (buildingChanges.size > 0) {
-          const buildingIds = [...buildingChanges.keys()];
-          await client.query(
-            `UPDATE residential_buildings building
-             SET stock = building.stock + changes.stock,
-                 tool_stock = building.tool_stock + changes.tools,
-                 wood_stock = building.wood_stock + changes.wood,
-                 iron_stock = building.iron_stock + changes.iron,
-                 charcoal_stock = building.charcoal_stock + changes.charcoal,
-                 sugarcane_stock = building.sugarcane_stock + changes.sugarcane
-             FROM UNNEST(
-               $1::uuid[], $2::integer[], $3::integer[],
-               $4::integer[], $5::integer[], $6::integer[], $7::integer[]
-             ) AS changes(id, stock, tools, wood, iron, charcoal, sugarcane)
-             WHERE building.id = changes.id`,
-            [
-              buildingIds,
-              buildingIds.map((id) => buildingChanges.get(id)?.stock ?? 0),
-              buildingIds.map((id) => buildingChanges.get(id)?.tools ?? 0),
-              buildingIds.map((id) => buildingChanges.get(id)?.wood ?? 0),
-              buildingIds.map((id) => buildingChanges.get(id)?.iron ?? 0),
-              buildingIds.map((id) => buildingChanges.get(id)?.charcoal ?? 0),
-              buildingIds.map((id) => buildingChanges.get(id)?.sugarcane ?? 0),
-            ],
-          );
-          const inputChanges = [...buildingChanges].flatMap(([buildingId, changes]) =>
-            [...changes.inputStocks].map(([productId, quantity]) => ({
-              buildingId,
-              productId,
-              quantity,
+          const { transfers, attempts } = planTransfersDetailed(
+            {
+              stock: inventory.stock,
+              minimumStock: inventory.minimumStock,
+              maximumStock: inventory.maximumStock,
+              capacityM3: RESIDENCES.warehouse.storageCapacityM3 ?? 0,
+              workPoints,
+            },
+            linkedBuildings.map((building) => ({
+              buildingId: building.id,
+              type: building.building_type,
+              stock: building.stock,
+              toolStock: building.tool_stock,
+              woodStock: building.wood_stock,
+              ironStock: building.iron_stock,
+              charcoalStock: building.charcoal_stock,
+              sugarcaneStock: building.sugarcane_stock,
+              inputStocks: inputStocksByBuilding.get(building.id) ?? {},
+              selectedInputProductId: building.selected_input_product_id,
             })),
           );
-          if (inputChanges.length > 0) {
-            await client.query(
-              `INSERT INTO building_input_stock (building_id, product_id, quantity)
-               SELECT batch.building_id, batch.product_id, batch.quantity
-               FROM UNNEST($1::uuid[], $2::text[], $3::integer[])
-                 AS batch(building_id, product_id, quantity)
-               ON CONFLICT (building_id, product_id) DO UPDATE
-               SET quantity = building_input_stock.quantity + EXCLUDED.quantity`,
-              [
-                inputChanges.map((change) => change.buildingId),
-                inputChanges.map((change) => change.productId),
-                inputChanges.map((change) => change.quantity),
-              ],
-            );
+          const types = new Map(
+            linkedBuildings.map((building) => [building.id, building.building_type]),
+          );
+          for (const attempt of attempts) {
+            transportLogRows.push({
+              warehouseId: warehouse.id,
+              buildingId: attempt.buildingId,
+              buildingType: types.get(attempt.buildingId) ?? '',
+              productId: attempt.productId,
+              direction: attempt.direction,
+              wanted: attempt.wanted,
+              moved: attempt.moved,
+              reason: attempt.reason,
+              errorDetail: null,
+            });
           }
-          changed = true;
-        }
-        await logProductionBatch(
-          client,
-          state.day,
-          [...transportedByBuilding].map(([buildingId, transported]) => ({
-            buildingId,
-            transported,
-          })),
-        );
-        transportPhase = 'recording_daily_demand';
-        await logWarehouseDemand(
-          client,
-          warehouse.id,
-          state.day,
-          transfers.reduce((sum, item) => sum + getTransportDemand(item.productId, item.quantity), 0),
-        );
-        await client.query('RELEASE SAVEPOINT warehouse_transport');
+          const stockDeltas = warehouseStockDeltas.get(warehouse.id) ?? new Map<string, number>();
+          for (const transfer of transfers) {
+            const warehouseDelta =
+              transfer.direction === 'out' ? transfer.quantity : -transfer.quantity;
+            stockDeltas.set(
+              transfer.productId,
+              (stockDeltas.get(transfer.productId) ?? 0) + warehouseDelta,
+            );
+            transportDemandByWarehouse.set(
+              warehouse.id,
+              (transportDemandByWarehouse.get(warehouse.id) ?? 0) +
+                getTransportDemand(transfer.productId, transfer.quantity),
+            );
+            if (transfer.direction === 'out') {
+              transportedByBuilding.set(
+                transfer.buildingId,
+                (transportedByBuilding.get(transfer.buildingId) ?? 0) + transfer.quantity,
+              );
+            }
+
+            const definition = getResidenceDefinition(
+              linkedById.get(transfer.buildingId)?.building_type ?? '',
+            );
+            const genericInput =
+              transfer.direction === 'in' &&
+              definition?.inputCapacities?.[transfer.productId] !== undefined &&
+              (!definition.selectableInputProductIds ||
+                linkedById.get(transfer.buildingId)?.selected_input_product_id ===
+                  transfer.productId);
+            const kind = definition?.kind;
+            const column = genericInput
+              ? 'input_stock'
+              : transfer.direction === 'out' || kind === 'shop'
+                ? 'stock'
+                : ({
+                    tools: 'tool_stock',
+                    wood: 'wood_stock',
+                    iron: 'iron_stock',
+                    charcoal: 'charcoal_stock',
+                    sugarcane: 'sugarcane_stock',
+                  } as Record<string, string>)[transfer.productId];
+            if (!column) continue;
+            const changes = buildingChanges.get(transfer.buildingId) ?? {
+              stock: 0,
+              tools: 0,
+              wood: 0,
+              iron: 0,
+              charcoal: 0,
+              sugarcane: 0,
+              inputStocks: new Map<string, number>(),
+            };
+            const buildingDelta =
+              transfer.direction === 'out' ? -transfer.quantity : transfer.quantity;
+            if (column === 'stock') changes.stock += buildingDelta;
+            else if (column === 'tool_stock') changes.tools += buildingDelta;
+            else if (column === 'wood_stock') changes.wood += buildingDelta;
+            else if (column === 'iron_stock') changes.iron += buildingDelta;
+            else if (column === 'charcoal_stock') changes.charcoal += buildingDelta;
+            else if (column === 'sugarcane_stock') changes.sugarcane += buildingDelta;
+            else if (column === 'input_stock') {
+              changes.inputStocks.set(
+                transfer.productId,
+                (changes.inputStocks.get(transfer.productId) ?? 0) + buildingDelta,
+              );
+            }
+            buildingChanges.set(transfer.buildingId, changes);
+          }
+          warehouseStockDeltas.set(warehouse.id, stockDeltas);
         } catch (transportError) {
-          await client.query('ROLLBACK TO SAVEPOINT warehouse_transport');
           const errorInfo =
             transportError && typeof transportError === 'object'
               ? (transportError as Record<string, unknown>)
@@ -2673,27 +2582,167 @@ async function runDailyEmployment(): Promise<boolean> {
             typeof errorInfo.detail === 'string' ? errorInfo.detail : null,
           ].filter((value): value is string => value !== null);
           const errorDetail =
-            `${transportPhase}: ${errorMessage}${errorMetadata.length ? ` (${errorMetadata.join('; ')})` : ''}`.slice(
+            `planning_transfers: ${errorMessage}${errorMetadata.length ? ` (${errorMetadata.join('; ')})` : ''}`.slice(
               0,
               1000,
             );
-          console.error(`Falha no transporte do armazém ${warehouse.id} (${transportPhase}):`, transportError);
-          await client.query('SAVEPOINT transport_error_log');
-          try {
-            await client.query(
-              `INSERT INTO warehouse_transport_log
-                 (warehouse_id, day, linked_id, linked_type, product_id, direction, wanted, moved, reason, error_detail)
-               VALUES ($1, $2::date, $1, 'system', '', 'out', 0, 0, 'error', $3)`,
-              [warehouse.id, state.day, errorDetail],
-            );
-            await client.query('RELEASE SAVEPOINT transport_error_log');
-          } catch (logError) {
-            await client.query('ROLLBACK TO SAVEPOINT transport_error_log');
-            console.error('Não foi possível registrar o erro do armazém:', logError);
-          }
-          await client.query('RELEASE SAVEPOINT warehouse_transport');
+          console.error(`Falha no transporte do armazém ${warehouse.id} (planning_transfers):`, transportError);
+          transportLogRows.push({
+            warehouseId: warehouse.id,
+            buildingId: warehouse.id,
+            buildingType: 'system',
+            productId: '',
+            direction: 'out',
+            wanted: 0,
+            moved: 0,
+            reason: 'error',
+            errorDetail,
+          });
         }
       }
+
+      const stockDeltaRows = [...warehouseStockDeltas].flatMap(([warehouseId, deltas]) =>
+        [...deltas]
+          .filter(([, quantity]) => quantity !== 0)
+          .map(([productId, quantity]) => ({ warehouseId, productId, quantity })),
+      );
+      for (const change of stockDeltaRows) {
+        const currentStock =
+          inventoryByWarehouse.get(change.warehouseId)?.stock.get(change.productId) ?? 0;
+        if (currentStock + change.quantity < 0) {
+          throw new Error(
+            `Estoque insuficiente no armazém ${change.warehouseId} para ${change.productId}.`,
+          );
+        }
+      }
+
+      if (warehouseIds.length > 0) {
+        await client.query(
+          `DELETE FROM warehouse_transport_log
+           WHERE warehouse_id = ANY($1::uuid[]) AND day < $2::date - 30`,
+          [warehouseIds, state.day],
+        );
+      }
+      if (transportLogRows.length > 0) {
+        await client.query(
+          `INSERT INTO warehouse_transport_log
+             (warehouse_id, day, linked_id, linked_type, product_id, direction, wanted, moved, reason, error_detail)
+           SELECT batch.warehouse_id, $1::date, batch.building_id, batch.building_type,
+                  batch.product_id, batch.direction, batch.wanted, batch.moved,
+                  batch.reason, batch.error_detail
+           FROM UNNEST(
+             $2::uuid[], $3::uuid[], $4::text[], $5::text[], $6::text[],
+             $7::integer[], $8::integer[], $9::text[], $10::text[]
+           ) AS batch(
+             warehouse_id, building_id, building_type, product_id, direction,
+             wanted, moved, reason, error_detail
+           )`,
+          [
+            state.day,
+            transportLogRows.map((row) => row.warehouseId),
+            transportLogRows.map((row) => row.buildingId),
+            transportLogRows.map((row) => row.buildingType),
+            transportLogRows.map((row) => row.productId),
+            transportLogRows.map((row) => row.direction),
+            transportLogRows.map((row) => row.wanted),
+            transportLogRows.map((row) => row.moved),
+            transportLogRows.map((row) => row.reason),
+            transportLogRows.map((row) => row.errorDetail),
+          ],
+        );
+      }
+      if (stockDeltaRows.length > 0) {
+        const { rowCount } = await client.query(
+          `INSERT INTO warehouse_stock (building_id, product_id, quantity)
+           SELECT changes.warehouse_id, changes.product_id, changes.quantity
+           FROM UNNEST($1::uuid[], $2::text[], $3::integer[])
+             AS changes(warehouse_id, product_id, quantity)
+           WHERE changes.quantity > 0
+              OR EXISTS (
+                SELECT 1 FROM warehouse_stock current
+                WHERE current.building_id = changes.warehouse_id
+                  AND current.product_id = changes.product_id
+                  AND current.quantity + changes.quantity >= 0
+              )
+           ON CONFLICT (building_id, product_id) DO UPDATE
+           SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
+           WHERE warehouse_stock.quantity + EXCLUDED.quantity >= 0`,
+          [
+            stockDeltaRows.map((row) => row.warehouseId),
+            stockDeltaRows.map((row) => row.productId),
+            stockDeltaRows.map((row) => row.quantity),
+          ],
+        );
+        if (rowCount !== stockDeltaRows.length) {
+          throw new Error('O estoque de um armazém mudou durante o transporte diário.');
+        }
+      }
+
+      if (buildingChanges.size > 0) {
+        const buildingIds = [...buildingChanges.keys()];
+        const { rowCount } = await client.query(
+          `UPDATE residential_buildings building
+           SET stock = building.stock + changes.stock,
+               tool_stock = building.tool_stock + changes.tools,
+               wood_stock = building.wood_stock + changes.wood,
+               iron_stock = building.iron_stock + changes.iron,
+               charcoal_stock = building.charcoal_stock + changes.charcoal,
+               sugarcane_stock = building.sugarcane_stock + changes.sugarcane
+           FROM UNNEST(
+             $1::uuid[], $2::integer[], $3::integer[],
+             $4::integer[], $5::integer[], $6::integer[], $7::integer[]
+           ) AS changes(id, stock, tools, wood, iron, charcoal, sugarcane)
+           WHERE building.id = changes.id`,
+          [
+            buildingIds,
+            buildingIds.map((id) => buildingChanges.get(id)?.stock ?? 0),
+            buildingIds.map((id) => buildingChanges.get(id)?.tools ?? 0),
+            buildingIds.map((id) => buildingChanges.get(id)?.wood ?? 0),
+            buildingIds.map((id) => buildingChanges.get(id)?.iron ?? 0),
+            buildingIds.map((id) => buildingChanges.get(id)?.charcoal ?? 0),
+            buildingIds.map((id) => buildingChanges.get(id)?.sugarcane ?? 0),
+          ],
+        );
+        if (rowCount !== buildingIds.length) {
+          throw new Error('Uma construção ligada mudou durante o transporte diário.');
+        }
+        const inputChanges = [...buildingChanges].flatMap(([buildingId, changes]) =>
+          [...changes.inputStocks]
+            .filter(([, quantity]) => quantity > 0)
+            .map(([productId, quantity]) => ({ buildingId, productId, quantity })),
+        );
+        if (inputChanges.length > 0) {
+          await client.query(
+            `INSERT INTO building_input_stock (building_id, product_id, quantity)
+             SELECT batch.building_id, batch.product_id, batch.quantity
+             FROM UNNEST($1::uuid[], $2::text[], $3::integer[])
+               AS batch(building_id, product_id, quantity)
+             ON CONFLICT (building_id, product_id) DO UPDATE
+             SET quantity = building_input_stock.quantity + EXCLUDED.quantity`,
+            [
+              inputChanges.map((change) => change.buildingId),
+              inputChanges.map((change) => change.productId),
+              inputChanges.map((change) => change.quantity),
+            ],
+          );
+        }
+        changed = true;
+      }
+
+      for (const [buildingId, transported] of transportedByBuilding) {
+        const entry = productionByBuilding.get(buildingId) ?? { buildingId };
+        entry.transported = transported;
+        productionByBuilding.set(buildingId, entry);
+      }
+      await logProductionBatch(client, state.day, [...productionByBuilding.values()]);
+      await logWarehouseDemandBatch(
+        client,
+        [...transportDemandByWarehouse].map(([warehouseId, demand]) => ({
+          warehouseId,
+          day: state.day,
+          demand,
+        })),
+      );
       });
       } catch (economyError) {
         await client.query('ROLLBACK TO SAVEPOINT daily_economy');

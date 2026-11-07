@@ -706,7 +706,13 @@ mapeamento e verificar todas as curvas.
   unidades proporcionalmente ao que falta em cada uma, com arredondamento
   inteiro determinístico; o histórico informa essa distribuição. O que não
   couber por espaço ou Work Points não é transportado, e a produção para o
-  armazém tem prioridade sobre o abastecimento. A transferência manual começa
+  armazém tem prioridade sobre o abastecimento. No job diário, construções
+  ligadas, estoques de insumos e inventários/configurações dos armazéns são
+  carregados em consultas por lote, e alterações de estoque, construções,
+  histórico e demanda são gravadas em lotes, em vez de repetir essas consultas
+  para cada armazém. A persistência do transporte é atômica no savepoint da
+  etapa: falha em uma gravação reverte o lote de transporte, sem desfazer as
+  demais etapas econômicas. A transferência manual começa
   no painel do armazém por produto, seleciona um destino concluído do mesmo
   dono em até 60 tiles e consulta um limite no servidor. A rota executora volta
   a validar a origem e o destino sob o lock transacional global, respeita o

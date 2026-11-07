@@ -395,7 +395,7 @@ mapeamento e verificar todas as curvas.
   fator 1,2 em 4 h, 1 em 8 h, 0,8 em 14 h, linear entre eles; saúde e felicidade
   fixas em 100 por enquanto) e é concluída automaticamente ao atingir os Work
   Points necessários.
-- Vendas da Cesta Básica (`src/types/commerce.ts`): lojas cujo catálogo tem
+- Vendas das cestas básica e intermediária (`src/types/commerce.ts`): lojas cujo catálogo tem
   `kind: 'shop'` e `stockProductId` participam das vendas; incluem arroz,
   batata, milho, cevada, trigo, peixe, carne vermelha, leite, açúcar, vegetais,
   sal e especiarias. Todas têm `price` (padrão C$ 10, editável pelo dono em centavos via
@@ -403,32 +403,40 @@ mapeamento e verificar todas as curvas.
   armazém ligado do mesmo dono. No job das 00:00, lojas de produtos por unidade
   têm capacidade `floor(WP do dia / 20)` unidades e leite
   `floor(WP do dia / 1)` litros (WP = empregados × `getDailyWorkPoints`).
-  `config/demanda_basica.txt` define
-  o consumo diário por pessoa para a Cesta Básica: arroz, trigo, cevada, milho,
-  batata, peixe, carne vermelha, açúcar, vegetais, sal e especiarias começam em
-  `0.03`; leite em `1`.
+  `config/demanda_basica.txt` define as necessidades diárias por pessoa: na
+  cesta básica, arroz, trigo, cevada, milho, batata, peixe e carne vermelha
+  começam em `0.03`, leite em `1`; na cesta intermediária, açúcar `0.01`,
+  vegetais `0.05`, sal `0.04` e especiarias `0.01`.
   `commerce_history` fornece os preços e unidades vendidas nos últimos 30 dias.
   `getCityProductAveragePrices` calcula a média ponderada por unidades vendidas,
   por produto e cidade; se ainda não houve venda do produto, usa a média dos
-  preços atuais anunciados na cidade. Produtos sem loja na cidade não entram
-  em `RR`, o custo diário por pessoa da cesta disponível.
-  `planShopSales` percorre cada produto e residência: `Pf = preço local ×
-  demanda_basica`; com `Rf` como renda média por morador,
+  preços atuais anunciados na cidade. Produtos básicos sem preço disponível não
+  contribuem em `RR`; os intermediários sem preço não contribuem em `RR2`.
+  `RR` é o custo diário por pessoa da cesta básica, e `RR2` o custo da cesta
+  intermediária. Para todos os produtos, `Pf = preço local × necessidade
+  diária por pessoa`, `Dᵢ = √(60 / (60 + dᵢ))`, onde `dᵢ` é a distância entre
+  residência e loja. Na cesta básica, com `Rf` como renda média por morador:
   `w = (1 − Pf / RR)^4`, `q = (0,8^w − 1) × Rf`,
-  `benefício_erro = 0` se `Rf < Pf`, caso contrário
-  `Dᵢ × ((Rf − Pf − q) / RR)^4`, onde
-  `Dᵢ = √(60 / (60 + dᵢ))` e `dᵢ` é a distância entre residência e loja;
+  `benefício_erro = 0` se `Rf < Pf`, senão
+  `Dᵢ × ((Rf − Pf − q) / RR)^4`, e
   `benefício_ideal = (Rf / RR − 0,125 / RR)^4`.
-  Se o benefício ideal for zero, o benefício de erro também é zerado;
-  `benefício_associado = (benefício_erro / benefício_ideal)^4`.
+  Na cesta intermediária, `w = (1 − Pf / (RR + RR2))^3`,
+  `q = (0,8^w − 1) × Rf`; o benefício de erro é
+  `Dᵢ × ((Rf − Pf − q) / (RR + RR2))^3` somente se
+  `Rf > Pf + 1` e `Rf > RR/6 + RR2/3`, e zero caso contrário. Seu benefício
+  ideal é `((Rf − 1/6) / (RR + RR2) − 1/110)^3`.
+  Em ambas as cestas, `benefício_associado = (benefício_erro /
+  benefício_ideal)^4`; se o benefício ideal for zero, o associado também é zero.
   Os moradores são repartidos entre as lojas do produto em 60 tiles na
   proporção do benefício associado. O método dos maiores restos garante
   alocações inteiras cuja soma é a população da residência quando há benefício
-  positivo; se `RR` ou todos os benefícios forem zero, não há compra. A
-  distância define a elegibilidade no raio de 60 tiles e também reduz o
-  benefício por `Dᵢ`. A quantidade desejada por loja é `moradores alocados × demanda
-  básica × benefício associado`, com arredondamento aleatório das frações;
-  pode exceder a necessidade básica. Não há redistribuição de moradores quando
+  positivo; se o custo da cesta aplicável (`RR` para produtos básicos,
+  `RR + RR2` para intermediários) ou todos os benefícios forem zero, não há
+  compra. A distância define a elegibilidade no raio de 60 tiles e também
+  reduz o benefício por `Dᵢ`. A quantidade desejada por loja é `moradores
+  alocados × necessidade diária por pessoa × benefício associado`, com
+  arredondamento aleatório das frações, e pode exceder a necessidade diária.
+  Não há redistribuição de moradores quando
   estoque ou capacidade da loja é insuficiente. Vendas são limitadas pelo
   estoque e capacidade diários; o dono recebe `quantidade × preço`.
   `employed` em `ResidentialBuilding` é calculado por subquery em
@@ -438,8 +446,8 @@ mapeamento e verificar todas as curvas.
   preço unitário de venda. Os detalhes do diagnóstico (renda, moradores,
   produto, `RR`, `Pf`, `w`, `q`, benefícios de erro/ideal/associado,
   participação e moradores alocados, quantidade, estoque/capacidade, resultado
-  e decomposição de `RR` por produto (necessidade diária, preço médio, origem
-  do preço, vendas/receita do período e contribuição)) são
+  e decomposição de `RR` e `RR2` por produto (cesta, necessidade diária, preço
+  médio, origem do preço, vendas/receita do período e contribuição) são
   encaminhados via Redis apenas aos WebSockets autenticados do
   proprietário e ficam somente no `localStorage` do navegador. O navegador
   precisa estar conectado durante o processamento das vendas para capturar
@@ -482,9 +490,10 @@ mapeamento e verificar todas as curvas.
   terminar, o plantio é limpo e um novo pode ser feito. `ResidentialBuilding.crop`
   expõe o estado ao cliente.
 - `red_meat` tem validade padrão de 30 dias em `src/types/product.ts`.
-- Consumo das residências: as compras de todos os produtos disponíveis da Cesta
-  Básica (arroz, trigo, cevada, milho, batata, peixe, açúcar, vegetais, sal,
-  especiarias, carne vermelha e leite) das 00:00 são gravadas em
+- Consumo das residências: as compras de todos os produtos disponíveis da
+  cesta básica (arroz, trigo, cevada, milho, batata, peixe, carne vermelha e
+  leite) e da cesta intermediária (açúcar, vegetais, sal e especiarias) das
+  00:00 são gravadas em
   `residence_consumption (building_id, product_id, day, quantity, spent,
   occupants)` (cascata). `GET /api/residential-buildings/:id/consumption`
   devolve por produto o consumo por pessoa no último dia e a média diária por
@@ -512,10 +521,9 @@ mapeamento e verificar todas as curvas.
   unidade de `ProductionRule.workPointsPerUnit`. Todas as lojas usam o planner
   compartilhado de vendas; cada uma vende seu `stockProductId`, incluindo as
   lojas de batata, milho, cevada, trigo, carne vermelha, açúcar, vegetais, sal e
-  especiarias. Os quatro produtos também são necessidades básicas configuradas
-  em `config/demanda_basica.txt` (0,03 unidade desejável por morador/dia), assim
-  as lojas participam do cálculo de venda e da cesta de referência. Ferramentas
-  (`tools`) é um produto novo (5 kg, 0,01 m³,
+  especiarias. Açúcar, vegetais, sal e especiarias têm necessidades configuradas
+  em `config/demanda_basica.txt` e participam do cálculo de vendas da cesta
+  intermediária. Ferramentas (`tools`) é um produto novo (5 kg, 0,01 m³,
   validade infinita); `planTransfers` leva peixe do Pesqueiro ao armazém e
   Ferramentas do armazém ao Pesqueiro (`Transfer.productId === 'tools'` grava em
   `  tool_stock`). A rota de preço e o histórico financeiro atendem todos os

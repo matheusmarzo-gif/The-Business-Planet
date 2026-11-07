@@ -111,18 +111,21 @@ export default function CommerceHistoryPanel({
                       {transaction.productId
                         ? `${PRODUCTS.find((product) => product.id === transaction.productId)?.name ?? transaction.productId} · `
                         : ''}
-                      renda média {formatMoney(transaction.averageIncome)} · RR da cesta{' '}
-                      {formatMoney(transaction.referenceBasketCost ?? transaction.areaAveragePrice)} · preço médio do produto{' '}
-                      {formatMoney(transaction.productAveragePrice ?? transaction.areaAveragePrice)} · necessidade básica{' '}
+                      renda média {formatMoney(transaction.averageIncome)} · RR básica{' '}
+                      {formatMoney(transaction.referenceBasketCost ?? transaction.areaAveragePrice)} · RR2 intermediária{' '}
+                      {formatMoney(transaction.intermediateBasketCost ?? 0)} · base da fórmula{' '}
+                      {formatMoney(transaction.calculationBasketCost ?? transaction.referenceBasketCost ?? transaction.areaAveragePrice)} · preço médio do produto{' '}
+                      {formatMoney(transaction.productAveragePrice ?? transaction.areaAveragePrice)} · necessidade diária{' '}
                       {decimal.format(transaction.expectedDemand)} · quantidade desejada total{' '}
                       {integer.format(transaction.desiredQuantity)}
                     </strong>
                     {transaction.basketBreakdown ? (
                       <details className="commerce-basket-breakdown">
-                        <summary>Composição do RR (soma diária por morador)</summary>
+                        <summary>Composição de RR e RR2 (soma diária por morador)</summary>
                         <p>
                           Cada contribuição é consumo diário configurado × preço médio municipal.
-                          Os subtotais são somados sem arredondamento intermediário.
+                          Produtos básicos compõem RR; produtos intermediários compõem RR2. Os
+                          subtotais são somados sem arredondamento intermediário.
                         </p>
                         {transaction.basketBreakdown.map((item) => {
                           const product = PRODUCTS.find(({ id }) => id === item.productId);
@@ -142,23 +145,44 @@ export default function CommerceHistoryPanel({
                                 : formatPreciseMoney(item.averagePrice)}{' '}
                               ={' '}
                               {item.basketContribution === null
-                                ? 'não entra no RR'
+                                ? 'não entra na cesta'
                                 : formatPreciseMoney(item.basketContribution)}{' '}
-                              · {priceSource}
+                              · {item.basketType === 'intermediate' ? 'RR2' : 'RR'} · {priceSource}
                             </p>
                           );
                         })}
                         <strong>
                           RR calculado: {formatPreciseMoney(
                             transaction.basketBreakdown.reduce(
-                              (total, item) => total + (item.basketContribution ?? 0),
+                              (total, item) =>
+                                total +
+                                (item.basketType === 'intermediate'
+                                  ? 0
+                                  : item.basketContribution ?? 0),
+                              0,
+                            ),
+                          )} · RR2 calculado: {formatPreciseMoney(
+                            transaction.basketBreakdown.reduce(
+                              (total, item) =>
+                                total +
+                                (item.basketType === 'intermediate'
+                                  ? item.basketContribution ?? 0
+                                  : 0),
                               0,
                             ),
                           )}
                         </strong>
                       </details>
                     ) : (
-                      <p>Composição detalhada do RR não foi registrada neste diagnóstico.</p>
+                      <p>Composição detalhada de RR e RR2 não foi registrada neste diagnóstico.</p>
+                    )}
+                    {transaction.basketType === 'intermediate' && (
+                      <p>
+                        Cesta intermediária: w = (1 − Pf / (RR + RR2))³; q = (0,8ʷ − 1) × Rf;
+                        benefício de erro = Dᵢ × ((Rf − Pf − q) / (RR + RR2))³ quando Rf &gt;
+                        Pf + 1 e Rf &gt; RR/6 + RR2/3; caso contrário, zero. Benefício ideal =
+                        ((Rf − 1/6) / (RR + RR2) − 1/110)³; associado = (erro / ideal)⁴.
+                      </p>
                     )}
                     <p className="commerce-candidate-list">
                       Loja #{transaction.candidate.rank} · preço {formatMoney(transaction.candidate.price)} ·

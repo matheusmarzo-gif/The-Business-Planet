@@ -1,4 +1,4 @@
-# Consumo diário desejável por morador para cada produto da Cesta Básica.
+# Consumo diário desejável por morador para as cestas básica e intermediária.
 # Edite os valores e reinicie o servidor para aplicar.
 demanda_basica.rice=0.03
 demanda_basica.wheat=0.03
@@ -6,9 +6,9 @@ demanda_basica.barley=0.03
 demanda_basica.corn=0.03
 demanda_basica.potato=0.03
 demanda_basica.fish=0.03
-demanda_basica.sugar=0.03
-demanda_basica.vegetables=0.03
-demanda_basica.salt=0.03
-demanda_basica.spices=0.03
 demanda_basica.red_meat=0.03
 demanda_basica.milk=1
+demanda_intermediaria.sugar=0.01
+demanda_intermediaria.vegetables=0.05
+demanda_intermediaria.salt=0.04
+demanda_intermediaria.spices=0.01

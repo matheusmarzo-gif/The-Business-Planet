@@ -43,8 +43,11 @@ import {
 import {
   getBasicBasketBreakdown,
   getBasicBasketCost,
+  getBasketBreakdown,
   getCityProductAveragePrices,
   getCityProductKey,
+  getIntermediateBasketBreakdown,
+  getIntermediateBasketCost,
   getShopDailyFinancials,
   getPurchaseBenefitCalculation,
   getShopSalesCapacity,
@@ -496,12 +499,12 @@ describe('shop sales', () => {
     ['corn', 0.03],
     ['potato', 0.03],
     ['fish', 0.03],
-    ['sugar', 0.03],
-    ['vegetables', 0.03],
-    ['salt', 0.03],
-    ['spices', 0.03],
     ['red_meat', 0.03],
     ['milk', 1],
+    ['sugar', 0.01],
+    ['vegetables', 0.05],
+    ['salt', 0.04],
+    ['spices', 0.01],
   ]);
   const cityPrices = (productId: string, price: number) =>
     new Map([[getCityProductKey('city-a', productId), price]]);
@@ -678,7 +681,7 @@ describe('shop sales', () => {
       history,
     );
 
-    assert.equal(breakdown.length, 12);
+    assert.equal(breakdown.length, 8);
     assert.deepEqual(
       breakdown
         .filter((item) => item.averagePrice !== null)
@@ -694,6 +697,29 @@ describe('shop sales', () => {
       ],
     );
     assert.equal(getBasicBasketCost('city-a', demandByProduct, prices), 1.9143);
+    assert.equal(getIntermediateBasketCost('city-a', demandByProduct, prices), 0);
+    const allBasketItems = getBasketBreakdown(
+      'city-a',
+      demandByProduct,
+      prices,
+      basketShops,
+      history,
+    );
+    assert.equal(allBasketItems.length, 12);
+    assert.deepEqual(
+      getIntermediateBasketBreakdown('city-a', demandByProduct, prices, basketShops, history)
+        .map(({ productId, basketContribution }) => [productId, basketContribution]),
+      [
+        ['sugar', null],
+        ['vegetables', null],
+        ['salt', null],
+        ['spices', null],
+      ],
+    );
+    assert.equal(
+      allBasketItems.filter((item) => item.basketType === 'intermediate').length,
+      4,
+    );
     assert.ok(
       breakdown
         .filter((item) => item.basketContribution !== null)
@@ -710,8 +736,85 @@ describe('shop sales', () => {
     const diagnostic = plan.transactionsByShop.get('rice')?.[0];
     assert.ok(diagnostic);
     assert.equal(isShopResidenceTransaction(diagnostic), true);
-    assert.deepEqual(diagnostic.basketBreakdown, breakdown);
+    assert.deepEqual(diagnostic.basketBreakdown, allBasketItems);
     assert.equal(diagnostic.referenceBasketCost, 1.9143);
+    assert.equal(diagnostic.intermediateBasketCost, 0);
+  });
+
+  it('uses the intermediate-basket formula, RR2, and both income thresholds', () => {
+    const income = 5;
+    const price = 10;
+    const need = 0.01;
+    const rr = 2;
+    const rr2 = 1;
+    const distance = 15;
+    const pf = price * need;
+    const total = rr + rr2;
+    const w = (1 - pf / total) ** 3;
+    const q = (0.8 ** w - 1) * income;
+    const distanceFactor = Math.sqrt(60 / (60 + distance));
+    const error = distanceFactor * ((income - pf - q) / total) ** 3;
+    const ideal = ((income - 1 / 6) / total - 1 / 110) ** 3;
+    const calculation = getPurchaseBenefitCalculation(
+      income,
+      price,
+      need,
+      rr,
+      distance,
+      { basketType: 'intermediate', intermediateBasketCost: rr2 },
+    );
+    assert.equal(calculation.pf, pf);
+    assert.equal(calculation.w, w);
+    assert.ok(Math.abs(calculation.q - q) < 1e-12);
+    assert.ok(Math.abs(calculation.errorBenefit - error) < 1e-12);
+    assert.ok(Math.abs(calculation.idealBenefit - ideal) < 1e-12);
+    assert.ok(
+      Math.abs(calculation.associatedBenefit - (error / ideal) ** 4) < 1e-10,
+    );
+    assert.equal(
+      getPurchaseBenefitCalculation(1, price, need, rr, 0, {
+        basketType: 'intermediate',
+        intermediateBasketCost: rr2,
+      }).errorBenefit,
+      0,
+    );
+    assert.equal(
+      getPurchaseBenefitCalculation(2, price, need, 12, 0, {
+        basketType: 'intermediate',
+        intermediateBasketCost: 6,
+      }).errorBenefit,
+      0,
+    );
+  });
+
+  it('sells intermediate products using RR plus RR2', () => {
+    const sugarShop = {
+      ...shop('sugar-intermediate', 0, 10, 100, 100),
+      productId: 'sugar',
+      type: 'shop_sugar' as const,
+    };
+    const shops = [sugarShop];
+    const prices = new Map(
+      [...demandByProduct.keys()].map((productId) => [
+        getCityProductKey('city-a', productId),
+        1,
+      ]),
+    );
+    const plan = planShopSalesDetailed(
+      [home('intermediate-home', 0, 32, 10)],
+      shops,
+      demandByProduct,
+      prices,
+      () => 0,
+    );
+    const transaction = plan.transactionsByShop.get(sugarShop.id)?.[0];
+    assert.ok(transaction);
+    assert.equal(transaction.basketType, 'intermediate');
+    assert.equal(transaction.expectedDemand, 32 * 0.01);
+    assert.equal(transaction.intermediateBasketCost, 0.11);
+    assert.equal(transaction.referenceBasketCost, 1.21);
+    assert.equal(transaction.calculationBasketCost, 1.32);
+    assert.equal(transaction.candidate.calculationBasketCost, 1.32);
   });
 
   it('allocates integer residents by associated benefit and keeps their total exact', () => {
@@ -869,12 +972,12 @@ describe('fazenda leiteira e demanda configurável', () => {
       'demanda_basica.corn=0.03',
       'demanda_basica.potato=0.03',
       'demanda_basica.fish=0.03',
-      'demanda_basica.sugar=0.03',
-      'demanda_basica.vegetables=0.03',
-      'demanda_basica.salt=0.03',
-      'demanda_basica.spices=0.03',
       'demanda_basica.red_meat=0.03',
       'demanda_basica.milk=1',
+      'demanda_intermediaria.sugar=0.01',
+      'demanda_intermediaria.vegetables=0.05',
+      'demanda_intermediaria.salt=0.04',
+      'demanda_intermediaria.spices=0.01',
     ].join('\n'));
     assert.equal(multipliers.get('rice'), 0.03);
     assert.equal(multipliers.get('wheat'), 0.03);
@@ -882,16 +985,35 @@ describe('fazenda leiteira e demanda configurável', () => {
     assert.equal(multipliers.get('corn'), 0.03);
     assert.equal(multipliers.get('potato'), 0.03);
     assert.equal(multipliers.get('fish'), 0.03);
-    assert.equal(multipliers.get('sugar'), 0.03);
-    assert.equal(multipliers.get('vegetables'), 0.03);
-    assert.equal(multipliers.get('salt'), 0.03);
-    assert.equal(multipliers.get('spices'), 0.03);
+    assert.equal(multipliers.get('sugar'), 0.01);
+    assert.equal(multipliers.get('vegetables'), 0.05);
+    assert.equal(multipliers.get('salt'), 0.04);
+    assert.equal(multipliers.get('spices'), 0.01);
     assert.equal(multipliers.get('red_meat'), 0.03);
     assert.equal(multipliers.get('milk'), 1);
     assert.throws(() => parseBasicDemandConfig('demanda_basica.milk=-1'), /linha 1/);
     assert.throws(
       () => parseBasicDemandConfig('demanda_basica.rice=0.03'),
       /não define o produto wheat/,
+    );
+    assert.throws(
+      () => parseBasicDemandConfig(
+        [
+          'demanda_basica.rice=0.03',
+          'demanda_basica.wheat=0.03',
+          'demanda_basica.barley=0.03',
+          'demanda_basica.corn=0.03',
+          'demanda_basica.potato=0.03',
+          'demanda_basica.fish=0.03',
+          'demanda_basica.red_meat=0.03',
+          'demanda_basica.milk=1',
+          'demanda_basica.sugar=0.01',
+          'demanda_intermediaria.vegetables=0.05',
+          'demanda_intermediaria.salt=0.04',
+          'demanda_intermediaria.spices=0.01',
+        ].join('\n'),
+      ),
+      /categoria de demanda incorreta/,
     );
     assert.throws(
       () => parseBasicDemandConfig([
@@ -913,12 +1035,12 @@ describe('fazenda leiteira e demanda configurável', () => {
         ['corn', 0.03],
         ['potato', 0.03],
         ['fish', 0.03],
-        ['sugar', 0.03],
-        ['vegetables', 0.03],
-        ['salt', 0.03],
-        ['spices', 0.03],
         ['red_meat', 0.03],
         ['milk', 1],
+        ['sugar', 0.01],
+        ['vegetables', 0.05],
+        ['salt', 0.04],
+        ['spices', 0.01],
       ],
     );
     assert.equal(

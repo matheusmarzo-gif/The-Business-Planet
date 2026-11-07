@@ -334,11 +334,29 @@ Loja de Peixes: cada uma ocupa 2 × 2 tiles, emprega até 4 funcionários, guard
 até 40 unidades, custa 30 madeiras e 10 pedras e exige 6.000 Work Points. Cada
 loja recebe seu produto do armazém ligado e vende por preço definido pelo dono.
 
-O consumo diário desejável por morador da **Cesta Básica** pode ser ajustado em
-[`config/demanda_basica.txt`](./config/demanda_basica.txt): 0,03 de arroz,
-trigo, cevada, milho, batata, peixe, açúcar, vegetais, sal, especiarias e carne
-vermelha; e 1 litro de leite. O servidor lê o arquivo ao iniciar; reinicie o
-serviço depois de alterá-lo.
+O consumo diário desejável por morador das **cestas básicas e intermediárias**
+pode ser ajustado em [`config/demanda_basica.txt`](./config/demanda_basica.txt).
+Na cesta básica: 0,03 de arroz, trigo, cevada, milho, batata, peixe e carne
+vermelha; e 1 litro de leite. Na cesta intermediária: 0,01 de açúcar, 0,05 de
+vegetais, 0,04 de sal e 0,01 de especiarias. O servidor lê o arquivo ao iniciar;
+reinicie o serviço depois de alterá-lo.
+
+O preço médio de cada produto é ponderado pelas vendas dos últimos 30 dias ou,
+na ausência de vendas, pela média dos preços anunciados na cidade. `RR` é a soma
+de necessidade diária × preço médio dos produtos básicos com preço disponível;
+`RR2` é a mesma soma para os produtos intermediários.
+
+As compras básicas usam a fórmula existente com `RR`: `Pf = preço local ×
+necessidade`, `w = (1 − Pf/RR)^4`, `q = (0,8^w − 1) × Rf`, benefício de erro
+`Dᵢ × ((Rf − Pf − q)/RR)^4` quando `Rf ≥ Pf` e benefício ideal
+`(Rf/RR − 0,125/RR)^4`. Para os produtos intermediários, usa-se
+`w = (1 − Pf/(RR + RR2))^3` e o mesmo cálculo de `q`. O benefício de erro é
+`Dᵢ × ((Rf − Pf − q)/(RR + RR2))^3` somente quando `Rf > Pf + 1` e
+`Rf > RR/6 + RR2/3`; caso contrário, é zero. O benefício ideal é
+`((Rf − 1/6)/(RR + RR2) − 1/110)^3`. Em ambas as cestas, o benefício associado
+continua sendo `(benefício de erro / benefício ideal)^4`. `Rf` é a renda média
+por morador e `Dᵢ = √(60/(60 + distância))`. A demanda efetiva ainda depende da
+distribuição de moradores entre lojas, estoque e capacidade de venda.
 
 ### Recursos e Ferramentaria
 
@@ -445,39 +463,36 @@ Points gerados pelos funcionários no dia: as lojas de produtos por unidade
 (arroz, batata, milho, cevada, trigo, peixe, açúcar, vegetais, sal, especiarias
 e carne vermelha) ganham 1 unidade por 20 Work Points; a Loja de Leite ganha 1
 litro por Work Point. Para cada produto, as residências consideram lojas do
-produto em até 60 tiles. O custo de referência `RR` é o custo diário por pessoa de todos os
-itens da Cesta Básica disponíveis na cidade, calculado pelos preços médios
+produto em até 60 tiles. O custo de referência `RR` é o custo diário por pessoa
+da cesta básica e `RR2`, o da cesta intermediária. Ambos usam preços médios
 ponderados pelas unidades vendidas nos últimos 30 dias. Produtos sem vendas no
 período usam a média dos preços atuais anunciados na cidade; produtos sem loja
-na cidade são omitidos.
+na cidade são omitidos do custo da cesta correspondente.
 
-Para cada residência e loja, `Pf` é o preço local multiplicado pelo consumo
-básico por pessoa, e `Rf` é a renda média por morador. Se `Rf < Pf`, o benefício
-de erro é zero; caso contrário, `w = (1 − Pf / RR)^4`,
-`q = (0,8^w − 1) × Rf` e
-`Dᵢ = √(60 / (60 + dᵢ))`, `benefício_erro = Dᵢ × ((Rf − Pf − q) / RR)^4`,
-onde `dᵢ` é a distância entre a residência e a loja.
-`benefício_ideal = (Rf / RR − 0,125 / RR)^4`; se ele for zero, o benefício de
-erro também é zerado. `benefício_associado = (benefício_erro /
-benefício_ideal)^4`. Para cada produto, os moradores são divididos entre as
-lojas proporcionalmente ao benefício associado. O arredondamento pelo método
-dos maiores restos mantém o número de moradores inteiro e igual à população da
-residência quando existe benefício positivo. Se `RR` for zero ou todas as lojas
-tiverem benefício zero, não há compra. A distância também define a elegibilidade
-no raio de 60 tiles e reduz o benefício conforme `Dᵢ`. A quantidade desejada em
-cada loja é moradores alocados × consumo
-básico × benefício associado; pode superar 100% da necessidade básica. Frações
-de unidade são arredondadas aleatoriamente, preservando a quantidade esperada
-ao longo do tempo. Estoque e capacidade limitam as vendas; moradores alocados a
-uma loja sem unidades disponíveis não são realocados para outra. O dono recebe
-o valor das vendas; moradores não são cobrados.
+Para cada residência e loja, `Pf` é o preço local multiplicado pela necessidade
+diária por pessoa, e `Rf` é a renda média por morador. As fórmulas de benefício
+e a distinção entre produtos básicos e intermediários estão descritas acima.
+`Dᵢ = √(60 / (60 + dᵢ))`, onde `dᵢ` é a distância entre a residência e a loja.
+Para cada produto, os moradores são divididos entre as lojas elegíveis em até
+60 tiles, proporcionalmente ao benefício associado. O arredondamento pelo
+método dos maiores restos mantém o número de moradores inteiro e igual à
+população da residência quando existe benefício positivo. Se o custo de
+referência da cesta aplicável (`RR` ou `RR + RR2`) for zero, ou todas as lojas
+tiverem benefício zero, não há compra. A quantidade desejada em cada loja é
+moradores alocados × necessidade diária por pessoa × benefício associado e pode
+superar a necessidade diária. Frações de unidade são arredondadas
+aleatoriamente, preservando a quantidade esperada ao longo do tempo. Estoque e
+capacidade limitam as vendas; moradores alocados a uma loja sem unidades
+disponíveis não são realocados para outra. O dono recebe o valor das vendas;
+moradores não são cobrados.
 
 A loja vende somente o estoque que tiver (começa em 0; pode ser abastecida por
-um armazém ligado). No histórico do comércio, **Ver cálculo** mostra `RR` e uma composição por
-produto da cesta: consumo diário por morador, preço médio usado, subtotal,
-origem do preço (vendas ponderadas ou média dos anúncios), unidades vendidas e
-receita no período; itens sem preço disponível aparecem como fora do `RR`.
-Também mostra preço médio do produto, `Pf`, `w`, `q`, benefícios de
+um armazém ligado). No histórico do comércio, **Ver cálculo** mostra `RR` e
+`RR2` e a composição por produto de cada cesta: necessidade diária por morador,
+preço médio usado, subtotal, origem do preço (vendas ponderadas ou média dos
+anúncios), unidades vendidas e receita no período; itens sem preço disponível
+aparecem fora do custo de referência correspondente. Também mostra preço médio
+do produto, `Pf`, `w`, `q`, benefícios de
 erro/ideal/associado, participação e número de moradores alocados, demanda,
 estoque/capacidade e resultado. Os subtotais da cesta são exibidos com maior
 precisão, sem arredondamento intermediário. O cálculo é enviado ao dono em
@@ -546,8 +561,9 @@ indicados, limitada ao estoque livre (300; ligar a um armazém libera espaço); 
 depois de colher tudo é possível iniciar um novo ciclo.
 
 **Consumo:** em residências concluídas, **Ver consumo da casa** mostra o consumo
-por pessoa de todos os produtos da Cesta Básica (arroz, trigo, cevada, milho,
-batata, peixe, açúcar, vegetais, sal, especiarias, carne vermelha e leite) no
+por pessoa de todos os produtos das cestas básica (arroz, trigo, cevada, milho,
+batata, peixe, carne vermelha e leite) e intermediária (açúcar, vegetais, sal e
+especiarias) no
 último dia e a média diária por pessoa nos últimos 30 dias, além do preço médio
 pago no dia e no mês. No painel da cidade, **Consumo**
 mostra esses mesmos dados agregados para todos os cidadãos: as quantidades

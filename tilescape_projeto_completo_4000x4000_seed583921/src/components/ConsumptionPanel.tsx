@@ -1,6 +1,11 @@
+import { Fragment } from 'react';
 import { PRODUCTS } from '../types/product';
 import { formatMoney } from '../types/wallet';
-import { BASIC_BASKET_PRODUCT_IDS } from '../types/commerceDemand';
+import {
+  BASIC_BASKET_PRODUCT_IDS,
+  CONSUMPTION_PRODUCT_IDS,
+  INTERMEDIATE_BASKET_PRODUCT_IDS,
+} from '../types/commerceDemand';
 
 export interface ProductConsumption {
   productId: string;
@@ -10,7 +15,7 @@ export interface ProductConsumption {
   monthAveragePrice: number | null;
 }
 
-export const CONSUMED_PRODUCT_IDS = BASIC_BASKET_PRODUCT_IDS;
+export const CONSUMED_PRODUCT_IDS = CONSUMPTION_PRODUCT_IDS;
 
 interface ConsumptionPanelProps {
   consumption: Map<string, ProductConsumption>;
@@ -58,16 +63,24 @@ export default function ConsumptionPanel({
           const product = PRODUCTS.find((item) => item.id === productId);
           const data = consumption.get(productId);
           return (
-            <div className="consumption-row" key={productId}>
-              <span className="warehouse-product">
-                {product && <img src={product.icon} alt="" />}
-                {product?.name ?? productId}
-              </span>
-              <span>{decimal.format(data?.lastDayPerPerson ?? 0)}</span>
-              <span>{decimal.format(data?.monthPerPerson ?? 0)}</span>
-              <span>{price(data?.lastDayAveragePrice ?? null)}</span>
-              <span>{price(data?.monthAveragePrice ?? null)}</span>
-            </div>
+            <Fragment key={productId}>
+              {productId === BASIC_BASKET_PRODUCT_IDS[0] && (
+                <div className="consumption-basket-group">Cesta básica</div>
+              )}
+              {productId === INTERMEDIATE_BASKET_PRODUCT_IDS[0] && (
+                <div className="consumption-basket-group">Cesta intermediária</div>
+              )}
+              <div className="consumption-row">
+                <span className="warehouse-product">
+                  {product && <img src={product.icon} alt="" />}
+                  {product?.name ?? productId}
+                </span>
+                <span>{decimal.format(data?.lastDayPerPerson ?? 0)}</span>
+                <span>{decimal.format(data?.monthPerPerson ?? 0)}</span>
+                <span>{price(data?.lastDayAveragePrice ?? null)}</span>
+                <span>{price(data?.monthAveragePrice ?? null)}</span>
+              </div>
+            </Fragment>
           );
         })}
       </div>

@@ -141,6 +141,7 @@ button { color: inherit; }
 .commerce-loss { color: #e58b7d; }
 .warehouse-row { display: grid; grid-template-columns: minmax(130px, 1.6fr) 62px 82px minmax(100px, 1fr) minmax(100px, 1fr) 74px 68px 130px; min-width: 800px; gap: 7px; align-items: center; font-size: 11px; }
 .consumption-row { display: grid; grid-template-columns: minmax(110px, 1.4fr) repeat(4, 1fr); gap: 8px; align-items: center; font-size: 11px; }
+.consumption-basket-group { grid-column: 1 / -1; color: #b29a66; font-size: 10px; font-weight: 700; letter-spacing: .06em; padding-top: 8px; text-transform: uppercase; }
 .warehouse-head { position: sticky; top: 0; background: rgba(19,28,23,.98); color: #b29a66; font-size: 9px; font-weight: 700; letter-spacing: .06em; }
 .warehouse-product { display: flex; align-items: center; gap: 7px; }
 .warehouse-product img { width: 26px; height: 26px; object-fit: contain; }

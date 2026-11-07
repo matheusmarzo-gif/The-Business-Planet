@@ -112,7 +112,7 @@ válida; as rotas do mundo verificam os tokens no servidor.
 Cada tipo de construção de um jogador recebe numeração romana individual
 (por exemplo, Loja de Arroz I e Loja de Arroz II). O nome aparece no painel de
 detalhes. A etiqueta sobre a construção mostra o nome do jogador somente para
-ele; a partir do zoom 4,5 (de 6), uma segunda etiqueta abaixo informa o tipo da
+ele; a partir do zoom 3 (de 6), uma segunda etiqueta abaixo informa o tipo da
 construção. Na aba **Contábil**, **Visualizar** fecha o painel, centraliza o
 mapa na construção e abre seus detalhes.
 

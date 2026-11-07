@@ -34,7 +34,7 @@ import {
 
 const BASE_TILE_SIZE = 24;
 const MAX_CAMERA_ZOOM = 6;
-const BUILDING_TYPE_LABEL_MIN_ZOOM = 4.5;
+const BUILDING_TYPE_LABEL_MIN_ZOOM = 3;
 const ASSEMBLY_ASSET = '/buildings/assembleia.png';
 const ROAD_ASSETS = Array.from(
   { length: 11 },

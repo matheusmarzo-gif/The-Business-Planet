@@ -45,7 +45,10 @@ import {
 } from '../src/types/residence.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
 import { roundCurrency } from '../src/types/currency.js';
-import { calculateDailyRentRevenue } from '../src/types/accounting.js';
+import {
+  calculateDailyRentRevenue,
+  parseAccountingPeriodDays,
+} from '../src/types/accounting.js';
 import {
   isPastDailyWorldRefreshTime,
   isValidTimeScale,
@@ -90,10 +93,14 @@ import {
 } from '../src/types/logistics.js';
 import {
   advanceGrowth,
+  AUTOMATABLE_FARM_TYPES,
   FARM_CROP_TYPES,
   getDailyWorkRatio,
+  isAutomatableFarmType,
   isFarmCropType,
+  parseFarmAutomationSettings,
   planHarvest,
+  shouldStartAutomatedCrop,
   type Crop,
   type FarmCropType,
 } from '../src/types/farming.js';
@@ -391,6 +398,10 @@ type ResidentialBuildingRow = {
   crop_days: number;
   crop_yield: number;
   crop_harvested: number;
+  farm_auto_planting_enabled: boolean;
+  farm_auto_planting_months: number[];
+  farm_planting_workers: number;
+  farm_harvest_workers: number;
   employed: number;
   average_income: number;
   owner_name?: string | null;
@@ -398,6 +409,7 @@ type ResidentialBuildingRow = {
 };
 
 const RESIDENTIAL_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, efficiency_penalty,
+  farm_auto_planting_enabled, farm_auto_planting_months, farm_planting_workers, farm_harvest_workers,
   crop_phase, to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day, crop_ratio_sum, crop_days,
   crop_yield, crop_harvested,
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
@@ -408,6 +420,12 @@ const RESIDENTIAL_COLUMNS = `id, building_type, building_number, tile_x, tile_y,
     / GREATEST(occupants, 1) AS average_income`;
 
 function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuilding {
+  const farmAutomation = {
+    enabled: row.farm_auto_planting_enabled,
+    plantingMonths: row.farm_auto_planting_months,
+    plantingWorkers: row.farm_planting_workers,
+    harvestWorkers: row.farm_harvest_workers,
+  };
   return {
     id: row.id,
     ownerName: row.owner_name ?? undefined,
@@ -423,7 +441,13 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     workHoursPerDay: row.work_hours_per_day,
     rent: row.rent,
     occupants: row.occupants,
-    desiredWorkers: row.desired_workers,
+    desiredWorkers: farmAutomation.enabled
+      ? row.crop_phase === 'growing'
+        ? farmAutomation.plantingWorkers
+        : row.crop_phase === 'harvesting'
+          ? farmAutomation.harvestWorkers
+          : 0
+      : row.desired_workers,
     workPointsDone: row.work_points_done,
     price: row.price,
     stock: row.stock,
@@ -434,6 +458,7 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     charcoalStock: row.charcoal_stock,
     sugarcaneStock: row.sugarcane_stock,
     efficiencyPenalty: row.efficiency_penalty,
+    farmAutomation,
     crop:
       row.crop_phase && row.crop_planted_day
         ? {
@@ -2536,6 +2561,49 @@ async function runDailyEmployment(): Promise<boolean> {
         performanceCycleId,
         allocationCounts,
         async () => {
+      const currentMonth = Number(state.day.slice(5, 7));
+      const { rows: automationCandidates } = await client.query<{
+        id: string;
+        phase: Crop['phase'] | null;
+        enabled: boolean;
+        months: number[];
+        plantingWorkers: number;
+        harvestWorkers: number;
+      }>(
+        `SELECT id, crop_phase AS phase,
+                farm_auto_planting_enabled AS enabled,
+                farm_auto_planting_months AS months,
+                farm_planting_workers AS "plantingWorkers",
+                farm_harvest_workers AS "harvestWorkers"
+         FROM residential_buildings
+         WHERE building_type = ANY($1::text[]) AND status = 'completed' AND crop_phase IS NULL
+           AND farm_auto_planting_enabled = true`,
+        [AUTOMATABLE_FARM_TYPES],
+      );
+      const farmsToPlant = automationCandidates
+        .filter((farm) =>
+          shouldStartAutomatedCrop(
+            {
+              enabled: farm.enabled,
+              plantingMonths: farm.months,
+              plantingWorkers: farm.plantingWorkers,
+              harvestWorkers: farm.harvestWorkers,
+            },
+            farm.phase,
+            currentMonth,
+          ),
+        )
+        .map((farm) => farm.id);
+      if (farmsToPlant.length > 0) {
+        await client.query(
+          `UPDATE residential_buildings
+           SET crop_phase = 'growing', crop_planted_day = $2::date,
+               crop_ratio_sum = 0, crop_days = 0, crop_yield = 0, crop_harvested = 0
+           WHERE id = ANY($1::uuid[]) AND crop_phase IS NULL`,
+          [farmsToPlant, state.day],
+        );
+        changed = true;
+      }
       const { rows } = await client.query<ResidentialBuildingRow>(
         `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings`,
       );
@@ -3424,6 +3492,12 @@ async function start() {
       response.status(401).json({ error: 'unauthorized' });
       return;
     }
+    const periodDays =
+      request.query.days === undefined ? 30 : parseAccountingPeriodDays(request.query.days);
+    if (periodDays === null) {
+      response.status(400).json({ error: 'invalid_accounting_period' });
+      return;
+    }
     void (async () => {
       const { rows: clockRows } = await pool.query<{ day: string }>(
         `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
@@ -3452,12 +3526,12 @@ async function start() {
            FROM residential_buildings building
            LEFT JOIN commerce_history history
              ON history.building_id = building.id
-            AND history.day BETWEEN $2::date - 29 AND $2::date
+            AND history.day BETWEEN $2::date - ($4::integer - 1) AND $2::date
            WHERE building.created_by = $1
              AND building.building_type = ANY($3::text[])
            GROUP BY building.id, building.building_type, building.building_number, building.tile_x, building.tile_y
            ORDER BY building.building_type, building.building_number`,
-          [userId, day, SHOP_TYPES],
+          [userId, day, SHOP_TYPES, periodDays],
         ),
         pool.query<{ employee_expense: string }>(
           `SELECT COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense
@@ -3465,8 +3539,8 @@ async function start() {
            JOIN residential_buildings building ON building.id = history.building_id
            WHERE building.created_by = $1
              AND building.building_type = 'warehouse'
-             AND history.day BETWEEN $2::date - 29 AND $2::date`,
-          [userId, day],
+             AND history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date`,
+          [userId, day, periodDays],
         ),
         pool.query<{
           id: string;
@@ -3499,11 +3573,11 @@ async function start() {
              ON buyer.id = history.buyer_id AND buyer.created_by = $1
            LEFT JOIN residential_buildings seller
              ON seller.id = history.seller_id AND seller.created_by = $1
-           WHERE history.day BETWEEN $2::date - 29 AND $2::date
+           WHERE history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date
              AND (buyer.id IS NOT NULL OR seller.id IS NOT NULL)
            GROUP BY history.product_id
            ORDER BY history.product_id`,
-          [userId, day],
+          [userId, day, periodDays],
         ),
         pool.query<{
           id: string;
@@ -3520,12 +3594,12 @@ async function start() {
            FROM residential_buildings building
            LEFT JOIN residence_rent_history history
              ON history.building_id = building.id
-            AND history.day BETWEEN $2::date - 29 AND $2::date
+            AND history.day BETWEEN $2::date - ($4::integer - 1) AND $2::date
            WHERE building.created_by = $1
              AND building.building_type = ANY($3::text[])
            GROUP BY building.id
            ORDER BY building.building_type, building.building_number`,
-          [userId, day, RESIDENCE_BUILDING_TYPES],
+          [userId, day, RESIDENCE_BUILDING_TYPES, periodDays],
         ),
         pool.query<{
           id: string;
@@ -3544,19 +3618,19 @@ async function start() {
            LEFT JOIN (
              SELECT building_id, SUM(employee_expense) AS employee_expense
              FROM building_payroll_history
-             WHERE day BETWEEN $2::date - 29 AND $2::date
+             WHERE day BETWEEN $2::date - ($4::integer - 1) AND $2::date
              GROUP BY building_id
            ) payroll ON payroll.building_id = building.id
            LEFT JOIN (
              SELECT building_id, SUM(produced) AS produced
              FROM production_history
-             WHERE day BETWEEN $2::date - 29 AND $2::date
+             WHERE day BETWEEN $2::date - ($4::integer - 1) AND $2::date
              GROUP BY building_id
            ) production ON production.building_id = building.id
            WHERE building.created_by = $1
              AND building.building_type = ANY($3::text[])
            ORDER BY building.building_type, building.building_number`,
-          [userId, day, PRODUCTION_BUILDING_TYPES],
+          [userId, day, PRODUCTION_BUILDING_TYPES, periodDays],
         ),
       ]);
 
@@ -3573,6 +3647,7 @@ async function start() {
         };
       });
       response.json({
+        periodDays,
         shops: shopResult.rows.map((row) => ({
           id: row.id,
           type: row.building_type,
@@ -4515,8 +4590,15 @@ async function start() {
           building_type: string;
           status: ResidentialBuilding['status'];
           created_by: string;
+          desired_workers: number;
+          crop_phase: Crop['phase'] | null;
+          farm_auto_planting_enabled: boolean;
+          farm_planting_workers: number;
+          farm_harvest_workers: number;
         }>(
-          'SELECT building_type, status, created_by FROM residential_buildings WHERE id = $1 FOR UPDATE',
+          `SELECT building_type, status, created_by, desired_workers, crop_phase,
+                  farm_auto_planting_enabled, farm_planting_workers, farm_harvest_workers
+           FROM residential_buildings WHERE id = $1 FOR UPDATE`,
           [request.params.id],
         );
         const building = buildingRows[0];
@@ -4552,7 +4634,7 @@ async function start() {
             userId,
             settings.wage,
             settings.workHoursPerDay,
-            settings.desiredWorkers,
+            building.farm_auto_planting_enabled ? building.desired_workers : settings.desiredWorkers,
           ],
         );
         if (!rows[0]) {
@@ -4560,7 +4642,14 @@ async function start() {
           throw new Error(`A construção ${request.params.id} mudou durante a atualização.`);
         }
 
-        await limitJobAssignments(client, request.params.id, settings.desiredWorkers);
+        const targetWorkers = building.farm_auto_planting_enabled
+          ? building.crop_phase === 'harvesting'
+            ? building.farm_harvest_workers
+            : building.crop_phase === 'growing'
+              ? building.farm_planting_workers
+              : 0
+          : settings.desiredWorkers;
+        await limitJobAssignments(client, request.params.id, targetWorkers);
         const { rows: updated } = await client.query<ResidentialBuildingRow>(
           `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings WHERE id = $1`,
           [request.params.id],
@@ -4662,6 +4751,98 @@ async function start() {
         console.error('Não foi possível atualizar o preço:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
+  });
+  app.put('/api/residential-buildings/:id/farm-automation', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const settings = parseFarmAutomationSettings(request.body, 100000);
+    if (!residenceIdPattern.test(request.params.id) || !settings) {
+      response.status(400).json({ error: 'invalid_farm_automation' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const { rows: buildingRows } = await client.query<{
+          building_type: string;
+          status: ResidentialBuilding['status'];
+          created_by: string;
+          crop_phase: Crop['phase'] | null;
+          desired_workers: number;
+        }>(
+          `SELECT building_type, status, created_by, crop_phase, desired_workers
+           FROM residential_buildings WHERE id = $1 FOR UPDATE`,
+          [request.params.id],
+        );
+        const building = buildingRows[0];
+        if (!building) {
+          await client.query('ROLLBACK');
+          response.status(404).json({ error: 'residence_not_found' });
+          return;
+        }
+        if (building.created_by !== userId) {
+          await client.query('ROLLBACK');
+          response.status(403).json({ error: 'residence_not_owned' });
+          return;
+        }
+        const definition = getResidenceDefinition(building.building_type);
+        if (
+          !isAutomatableFarmType(building.building_type) ||
+          building.status !== 'completed' ||
+          !definition ||
+          definition.kind !== 'farm' ||
+          settings.plantingWorkers > definition.maxWorkers ||
+          settings.harvestWorkers > definition.maxWorkers
+        ) {
+          await client.query('ROLLBACK');
+          response.status(400).json({ error: 'invalid_farm_automation' });
+          return;
+        }
+        const { rows } = await client.query<ResidentialBuildingRow>(
+          `UPDATE residential_buildings
+           SET farm_auto_planting_enabled = $3,
+               farm_auto_planting_months = $4::smallint[],
+               farm_planting_workers = $5,
+               farm_harvest_workers = $6
+           WHERE id = $1 AND created_by = $2
+           RETURNING ${RESIDENTIAL_COLUMNS}`,
+          [
+            request.params.id,
+            userId,
+            settings.enabled,
+            settings.plantingMonths,
+            settings.plantingWorkers,
+            settings.harvestWorkers,
+          ],
+        );
+        const targetWorkers = settings.enabled
+          ? building.crop_phase === 'harvesting'
+            ? settings.harvestWorkers
+            : building.crop_phase === 'growing'
+              ? settings.plantingWorkers
+              : 0
+          : building.desired_workers;
+        await limitJobAssignments(client, request.params.id, targetWorkers);
+        await client.query('COMMIT');
+
+        response.json(mapResidentialBuilding(rows[0]));
+        void publishCities().catch((error: unknown) => {
+          console.error('A automação foi atualizada, mas a atualização do mundo falhou:', error);
+        });
+      } catch (error: unknown) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        console.error('Não foi possível salvar a automação da fazenda:', error);
+        response.status(503).json({ error: 'residence_unavailable' });
+      } finally {
+        client.release();
+      }
+    })();
   });
   app.post('/api/residential-buildings/:id/plant', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);

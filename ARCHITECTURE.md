@@ -304,6 +304,14 @@ mapeamento e verificar todas as curvas.
   Sprites: `public/buildings/farms/fazenda_cana.png`,
   `public/buildings/farms/fazenda_especiarias.png` e
   `public/buildings/farms/fazenda_vegetais.png`.
+- As fazendas agrícolas com plantio (exceto criação bovina) podem salvar automação em
+  `PUT /api/residential-buildings/:id/farm-automation`. O servidor valida dono,
+  fase da construção, meses (1–12) e limites de funcionários do tipo antes de
+  gravar meses de replantio e equipes separadas de crescimento e colheita.
+  Durante a alocação diária, uma fazenda automatizada sem ciclo inicia outro
+  somente se o mês atual estiver selecionado; ciclos ativos não são interrompidos.
+  A equipe desejada muda conforme a fase e as configurações são propagadas pelo
+  mesmo snapshot de construções. Desativá-la não cancela um ciclo em andamento.
 - `shop_milk` (categoria Comerciais) usa a mesma definição, preço editável e
   fluxo de venda da Loja de Peixes: 2 × 2 tiles, 4 funcionários, estoque máximo
   de 400 litros, custo de 30 madeiras e 10 pedras e 6.000 Work Points. Produto
@@ -678,7 +686,8 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo médio por cidadão da cidade e preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira do usuário com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
-| `GET /api/accounting` | Autenticado | Retorna, apenas para o jogador da sessão, salários/receita das lojas, aluguel gerado por residência, salários e produção por construção produtiva, além dos relatórios de armazéns; os valores usam os últimos 30 dias do relógio do jogo. |
+| `GET /api/accounting?days=1\|7\|30` | Autenticado | Retorna, apenas para o jogador da sessão, salários/receita das lojas, aluguel gerado por residência, salários e produção por construção produtiva, além dos relatórios de armazéns, no período indicado (padrão: 30 dias, incluindo o dia corrente). |
+| `PUT /api/residential-buildings/:id/farm-automation` | Dono da fazenda agrícola concluída | Valida e salva meses de replantio e limites de trabalhadores por fase; desativar mantém as preferências e o ciclo atual, mas interrompe novos plantios automáticos. |
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
 | `GET /api/residential-buildings/:id/warehouse-log` | Dono do armazém | Retorna `{ days: [{ day, workPoints }], events: [{ day, buildingType, productId, direction, wanted, moved, reason, errorDetail }] }` do armazém (tabela `warehouse_transport_log`, gravada às 00:00 na etapa de transporte, 30 dias; `reason` = `desired_reached`/`no_space`/`no_work_points`/`warehouse_empty` quando moveu menos que o desejado; erros internos registram etapa e detalhe em `errorDetail`). |
 | `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo), estoque e preço médio local ponderado por oferta acima do mínimo; espaço ocupado é calculado no cliente. |
@@ -730,7 +739,8 @@ de sucesso.
   os valores já existentes.
 - `residential_buildings` guarda tipo, footprint, cidade, status, autoria e
   horários de início/conclusão, `wage`, `work_hours_per_day`, `desired_workers`, `rent` e
-  `occupants` (colunas
+  `occupants`, o estado do ciclo agrícola e as preferências de automação das
+  fazendas (`farm_auto_planting_enabled`, meses e trabalhadores por fase) (colunas
   adicionadas com `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, assim como
   `world_state.last_immigration_day`); excluir a cidade
   remove suas residências por cascata.
@@ -742,8 +752,9 @@ de sucesso.
 - `production_history` guarda a produção diária por construção. A aba
   **Produção** combina essa tabela com `building_payroll_history`; **Residências**
   combina população/capacidade atuais com a receita de
-  `residence_rent_history`. O endpoint restringe os relatórios ao dono
-  autenticado e agrega o dia corrente e os 29 anteriores.
+  `residence_rent_history`. O endpoint contábil restringe os relatórios ao dono
+  autenticado e filtra os históricos pelo período selecionado (1, 7 ou 30 dias,
+  incluindo o dia corrente).
 - A tabela `neon_auth."user"` é gerenciada pelo Neon Auth, não pelo esquema do
   jogo.
 

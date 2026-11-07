@@ -35,7 +35,12 @@ import {
 } from './types/city';
 import { DEFAULT_SHOP_PRICE } from './types/commerce';
 import { LINK_RADIUS } from './types/logistics';
-import type { AccountingBuildingPosition, AccountingSummary } from './types/accounting';
+import {
+  type AccountingBuildingPosition,
+  type AccountingPeriodDays,
+  type AccountingSummary,
+} from './types/accounting';
+import type { FarmAutomationSettings } from './types/farming';
 import {
   MAX_WAGE,
   MAX_WORK_HOURS,
@@ -193,6 +198,8 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'A colheita está em andamento; só é possível plantar de novo ao terminar.';
         } else if (body.error === 'cannot_plant') {
           error = 'Somente fazendas agrícolas concluídas podem plantar.';
+        } else if (body.error === 'invalid_farm_automation') {
+          error = 'Confira os meses selecionados e mantenha os funcionários entre zero e o limite da fazenda.';
         } else if (body.error === 'invalid_warehouse_link') {
           error = 'Essa construção não pode ser ligada a esse destino.';
         } else if (body.error === 'warehouse_out_of_range') {
@@ -378,6 +385,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isAccountingLoading, setIsAccountingLoading] = useState(false);
   const [accountingError, setAccountingError] = useState('');
   const [accountingSummary, setAccountingSummary] = useState<AccountingSummary | null>(null);
+  const [accountingPeriodDays, setAccountingPeriodDays] = useState<AccountingPeriodDays>(30);
   const [isPerformanceLogOpen, setIsPerformanceLogOpen] = useState(false);
   const [isPerformanceLogLoading, setIsPerformanceLogLoading] = useState(false);
   const [performanceLogError, setPerformanceLogError] = useState('');
@@ -668,13 +676,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
-  const loadAccounting = async () => {
+  const loadAccounting = async (periodDays: AccountingPeriodDays = accountingPeriodDays) => {
     setIsAccountingOpen(true);
     setIsAccountingLoading(true);
     setAccountingError('');
     setAccountingSummary(null);
     try {
-      setAccountingSummary(await cityRequest<AccountingSummary>('/api/accounting'));
+      setAccountingSummary(
+        await cityRequest<AccountingSummary>(`/api/accounting?days=${periodDays}`),
+      );
     } catch (error) {
       setAccountingError(error instanceof Error ? error.message : 'Não foi possível carregar o painel contábil.');
     } finally {
@@ -913,6 +923,23 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       });
     } catch (error) {
       setWorkSettingsError(error instanceof Error ? error.message : 'Não foi possível plantar.');
+    } finally {
+      setIsSavingWorkSettings(false);
+    }
+  };
+
+  const saveFarmAutomation = async (buildingId: string, settings: FarmAutomationSettings) => {
+    setIsSavingWorkSettings(true);
+    setWorkSettingsError('');
+    try {
+      await cityRequest<ResidentialBuilding>(
+        `/api/residential-buildings/${buildingId}/farm-automation`,
+        { method: 'PUT', body: JSON.stringify(settings) },
+      );
+    } catch (error) {
+      setWorkSettingsError(
+        error instanceof Error ? error.message : 'Não foi possível salvar a automação da fazenda.',
+      );
     } finally {
       setIsSavingWorkSettings(false);
     }
@@ -1384,6 +1411,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       sugarcaneStock: 0,
       averageIncome: 0,
       efficiencyPenalty: 0,
+      farmAutomation: {
+        enabled: false,
+        plantingMonths: [],
+        plantingWorkers: 0,
+        harvestWorkers: 0,
+      },
       crop: null,
       employed: 0,
       ownerName: user.name || user.email,
@@ -1772,6 +1805,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onCancelLink={() => setLinkingFromId(null)}
             onUnlink={() => void linkWarehouse(selectedResidence.id, null)}
             onPlant={() => void plantCrop(selectedResidence.id)}
+            onSaveFarmAutomation={(settings) =>
+              void saveFarmAutomation(selectedResidence.id, settings)
+            }
             showInfluence={showInfluence}
             onToggleInfluence={() => setShowInfluence((current) => !current)}
             onClose={() => {
@@ -1845,6 +1881,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             summary={accountingSummary}
             isLoading={isAccountingLoading}
             error={accountingError}
+            periodDays={accountingPeriodDays}
+            onPeriodChange={(days) => {
+              setAccountingPeriodDays(days);
+              void loadAccounting(days);
+            }}
             onViewBuilding={viewAccountingBuilding}
             onClose={() => setIsAccountingOpen(false)}
           />

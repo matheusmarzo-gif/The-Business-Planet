@@ -19,6 +19,8 @@ import {
   getHarvestDay,
   getMonthOfDay,
   getPlantingFactor,
+  isAutomatableFarmType,
+  type FarmAutomationSettings,
 } from '../types/farming';
 import { getDairyFarmEfficiency } from '../types/dairy';
 import { GAME_RULES } from '../generated/gameConfig';
@@ -43,6 +45,7 @@ interface ResidencePanelProps {
   onCancelLink: () => void;
   onUnlink: () => void;
   onPlant: () => void;
+  onSaveFarmAutomation: (settings: FarmAutomationSettings) => void;
   showInfluence: boolean;
   onToggleInfluence: () => void;
   onClose: () => void;
@@ -50,6 +53,20 @@ interface ResidencePanelProps {
 
 const number = new Intl.NumberFormat('pt-BR');
 const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
+const monthNames = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+];
 
 function getProductionDescription(type: ResidenceType): string | null {
   const definition = RESIDENCES[type];
@@ -117,6 +134,7 @@ export default function ResidencePanel({
   onCancelLink,
   onUnlink,
   onPlant,
+  onSaveFarmAutomation,
   showInfluence,
   onToggleInfluence,
   onClose,
@@ -127,6 +145,8 @@ export default function ResidencePanel({
   const [rent, setRent] = useState(String(building.rent));
   const [desired, setDesired] = useState(String(building.desiredWorkers));
   const [price, setPrice] = useState(String(building.price));
+  const [isFarmAdvancedOpen, setIsFarmAdvancedOpen] = useState(false);
+  const [farmAutomation, setFarmAutomation] = useState<FarmAutomationSettings>(building.farmAutomation);
 
   useEffect(() => {
     setPrice(String(building.price));
@@ -139,6 +159,19 @@ export default function ResidencePanel({
     setDesired(String(building.desiredWorkers));
   }, [building.id, building.wage, building.workHoursPerDay, building.rent, building.desiredWorkers]);
 
+  useEffect(() => {
+    setFarmAutomation({
+      ...building.farmAutomation,
+      plantingMonths: [...building.farmAutomation.plantingMonths],
+    });
+  }, [
+    building.id,
+    building.farmAutomation.enabled,
+    building.farmAutomation.plantingMonths.join(','),
+    building.farmAutomation.plantingWorkers,
+    building.farmAutomation.harvestWorkers,
+  ]);
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     onSave({
@@ -150,6 +183,18 @@ export default function ResidencePanel({
   const submitRent = (event: FormEvent) => {
     event.preventDefault();
     onSaveRent(Number(rent));
+  };
+  const submitFarmAutomation = (event: FormEvent) => {
+    event.preventDefault();
+    onSaveFarmAutomation(farmAutomation);
+  };
+  const togglePlantingMonth = (month: number) => {
+    setFarmAutomation((current) => ({
+      ...current,
+      plantingMonths: current.plantingMonths.includes(month)
+        ? current.plantingMonths.filter((value) => value !== month)
+        : [...current.plantingMonths, month].sort((a, b) => a - b),
+    }));
   };
 
   const isResidence = definition.kind === 'residence';
@@ -323,6 +368,118 @@ export default function ResidencePanel({
               {building.crop ? 'Reiniciar ciclo (zera o contador)' : cropAction}
             </button>
           )}
+          {isOwner && isAutomatableFarmType(building.type) && (
+            <>
+              <button
+                type="button"
+                aria-expanded={isFarmAdvancedOpen}
+                onClick={() => setIsFarmAdvancedOpen((open) => !open)}
+              >
+                {isFarmAdvancedOpen ? 'Fechar configurações avançadas' : 'Configurações avançadas'}
+              </button>
+              {isFarmAdvancedOpen && (
+                <form className="farm-automation-settings" onSubmit={submitFarmAutomation}>
+                  <label className="farm-automation-toggle">
+                    <input
+                      type="checkbox"
+                      checked={farmAutomation.enabled}
+                      disabled={isSaving}
+                      onChange={(event) =>
+                        setFarmAutomation((current) => ({ ...current, enabled: event.target.checked }))
+                      }
+                    />
+                    Automatizar os ciclos desta fazenda
+                  </label>
+                  <p>
+                    Quando a fazenda estiver sem ciclo, o plantio começará no primeiro processamento
+                    diário de um mês selecionado. Ciclos em andamento não serão interrompidos.
+                  </p>
+                  <fieldset>
+                    <legend>Meses permitidos para replantar</legend>
+                    <div className="farm-automation-months">
+                      {monthNames.map((monthName, index) => {
+                        const month = index + 1;
+                        return (
+                          <label key={month}>
+                            <input
+                              type="checkbox"
+                              checked={farmAutomation.plantingMonths.includes(month)}
+                              disabled={isSaving}
+                              onChange={() => togglePlantingMonth(month)}
+                            />
+                            {monthName}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                  <label>
+                    Funcionários durante o plantio e crescimento (0 a {definition.maxWorkers})
+                    <input
+                      type="number"
+                      min={0}
+                      max={definition.maxWorkers}
+                      step={1}
+                      value={farmAutomation.plantingWorkers}
+                      disabled={isSaving}
+                      onChange={(event) =>
+                        setFarmAutomation((current) => ({
+                          ...current,
+                          plantingWorkers: Number(event.target.value),
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Funcionários durante a colheita (0 a {definition.maxWorkers})
+                    <input
+                      type="number"
+                      min={0}
+                      max={definition.maxWorkers}
+                      step={1}
+                      value={farmAutomation.harvestWorkers}
+                      disabled={isSaving}
+                      onChange={(event) =>
+                        setFarmAutomation((current) => ({
+                          ...current,
+                          harvestWorkers: Number(event.target.value),
+                        }))
+                      }
+                    />
+                  </label>
+                  {farmAutomation.enabled && farmAutomation.plantingMonths.length === 0 && (
+                    <p role="alert">Selecione pelo menos um mês para ativar a automação.</p>
+                  )}
+                  <div className="farm-automation-actions">
+                    <button
+                      type="submit"
+                      disabled={
+                        isSaving ||
+                        (farmAutomation.enabled && farmAutomation.plantingMonths.length === 0)
+                      }
+                    >
+                      {isSaving
+                        ? 'Salvando…'
+                        : farmAutomation.enabled
+                          ? 'Salvar automatização'
+                          : 'Salvar configurações'}
+                    </button>
+                    {building.farmAutomation.enabled && (
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() =>
+                          onSaveFarmAutomation({ ...farmAutomation, enabled: false })
+                        }
+                      >
+                        Desativar automatização
+                      </button>
+                    )}
+                  </div>
+                </form>
+              )}
+            </>
+          )}
         </div>
       )}
       {isOwner && building.status === 'completed' && canLinkToWarehouse(building.type) && (
@@ -354,10 +511,13 @@ export default function ResidencePanel({
               max={maxDesiredWorkers}
               step={1}
               value={desired}
-              disabled={!isOwner || isSaving}
+              disabled={!isOwner || isSaving || (cropRule !== undefined && building.farmAutomation.enabled)}
               onChange={(event) => setDesired(event.target.value)}
             />
           </label>
+          {cropRule && building.farmAutomation.enabled && (
+            <small>A quantidade de funcionários é controlada pelas configurações avançadas durante cada fase.</small>
+          )}
           <label>
             Salário ofertado (C$ por dia de trabalho)
             <input

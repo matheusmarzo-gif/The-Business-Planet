@@ -159,7 +159,16 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS crop_ratio_sum DOUBLE PRECISION NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS crop_days INTEGER NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS crop_yield INTEGER NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS crop_harvested INTEGER NOT NULL DEFAULT 0;
+  ADD COLUMN IF NOT EXISTS crop_harvested INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS farm_auto_planting_enabled BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS farm_auto_planting_months SMALLINT[] NOT NULL DEFAULT '{}',
+  ADD COLUMN IF NOT EXISTS farm_planting_workers INTEGER NOT NULL DEFAULT 0 CHECK (farm_planting_workers >= 0),
+  ADD COLUMN IF NOT EXISTS farm_harvest_workers INTEGER NOT NULL DEFAULT 0 CHECK (farm_harvest_workers >= 0);
+
+ALTER TABLE residential_buildings
+  DROP CONSTRAINT IF EXISTS residential_buildings_farm_auto_planting_months_check,
+  ADD CONSTRAINT residential_buildings_farm_auto_planting_months_check
+    CHECK (farm_auto_planting_months <@ ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]::SMALLINT[]);
 
 ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS tool_stock INTEGER NOT NULL DEFAULT 0 CHECK (tool_stock >= 0),

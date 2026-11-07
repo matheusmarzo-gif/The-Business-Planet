@@ -2,12 +2,20 @@ import { useState } from 'react';
 import { PRODUCTS } from '../types/product';
 import { getResidentialBuildingName } from '../types/residence';
 import { formatMoney } from '../types/wallet';
-import type { AccountingBuildingPosition, AccountingSummary } from '../types/accounting';
+import {
+  getAccountingPeriodLabel,
+  parseAccountingPeriodDays,
+  type AccountingBuildingPosition,
+  type AccountingPeriodDays,
+  type AccountingSummary,
+} from '../types/accounting';
 
 interface AccountingPanelProps {
   summary: AccountingSummary | null;
   isLoading: boolean;
   error: string;
+  periodDays: AccountingPeriodDays;
+  onPeriodChange: (days: AccountingPeriodDays) => void;
   onViewBuilding: (building: AccountingBuildingPosition) => void;
   onClose: () => void;
 }
@@ -18,10 +26,13 @@ export default function AccountingPanel({
   summary,
   isLoading,
   error,
+  periodDays,
+  onPeriodChange,
   onViewBuilding,
   onClose,
 }: AccountingPanelProps) {
   const [activeTab, setActiveTab] = useState<'shops' | 'warehouses' | 'residences' | 'production'>('shops');
+  const periodLabel = getAccountingPeriodLabel(periodDays);
 
   return (
     <section className="warehouse-panel accounting-panel" aria-label="Painel contábil">
@@ -33,8 +44,23 @@ export default function AccountingPanel({
         </button>
       </div>
       <p className="warehouse-summary">
-        Resumo dos últimos 30 dias do relógio do jogo. {isLoading && 'Carregando…'}
+        Período: {periodLabel} do relógio do jogo. {isLoading && 'Carregando…'}
       </p>
+      <label className="accounting-period">
+        Período do relatório
+        <select
+          value={periodDays}
+          disabled={isLoading}
+          onChange={(event) => {
+            const days = parseAccountingPeriodDays(event.target.value);
+            if (days !== null) onPeriodChange(days);
+          }}
+        >
+          <option value={1}>Último dia</option>
+          <option value={7}>Últimos 7 dias</option>
+          <option value={30}>Últimos 30 dias</option>
+        </select>
+      </label>
       <div className="accounting-tabs" role="tablist" aria-label="Relatórios contábeis">
         <button
           type="button"
@@ -157,7 +183,7 @@ export default function AccountingPanel({
       ) : activeTab === 'residences' ? (
         <>
           <p className="accounting-history-note">
-            A receita é o aluguel efetivamente gerado nos últimos 30 dias. Moradores são NPCs sem carteira
+            A receita é o aluguel efetivamente gerado no período selecionado. Moradores são NPCs sem carteira
             individual; o valor é creditado diretamente ao proprietário. O histórico começa com esta atualização.
           </p>
           <div className="warehouse-list accounting-list">
@@ -185,7 +211,7 @@ export default function AccountingPanel({
       ) : (
         <>
           <p className="accounting-history-note">
-            Salários e produção somam os registros diários dos últimos 30 dias. Não há dados recuperáveis de
+            Salários e produção somam os registros diários do período selecionado. Não há dados recuperáveis de
             salários anteriores à implantação deste histórico.
           </p>
           <div className="warehouse-list accounting-list">

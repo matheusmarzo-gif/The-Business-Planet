@@ -466,6 +466,12 @@ pedras e exigem 12.000 Work Points. Seus estoques máximos são 2.000 canas e 40
 especiarias; o excedente da colheita aguarda no campo até haver espaço livre.
 A Fazenda de Vegetais também ocupa 3 × 3, emprega até 10 funcionários, custa
 60 madeiras e 60 pedras, exige 12.000 Work Points e guarda até 100 vegetais.
+Nas fazendas agrícolas com ciclo de cultivo, **Configurações avançadas** permite
+automatizar o replantio: selecione os meses permitidos e quantos funcionários
+deseja durante o crescimento e durante a colheita. A automação não interrompe um
+ciclo ativo; quando a fazenda ficar livre, ela aguarda um dos meses selecionados
+para iniciar outro. É possível desativá-la no mesmo painel. Sem automação, o
+proprietário continua iniciando os ciclos manualmente.
 
 ### Empregos e salários
 
@@ -585,14 +591,16 @@ painel para executar uma tentativa imediata com as mesmas regras e limites.
 último dia, a média do último mês (30 dias de jogo) e a previsão de pontos que
 os funcionários atuais gerarão no próximo dia, para decidir se é preciso contratar.
 
-**Fazendas agrícolas:** o dono inicia ou reinicia o ciclo no painel da fazenda
-concluída. O crescimento dura 6 meses (2 meses para vegetais), exceto a fazenda
+**Fazendas agrícolas:** o dono inicia ou reinicia manualmente o ciclo no painel
+da fazenda concluída; a automação segue a configuração avançada descrita acima.
+O crescimento dura 6 meses (2 meses para vegetais), exceto a fazenda
 bovina, que leva 24 meses até o corte. A eficiência sazonal, o requisito de Work Points diários e o
 custo de colheita/corte são mostrados no painel e detalhados na tabela acima.
 O rendimento é ajustado pela média de `min(1, Work Points / requisito diário)`
 durante o crescimento. Na colheita ou corte, cada unidade consome os Work Points
-indicados, limitada ao estoque livre (300; ligar a um armazém libera espaço); só
-depois de colher tudo é possível iniciar um novo ciclo.
+indicados, limitada ao estoque livre (300; ligar a um armazém libera espaço).
+Durante a colheita, a fazenda não inicia outro ciclo; a automação espera a
+colheita terminar e um mês selecionado para replantar.
 
 **Consumo:** em residências concluídas, **Ver consumo da casa** mostra o consumo
 por pessoa de todos os produtos das cestas básica (arroz, trigo, cevada, milho,
@@ -648,17 +656,18 @@ transferência interna sem cobrança e aparece com gasto de produto C$ 0.
 
 ## Contábil
 
-O botão **Contábil** na barra inferior tem quatro abas. **Lojas comerciais** lista
-todas as lojas do jogador e soma salários pagos e receita de vendas nos últimos
-30 dias do relógio do jogo; **Visualizar** centraliza a loja no mapa e abre seus
+O botão **Contábil** na barra inferior tem quatro abas e permite escolher entre
+o último dia ou os últimos 7 ou 30 dias do relógio do jogo. **Lojas comerciais**
+lista todas as lojas do jogador e soma salários pagos e receita de vendas no
+período selecionado; **Visualizar** centraliza a loja no mapa e abre seus
 detalhes. **Armazéns** mostra os armazéns do jogador (também com **Visualizar**),
 salários pagos e, por produto,
 quantidades e valores comprados/vendidos, além do resultado bruto (receita de
 vendas menos custo de compras). O resultado por produto não desconta salários.
 **Residências** lista moradores, capacidade e aluguel efetivamente gerado para
-cada casa nos últimos 30 dias, com o mesmo atalho **Visualizar**. **Produção**
+cada casa no período selecionado, com o mesmo atalho **Visualizar**. **Produção**
 lista fazendas, pesqueiros, recursos e oficinas, seus salários e unidades
-produzidas no período. O histórico de aluguel começa com esta atualização;
+produzidas no período selecionado. O histórico de aluguel começa com esta atualização;
 salários de construções não comerciais anteriores a ela não podem ser
 reconstruídos. O histórico financeiro de armazéns começa com esta atualização;
 transações anteriores não podem ser reconstruídas.

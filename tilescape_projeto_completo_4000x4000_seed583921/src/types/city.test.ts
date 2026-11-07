@@ -1548,6 +1548,12 @@ describe('municipal zones', () => {
         sugarcaneStock: 0,
         averageIncome: 0,
         efficiencyPenalty: 0,
+        farmAutomation: {
+          enabled: false,
+          plantingMonths: [],
+          plantingWorkers: 0,
+          harvestWorkers: 0,
+        },
         crop: null,
         employed: 0,
       };
@@ -1598,6 +1604,12 @@ describe('municipal zones', () => {
         sugarcaneStock: 0,
         averageIncome: 0,
         efficiencyPenalty: 0,
+        farmAutomation: {
+          enabled: false,
+          plantingMonths: [],
+          plantingWorkers: 0,
+          harvestWorkers: 0,
+        },
         crop: null,
         employed: 0,
       };

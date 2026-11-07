@@ -1,6 +1,7 @@
 import type { CityAssembly, ConstructionCategory } from './city.js';
 import {
   type Crop,
+  type FarmAutomationSettings,
   type FarmCropRule,
 } from './farming.js';
 import { ASSEMBLY_SIZE, isFootprintInCityZone, MUNICIPAL_AREA_RADIUS } from './city.js';
@@ -230,6 +231,7 @@ export interface ResidentialBuilding {
   charcoalStock: number;
   sugarcaneStock: number;
   efficiencyPenalty: number;
+  farmAutomation: FarmAutomationSettings;
   // Plantio/ciclo das fazendas agrícolas; null quando não há plantio.
   crop: Crop | null;
   // Funcionários empregados na construção ou, em residências, moradores empregados.

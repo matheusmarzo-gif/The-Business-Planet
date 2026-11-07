@@ -1,6 +1,19 @@
 import type { ResidenceType } from './residence.js';
 import { roundCurrency } from './currency.js';
 
+export const ACCOUNTING_PERIOD_DAYS = [1, 7, 30] as const;
+export type AccountingPeriodDays = (typeof ACCOUNTING_PERIOD_DAYS)[number];
+
+export function parseAccountingPeriodDays(value: unknown): AccountingPeriodDays | null {
+  const parsed = typeof value === 'string' ? Number(value) : value;
+  return ACCOUNTING_PERIOD_DAYS.find((days) => days === parsed) ?? null;
+}
+
+export function getAccountingPeriodLabel(days: AccountingPeriodDays): string {
+  if (days === 1) return 'último dia';
+  return `últimos ${days} dias`;
+}
+
 export interface AccountingBuildingPosition {
   id: string;
   x: number;
@@ -56,6 +69,7 @@ export interface AccountingProductionBuilding {
 }
 
 export interface AccountingSummary {
+  periodDays: AccountingPeriodDays;
   shops: AccountingShop[];
   residences: AccountingResidence[];
   production: AccountingProductionBuilding[];

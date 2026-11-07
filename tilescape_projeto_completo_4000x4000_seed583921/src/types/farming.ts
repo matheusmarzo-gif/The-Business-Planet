@@ -12,6 +12,10 @@ export const FARM_CROP_RULES = GENERATED_FARM_CROP_RULES satisfies Record<string
 
 export type FarmCropType = keyof typeof FARM_CROP_RULES;
 export const FARM_CROP_TYPES = Object.keys(FARM_CROP_RULES) as FarmCropType[];
+export const AUTOMATABLE_FARM_TYPES = FARM_CROP_TYPES.filter(
+  (type) => type !== 'farm_cattle',
+);
+const automatableFarmTypeSet: ReadonlySet<string> = new Set(AUTOMATABLE_FARM_TYPES);
 
 export const FARM_DAILY_WORK_POINTS = FARM_CROP_RULES.farm_rice.dailyWorkPoints;
 export const GROWTH_MONTHS = FARM_CROP_RULES.farm_rice.growthMonths;
@@ -20,8 +24,72 @@ export const BASE_YIELD = FARM_CROP_RULES.farm_rice.baseYield;
 
 export type CropPhase = 'growing' | 'harvesting';
 
+export interface FarmAutomationSettings {
+  enabled: boolean;
+  plantingMonths: number[];
+  plantingWorkers: number;
+  harvestWorkers: number;
+}
+
+export function parseFarmAutomationSettings(
+  value: unknown,
+  maxWorkers: number,
+): FarmAutomationSettings | null {
+  if (typeof value !== 'object' || value === null || !Number.isInteger(maxWorkers) || maxWorkers < 0) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const { enabled, plantingMonths, plantingWorkers, harvestWorkers } = record;
+  if (
+    typeof enabled !== 'boolean' ||
+    !Array.isArray(plantingMonths) ||
+    plantingMonths.some(
+      (month) => typeof month !== 'number' || !Number.isInteger(month) || month < 1 || month > 12,
+    ) ||
+    new Set(plantingMonths).size !== plantingMonths.length ||
+    (enabled && plantingMonths.length === 0) ||
+    typeof plantingWorkers !== 'number' ||
+    !Number.isInteger(plantingWorkers) ||
+    plantingWorkers < 0 ||
+    plantingWorkers > maxWorkers ||
+    typeof harvestWorkers !== 'number' ||
+    !Number.isInteger(harvestWorkers) ||
+    harvestWorkers < 0 ||
+    harvestWorkers > maxWorkers
+  ) {
+    return null;
+  }
+  return {
+    enabled,
+    plantingMonths: [...plantingMonths].sort((a, b) => a - b),
+    plantingWorkers,
+    harvestWorkers,
+  };
+}
+
+export function shouldStartAutomatedCrop(
+  settings: FarmAutomationSettings,
+  phase: CropPhase | null,
+  month: number,
+): boolean {
+  return (
+    settings.enabled &&
+    phase === null &&
+    Number.isInteger(month) &&
+    month >= 1 &&
+    month <= 12 &&
+    settings.plantingMonths.includes(month)
+  );
+}
+
 export function isFarmCropType(value: string): value is FarmCropType {
   return Object.prototype.hasOwnProperty.call(FARM_CROP_RULES, value);
+}
+
+export function isAutomatableFarmType(
+  value: string,
+): value is (typeof AUTOMATABLE_FARM_TYPES)[number] {
+  return automatableFarmTypeSet.has(value);
 }
 
 export interface Crop {

@@ -83,6 +83,7 @@ function getProductionDescription(type: ResidenceType): string | null {
         : '',
       rule.batchWood ? `${number.format(rule.batchWood)} madeiras` : '',
       rule.batchIron ? `${number.format(rule.batchIron)} ferro` : '',
+      rule.batchCharcoal ? `${number.format(rule.batchCharcoal)} carvões` : '',
     ].filter(Boolean);
     return `A cada ${number.format(rule.workPointsPerUnit)} Work Points${inputs.length ? ` + ${inputs.join(' + ')}` : ''}, produz ${number.format(rule.batchSize ?? 1)} ${product}.`;
   }
@@ -201,6 +202,9 @@ export default function ResidencePanel({
               : []),
             ...(definition.ironCapacity
               ? ([['Estoque de Ferro', `${number.format(building.ironStock)} / ${number.format(definition.ironCapacity)}`]] as [string, string][])
+              : []),
+            ...(definition.charcoalCapacity
+              ? ([['Estoque de Carvão', `${number.format(building.charcoalStock)} / ${number.format(definition.charcoalCapacity)}`]] as [string, string][])
               : []),
             ...(definition.sugarcaneCapacity
               ? ([['Estoque de Cana', `${number.format(building.sugarcaneStock)} / ${number.format(definition.sugarcaneCapacity)}`]] as [string, string][])

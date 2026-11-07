@@ -359,17 +359,17 @@ ainda não diferencia rios de outros tiles aquáticos, qualquer água adjacente 
 aceita.
 
 Na categoria **Artesanais** (área urbana, ao lado de estrada), a **Ferramentaria**
-(2 × 2, 30 funcionários, estoque máx. 100 Ferramentas, 30 madeiras e 5 ferro)
+(2 × 2, 30 funcionários, estoque máx. 100 Ferramentas, 30 carvões e 5 ferro)
 custa 60 madeiras e 60 pedras e exige 12.000 Work Points. Por dia, cada lote de
-1000 WP + 5 madeiras + 1 ferro produz 100 Ferramentas. Madeira e ferro chegam por
+1.000 WP + 5 carvões + 1 ferro produz 100 Ferramentas. Carvão e ferro chegam pelo
 armazém ligado.
 
-Na mesma categoria **Artesanais**, a **Casa de Engenho** (3 × 3, até 40
+Na mesma categoria **Artesanais**, a **Casa de Engenho** (3 × 3, até 60
 funcionários) custa 30 madeiras e 80 pedras e exige 12.000 Work Points.
-Armazena até 200 unidades de açúcar, 400 de cana e 5 Ferramentas. Cada lote de
-600 Work Points efetivos, 6 canas e 1 madeira produz 1 açúcar. A demanda de
-Ferramentas é 0,05 por funcionário/dia, com a mesma penalidade de eficiência do
-Pesqueiro. Cana, madeira e Ferramentas são recebidas pelo armazém ligado; a cana
+Armazena até 200 unidades de açúcar, 400 de cana, 30 de carvão e 5 Ferramentas.
+Cada lote de 600 Work Points efetivos, 3 carvões e 6 canas produz 1 açúcar. A
+demanda de Ferramentas é 0,05 por funcionário/dia, com a mesma penalidade de eficiência do
+Pesqueiro. Cana, carvão e Ferramentas são recebidos pelo armazém ligado; a cana
 armazenada na construção também está sujeita à validade de 3 dias.
 
 A **Carvoaria** (3 × 3, até 20 funcionários) custa 30 madeiras e 60 pedras e
@@ -401,7 +401,7 @@ moradores nem aluguel.
 | Bovina | Carne vermelha | 40 % / 100 % / 80 % / 60 % | 24 meses | 500 / 40 | 1.000 |
 | Cana | Cana | 90 % / 80 % / 100 % / 90 % | 6 meses | 100 / 25 | 2.000 |
 | Especiarias | Especiarias | 100 % / 60 % / 60 % / 60 % | 6 meses | 5.000 / 10 | 600 |
-| Vegetais | Vegetais | 20 % / 40 % / 100 % / 80 % | 2 meses | 800 / 8 | 100 |
+| Vegetais | Vegetais | 20 % / 40 % / 100 % / 80 % | 2 meses | 5.000 / 10 | 1.000 |
 
 O mês em que o plantio começa define a eficiência sazonal do ciclo. A média diária
 de `min(1, Work Points / requisito diário)` durante o crescimento também reduz

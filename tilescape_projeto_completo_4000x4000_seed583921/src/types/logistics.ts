@@ -28,10 +28,11 @@ export interface LogisticsLink {
   toolStock?: number;
   woodStock?: number;
   ironStock?: number;
+  charcoalStock?: number;
   sugarcaneStock?: number;
 }
 
-export type InputProduct = 'tools' | 'wood' | 'iron' | 'sugarcane';
+export type InputProduct = 'tools' | 'wood' | 'iron' | 'charcoal' | 'sugarcane';
 
 export interface WarehouseLogistics {
   stock: Map<string, number>;
@@ -179,6 +180,7 @@ export function planTransfersDetailed(
           tools: link.toolStock,
           wood: link.woodStock,
           iron: link.ironStock,
+          charcoal: link.charcoalStock,
           sugarcane: link.sugarcaneStock,
         }[input] ?? 0
       : link.stock;
@@ -187,6 +189,7 @@ export function planTransfersDetailed(
           tools: definition.toolCapacity,
           wood: definition.woodCapacity,
           iron: definition.ironCapacity,
+          charcoal: definition.charcoalCapacity,
           sugarcane: definition.sugarcaneCapacity,
         }[input] ?? 0
       : (definition.stockCapacity ?? 0);
@@ -249,6 +252,9 @@ export function planTransfersDetailed(
     if (definition?.toolCapacity) addDemand(link, 'tools', definition.toolCapacity - (link.toolStock ?? 0));
     if (definition?.woodCapacity) addDemand(link, 'wood', definition.woodCapacity - (link.woodStock ?? 0));
     if (definition?.ironCapacity) addDemand(link, 'iron', definition.ironCapacity - (link.ironStock ?? 0));
+    if (definition?.charcoalCapacity) {
+      addDemand(link, 'charcoal', definition.charcoalCapacity - (link.charcoalStock ?? 0));
+    }
     if (definition?.sugarcaneCapacity) {
       addDemand(
         link,
@@ -280,6 +286,7 @@ export function planTransfersDetailed(
     if (definition?.toolCapacity) move(link, 'in', 'tools', allocationFor('tools'));
     if (definition?.woodCapacity) move(link, 'in', 'wood', allocationFor('wood'));
     if (definition?.ironCapacity) move(link, 'in', 'iron', allocationFor('iron'));
+    if (definition?.charcoalCapacity) move(link, 'in', 'charcoal', allocationFor('charcoal'));
     if (definition?.sugarcaneCapacity) {
       move(link, 'in', 'sugarcane', allocationFor('sugarcane'));
     }

@@ -381,6 +381,7 @@ type ResidentialBuildingRow = {
   tool_stock: number;
   wood_stock: number;
   iron_stock: number;
+  charcoal_stock: number;
   sugarcane_stock: number;
   efficiency_penalty: number;
   crop_phase: Crop['phase'] | null;
@@ -395,7 +396,7 @@ type ResidentialBuildingRow = {
   created_by?: string;
 };
 
-const RESIDENTIAL_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id, tool_stock, wood_stock, iron_stock, sugarcane_stock, efficiency_penalty,
+const RESIDENTIAL_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, efficiency_penalty,
   crop_phase, to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day, crop_ratio_sum, crop_days,
   crop_yield, crop_harvested,
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
@@ -429,6 +430,7 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     toolStock: row.tool_stock,
     woodStock: row.wood_stock,
     ironStock: row.iron_stock,
+    charcoalStock: row.charcoal_stock,
     sugarcaneStock: row.sugarcane_stock,
     efficiencyPenalty: row.efficiency_penalty,
     crop:
@@ -938,7 +940,7 @@ interface ManualWarehouseTransferQuote {
   destinationStock: number;
   destinationCapacity: number | null;
   sourceMinimumStock: number;
-  destinationColumn: 'stock' | 'tool_stock' | 'wood_stock' | 'iron_stock' | 'sugarcane_stock' | null;
+  destinationColumn: 'stock' | 'tool_stock' | 'wood_stock' | 'iron_stock' | 'charcoal_stock' | 'sugarcane_stock' | null;
   destinationType: ResidenceType;
   day: string;
 }
@@ -989,10 +991,11 @@ async function getManualWarehouseTransferQuote(
     tool_stock: number;
     wood_stock: number;
     iron_stock: number;
+    charcoal_stock: number;
     sugarcane_stock: number;
   }>(
     `SELECT id, building_type, created_by, status, tile_x, tile_y, work_hours_per_day,
-            stock, tool_stock, wood_stock, iron_stock, sugarcane_stock
+            stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock
      FROM residential_buildings
      WHERE id = ANY($1::uuid[])
      ORDER BY id
@@ -1101,6 +1104,10 @@ async function getManualWarehouseTransferQuote(
       destinationStock = destination.iron_stock;
       destinationCapacity = definition.ironCapacity ?? 0;
       destinationColumn = 'iron_stock';
+    } else if (productId === 'charcoal' && (definition.charcoalCapacity ?? 0) > 0) {
+      destinationStock = destination.charcoal_stock;
+      destinationCapacity = definition.charcoalCapacity ?? 0;
+      destinationColumn = 'charcoal_stock';
     } else if (productId === 'sugarcane' && (definition.sugarcaneCapacity ?? 0) > 0) {
       destinationStock = destination.sugarcane_stock;
       destinationCapacity = definition.sugarcaneCapacity ?? 0;
@@ -1901,11 +1908,12 @@ async function runDailyEmployment(): Promise<boolean> {
             tool_stock: number;
             wood_stock: number;
             iron_stock: number;
+            charcoal_stock: number;
             sugarcane_stock: number;
             efficiency_penalty: number;
             production_progress: number;
           }>(
-            `SELECT id, stock, tool_stock, wood_stock, iron_stock, sugarcane_stock,
+            `SELECT id, stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock,
                     efficiency_penalty, production_progress
              FROM residential_buildings
              WHERE id = ANY($1::uuid[])`,
@@ -1920,6 +1928,7 @@ async function runDailyEmployment(): Promise<boolean> {
         toolDemand: number;
         woodUsed: number;
         ironUsed: number;
+        charcoalUsed: number;
         sugarcaneUsed: number;
         penalty: number;
       }[] = [];
@@ -1948,6 +1957,7 @@ async function runDailyEmployment(): Promise<boolean> {
           freeSpace: (definition.stockCapacity ?? 0) - current.stock,
           wood: current.wood_stock,
           iron: current.iron_stock,
+          charcoal: current.charcoal_stock,
           batchStock: current.sugarcane_stock,
         });
         productionUpdates.push({
@@ -1957,6 +1967,7 @@ async function runDailyEmployment(): Promise<boolean> {
           toolDemand: usesTools && demandMet ? demand : 0,
           woodUsed: result.woodUsed,
           ironUsed: result.ironUsed,
+          charcoalUsed: result.charcoalUsed,
           sugarcaneUsed: result.batchStockUsed,
           penalty,
         });
@@ -1975,13 +1986,14 @@ async function runDailyEmployment(): Promise<boolean> {
                tool_stock = building.tool_stock - production.tool_demand,
                wood_stock = building.wood_stock - production.wood_used,
                iron_stock = building.iron_stock - production.iron_used,
+               charcoal_stock = building.charcoal_stock - production.charcoal_used,
                sugarcane_stock = building.sugarcane_stock - production.sugarcane_used,
                efficiency_penalty = production.penalty
            FROM UNNEST(
              $1::uuid[], $2::integer[], $3::double precision[], $4::integer[],
-             $5::integer[], $6::integer[], $7::integer[], $8::double precision[]
+             $5::integer[], $6::integer[], $7::integer[], $8::integer[], $9::double precision[]
            ) AS production(
-             id, units, progress, tool_demand, wood_used, iron_used, sugarcane_used, penalty
+             id, units, progress, tool_demand, wood_used, iron_used, charcoal_used, sugarcane_used, penalty
            )
            WHERE building.id = production.id`,
           [
@@ -1991,6 +2003,7 @@ async function runDailyEmployment(): Promise<boolean> {
             productionUpdates.map((update) => update.toolDemand),
             productionUpdates.map((update) => update.woodUsed),
             productionUpdates.map((update) => update.ironUsed),
+            productionUpdates.map((update) => update.charcoalUsed),
             productionUpdates.map((update) => update.sugarcaneUsed),
             productionUpdates.map((update) => update.penalty),
           ],
@@ -2160,9 +2173,10 @@ async function runDailyEmployment(): Promise<boolean> {
           tool_stock: number;
           wood_stock: number;
           iron_stock: number;
+          charcoal_stock: number;
           sugarcane_stock: number;
         }>(
-          `SELECT id, building_type, stock, tool_stock, wood_stock, iron_stock, sugarcane_stock
+          `SELECT id, building_type, stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock
            FROM residential_buildings
            WHERE warehouse_id = $1 AND status = 'completed'`,
           [warehouse.id],
@@ -2226,6 +2240,7 @@ async function runDailyEmployment(): Promise<boolean> {
             toolStock: row.tool_stock,
             woodStock: row.wood_stock,
             ironStock: row.iron_stock,
+            charcoalStock: row.charcoal_stock,
             sugarcaneStock: row.sugarcane_stock,
           })),
         );
@@ -2275,6 +2290,7 @@ async function runDailyEmployment(): Promise<boolean> {
           tools: number;
           wood: number;
           iron: number;
+          charcoal: number;
           sugarcane: number;
         }>();
         const transportedByBuilding = new Map<string, number>();
@@ -2358,6 +2374,7 @@ async function runDailyEmployment(): Promise<boolean> {
                   tools: 'tool_stock',
                   wood: 'wood_stock',
                   iron: 'iron_stock',
+                  charcoal: 'charcoal_stock',
                   sugarcane: 'sugarcane_stock',
                 } as Record<string, string>)[
                   transfer.productId
@@ -2374,6 +2391,7 @@ async function runDailyEmployment(): Promise<boolean> {
             tools: 0,
             wood: 0,
             iron: 0,
+            charcoal: 0,
             sugarcane: 0,
           };
           const delta = transfer.direction === 'out' ? -transfer.quantity : transfer.quantity;
@@ -2381,6 +2399,7 @@ async function runDailyEmployment(): Promise<boolean> {
           else if (column === 'tool_stock') changes.tools += delta;
           else if (column === 'wood_stock') changes.wood += delta;
           else if (column === 'iron_stock') changes.iron += delta;
+          else if (column === 'charcoal_stock') changes.charcoal += delta;
           else if (column === 'sugarcane_stock') changes.sugarcane += delta;
           buildingChanges.set(transfer.buildingId, changes);
         }
@@ -2392,11 +2411,12 @@ async function runDailyEmployment(): Promise<boolean> {
                  tool_stock = building.tool_stock + changes.tools,
                  wood_stock = building.wood_stock + changes.wood,
                  iron_stock = building.iron_stock + changes.iron,
+                 charcoal_stock = building.charcoal_stock + changes.charcoal,
                  sugarcane_stock = building.sugarcane_stock + changes.sugarcane
              FROM UNNEST(
                $1::uuid[], $2::integer[], $3::integer[],
-               $4::integer[], $5::integer[], $6::integer[]
-             ) AS changes(id, stock, tools, wood, iron, sugarcane)
+               $4::integer[], $5::integer[], $6::integer[], $7::integer[]
+             ) AS changes(id, stock, tools, wood, iron, charcoal, sugarcane)
              WHERE building.id = changes.id`,
             [
               buildingIds,
@@ -2404,6 +2424,7 @@ async function runDailyEmployment(): Promise<boolean> {
               buildingIds.map((id) => buildingChanges.get(id)?.tools ?? 0),
               buildingIds.map((id) => buildingChanges.get(id)?.wood ?? 0),
               buildingIds.map((id) => buildingChanges.get(id)?.iron ?? 0),
+              buildingIds.map((id) => buildingChanges.get(id)?.charcoal ?? 0),
               buildingIds.map((id) => buildingChanges.get(id)?.sugarcane ?? 0),
             ],
           );

@@ -262,8 +262,9 @@ describe('other crop farms', () => {
     assert.equal(grow('2026-10-10', 'farm_corn', 1000).yieldUnits, 100);
     assert.equal(grow('2026-01-10', 'farm_cane', 100).yieldUnits, 1800);
     assert.equal(grow('2026-01-10', 'farm_spices', 5000).yieldUnits, 600);
-    assert.equal(grow('2026-01-10', 'farm_vegetables', 800).yieldUnits, 20);
-    assert.equal(grow('2026-07-10', 'farm_vegetables', 800).yieldUnits, 100);
+    assert.equal(grow('2026-01-10', 'farm_vegetables', 5000).yieldUnits, 200);
+    assert.equal(grow('2026-07-10', 'farm_vegetables', 5000).yieldUnits, 1000);
+    assert.equal(grow('2026-01-10', 'farm_vegetables', 2500).yieldUnits, 100);
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_vegetables.growthMonths), '2026-03-31');
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_cattle.growthMonths), '2028-01-31');
     assert.equal(grow('2026-04-10', 'farm_cattle', 500).yieldUnits, 1000);
@@ -312,7 +313,7 @@ describe('other crop farms', () => {
         FARM_CROP_RULES.farm_vegetables.harvestWorkPointsPerUnit,
         FARM_CROP_RULES.farm_vegetables.baseYield,
       ],
-      [100, 25, 2000, 5000, 10, 600, 800, 8, 100],
+      [100, 25, 2000, 5000, 10, 600, 5000, 10, 1000],
     );
     assert.deepEqual(
       planHarvest(
@@ -321,7 +322,7 @@ describe('other crop farms', () => {
         100,
         FARM_CROP_RULES.farm_vegetables,
       ),
-      { units: 10, done: false },
+      { units: 8, done: false },
     );
   });
 });
@@ -849,7 +850,7 @@ describe('fazenda leiteira e demanda configurável', () => {
         dairy.production!,
         { progress: 2, workPoints: 11, penalty: 0, freeSpace: 4 },
       ),
-      { units: 2, progress: 3, woodUsed: 0, ironUsed: 0, batchStockUsed: 0 },
+      { units: 2, progress: 3, woodUsed: 0, ironUsed: 0, charcoalUsed: 0, batchStockUsed: 0 },
     );
     assert.equal(
       planProduction(
@@ -1421,6 +1422,7 @@ describe('municipal zones', () => {
         toolStock: 0,
         woodStock: 0,
         ironStock: 0,
+        charcoalStock: 0,
         sugarcaneStock: 0,
         averageIncome: 0,
         efficiencyPenalty: 0,
@@ -1470,6 +1472,7 @@ describe('municipal zones', () => {
         toolStock: 0,
         woodStock: 0,
         ironStock: 0,
+        charcoalStock: 0,
         sugarcaneStock: 0,
         averageIncome: 0,
         efficiencyPenalty: 0,
@@ -1659,7 +1662,7 @@ describe('fishery', () => {
         RESIDENCES.fishery.production!,
         { progress: 50, workPoints: 1000, penalty: 30, freeSpace: 300 },
       ),
-      { units: 7, progress: 50, woodUsed: 0, ironUsed: 0, batchStockUsed: 0 },
+      { units: 7, progress: 50, woodUsed: 0, ironUsed: 0, charcoalUsed: 0, batchStockUsed: 0 },
     );
     assert.equal(planFishing({ progress: 0, workPoints: 1000, penalty: 0, freeSpace: 4 }).fish, 4);
   });
@@ -1698,9 +1701,10 @@ describe('recursos e ferramentaria', () => {
   it('makes a toolmaker batch only with inputs', () => {
     const rule = RESIDENCES.toolmaker.production!;
     const base = { progress: 0, workPoints: 1000, penalty: 0, freeSpace: 100 };
-    assert.equal(planProduction(rule, { ...base, wood: 5, iron: 0 }).units, 0);
-    const ok = planProduction(rule, { ...base, wood: 5, iron: 1 });
-    assert.deepEqual([ok.units, ok.woodUsed, ok.ironUsed], [100, 5, 1]);
+    assert.equal(planProduction(rule, { ...base, charcoal: 5, iron: 0 }).units, 0);
+    assert.equal(planProduction(rule, { ...base, charcoal: 4, iron: 1 }).units, 0);
+    const ok = planProduction(rule, { ...base, charcoal: 5, iron: 1 });
+    assert.deepEqual([ok.units, ok.charcoalUsed, ok.ironUsed], [100, 5, 1]);
   });
 
   it('defines the new buildings', () => {
@@ -1726,7 +1730,10 @@ describe('recursos e ferramentaria', () => {
     assert.deepEqual(RESIDENCES.sugar_mill.cost, { wood: 30, stone: 80 });
     assert.equal(RESIDENCES.salt_gatherer.maxWorkers, 10);
     assert.equal(RESIDENCES.salt_gatherer.toolDemandPerWorker, 0.05);
-    assert.equal(RESIDENCES.sugar_mill.maxWorkers, 40);
+    assert.equal(RESIDENCES.toolmaker.woodCapacity, undefined);
+    assert.equal(RESIDENCES.toolmaker.charcoalCapacity, 30);
+    assert.equal(RESIDENCES.sugar_mill.charcoalCapacity, 30);
+    assert.equal(RESIDENCES.sugar_mill.maxWorkers, 60);
     assert.equal(RESIDENCES.sugar_mill.toolDemandPerWorker, 0.05);
     assert.deepEqual(
       [
@@ -1753,36 +1760,37 @@ describe('recursos e ferramentaria', () => {
     assert.equal(planProduction(rule, { ...input, workPoints: 200, penalty: 50 }, () => 0.3).units, 0);
   });
 
-  it('supplies wood and iron to a toolmaker through a warehouse', () => {
+  it('supplies charcoal and iron to a toolmaker through a warehouse', () => {
     const transfers = planTransfers(
-      { stock: new Map([['wood', 20], ['iron', 3]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 1e6 },
-      [{ buildingId: 't', type: 'toolmaker', stock: 0, woodStock: 10, ironStock: 1 }],
+      { stock: new Map([['charcoal', 20], ['iron', 3]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 1e6 },
+      [{ buildingId: 't', type: 'toolmaker', stock: 0, charcoalStock: 10, ironStock: 1 }],
     );
     assert.deepEqual(
       transfers.map((t) => [t.productId, t.quantity, t.direction]),
-      [['wood', 20, 'in'], ['iron', 3, 'in']].map(([p, q, d]) => [p, Math.min(q as number, p === 'wood' ? 20 : 3), d]),
+      [['iron', 3, 'in'], ['charcoal', 20, 'in']],
     );
   });
 
-  it('makes sugar using canes, wood, Work Points, and available stock space', () => {
+  it('makes sugar using canes, charcoal, Work Points, and available stock space', () => {
     const rule = RESIDENCES.sugar_mill.production!;
     const input = {
       progress: 0,
       workPoints: 600,
       penalty: 0,
       freeSpace: 200,
-      wood: 1,
+      charcoal: 3,
       batchStock: 6,
     };
     const result = planProduction(rule, input);
     assert.deepEqual(
-      [result.units, result.woodUsed, result.batchStockUsed],
-      [1, 1, 6],
+      [result.units, result.charcoalUsed, result.batchStockUsed],
+      [1, 3, 6],
     );
     assert.equal(
       planProduction(rule, { ...input, batchStock: 5 }).units,
       0,
     );
+    assert.equal(planProduction(rule, { ...input, charcoal: 2 }).units, 0);
     assert.equal(
       planProduction(rule, { ...input, freeSpace: 0 }).units,
       0,
@@ -1797,7 +1805,7 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.sugar_mill.toolCapacity,
         RESIDENCES.sugar_mill.workPoints,
       ],
-      [3, 3, 40, 200, 400, 5, 12000],
+      [3, 3, 60, 200, 400, 5, 12000],
     );
     assert.equal(
       planProduction(rule, { ...input, workPoints: 600, penalty: 50 }).units,
@@ -1805,18 +1813,19 @@ describe('recursos e ferramentaria', () => {
     );
   });
 
-  it('supplies the sugar mill with cane from a linked warehouse', () => {
+  it('supplies the sugar mill with cane and charcoal from a linked warehouse', () => {
     const transfers = planTransfers(
       {
-        stock: new Map([['sugarcane', 400]]),
+        stock: new Map([['sugarcane', 400], ['charcoal', 30]]),
         minimumStock: new Map(),
         maximumStock: new Map(),
         capacityM3: 50,
         workPoints: 1e6,
       },
-      [{ buildingId: 'sugar-mill', type: 'sugar_mill', stock: 0, sugarcaneStock: 0 }],
+      [{ buildingId: 'sugar-mill', type: 'sugar_mill', stock: 0, sugarcaneStock: 0, charcoalStock: 0 }],
     );
     assert.deepEqual(transfers, [
+      { buildingId: 'sugar-mill', productId: 'charcoal', quantity: 30, direction: 'in' },
       { buildingId: 'sugar-mill', productId: 'sugarcane', quantity: 400, direction: 'in' },
     ]);
   });

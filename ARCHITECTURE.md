@@ -294,8 +294,8 @@ mapeamento e verificar todas as curvas.
   especiarias e têm requisitos diários de 100/5.000 WP, crescimento de seis
   meses, colheita de 25/10 WP por unidade, rendimento de 2.000/600 e eficiências
   sazonais 90/80/100/90% e 100/60/60/60%. Vegetais emprega até 10 pessoas,
-  armazena 100 unidades, requer 800 WP/dia, cresce por dois meses, colhe a 8 WP
-  por unidade, rende até 100 e tem eficiências sazonais 20/40/100/80%. O
+  armazena 100 unidades, requer 5.000 WP/dia, cresce por dois meses, colhe a 10 WP
+  por unidade, rende até 1.000 e tem eficiências sazonais 20/40/100/80%. O
   excedente da colheita permanece pendente até haver espaço no estoque.
   Sprites: `public/buildings/farms/fazenda_cana.png`,
   `public/buildings/farms/fazenda_especiarias.png` e
@@ -533,9 +533,10 @@ mapeamento e verificar todas as curvas.
   `runDailyEmployment`, que serve a qualquer construção com `production`.
   Madeireira: 1 madeira/1000 WP; Pedreira e Mina: 1 pedra/ferro a cada 3000 WP
   (fração = probabilidade); demanda de Ferramentas 0,05 (0,15 na Mina) com a
-  penalidade do Pesqueiro. Ferramentaria: lote de 1000 WP + 5 madeiras + 1 ferro
-  = 100 Ferramentas, sem penalidade. Colunas novas `wood_stock` e `iron_stock`;
-  `planTransfers` leva madeira/ferro do armazém à Ferramentaria (`InputProduct`).
+  penalidade do Pesqueiro. Ferramentaria: armazena 30 carvões e 5 ferros; cada
+  lote de 1.000 WP + 5 carvões + 1 ferro = 100 Ferramentas, sem penalidade.
+  Estoques de carvão e ferro são abastecidos pelo armazém ligado (`InputProduct`),
+  em `charcoal_stock` e `iron_stock`.
 - `salt_gatherer` (categoria Recursos, zona rural) ocupa 2 × 2, emprega até 10,
   guarda 100 sal e 5 Ferramentas, custa 30 madeiras/20 pedras e exige 6.000 WP.
   Precisa de estrada adjacente e água adjacente, sem ocupar água. A categoria
@@ -545,12 +546,12 @@ mapeamento e verificar todas as curvas.
   0,05 por funcionário e penalidade igual à do Pesqueiro. Sprite
   `public/buildings/resources/coleta_sal.png`.
 - `sugar_mill` (Casa de Engenho, categoria Artesanais, zona urbana) ocupa 3 × 3,
-  emprega até 40, custa 30 madeiras/80 pedras e exige 12.000 WP. Guarda 200
-  açúcares, 400 canas, 30 madeiras e 5 Ferramentas. Cada lote de 600 WP efetivos
-  + 6 canas + 1 madeira produz 1 açúcar; a penalidade por Ferramentas é igual à
-  do Pesqueiro. `sugarcane_stock` é coluna aditiva no schema, exibida no painel,
-  abastecida pelo armazém ligado e consumida por `planProduction`; a cana nesse
-  insumo também sofre validade de 3 dias. Sprite
+  emprega até 60, custa 30 madeiras/80 pedras e exige 12.000 WP. Guarda 200
+  açúcares, 400 canas, 30 carvões e 5 Ferramentas. Cada lote de 600 WP efetivos
+  + 3 carvões + 6 canas produz 1 açúcar; a penalidade por Ferramentas é igual à
+  do Pesqueiro. `charcoal_stock` e `sugarcane_stock` são colunas aditivas no
+  schema, exibidas no painel, abastecidas pelo armazém ligado e consumidas por
+  `planProduction`; a cana nesse insumo também sofre validade de 3 dias. Sprite
   `public/buildings/artisan/casa_de_engenho.png`.
 - `charcoal_works` (Carvoaria, categoria Artesanais, zona urbana) ocupa 3 × 3,
   emprega até 20, custa 30 madeiras/60 pedras e exige 12.000 WP. Guarda 100

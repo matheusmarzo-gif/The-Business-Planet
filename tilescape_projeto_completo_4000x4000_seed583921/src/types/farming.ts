@@ -65,9 +65,9 @@ export const FARM_CROP_RULES = {
   },
   farm_vegetables: {
     growthMonths: 2,
-    dailyWorkPoints: 800,
-    harvestWorkPointsPerUnit: 8,
-    baseYield: 100,
+    dailyWorkPoints: 5000,
+    harvestWorkPointsPerUnit: 10,
+    baseYield: 1000,
     plantingEfficiencyByQuarter: [0.2, 0.4, 1, 0.8],
   },
 } as const satisfies Record<string, FarmCropRule>;

@@ -167,6 +167,7 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS production_progress DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (production_progress >= 0),
   ADD COLUMN IF NOT EXISTS wood_stock INTEGER NOT NULL DEFAULT 0 CHECK (wood_stock >= 0),
   ADD COLUMN IF NOT EXISTS iron_stock INTEGER NOT NULL DEFAULT 0 CHECK (iron_stock >= 0),
+  ADD COLUMN IF NOT EXISTS charcoal_stock INTEGER NOT NULL DEFAULT 0 CHECK (charcoal_stock >= 0),
   ADD COLUMN IF NOT EXISTS sugarcane_stock INTEGER NOT NULL DEFAULT 0 CHECK (sugarcane_stock >= 0);
 
 -- O caixa dos jogadores pode ficar negativo (folha de pagamento).

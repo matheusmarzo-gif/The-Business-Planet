@@ -79,6 +79,7 @@ export interface ProductionRule {
   batchSize?: number;
   batchWood?: number;
   batchIron?: number;
+  batchCharcoal?: number;
   batchStockProductId?: string;
   batchStockAmount?: number;
 }
@@ -123,6 +124,7 @@ export interface ResidenceDefinition {
   toolCapacity?: number;
   woodCapacity?: number;
   ironCapacity?: number;
+  charcoalCapacity?: number;
   // Estoque de cana recebido por armazém e consumido pela Casa de Engenho.
   sugarcaneCapacity?: number;
   // Demanda diária de Ferramentas por funcionário (valores abaixo de 1 são probabilidade).
@@ -692,9 +694,9 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     stockProduct: 'Ferramentas',
     stockProductId: 'tools',
     stockCapacity: 100,
-    woodCapacity: 30,
     ironCapacity: 5,
-    production: { mode: 'batch', workPointsPerUnit: 1000, batchSize: 100, batchWood: 5, batchIron: 1 },
+    charcoalCapacity: 30,
+    production: { mode: 'batch', workPointsPerUnit: 1000, batchSize: 100, batchCharcoal: 5, batchIron: 1 },
   },
   sugar_mill: {
     type: 'sugar_mill',
@@ -709,19 +711,19 @@ export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = {
     localAppeal: 0,
     cost: { wood: 30, stone: 80 },
     workPoints: 12000,
-    maxWorkers: 40,
+    maxWorkers: 60,
     stockProduct: 'Açúcar',
     stockProductId: 'sugar',
     stockCapacity: 200,
     toolCapacity: 5,
     toolDemandPerWorker: 0.05,
     sugarcaneCapacity: 400,
-    woodCapacity: 30,
+    charcoalCapacity: 30,
     production: {
       mode: 'batch',
       workPointsPerUnit: 600,
       batchSize: 1,
-      batchWood: 1,
+      batchCharcoal: 3,
       batchStockProductId: 'sugarcane',
       batchStockAmount: 6,
     },
@@ -888,6 +890,7 @@ export interface ResidentialBuilding {
   toolStock: number;
   woodStock: number;
   ironStock: number;
+  charcoalStock: number;
   sugarcaneStock: number;
   efficiencyPenalty: number;
   // Plantio/ciclo das fazendas agrícolas; null quando não há plantio.

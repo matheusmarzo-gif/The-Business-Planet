@@ -1376,6 +1376,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       toolStock: 0,
       woodStock: 0,
       ironStock: 0,
+      charcoalStock: 0,
       sugarcaneStock: 0,
       averageIncome: 0,
       efficiencyPenalty: 0,

@@ -27,5 +27,17 @@
     "idealBasketDivisor": 110,
     "idealExponent": 3
   },
+  "advanced": {
+    "discountBase": 0.8,
+    "wExponent": 2,
+    "errorExponent": 2,
+    "minimumIncomeAboveProductCost": 4,
+    "basicBasketThresholdDivisor": 6,
+    "intermediateBasketThresholdDivisor": 3,
+    "advancedBasketThresholdDivisor": 4,
+    "idealIncomeOffset": 0.16666666666666666,
+    "idealBasketDivisor": 180,
+    "idealExponent": 2
+  },
   "associatedBenefitExponent": 4
 }

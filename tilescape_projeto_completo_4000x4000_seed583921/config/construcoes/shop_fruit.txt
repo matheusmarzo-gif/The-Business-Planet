@@ -1,0 +1,19 @@
+{
+  "type": "shop_fruit",
+  "kind": "shop",
+  "requiredZone": "urban",
+  "requiresRoad": true,
+  "name": "Frutaria",
+  "asset": "/buildings/commerce/frutaria.png",
+  "width": 2,
+  "height": 2,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 10, "stone": 10 },
+  "workPoints": 12000,
+  "maxWorkers": 4,
+  "stockProduct": "Fruta",
+  "stockProductId": "fruit",
+  "stockCapacity": 12,
+  "salesPerWorkerPerDay": 3
+}

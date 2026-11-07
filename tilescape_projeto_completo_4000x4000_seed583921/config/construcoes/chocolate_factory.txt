@@ -1,0 +1,31 @@
+{
+  "type": "chocolate_factory",
+  "kind": "industry",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fábrica de Chocolate",
+  "asset": "/buildings/industrial/fabrica_chocolate.png",
+  "width": 4,
+  "height": 4,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 200, "stone": 100 },
+  "workPoints": 150000,
+  "maxWorkers": 40,
+  "stockProduct": "Chocolate",
+  "stockProductId": "chocolate",
+  "stockCapacity": 50,
+  "toolCapacity": 200,
+  "charcoalCapacity": 100,
+  "inputCapacities": { "cocoa": 5, "milk": 130, "sugar": 10 },
+  "production": {
+    "mode": "batch",
+    "workPointsPerUnit": 400,
+    "batchInputs": { "charcoal": 2, "milk": 2, "tools": 4 },
+    "batchInputRates": {
+      "cocoa": 0.1,
+      "sugar": 0.2,
+      "milk": 0.6
+    }
+  }
+}

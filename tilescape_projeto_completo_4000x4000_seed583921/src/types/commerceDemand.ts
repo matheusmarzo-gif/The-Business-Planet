@@ -19,10 +19,11 @@ export const INTERMEDIATE_BASKET_PRODUCT_IDS = [
   'salt',
   'spices',
 ] as const;
-export const ADVANCED_BASKET_PRODUCT_IDS = ['bread', 'cheese'] as const;
+export const ADVANCED_BASKET_PRODUCT_IDS = ['bread', 'cheese', 'fruit', 'chocolate'] as const;
 export const CONSUMPTION_PRODUCT_IDS = [
   ...BASIC_BASKET_PRODUCT_IDS,
   ...INTERMEDIATE_BASKET_PRODUCT_IDS,
+  ...ADVANCED_BASKET_PRODUCT_IDS,
 ] as const;
 
 export function parseBasicDemandConfig(contents: string): Map<string, number> {

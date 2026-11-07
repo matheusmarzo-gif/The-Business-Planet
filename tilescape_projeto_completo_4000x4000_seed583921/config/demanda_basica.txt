@@ -14,3 +14,5 @@ demanda_intermediaria.salt=0.04
 demanda_intermediaria.spices=0.01
 demanda_avancada.bread=1
 demanda_avancada.cheese=0.1
+demanda_avancada.fruit=0.02
+demanda_avancada.chocolate=0.025

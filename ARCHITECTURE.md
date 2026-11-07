@@ -60,7 +60,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `server/index.ts` | API Express, autenticação de tokens, banco, Redis, relógio e WebSocket. |
 | `database/schema.sql` | DDL aplicado pelo servidor durante a inicialização. |
 | `config/demanda_basica.txt` | Multiplicadores de demanda residencial por produto, carregados na inicialização do servidor. |
-| `config/construcoes/*.txt` | Dados editáveis das 39 construções, um JSON por arquivo. |
+| `config/construcoes/*.txt` | Dados editáveis das 44 construções, um JSON por arquivo. |
 | `config/formulas/*.txt` | Parâmetros editáveis de consumo, trabalho e transporte. |
 | `server/generate-game-config.ts` | Valida os TXT e gera o módulo de configuração compartilhado. |
 | `src/generated/gameConfig.ts` | Saída ignorada pelo Git, regenerada pelos comandos npm antes de uso. |
@@ -304,13 +304,20 @@ mapeamento e verificar todas as curvas.
   Cana e especiarias empregam até 10/50 pessoas, armazenam 2.000 canas/400
   especiarias e têm requisitos diários de 100/5.000 WP, crescimento de seis
   meses, colheita de 25/10 WP por unidade, rendimento de 2.000/600 e eficiências
-  sazonais 90/80/100/90% e 100/60/60/60%. Vegetais emprega até 10 pessoas,
+  sazonais 90/80/100/90% e 100/60/60/60%. Vegetais emprega até 50 pessoas,
   armazena 100 unidades, requer 5.000 WP/dia, cresce por dois meses, colhe a 10 WP
   por unidade, rende até 1.000 e tem eficiências sazonais 20/40/100/80%. O
   excedente da colheita permanece pendente até haver espaço no estoque.
   Sprites: `public/buildings/farms/fazenda_cana.png`,
   `public/buildings/farms/fazenda_especiarias.png` e
   `public/buildings/farms/fazenda_vegetais.png`.
+- `farm_fruit` e `farm_cocoa` usam o ciclo agrícola comum em áreas rurais. Ambas
+  ocupam 4 × 4, empregam até 50, custam 200 madeiras/100 pedras e exigem
+  120.000 WP. A Fazenda de Frutas armazena 1.000 unidades, exige 5.000 WP/dia,
+  cresce por 12 meses, colhe a 20 WP/unidade, rende até 1.000 e tem eficiências
+  sazonais 100/80/60/40%. A Fazenda de Cacau armazena 400, exige 2.000 WP/dia,
+  cresce por 12 meses, colhe a 62 WP/unidade, rende até 400 e tem eficiências
+  100/90/70/50%. Sprites em `public/buildings/farms/`.
 - As fazendas agrícolas com plantio (exceto criação bovina) podem salvar automação em
   `PUT /api/residential-buildings/:id/farm-automation`. O servidor valida dono,
   fase da construção, meses (1–12) e limites de funcionários do tipo antes de
@@ -332,11 +339,11 @@ mapeamento e verificar todas as curvas.
   respectivamente com estoque máximo de 100 pães/4 funcionários e 30 queijos/
   5 funcionários. Custam 4 madeiras/4 pedras e 2.000 WP, e 10 madeiras/10 pedras
   e 8.000 WP. Cada funcionário adiciona capacidade diária de 25 pães ou 6
-  queijos, independente dos WP. As demandas avançadas (`bread=1`,
-  `cheese=0,1` por pessoa/dia) são aceitas pela configuração, mas não entram em
-  `CONSUMPTION_PRODUCT_IDS`; as vendas residenciais permanecem desativadas até a
-  implementação das fórmulas da cesta avançada. Sprites em
-  `public/buildings/commerce/`.
+  queijos, independente dos WP. `shop_chocolate` (Chocolateria) e `shop_fruit`
+  (Frutaria) têm 12 unidades de estoque, 4 funcionários, custam 10 madeiras/
+  10 pedras e exigem 12.000 WP; cada funcionário permite vender 3 unidades/dia.
+  Seus produtos participam da cesta avançada e recebem estoque do armazém ligado.
+  Sprites em `public/buildings/commerce/`.
 - O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
   área ocupada deve ficar dentro da cidade e da zona exigida pela construção
   (urbana ou rural), em terra, sem
@@ -368,9 +375,8 @@ mapeamento e verificar todas as curvas.
   permite a remoção ao autor e publica o novo estado.
 - Capacidade limita os moradores e apreço local desempata a ordem de ocupação
   quando os aluguéis são iguais; Work Points avançam obras e custos debitam
-  materiais. A população é atualizada pela imigração; o consumo da
-  Cesta Básica é simulado nas lojas, mas outras necessidades residenciais ainda
-  não são simuladas.
+  materiais. A população é atualizada pela imigração; o consumo das cestas
+  básica, intermediária e avançada é simulado nas lojas.
 - `GET /api/player/resources?x=&y=` agrega Madeira e Pedra dos armazéns
   concluídos do próprio usuário em até 60 tiles do centro da câmera. A barra
   superior atualiza esses totais quando a área muda e em intervalo regular.
@@ -424,10 +430,11 @@ mapeamento e verificar todas as curvas.
   fator 1,2 em 4 h, 1 em 8 h, 0,8 em 14 h, linear entre eles; saúde e felicidade
   fixas em 100 por enquanto) e é concluída automaticamente ao atingir os Work
   Points necessários.
-- Vendas das cestas básica e intermediária (`src/types/commerce.ts`): lojas cujo catálogo tem
+- Vendas das cestas básica, intermediária e avançada (`src/types/commerce.ts`): lojas cujo catálogo tem
   `kind: 'shop'` e `stockProductId` participam das vendas; incluem arroz,
   batata, milho, cevada, trigo, peixe, carne vermelha, leite, açúcar, vegetais,
-  sal e especiarias. Todas têm `price` (padrão C$ 10, editável pelo dono em centavos via
+  sal, especiarias, pão, queijo, frutas e chocolate. Todas têm `price` (padrão
+  C$ 10, editável pelo dono em centavos via
   `PATCH /api/residential-buildings/:id/price`) e estoque abastecido pelo
   armazém ligado do mesmo dono. No job das 00:00, lojas de produtos por unidade
   têm capacidade `floor(WP do dia / 20)` unidades e leite
@@ -435,14 +442,16 @@ mapeamento e verificar todas as curvas.
   `config/demanda_basica.txt` define as necessidades diárias por pessoa: na
   cesta básica, arroz, trigo, cevada, milho, batata, peixe e carne vermelha
   começam em `0.03`, leite em `1`; na cesta intermediária, açúcar `0.01`,
-  vegetais `0.05`, sal `0.04` e especiarias `0.01`.
+  vegetais `0.05`, sal `0.04` e especiarias `0.01`; na cesta avançada, pão
+  `1`, queijo `0.1`, frutas `0.02` e chocolate `0.025`.
   `commerce_history` fornece os preços e unidades vendidas nos últimos 30 dias.
   `getCityProductAveragePrices` calcula a média ponderada por unidades vendidas,
   por produto e cidade; se ainda não houve venda do produto, usa a média dos
   preços atuais anunciados na cidade. Produtos básicos sem preço disponível não
-  contribuem em `RR`; os intermediários sem preço não contribuem em `RR2`.
-  `RR` é o custo diário por pessoa da cesta básica, e `RR2` o custo da cesta
-  intermediária. Para todos os produtos, `Pf = preço local × necessidade
+  contribuem em `RR`; os intermediários sem preço não contribuem em `RR2`;
+  produtos avançados sem preço não contribuem em `RR3`. `RR` é o custo diário
+  por pessoa da cesta básica, `RR2` o da cesta intermediária e `RR3` o da cesta
+  avançada. Para todos os produtos, `Pf = preço local × necessidade
   diária por pessoa`, `Dᵢ = √(60 / (60 + dᵢ))`, onde `dᵢ` é a distância entre
   residência e loja. Na cesta básica, com `Rf` como renda média por morador:
   `w = (1 − Pf / RR)^4`, `q = (0,8^w − 1) × Rf`,
@@ -453,14 +462,18 @@ mapeamento e verificar todas as curvas.
   `q = (0,8^w − 1) × Rf`; o benefício de erro é
   `Dᵢ × ((Rf − Pf − q) / (RR + RR2))^3` somente se
   `Rf > Pf + 1` e `Rf > RR/6 + RR2/3`, e zero caso contrário. Seu benefício
-  ideal é `((Rf − 1/6) / (RR + RR2) − 1/110)^3`.
-  Em ambas as cestas, `benefício_associado = (benefício_erro /
+  ideal é `((Rf − 1/6) / (RR + RR2) − 1/110)^3`. Na cesta avançada,
+  `w = (1 − Pf / (RR + RR2 + RR3))^2`; `q` mantém a mesma fórmula. O benefício
+  de erro é `Dᵢ × ((Rf − Pf − q) / (RR + RR2 + RR3))^2` se
+  `Rf > Pf + 4` e `Rf > RR/6 + RR2/3 + RR3/4`, caso contrário zero; o ideal é
+  `((Rf − 1/6) / (RR + RR2 + RR3) − 1/180)^2`. Em todas as cestas,
+  `benefício_associado = (benefício_erro /
   benefício_ideal)^4`; se o benefício ideal for zero, o associado também é zero.
   Os moradores são repartidos entre as lojas do produto em 60 tiles na
   proporção do benefício associado. O método dos maiores restos garante
   alocações inteiras cuja soma é a população da residência quando há benefício
   positivo; se o custo da cesta aplicável (`RR` para produtos básicos,
-  `RR + RR2` para intermediários) ou todos os benefícios forem zero, não há
+  `RR + RR2` para intermediários, `RR + RR2 + RR3` para avançados) ou todos os benefícios forem zero, não há
   compra. A distância define a elegibilidade no raio de 60 tiles e também
   reduz o benefício por `Dᵢ`. A quantidade desejada por loja é `moradores
   alocados × necessidade diária por pessoa × benefício associado`, com
@@ -472,14 +485,14 @@ mapeamento e verificar todas as curvas.
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
   Os comércios configurados com `salesPerWorkerPerDay` usam funcionários ×
   esse limite, em vez de converter Work Points em unidades; Padaria e Queijaria
-  usam 25 pães e 6 queijos por funcionário/dia. Produtos da cesta avançada ainda
-  não participam do planejador de compras residenciais.
+  usam 25 pães e 6 queijos, e Chocolateria e Frutaria 3 unidades por funcionário/
+  dia. `bread`, `cheese`, `fruit` e `chocolate` participam da cesta avançada.
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
   preço unitário de venda. Os detalhes do diagnóstico (renda, moradores,
   produto, `RR`, `Pf`, `w`, `q`, benefícios de erro/ideal/associado,
   participação e moradores alocados, quantidade, estoque/capacidade, resultado
-  e decomposição de `RR` e `RR2` por produto (cesta, necessidade diária, preço
+  e decomposição de `RR`, `RR2` e `RR3` por produto (cesta, necessidade diária, preço
   médio, origem do preço, vendas/receita do período e contribuição) são
   encaminhados via Redis apenas aos WebSockets autenticados do
   proprietário e ficam somente no `localStorage` do navegador. O navegador
@@ -627,7 +640,7 @@ mapeamento e verificar todas as curvas.
   `wood_stock`; o armazém ligado abastece madeira e Ferramentas. O produto
   `charcoal` pesa 5 kg, ocupa 0,015 m³ e não perece. Sprites
   `public/buildings/artisan/carvoaria.png` e `public/products/carvao.png`.
-- `flour_mill`, `bread_factory` e `cheese_factory` (categoria Indústrias, zona
+- `flour_mill`, `bread_factory`, `cheese_factory` e `chocolate_factory` (categoria Indústrias, zona
   rural) recebem seus insumos pelo armazém ligado. O Moinho ocupa 3 × 3, emprega
   até 60, custa 60 madeiras/20 pedras e exige 60.000 WP; armazena 100 farinhas e
   até 20 unidades de cada grão elegível, mas só recebe o item selecionado pelo
@@ -637,8 +650,14 @@ mapeamento e verificar todas as curvas.
   armazena 300 pães/30 farinhas e produz 10 pães por farinha + 200 WP. A
   Fábrica de Queijo ocupa 3 × 3, emprega 200, custa 120 madeiras/60 pedras,
   exige 100.000 WP, armazena 100 queijos/2.000 litros de leite e produz 1 queijo
-  por 20 litros + 200 WP. Os insumos perecíveis também passam pela deterioração
-  diária. Sprites em `public/buildings/industrial/`.
+  por 20 litros + 200 WP. A Fábrica de Chocolate ocupa 4 × 4, emprega 40,
+  custa 200 madeiras/100 pedras, exige 150.000 WP e armazena 50 chocolates,
+  5 cacaus, 130 litros de leite, 10 açúcares, 100 carvões e 200 Ferramentas.
+  Cada 400 WP gera 1 chocolate, consumindo 2 carvões, 2 leites e 4 Ferramentas;
+  os consumos esperados de cacau (0,1), açúcar (0,2) e leite extra (0,6) por
+  unidade são arredondados estocasticamente, inclusive para frações de WP. Os
+  insumos perecíveis também passam pela deterioração diária. Sprites em
+  `public/buildings/industrial/`.
 - Comércio entre armazéns (`planWarehouseTrades` em `src/types/logistics.ts`): às
   03:00 e 15:00 (`world_state.last_warehouse_trade_slot`, ex. `2026-01-01T15`,
   garante uma execução por rodada) cada armazém em modo `buy` procura armazéns

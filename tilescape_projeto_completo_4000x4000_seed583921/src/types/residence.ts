@@ -26,6 +26,8 @@ export const SHOP_TYPES = [
   'shop_spices',
   'shop_bread',
   'shop_cheese',
+  'shop_chocolate',
+  'shop_fruit',
 ] as const satisfies readonly ResidenceType[];
 export type BuildingKind =
   | 'residence'
@@ -59,8 +61,11 @@ export interface ProductionRule {
   batchWood?: number;
   batchIron?: number;
   batchCharcoal?: number;
+  batchTools?: number;
   batchStockProductId?: string;
   batchStockAmount?: number;
+  batchInputs?: Record<string, number>;
+  batchInputRates?: Record<string, number>;
 }
 export type ResidentialBuildingStatus = 'under_construction' | 'completed';
 

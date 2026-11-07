@@ -2,6 +2,7 @@ import { getResidenceDefinition, type ResidenceType } from './residence.js';
 import {
   BASIC_BASKET_PRODUCT_IDS,
   CONSUMPTION_PRODUCT_IDS,
+  ADVANCED_BASKET_PRODUCT_IDS,
   INTERMEDIATE_BASKET_PRODUCT_IDS,
 } from './commerceDemand.js';
 import { isCurrencyAmount, roundCurrency } from './currency.js';
@@ -15,6 +16,7 @@ export const SHOP_SALES_WORK_POINTS_PER_UNIT =
 export const MILK_SALES_WORK_POINTS_PER_LITER =
   GAME_RULES.consumption.salesCapacity.literWorkPointsPerSale;
 const MAX_DIAGNOSTIC_VALUE = Number.MAX_SAFE_INTEGER;
+type BasketType = 'basic' | 'intermediate' | 'advanced';
 
 export interface SalesShop {
   id: string;
@@ -69,6 +71,7 @@ export interface ShopTransactionCandidate {
   basicNeedPerPerson?: number;
   referenceBasketCost?: number;
   intermediateBasketCost?: number;
+  advancedBasketCost?: number;
   calculationBasketCost?: number;
   productAveragePrice?: number;
   pf?: number;
@@ -98,10 +101,11 @@ export interface ShopResidenceTransaction {
   expectedDemand: number;
   desiredQuantity: number;
   productId?: string;
-  basketType?: 'basic' | 'intermediate';
+  basketType?: BasketType;
   basicNeedPerPerson?: number;
   referenceBasketCost?: number;
   intermediateBasketCost?: number;
+  advancedBasketCost?: number;
   calculationBasketCost?: number;
   basketBreakdown?: BasketProductBreakdown[];
   productAveragePrice?: number;
@@ -117,7 +121,7 @@ export interface BasketProductBreakdown {
   historicalRevenue: number;
   currentShopCount: number;
   basketContribution: number | null;
-  basketType?: 'basic' | 'intermediate';
+  basketType?: BasketType;
 }
 
 export interface CommerceDiagnosticsUpdate {
@@ -165,13 +169,16 @@ export function isShopResidenceTransaction(value: unknown): value is ShopResiden
     (transaction.productId !== undefined && typeof transaction.productId !== 'string') ||
     (transaction.basketType !== undefined &&
       transaction.basketType !== 'basic' &&
-      transaction.basketType !== 'intermediate') ||
+      transaction.basketType !== 'intermediate' &&
+      transaction.basketType !== 'advanced') ||
     (transaction.basicNeedPerPerson !== undefined &&
       !isNonNegativeNumber(transaction.basicNeedPerPerson)) ||
     (transaction.referenceBasketCost !== undefined &&
       !isNonNegativeNumber(transaction.referenceBasketCost)) ||
     (transaction.intermediateBasketCost !== undefined &&
       !isNonNegativeNumber(transaction.intermediateBasketCost)) ||
+    (transaction.advancedBasketCost !== undefined &&
+      !isNonNegativeNumber(transaction.advancedBasketCost)) ||
     (transaction.calculationBasketCost !== undefined &&
       !isNonNegativeNumber(transaction.calculationBasketCost)) ||
     (transaction.basketBreakdown !== undefined &&
@@ -208,6 +215,8 @@ export function isShopResidenceTransaction(value: unknown): value is ShopResiden
       isNonNegativeNumber(candidate.referenceBasketCost)) &&
     (candidate.intermediateBasketCost === undefined ||
       isNonNegativeNumber(candidate.intermediateBasketCost)) &&
+    (candidate.advancedBasketCost === undefined ||
+      isNonNegativeNumber(candidate.advancedBasketCost)) &&
     (candidate.calculationBasketCost === undefined ||
       isNonNegativeNumber(candidate.calculationBasketCost)) &&
     (candidate.productAveragePrice === undefined ||
@@ -248,7 +257,8 @@ function isBasketProductBreakdown(value: unknown): value is BasketProductBreakdo
     (item.basketContribution === null || isNonNegativeNumber(item.basketContribution)) &&
     (item.basketType === undefined ||
       item.basketType === 'basic' ||
-      item.basketType === 'intermediate')
+      item.basketType === 'intermediate' ||
+      item.basketType === 'advanced')
   );
 }
 
@@ -463,7 +473,7 @@ export function getIntermediateBasketCost(
 
 function getBasketBreakdownForProducts(
   productIds: readonly string[],
-  basketType: 'basic' | 'intermediate',
+  basketType: BasketType,
   cityId: string,
   demandByProduct: ReadonlyMap<string, number>,
   averagePrices: ReadonlyMap<string, number>,
@@ -544,6 +554,24 @@ export function getIntermediateBasketBreakdown(
   );
 }
 
+export function getAdvancedBasketBreakdown(
+  cityId: string,
+  demandByProduct: ReadonlyMap<string, number>,
+  averagePrices: ReadonlyMap<string, number>,
+  shops: Pick<SalesShop, 'cityId' | 'productId' | 'price'>[],
+  history: CityProductSale[],
+): BasketProductBreakdown[] {
+  return getBasketBreakdownForProducts(
+    ADVANCED_BASKET_PRODUCT_IDS,
+    'advanced',
+    cityId,
+    demandByProduct,
+    averagePrices,
+    shops,
+    history,
+  );
+}
+
 export function getBasketBreakdown(
   cityId: string,
   demandByProduct: ReadonlyMap<string, number>,
@@ -554,6 +582,7 @@ export function getBasketBreakdown(
   return [
     ...getBasicBasketBreakdown(cityId, demandByProduct, averagePrices, shops, history),
     ...getIntermediateBasketBreakdown(cityId, demandByProduct, averagePrices, shops, history),
+    ...getAdvancedBasketBreakdown(cityId, demandByProduct, averagePrices, shops, history),
   ];
 }
 
@@ -632,8 +661,9 @@ export function getPurchaseBenefitCalculation(
   referenceBasketCost: number,
   distance: number,
   options: {
-    basketType?: 'basic' | 'intermediate';
+    basketType?: BasketType;
     intermediateBasketCost?: number;
+    advancedBasketCost?: number;
   } = {},
 ): PurchaseBenefitCalculation {
   if (
@@ -654,13 +684,20 @@ export function getPurchaseBenefitCalculation(
   const pf = price * basicNeedPerPerson;
   const { radiusTiles, radicandNumerator } = GAME_RULES.consumption.distance;
   const distanceFactor = Math.sqrt(radicandNumerator / (radiusTiles + distance));
-  if (options.basketType === 'intermediate') {
-    const formula = GAME_RULES.consumption.intermediate;
+  if (options.basketType === 'intermediate' || options.basketType === 'advanced') {
+    const isAdvanced = options.basketType === 'advanced';
+    const formula = isAdvanced
+      ? GAME_RULES.consumption.advanced
+      : GAME_RULES.consumption.intermediate;
     const intermediateBasketCost = options.intermediateBasketCost ?? 0;
-    const combinedBasketCost = referenceBasketCost + intermediateBasketCost;
+    const advancedBasketCost = options.advancedBasketCost ?? 0;
+    const combinedBasketCost =
+      referenceBasketCost + intermediateBasketCost + (isAdvanced ? advancedBasketCost : 0);
     if (
       !Number.isFinite(intermediateBasketCost) ||
       intermediateBasketCost < 0 ||
+      !Number.isFinite(advancedBasketCost) ||
+      advancedBasketCost < 0 ||
       !Number.isFinite(combinedBasketCost)
     ) {
       throw new RangeError('O custo da cesta intermediária é inválido.');
@@ -686,11 +723,16 @@ export function getPurchaseBenefitCalculation(
       (income - formula.idealIncomeOffset) / combinedBasketCost -
       1 / formula.idealBasketDivisor;
     const idealBenefit = boundedPower(idealBase, formula.idealExponent);
+    const advancedThreshold =
+      isAdvanced
+        ? advancedBasketCost / GAME_RULES.consumption.advanced.advancedBasketThresholdDivisor
+        : 0;
+    const threshold =
+      referenceBasketCost / formula.basicBasketThresholdDivisor +
+      intermediateBasketCost / formula.intermediateBasketThresholdDivisor +
+      advancedThreshold;
     const eligible =
-      income > pf + formula.minimumIncomeAboveProductCost &&
-      income >
-        referenceBasketCost / formula.basicBasketThresholdDivisor +
-          intermediateBasketCost / formula.intermediateBasketThresholdDivisor;
+      income > pf + formula.minimumIncomeAboveProductCost && income > threshold;
     const errorBase = eligible
       ? (income - pf - q) / combinedBasketCost
       : 0;
@@ -924,14 +966,21 @@ export function planShopSalesDetailed(
           total + (item.basketType === 'intermediate' ? item.basketContribution ?? 0 : 0),
         0,
       );
-      const basketType = (
-        INTERMEDIATE_BASKET_PRODUCT_IDS as readonly string[]
-      ).includes(productId)
-        ? 'intermediate'
-        : 'basic';
+      const advancedBasketCost = basketBreakdown.reduce(
+        (total, item) =>
+          total + (item.basketType === 'advanced' ? item.basketContribution ?? 0 : 0),
+        0,
+      );
+      const basketType: BasketType = (ADVANCED_BASKET_PRODUCT_IDS as readonly string[]).includes(productId)
+        ? 'advanced'
+        : (INTERMEDIATE_BASKET_PRODUCT_IDS as readonly string[]).includes(productId)
+          ? 'intermediate'
+          : 'basic';
       const calculationBasketCost =
-        basketType === 'intermediate'
-          ? referenceBasketCost + intermediateBasketCost
+        basketType === 'advanced'
+          ? referenceBasketCost + intermediateBasketCost + advancedBasketCost
+          : basketType === 'intermediate'
+            ? referenceBasketCost + intermediateBasketCost
           : referenceBasketCost;
       const productAveragePrice =
         averagePrices.get(getCityProductKey(residence.cityId, productId)) ?? 0;
@@ -943,7 +992,7 @@ export function planShopSalesDetailed(
           basicNeedPerPerson,
           referenceBasketCost,
           distance,
-          { basketType, intermediateBasketCost },
+          { basketType, intermediateBasketCost, advancedBasketCost },
         );
         return { shop, distance, calculation, resultShare: 0, allocatedResidents: 0 };
       });
@@ -1056,6 +1105,7 @@ export function planShopSalesDetailed(
           basicNeedPerPerson,
           referenceBasketCost,
           intermediateBasketCost,
+          advancedBasketCost,
           calculationBasketCost,
           basketBreakdown,
           productAveragePrice,
@@ -1076,6 +1126,7 @@ export function planShopSalesDetailed(
             basicNeedPerPerson,
             referenceBasketCost: calculationBasketCost,
             intermediateBasketCost,
+            advancedBasketCost,
             calculationBasketCost,
             productAveragePrice,
             pf: candidate.calculation.pf,

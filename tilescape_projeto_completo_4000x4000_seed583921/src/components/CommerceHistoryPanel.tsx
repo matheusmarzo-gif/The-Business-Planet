@@ -115,7 +115,8 @@ export default function CommerceHistoryPanel({
                         : ''}
                       renda média {formatMoney(transaction.averageIncome)} · RR básica{' '}
                       {formatMoney(transaction.referenceBasketCost ?? transaction.areaAveragePrice)} · RR2 intermediária{' '}
-                      {formatMoney(transaction.intermediateBasketCost ?? 0)} · base da fórmula{' '}
+                      {formatMoney(transaction.intermediateBasketCost ?? 0)} · RR3 avançada{' '}
+                      {formatMoney(transaction.advancedBasketCost ?? 0)} · base da fórmula{' '}
                       {formatMoney(transaction.calculationBasketCost ?? transaction.referenceBasketCost ?? transaction.areaAveragePrice)} · preço médio do produto{' '}
                       {formatMoney(transaction.productAveragePrice ?? transaction.areaAveragePrice)} · necessidade diária{' '}
                       {decimal.format(transaction.expectedDemand)} · quantidade desejada total{' '}
@@ -123,10 +124,10 @@ export default function CommerceHistoryPanel({
                     </strong>
                     {transaction.basketBreakdown ? (
                       <details className="commerce-basket-breakdown">
-                        <summary>Composição de RR e RR2 (soma diária por morador)</summary>
+                        <summary>Composição das cestas (soma diária por morador)</summary>
                         <p>
                           Cada contribuição é consumo diário configurado × preço médio municipal.
-                          Produtos básicos compõem RR; produtos intermediários compõem RR2. Os
+                          Produtos básicos compõem RR, intermediários RR2 e avançados RR3. Os
                           subtotais são somados sem arredondamento intermediário.
                         </p>
                         {transaction.basketBreakdown.map((item) => {
@@ -149,7 +150,11 @@ export default function CommerceHistoryPanel({
                               {item.basketContribution === null
                                 ? 'não entra na cesta'
                                 : formatPreciseMoney(item.basketContribution)}{' '}
-                              · {item.basketType === 'intermediate' ? 'RR2' : 'RR'} · {priceSource}
+                              · {item.basketType === 'advanced'
+                                ? 'RR3'
+                                : item.basketType === 'intermediate'
+                                  ? 'RR2'
+                                  : 'RR'} · {priceSource}
                             </p>
                           );
                         })}
@@ -158,7 +163,7 @@ export default function CommerceHistoryPanel({
                             transaction.basketBreakdown.reduce(
                               (total, item) =>
                                 total +
-                                (item.basketType === 'intermediate'
+                                (item.basketType !== 'basic'
                                   ? 0
                                   : item.basketContribution ?? 0),
                               0,
@@ -172,13 +177,39 @@ export default function CommerceHistoryPanel({
                                   : 0),
                               0,
                             ),
+                          )} · RR3 calculado: {formatPreciseMoney(
+                            transaction.basketBreakdown.reduce(
+                              (total, item) =>
+                                total +
+                                (item.basketType === 'advanced'
+                                  ? item.basketContribution ?? 0
+                                  : 0),
+                              0,
+                            ),
                           )}
                         </strong>
                       </details>
                     ) : (
-                      <p>Composição detalhada de RR e RR2 não foi registrada neste diagnóstico.</p>
+                      <p>Composição detalhada das cestas não foi registrada neste diagnóstico.</p>
                     )}
-                    {transaction.basketType === 'intermediate' ? (
+                    {transaction.basketType === 'advanced' ? (
+                      <p>
+                        Cesta avançada: w = (1 − Pf / (RR + RR2 + RR3))
+                        <sup>{consumptionRules.advanced.wExponent}</sup>; q = (
+                        {preciseDecimal.format(consumptionRules.advanced.discountBase)}<sup>w</sup> − 1) × Rf;
+                        benefício de erro = Dᵢ × ((Rf − Pf − q) / (RR + RR2 + RR3))
+                        <sup>{consumptionRules.advanced.errorExponent}</sup> quando Rf &gt;
+                        Pf + {preciseDecimal.format(consumptionRules.advanced.minimumIncomeAboveProductCost)} e
+                        Rf &gt; RR/{preciseDecimal.format(consumptionRules.advanced.basicBasketThresholdDivisor)} +
+                        RR2/{preciseDecimal.format(consumptionRules.advanced.intermediateBasketThresholdDivisor)} +
+                        RR3/{preciseDecimal.format(consumptionRules.advanced.advancedBasketThresholdDivisor)};
+                        caso contrário, zero. Benefício ideal = ((Rf −
+                        {preciseDecimal.format(consumptionRules.advanced.idealIncomeOffset)}) / (RR + RR2 + RR3) −
+                        1/{preciseDecimal.format(consumptionRules.advanced.idealBasketDivisor)})
+                        <sup>{consumptionRules.advanced.idealExponent}</sup>; associado = (erro / ideal)
+                        <sup>{consumptionRules.associatedBenefitExponent}</sup>.
+                      </p>
+                    ) : transaction.basketType === 'intermediate' ? (
                       <p>
                         Cesta intermediária: w = (1 − Pf / (RR + RR2))
                         <sup>{consumptionRules.intermediate.wExponent}</sup>; q = (

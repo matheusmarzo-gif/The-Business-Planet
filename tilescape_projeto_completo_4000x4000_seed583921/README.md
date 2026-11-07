@@ -163,7 +163,7 @@ produção do jogador conectado.
 
 ### Configuração editável do jogo
 
-Os dados das 39 construções ficam em arquivos individuais
+Os dados das 44 construções ficam em arquivos individuais
 [`config/construcoes/`](./config/construcoes/), um JSON válido por arquivo
 `.txt` nomeado pelo tipo interno (por exemplo, `farm_rice.txt`). É possível
 ajustar dimensões, zona, estrada/água exigida, custo de Madeira/Pedra, Work
@@ -327,7 +327,13 @@ cada farinha e 200 Work Points produz 10 pães. A Fábrica de Queijo (3 × 3, 20
 funcionários) custa 120 madeiras e 60 pedras, exige 100.000 Work Points e guarda
 2.000 litros de leite e 100 queijos; cada 20 litros e 200 Work Points produz 1
 queijo. Os três edifícios recebem seus insumos pelo armazém ligado e enviam a
-produção ao armazém.
+produção ao armazém. A **Fábrica de Chocolate** (4 × 4, 40 funcionários) custa
+200 madeiras e 100 pedras, exige 150.000 Work Points e guarda 50 chocolates, 5
+cacaus, 130 litros de leite, 10 açúcares, 100 carvões e 200 Ferramentas. A cada
+400 Work Points produz 1 chocolate: consome 2 carvões, 2 leites e 4 Ferramentas;
+há 10% de chance proporcional de consumir 1 cacau, 20% de consumir 1 açúcar e
+60% de consumir 1 leite extra por unidade. Frações de produção e consumo são
+arredondadas como probabilidades.
 
 ### Comércio
 
@@ -353,10 +359,10 @@ e exige 2.000 Work Points; cada funcionário permite vender até 25 pães por di
 A **Queijaria** (2 × 2, 5 funcionários, até 30 queijos) custa 10 madeiras e 10
 pedras e exige 8.000 Work Points; cada funcionário permite vender até 6 queijos
 por dia. Ambas recebem estoque do armazém ligado e permitem ao dono definir o
-preço. As demandas avançadas de 1 pão e 0,1 queijo por pessoa/dia já estão
-registradas em `config/demanda_basica.txt`; as residências ainda não consomem
-esses produtos nem compram das lojas até a implementação das fórmulas da cesta
-avançada.
+preço. A **Chocolateria** e a **Frutaria** (2 × 2, 4 funcionários, estoque
+máximo de 12 unidades) custam 10 madeiras e 10 pedras, exigem 12.000 Work
+Points e vendem até 3 unidades por funcionário/dia. Ambas recebem estoque do
+armazém ligado e permitem configurar o preço.
 
 ### Pesqueiro e Loja de Peixes
 
@@ -395,21 +401,20 @@ Loja de Peixes: cada uma ocupa 2 × 2 tiles, emprega até 4 funcionários, guard
 até 40 unidades, custa 30 madeiras e 10 pedras e exige 6.000 Work Points. Cada
 loja recebe seu produto do armazém ligado e vende por preço definido pelo dono.
 
-O consumo diário desejável por morador das **cestas básicas e intermediárias**
+O consumo diário desejável por morador das **cestas básica, intermediária e
+avançada**
 pode ser ajustado em [`config/demanda_basica.txt`](./config/demanda_basica.txt).
 Na cesta básica: 0,03 de arroz, trigo, cevada, milho, batata, peixe e carne
 vermelha; e 1 litro de leite. Na cesta intermediária: 0,01 de açúcar, 0,05 de
-vegetais, 0,04 de sal e 0,01 de especiarias. O servidor lê o arquivo ao iniciar;
+vegetais, 0,04 de sal e 0,01 de especiarias. Na cesta avançada: 1 pão, 0,1 queijo,
+0,02 frutas e 0,025 chocolate por pessoa/dia. O servidor lê o arquivo ao iniciar;
 reinicie o serviço depois de alterá-lo.
-O arquivo também registra a demanda avançada de 1 pão e 0,1 queijo por pessoa
-ao dia. Esses dois valores são apenas preparatórios: não entram no consumo nem
-nas vendas residenciais até a implementação das fórmulas dessa cesta.
 
 O preço médio de cada produto é ponderado pelas vendas do período definido em
 `config/formulas/consumo.txt` (30 dias por padrão) ou,
 na ausência de vendas, pela média dos preços anunciados na cidade. `RR` é a soma
 de necessidade diária × preço médio dos produtos básicos com preço disponível;
-`RR2` é a mesma soma para os produtos intermediários.
+`RR2` é a mesma soma para os produtos intermediários e `RR3` para os avançados.
 
 As compras básicas usam a fórmula existente com `RR`: `Pf = preço local ×
 necessidade`, `w = (1 − Pf/RR)^4`, `q = (0,8^w − 1) × Rf`, benefício de erro
@@ -419,7 +424,12 @@ necessidade`, `w = (1 − Pf/RR)^4`, `q = (0,8^w − 1) × Rf`, benefício de er
 `Dᵢ × ((Rf − Pf − q)/(RR + RR2))^3` somente quando `Rf > Pf + 1` e
 `Rf > RR/6 + RR2/3`; caso contrário, é zero. O benefício ideal é
 `((Rf − 1/6)/(RR + RR2) − 1/110)^3`. Em ambas as cestas, o benefício associado
-continua sendo `(benefício de erro / benefício ideal)^4`. `Rf` é a renda média
+continua sendo `(benefício de erro / benefício ideal)^4`. Para a cesta avançada,
+usa-se `w = (1 − Pf/(RR + RR2 + RR3))^2` e o mesmo `q`; o benefício de erro é
+`Dᵢ × ((Rf − Pf − q)/(RR + RR2 + RR3))^2` quando `Rf > Pf + 4` e
+`Rf > RR/6 + RR2/3 + RR3/4`, caso contrário é zero. O benefício ideal é
+`((Rf − 1/6)/(RR + RR2 + RR3) − 1/180)^2`. O benefício associado permanece
+`(benefício de erro / benefício ideal)^4`. `Rf` é a renda média
 por morador e `Dᵢ = √(60/(60 + distância))`. A demanda efetiva ainda depende da
 distribuição de moradores entre lojas, estoque e capacidade de venda.
 As necessidades e os parâmetros dessas fórmulas, inclusive as eficiências
@@ -490,6 +500,8 @@ lateral), mas sem moradores nem aluguel.
 | Cana | Cana | 90 % / 80 % / 100 % / 90 % | 6 meses | 100 / 25 | 2.000 |
 | Especiarias | Especiarias | 100 % / 60 % / 60 % / 60 % | 6 meses | 5.000 / 10 | 600 |
 | Vegetais | Vegetais | 20 % / 40 % / 100 % / 80 % | 2 meses | 5.000 / 10 | 1.000 |
+| Frutas | Fruta | 100 % / 80 % / 60 % / 40 % | 12 meses | 5.000 / 20 | 1.000 |
+| Cacau | Cacau | 100 % / 90 % / 70 % / 50 % | 12 meses | 2.000 / 62 | 400 |
 
 O mês em que o plantio começa define a eficiência sazonal do ciclo. A média diária
 de `min(1, Work Points / requisito diário)` durante o crescimento também reduz
@@ -637,11 +649,18 @@ durante o crescimento. Na colheita ou corte, cada unidade consome os Work Points
 indicados, limitada ao estoque livre (300; ligar a um armazém libera espaço).
 Durante a colheita, a fazenda não inicia outro ciclo; a automação espera a
 colheita terminar e um mês selecionado para replantar.
+A **Fazenda de Frutas** e a **Fazenda de Cacau** ocupam 4 × 4 tiles, empregam
+até 50 funcionários e levam 12 meses para crescer. A Fazenda de Frutas exige
+5.000 Work Points/dia, colhe até 1.000 unidades a 20 Work Points por unidade
+e tem eficiência sazonal de 100%, 80%, 60% e 40%. A Fazenda de Cacau exige
+2.000 Work Points/dia, colhe até 400 unidades a 62 Work Points por unidade
+e tem eficiência sazonal de 100%, 90%, 70% e 50%. Ambas armazenam a colheita
+no próprio estoque e transferem o excedente para o armazém ligado.
 
 **Consumo:** em residências concluídas, **Ver consumo da casa** mostra o consumo
 por pessoa de todos os produtos das cestas básica (arroz, trigo, cevada, milho,
-batata, peixe, carne vermelha e leite) e intermediária (açúcar, vegetais, sal e
-especiarias) no
+batata, peixe, carne vermelha e leite), intermediária (açúcar, vegetais, sal e
+especiarias) e avançada (pão, queijo, frutas e chocolate) no
 último dia e a média diária por pessoa nos últimos 30 dias, além do preço médio
 pago no dia e no mês. No painel da cidade, **Consumo**
 mostra esses mesmos dados agregados para todos os cidadãos: as quantidades

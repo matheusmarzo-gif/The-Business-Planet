@@ -11,11 +11,14 @@ const expectedBuildingIds = [
   'charcoal_works',
   'bread_factory',
   'cheese_factory',
+  'chocolate_factory',
   'farm_barley',
   'farm_cane',
   'farm_cattle',
+  'farm_cocoa',
   'farm_corn',
   'farm_dairy',
+  'farm_fruit',
   'farm_potato',
   'farm_rice',
   'farm_spices',
@@ -34,8 +37,10 @@ const expectedBuildingIds = [
   'shop_bread',
   'shop_butcher',
   'shop_cheese',
+  'shop_chocolate',
   'shop_corn',
   'shop_fish',
+  'shop_fruit',
   'shop_milk',
   'shop_potato',
   'shop_rice',
@@ -150,6 +155,7 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
     'ironCapacity',
     'charcoalCapacity',
     'sugarcaneCapacity',
+    'toolCapacity',
     'inputCapacities',
     'selectableInputProductIds',
     'defaultInputProductId',
@@ -280,8 +286,11 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
         'batchWood',
         'batchIron',
         'batchCharcoal',
+        'batchTools',
         'batchStockProductId',
         'batchStockAmount',
+        'batchInputs',
+        'batchInputRates',
       ],
     );
     if (!['accumulate', 'chance', 'batch'].includes(String(value.production.mode))) {
@@ -294,10 +303,21 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
     ) {
       fail(path, 'production.workPointsPerUnit precisa ser maior que zero.');
     }
-    if (value.production.mode === 'batch') {
+    if (
+      value.production.mode === 'batch' &&
+      !('batchInputs' in value.production) &&
+      !('batchInputRates' in value.production)
+    ) {
       requirePositive(value.production, 'batchSize');
     }
-    for (const field of ['batchSize', 'batchWood', 'batchIron', 'batchCharcoal', 'batchStockAmount']) {
+    for (const field of [
+      'batchSize',
+      'batchWood',
+      'batchIron',
+      'batchCharcoal',
+      'batchTools',
+      'batchStockAmount',
+    ]) {
       if (
         field in value.production &&
         (typeof value.production[field] !== 'number' ||
@@ -312,6 +332,21 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
       typeof value.production.batchStockProductId !== 'string'
     ) {
       fail(path, 'production.batchStockProductId precisa ser um identificador.');
+    }
+    for (const field of ['batchInputs', 'batchInputRates']) {
+      if (!(field in value.production)) continue;
+      const inputs = value.production[field];
+      if (!isRecord(inputs)) fail(path, `production.${field} precisa ser um objeto.`);
+      for (const [productId, amount] of Object.entries(inputs)) {
+        if (
+          !/^[a-z][a-z0-9_]*$/.test(productId) ||
+          typeof amount !== 'number' ||
+          !Number.isFinite(amount) ||
+          amount <= 0
+        ) {
+          fail(path, `production.${field} precisa mapear produtos para quantidades positivas.`);
+        }
+      }
     }
   }
   if ('cropRule' in value) {
@@ -404,6 +439,7 @@ async function generateGameConfig(): Promise<void> {
       'salesCapacity',
       'basic',
       'intermediate',
+      'advanced',
       'associatedBenefitExponent',
     ],
   );
@@ -439,6 +475,22 @@ async function generateGameConfig(): Promise<void> {
       'minimumIncomeAboveProductCost',
       'basicBasketThresholdDivisor',
       'intermediateBasketThresholdDivisor',
+      'idealIncomeOffset',
+      'idealBasketDivisor',
+      'idealExponent',
+    ],
+  );
+  validateKeys(
+    readRecord(formulas.consumption, 'advanced'),
+    'config/formulas/consumo.txt:advanced',
+    [
+      'discountBase',
+      'wExponent',
+      'errorExponent',
+      'minimumIncomeAboveProductCost',
+      'basicBasketThresholdDivisor',
+      'intermediateBasketThresholdDivisor',
+      'advancedBasketThresholdDivisor',
       'idealIncomeOffset',
       'idealBasketDivisor',
       'idealExponent',
@@ -537,6 +589,16 @@ async function generateGameConfig(): Promise<void> {
     'intermediate.intermediateBasketThresholdDivisor',
     'intermediate.idealBasketDivisor',
     'intermediate.idealExponent',
+    'advanced.discountBase',
+    'advanced.wExponent',
+    'advanced.errorExponent',
+    'advanced.minimumIncomeAboveProductCost',
+    'advanced.basicBasketThresholdDivisor',
+    'advanced.intermediateBasketThresholdDivisor',
+    'advanced.idealIncomeOffset',
+    'advanced.advancedBasketThresholdDivisor',
+    'advanced.idealBasketDivisor',
+    'advanced.idealExponent',
     'associatedBenefitExponent',
   ]);
   validateFormulaConfig(formulas.work, 'config/formulas/trabalho.txt', [
@@ -581,6 +643,9 @@ async function generateGameConfig(): Promise<void> {
     'consumption.intermediate.wExponent',
     'consumption.intermediate.errorExponent',
     'consumption.intermediate.idealExponent',
+    'consumption.advanced.wExponent',
+    'consumption.advanced.errorExponent',
+    'consumption.advanced.idealExponent',
     'consumption.associatedBenefitExponent',
     'work.hoursFactor.benefitExponent',
     'work.hours.minimum',
@@ -607,10 +672,16 @@ async function generateGameConfig(): Promise<void> {
     if (readNumber(formulas, path) % 2 !== 1) {
       throw new Error(`${path} precisa ser ímpar para manter a fórmula intermediária.`);
     }
+    for (const path of ['consumption.advanced.errorExponent', 'consumption.advanced.idealExponent']) {
+      if (readNumber(formulas, path) % 2 !== 0) {
+        throw new Error(`${path} precisa ser par para manter os benefícios não negativos.`);
+      }
+    }
   }
   for (const path of [
     'consumption.basic.discountBase',
     'consumption.intermediate.discountBase',
+    'consumption.advanced.discountBase',
   ]) {
     const discountBase = readNumber(formulas, path);
     if (discountBase >= 1) throw new Error(`${path} precisa ser menor que 1.`);
@@ -618,6 +689,7 @@ async function generateGameConfig(): Promise<void> {
   for (const path of [
     'consumption.basic.idealIncomeOffset',
     'consumption.intermediate.idealIncomeOffset',
+    'consumption.advanced.idealIncomeOffset',
     'work.hoursFactor.penalty',
     'work.wage.default',
     'work.rent.default',

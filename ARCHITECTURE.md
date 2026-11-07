@@ -60,7 +60,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `server/index.ts` | API Express, autenticação de tokens, banco, Redis, relógio e WebSocket. |
 | `database/schema.sql` | DDL aplicado pelo servidor durante a inicialização. |
 | `config/demanda_basica.txt` | Multiplicadores de demanda residencial por produto, carregados na inicialização do servidor. |
-| `config/construcoes/*.txt` | Dados editáveis das 33 construções existentes, um JSON por arquivo. |
+| `config/construcoes/*.txt` | Dados editáveis das 34 construções existentes, um JSON por arquivo. |
 | `config/formulas/*.txt` | Parâmetros editáveis de consumo, trabalho e transporte. |
 | `server/generate-game-config.ts` | Valida os TXT e gera o módulo de configuração compartilhado. |
 | `src/generated/gameConfig.ts` | Saída ignorada pelo Git, regenerada pelos comandos npm antes de uso. |
@@ -241,10 +241,13 @@ mapeamento e verificar todas as curvas.
 
 ## Residências
 
-- `src/types/residence.ts` define `house_poor1` (2 × 2 tiles, capacidade 4,
-  apreço local 50, custo de 100 madeiras e 30 pedras, 18.000 Work Points) e
-  `house_poor2` (3 × 3, capacidade 32, apreço local 40, custo de 300 madeiras
-  e 450 pedras, 67.500 Work Points).
+- O catálogo gerado em `src/generated/gameConfig.ts` define `house_poor1`
+  (2 × 2 tiles, capacidade 4, apreço local 50, custo de 100 madeiras e 30
+  pedras, 18.000 Work Points), `house_poor2` (3 × 3, capacidade 32, apreço
+  local 40, custo de 300 madeiras e 450 pedras, 67.500 Work Points) e
+  `house_poor3` (4 × 4, capacidade 128, apreço local 30, custo de 1.200
+  madeiras e 2.000 pedras, 300.000 Work Points). As três são residências urbanas
+  com estrada adjacente, imigração e aluguel.
 - `warehouse` (categoria Indústrias, `kind: 'warehouse'`, área rural, estrada
   adjacente) usa o mesmo catálogo/tabela: 4 × 4, até 100 funcionários,
   capacidade de 50 m³ para qualquer produto, 300 madeiras, 60 pedras e 20.000
@@ -350,8 +353,9 @@ mapeamento e verificar todas as curvas.
   traçado posterior cubra uma casa. No modo Demolir, clicar em qualquer tile
   do footprint de uma residência a remove sem confirmação; o servidor só
   permite a remoção ao autor e publica o novo estado.
-- Capacidade e apreço local são metadados; Work Points avançam obras e custos
-  debitam materiais. A população é atualizada pela imigração; o consumo da
+- Capacidade limita os moradores e apreço local desempata a ordem de ocupação
+  quando os aluguéis são iguais; Work Points avançam obras e custos debitam
+  materiais. A população é atualizada pela imigração; o consumo da
   Cesta Básica é simulado nas lojas, mas outras necessidades residenciais ainda
   não são simuladas.
 - `GET /api/player/resources?x=&y=` agrega Madeira e Pedra dos armazéns

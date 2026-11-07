@@ -162,7 +162,7 @@ produção do jogador conectado.
 
 ### Configuração editável do jogo
 
-Os dados das 33 construções existentes ficam em arquivos individuais
+Os dados das 34 construções existentes ficam em arquivos individuais
 [`config/construcoes/`](./config/construcoes/), um JSON válido por arquivo
 `.txt` nomeado pelo tipo interno (por exemplo, `farm_rice.txt`). É possível
 ajustar dimensões, zona, estrada/água exigida, custo de Madeira/Pedra, Work
@@ -243,7 +243,7 @@ por litro de leite.
 
 ### Residências
 
-Na categoria **Residências**, selecione uma das duas casas para ver no cursor
+Na categoria **Residências**, selecione uma das três casas para ver no cursor
 uma prévia verde/vermelha. A casa precisa caber inteira em uma área urbana da
 cidade, ficar em terra, não ocupar outra construção ou estrada e estar ao lado
 de uma estrada. Clique para iniciar a obra:
@@ -252,6 +252,7 @@ de uma estrada. Clique para iniciar a obra:
 | --- | --- | --- | --- | --- | --- |
 | Simples 1 | 2 × 2 tiles | 4 pessoas | 50 | 100 madeiras, 30 pedras | 18.000 Work Points |
 | Simples 2 | 3 × 3 tiles | 32 pessoas | 40 | 300 madeiras, 450 pedras | 67.500 Work Points |
+| Simples 3 | 4 × 4 tiles | 128 pessoas | 30 | 1.200 madeiras, 2.000 pedras | 300.000 Work Points |
 
 Todos os jogadores podem iniciar construções das seis categorias. Para jogadores
 que não são Master, o custo de Madeira e Pedra é descontado dos armazéns
@@ -262,8 +263,9 @@ construir um primeiro **Armazém** gratuito, que fica pronto imediatamente; esse
 direito permanece registrado mesmo se o armazém for demolido. As demais
 construções aparecem com o ícone **Em construção** e avançam com os Work Points
 dos funcionários; a conta Master mantém a permissão de iniciar sem materiais e
-concluí-las instantaneamente com duplo clique. Capacidade e apreço ainda não
-alteram população ou estoque.
+concluí-las instantaneamente com duplo clique. A capacidade limita os moradores
+de cada residência; o apreço local desempata a ordem de ocupação quando os
+aluguéis são iguais. Nenhum deles altera estoques de produtos.
 Para demolir uma residência, ative **Demolir** e clique em qualquer tile dela.
 Não há confirmação; somente o jogador que iniciou a construção pode removê-la.
 

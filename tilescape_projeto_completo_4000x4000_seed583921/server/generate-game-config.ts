@@ -22,6 +22,7 @@ const expectedBuildingIds = [
   'fishery',
   'house_poor1',
   'house_poor2',
+  'house_poor3',
   'iron_mine',
   'lumber_mill',
   'quarry',

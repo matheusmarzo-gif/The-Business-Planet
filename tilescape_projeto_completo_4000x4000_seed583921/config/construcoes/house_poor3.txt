@@ -1,0 +1,18 @@
+{
+  "type": "house_poor3",
+  "kind": "residence",
+  "requiredZone": "urban",
+  "requiresRoad": true,
+  "name": "Residência simples 3",
+  "asset": "/buildings/residences/house_poor3.png",
+  "width": 4,
+  "height": 4,
+  "capacity": 128,
+  "localAppeal": 30,
+  "cost": {
+    "wood": 1200,
+    "stone": 2000
+  },
+  "workPoints": 300000,
+  "maxWorkers": 0
+}

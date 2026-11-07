@@ -1344,7 +1344,12 @@ describe('work settings', () => {
 });
 
 describe('immigration', () => {
-  const home = (id: string, type: 'house_poor1' | 'house_poor2', rent: number, occupants = 0) => ({
+  const home = (
+    id: string,
+    type: 'house_poor1' | 'house_poor2' | 'house_poor3',
+    rent: number,
+    occupants = 0,
+  ) => ({
     id,
     type,
     status: 'completed' as const,
@@ -1373,6 +1378,11 @@ describe('immigration', () => {
     );
     assert.equal(result.size, 0);
     assert.equal(getCityPopulation([{ occupants: 4 }, { occupants: 7 }]), 11);
+  });
+
+  it('uses the 128-person capacity of the third simple residence', () => {
+    const result = allocateImmigrants([home('large', 'house_poor3', 1)], 150);
+    assert.equal(result.get('large'), 128);
   });
 });
 
@@ -1632,6 +1642,18 @@ describe('municipal zones', () => {
       assert.deepEqual(
         [RESIDENCES.house_poor2.width, RESIDENCES.house_poor2.height, RESIDENCES.house_poor2.capacity],
         [3, 3, 32],
+      );
+      assert.deepEqual(
+        [
+          RESIDENCES.house_poor3.width,
+          RESIDENCES.house_poor3.height,
+          RESIDENCES.house_poor3.capacity,
+          RESIDENCES.house_poor3.localAppeal,
+          RESIDENCES.house_poor3.cost.wood,
+          RESIDENCES.house_poor3.cost.stone,
+          RESIDENCES.house_poor3.workPoints,
+        ],
+        [4, 4, 128, 30, 1200, 2000, 300000],
       );
       assert.equal(isTileInResidenceFootprint(first, { x: 21, y: 21 }), true);
       assert.equal(isTileInResidenceFootprint(first, { x: 22, y: 21 }), false);

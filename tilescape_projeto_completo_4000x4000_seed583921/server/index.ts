@@ -4627,7 +4627,7 @@ async function start() {
           `UPDATE residential_buildings
            SET wage = $3, work_hours_per_day = $4, desired_workers = $5
            WHERE id = $1 AND created_by = $2
-             AND (status = 'under_construction' OR building_type NOT IN ('house_poor1', 'house_poor2'))
+             AND (status = 'under_construction' OR building_type <> ALL($6::text[]))
            RETURNING ${RESIDENTIAL_COLUMNS}`,
           [
             request.params.id,
@@ -4635,6 +4635,7 @@ async function start() {
             settings.wage,
             settings.workHoursPerDay,
             building.farm_auto_planting_enabled ? building.desired_workers : settings.desiredWorkers,
+            RESIDENCE_BUILDING_TYPES,
           ],
         );
         if (!rows[0]) {
@@ -4685,9 +4686,9 @@ async function start() {
       .query<ResidentialBuildingRow>(
         `UPDATE residential_buildings
          SET rent = $3
-         WHERE id = $1 AND created_by = $2 AND building_type IN ('house_poor1', 'house_poor2')
+         WHERE id = $1 AND created_by = $2 AND building_type = ANY($4::text[])
          RETURNING ${RESIDENTIAL_COLUMNS}`,
-        [request.params.id, userId, rent],
+        [request.params.id, userId, rent, RESIDENCE_BUILDING_TYPES],
       )
       .then(async ({ rows }) => {
         if (!rows[0]) {

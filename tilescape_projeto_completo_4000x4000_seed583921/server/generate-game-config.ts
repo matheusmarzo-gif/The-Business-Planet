@@ -9,6 +9,8 @@ const buildingDirectory = resolve(configDirectory, 'construcoes');
 const generatedFile = resolve(appDirectory, 'src/generated/gameConfig.ts');
 const expectedBuildingIds = [
   'charcoal_works',
+  'bread_factory',
+  'cheese_factory',
   'farm_barley',
   'farm_cane',
   'farm_cattle',
@@ -19,6 +21,7 @@ const expectedBuildingIds = [
   'farm_spices',
   'farm_vegetables',
   'farm_wheat',
+  'flour_mill',
   'fishery',
   'house_poor1',
   'house_poor2',
@@ -28,7 +31,9 @@ const expectedBuildingIds = [
   'quarry',
   'salt_gatherer',
   'shop_barley',
+  'shop_bread',
   'shop_butcher',
+  'shop_cheese',
   'shop_corn',
   'shop_fish',
   'shop_milk',
@@ -145,6 +150,10 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
     'ironCapacity',
     'charcoalCapacity',
     'sugarcaneCapacity',
+    'inputCapacities',
+    'selectableInputProductIds',
+    'defaultInputProductId',
+    'salesPerWorkerPerDay',
     'toolDemandPerWorker',
     'production',
     'requiresWater',
@@ -162,7 +171,7 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
     fail(path, 'nome ou URL pública da imagem inválidos.');
   }
   if (
-    !['residence', 'farm', 'shop', 'warehouse', 'fishery', 'resource', 'workshop'].includes(
+    !['residence', 'farm', 'shop', 'warehouse', 'fishery', 'resource', 'workshop', 'industry'].includes(
       String(value.kind),
     ) ||
     !['urban', 'rural'].includes(String(value.requiredZone)) ||
@@ -213,6 +222,47 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
     if (field in value && (typeof value[field] !== 'number' || !Number.isFinite(value[field]) || value[field] < 0)) {
       fail(path, `"${field}" precisa ser um número não negativo.`);
     }
+  }
+  if ('inputCapacities' in value) {
+    if (!isRecord(value.inputCapacities)) fail(path, '"inputCapacities" precisa ser um objeto.');
+    for (const [productId, capacity] of Object.entries(value.inputCapacities)) {
+      if (
+        !/^[a-z][a-z0-9_]*$/.test(productId) ||
+        typeof capacity !== 'number' ||
+        !Number.isFinite(capacity) ||
+        capacity <= 0
+      ) {
+        fail(path, '"inputCapacities" precisa mapear produtos para capacidades positivas.');
+      }
+    }
+  }
+  if ('selectableInputProductIds' in value) {
+    const selectable = value.selectableInputProductIds;
+    const inputCapacities = isRecord(value.inputCapacities) ? value.inputCapacities : {};
+    if (
+      !Array.isArray(selectable) ||
+      selectable.length === 0 ||
+      selectable.some((productId) => typeof productId !== 'string' || !(productId in inputCapacities)) ||
+      new Set(selectable).size !== selectable.length
+    ) {
+      fail(path, '"selectableInputProductIds" precisa listar entradas únicas de inputCapacities.');
+    }
+  }
+  if (
+    'defaultInputProductId' in value &&
+    (typeof value.defaultInputProductId !== 'string' ||
+      !Array.isArray(value.selectableInputProductIds) ||
+      !value.selectableInputProductIds.includes(value.defaultInputProductId))
+  ) {
+    fail(path, '"defaultInputProductId" precisa ser uma das matérias-primas selecionáveis.');
+  }
+  if (
+    'salesPerWorkerPerDay' in value &&
+    (typeof value.salesPerWorkerPerDay !== 'number' ||
+      !Number.isInteger(value.salesPerWorkerPerDay) ||
+      value.salesPerWorkerPerDay <= 0)
+  ) {
+    fail(path, '"salesPerWorkerPerDay" precisa ser um inteiro positivo.');
   }
   if ('requiresWater' in value && typeof value.requiresWater !== 'boolean') {
     fail(path, '"requiresWater" precisa ser booleano.');

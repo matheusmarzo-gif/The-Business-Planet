@@ -60,7 +60,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `server/index.ts` | API Express, autenticação de tokens, banco, Redis, relógio e WebSocket. |
 | `database/schema.sql` | DDL aplicado pelo servidor durante a inicialização. |
 | `config/demanda_basica.txt` | Multiplicadores de demanda residencial por produto, carregados na inicialização do servidor. |
-| `config/construcoes/*.txt` | Dados editáveis das 34 construções existentes, um JSON por arquivo. |
+| `config/construcoes/*.txt` | Dados editáveis das 39 construções, um JSON por arquivo. |
 | `config/formulas/*.txt` | Parâmetros editáveis de consumo, trabalho e transporte. |
 | `server/generate-game-config.ts` | Valida os TXT e gera o módulo de configuração compartilhado. |
 | `src/generated/gameConfig.ts` | Saída ignorada pelo Git, regenerada pelos comandos npm antes de uso. |
@@ -227,7 +227,7 @@ reimplemente as fórmulas separadamente no React e no servidor.
 
 ## Produtos
 
-- `src/types/product.ts` define os 32 produtos atualmente habilitados, com
+- `src/types/product.ts` define os 35 produtos atualmente habilitados, com
   unidade de medida (unidade ou litro), peso em kg, espaço em m³ e validade
   padrão em dias. Validades em anos usam 365 dias por ano; `null` representa
   validade infinita.
@@ -328,6 +328,15 @@ mapeamento e verificar todas as curvas.
   de 40 unidades, 30 madeiras, 10 pedras e 6.000 Work Points. Vendem,
   respectivamente, `sugar`, `vegetables`, `salt` e `spices`, abastecidas pelo
   armazém ligado. Seus sprites ficam em `public/buildings/commerce/`.
+- `shop_bread` (Padaria) e `shop_cheese` (Queijaria) são comércios urbanos 2 × 2,
+  respectivamente com estoque máximo de 100 pães/4 funcionários e 30 queijos/
+  5 funcionários. Custam 4 madeiras/4 pedras e 2.000 WP, e 10 madeiras/10 pedras
+  e 8.000 WP. Cada funcionário adiciona capacidade diária de 25 pães ou 6
+  queijos, independente dos WP. As demandas avançadas (`bread=1`,
+  `cheese=0,1` por pessoa/dia) são aceitas pela configuração, mas não entram em
+  `CONSUMPTION_PRODUCT_IDS`; as vendas residenciais permanecem desativadas até a
+  implementação das fórmulas da cesta avançada. Sprites em
+  `public/buildings/commerce/`.
 - O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
   área ocupada deve ficar dentro da cidade e da zona exigida pela construção
   (urbana ou rural), em terra, sem
@@ -461,6 +470,10 @@ mapeamento e verificar todas as curvas.
   estoque e capacidade diários; o dono recebe `quantidade × preço`.
   `employed` em `ResidentialBuilding` é calculado por subquery em
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
+  Os comércios configurados com `salesPerWorkerPerDay` usam funcionários ×
+  esse limite, em vez de converter Work Points em unidades; Padaria e Queijaria
+  usam 25 pães e 6 queijos por funcionário/dia. Produtos da cesta avançada ainda
+  não participam do planejador de compras residenciais.
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
   preço unitário de venda. Os detalhes do diagnóstico (renda, moradores,
@@ -614,6 +627,18 @@ mapeamento e verificar todas as curvas.
   `wood_stock`; o armazém ligado abastece madeira e Ferramentas. O produto
   `charcoal` pesa 5 kg, ocupa 0,015 m³ e não perece. Sprites
   `public/buildings/artisan/carvoaria.png` e `public/products/carvao.png`.
+- `flour_mill`, `bread_factory` e `cheese_factory` (categoria Indústrias, zona
+  rural) recebem seus insumos pelo armazém ligado. O Moinho ocupa 3 × 3, emprega
+  até 60, custa 60 madeiras/20 pedras e exige 60.000 WP; armazena 100 farinhas e
+  até 20 unidades de cada grão elegível, mas só recebe o item selecionado pelo
+  dono (trigo por padrão). Cada 300 WP + 1 grão produz 5 farinhas. Trocar a
+  matéria-prima remove o saldo anterior de `building_input_stock`. A Fábrica de
+  Pães ocupa 3 × 3, emprega 60, custa 60 madeiras/30 pedras, exige 80.000 WP,
+  armazena 300 pães/30 farinhas e produz 10 pães por farinha + 200 WP. A
+  Fábrica de Queijo ocupa 3 × 3, emprega 200, custa 120 madeiras/60 pedras,
+  exige 100.000 WP, armazena 100 queijos/2.000 litros de leite e produz 1 queijo
+  por 20 litros + 200 WP. Os insumos perecíveis também passam pela deterioração
+  diária. Sprites em `public/buildings/industrial/`.
 - Comércio entre armazéns (`planWarehouseTrades` em `src/types/logistics.ts`): às
   03:00 e 15:00 (`world_state.last_warehouse_trade_slot`, ex. `2026-01-01T15`,
   garante uma execução por rodada) cada armazém em modo `buy` procura armazéns
@@ -668,6 +693,8 @@ mapeamento e verificar todas as curvas.
   os estoques, registra o movimento no `warehouse_transport_log` e debita os
   Work Points no `warehouse_demand`. Destinos não armazéns só recebem produtos
   para os quais tenham estoque de saída ou capacidade de insumo configurados.
+  Insumos genéricos ficam em `building_input_stock`; o Moinho demanda somente o
+  produto salvo em `residential_buildings.selected_input_product_id`.
   Falhas técnicas na execução retornam uma referência, a etapa e uma categoria
   segura do erro; os logs do servidor associam essa referência ao erro técnico
   completo, sem expor detalhes do banco ao cliente.
@@ -676,8 +703,9 @@ mapeamento e verificar todas as curvas.
   esperada `quantidade / PRODUCTS.shelfLifeDays`; a parte inteira é removida
   sempre e a fração arredondada estocasticamente para uma unidade. A rotina
   varre o estoque principal de todas as construções que produzem ou vendem um
-  produto perecível (fazendas, comércios, construções artesanais e recursos) e
-  os produtos perecíveis em `warehouse_stock` (armazéns/indústrias).
+  produto perecível (fazendas, comércios, construções artesanais, recursos e
+  indústrias), os insumos perecíveis em `building_input_stock` e os produtos
+  perecíveis em `warehouse_stock` (armazéns).
   `world_state.last_spoilage_day` garante execução única por dia. Estoques
   iniciam a mesma regra imediatamente, sem backfill; produtos de validade
   infinita, como madeira, pedra, ferro e ferramentas, não se deterioram.
@@ -696,6 +724,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/wallet` | Autenticado | Cria a carteira do usuário com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
 | `GET /api/accounting?days=1\|7\|30` | Autenticado | Retorna, apenas para o jogador da sessão, salários/receita das lojas, aluguel gerado por residência, salários e produção por construção produtiva, além dos relatórios de armazéns, no período indicado (padrão: 30 dias, incluindo o dia corrente). |
 | `PUT /api/residential-buildings/:id/farm-automation` | Dono da fazenda agrícola concluída | Valida e salva meses de replantio e limites de trabalhadores por fase; desativar mantém as preferências e o ciclo atual, mas interrompe novos plantios automáticos. |
+| `PATCH /api/residential-buildings/:id/input-product` | Dono do Moinho concluído | Seleciona trigo, cevada ou milho; descarta o estoque de outro insumo na mesma transação e publica a seleção/estoques. |
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
 | `GET /api/residential-buildings/:id/warehouse-log` | Dono do armazém | Retorna `{ days: [{ day, workPoints }], events: [{ day, buildingType, productId, direction, wanted, moved, reason, errorDetail }] }` do armazém (tabela `warehouse_transport_log`, gravada às 00:00 na etapa de transporte, 30 dias; `reason` = `desired_reached`/`no_space`/`no_work_points`/`warehouse_empty` quando moveu menos que o desejado; erros internos registram etapa e detalhe em `errorDetail`). |
 | `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo), estoque e preço médio local ponderado por oferta acima do mínimo; espaço ocupado é calculado no cliente. |

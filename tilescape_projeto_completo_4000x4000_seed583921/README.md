@@ -163,7 +163,7 @@ produção do jogador conectado.
 
 ### Configuração editável do jogo
 
-Os dados das 34 construções existentes ficam em arquivos individuais
+Os dados das 39 construções ficam em arquivos individuais
 [`config/construcoes/`](./config/construcoes/), um JSON válido por arquivo
 `.txt` nomeado pelo tipo interno (por exemplo, `farm_rice.txt`). É possível
 ajustar dimensões, zona, estrada/água exigida, custo de Madeira/Pedra, Work
@@ -315,6 +315,20 @@ capacidade e Work Points; a ação pode ser repetida sem aguardar a rodada
 automática. Pedra exige mais Work Points por unidade que Madeira por ser mais
 pesada; cada compra é limitada aos Work Points disponíveis naquela rodada.
 
+O **Moinho**, a **Fábrica de Pães** e a **Fábrica de Queijo** também ficam na
+categoria Indústrias. O Moinho (3 × 3, 60 funcionários) custa 60 madeiras e 20
+pedras, exige 60.000 Work Points e guarda até 100 farinhas. Seu dono escolhe no
+painel se o insumo será trigo, cevada ou milho; somente a matéria-prima escolhida
+é recebida do armazém ligado, até 20 unidades. Trocar a seleção descarta o
+estoque restante da matéria-prima anterior. Cada unidade de grão e 300 Work
+Points produz 5 farinhas. A Fábrica de Pães (3 × 3, 60 funcionários) custa 60
+madeiras e 30 pedras, exige 80.000 Work Points e guarda 30 farinhas e 300 pães;
+cada farinha e 200 Work Points produz 10 pães. A Fábrica de Queijo (3 × 3, 200
+funcionários) custa 120 madeiras e 60 pedras, exige 100.000 Work Points e guarda
+2.000 litros de leite e 100 queijos; cada 20 litros e 200 Work Points produz 1
+queijo. Os três edifícios recebem seus insumos pelo armazém ligado e enviam a
+produção ao armazém.
+
 ### Comércio
 
 Na categoria **Comerciais**, a **Loja de Arroz** (2 × 2 tiles, até 4 funcionários,
@@ -333,6 +347,16 @@ trigo ou carne vermelha. Todas devem ficar em área urbana, ao lado de uma
 estrada, recebem estoque do armazém ligado e permitem ao dono configurar o
 preço. O trabalho dos funcionários gera capacidade de venda à razão de 1
 unidade por 20 Work Points.
+
+A **Padaria** (2 × 2, 4 funcionários, até 100 pães) custa 4 madeiras e 4 pedras
+e exige 2.000 Work Points; cada funcionário permite vender até 25 pães por dia.
+A **Queijaria** (2 × 2, 5 funcionários, até 30 queijos) custa 10 madeiras e 10
+pedras e exige 8.000 Work Points; cada funcionário permite vender até 6 queijos
+por dia. Ambas recebem estoque do armazém ligado e permitem ao dono definir o
+preço. As demandas avançadas de 1 pão e 0,1 queijo por pessoa/dia já estão
+registradas em `config/demanda_basica.txt`; as residências ainda não consomem
+esses produtos nem compram das lojas até a implementação das fórmulas da cesta
+avançada.
 
 ### Pesqueiro e Loja de Peixes
 
@@ -377,6 +401,9 @@ Na cesta básica: 0,03 de arroz, trigo, cevada, milho, batata, peixe e carne
 vermelha; e 1 litro de leite. Na cesta intermediária: 0,01 de açúcar, 0,05 de
 vegetais, 0,04 de sal e 0,01 de especiarias. O servidor lê o arquivo ao iniciar;
 reinicie o serviço depois de alterá-lo.
+O arquivo também registra a demanda avançada de 1 pão e 0,1 queijo por pessoa
+ao dia. Esses dois valores são apenas preparatórios: não entram no consumo nem
+nas vendas residenciais até a implementação das fórmulas dessa cesta.
 
 O preço médio de cada produto é ponderado pelas vendas do período definido em
 `config/formulas/consumo.txt` (30 dias por padrão) ou,
@@ -621,11 +648,11 @@ mostra esses mesmos dados agregados para todos os cidadãos: as quantidades
 compradas pelas residências da cidade são divididas pela população total, e os
 preços médios são ponderados pelas unidades compradas.
 
-Use **Produtos** na barra inferior para consultar os 33 produtos especificados,
+Use **Produtos** na barra inferior para consultar os 35 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.
 Validades informadas em anos são convertidas para dias considerando 365 dias
 por ano; produtos sem deterioração aparecem com validade infinita. Carne vermelha
-tem validade de 30 dias. A validade
+tem validade de 30 dias; farinha pesa 5 kg, ocupa 0,01 m³ e dura 1 ano. A validade
 também é usada para calcular a perda diária dos estoques às 18:00, conforme
 descrito em **Validade e espaço de armazenamento**. Produtos cujos atributos
 ainda não foram definidos não aparecem.

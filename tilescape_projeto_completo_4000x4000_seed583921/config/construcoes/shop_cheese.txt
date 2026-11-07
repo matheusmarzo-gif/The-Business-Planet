@@ -1,0 +1,19 @@
+{
+  "type": "shop_cheese",
+  "kind": "shop",
+  "requiredZone": "urban",
+  "requiresRoad": true,
+  "name": "Queijaria",
+  "asset": "/buildings/commerce/queijaria.png",
+  "width": 2,
+  "height": 2,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 10, "stone": 10 },
+  "workPoints": 8000,
+  "maxWorkers": 5,
+  "stockProduct": "Queijo",
+  "stockProductId": "cheese",
+  "stockCapacity": 30,
+  "salesPerWorkerPerDay": 6
+}

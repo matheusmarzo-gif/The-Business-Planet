@@ -24,6 +24,7 @@ import {
   parseWorkSettings,
   RESIDENCES,
   SHOP_TYPES,
+  parseInputProductSelection,
   type ResidentialBuilding,
   toRomanNumeral,
 } from './residence';
@@ -544,6 +545,8 @@ describe('shop sales', () => {
     assert.equal(getShopSalesCapacity('shop_fish', 40), 2);
     assert.equal(getShopSalesCapacity('shop_milk', 1), 1);
     assert.equal(getShopSalesCapacity('shop_milk', 0.9), 0);
+    assert.equal(getShopSalesCapacity('shop_bread', 0, 3), 75);
+    assert.equal(getShopSalesCapacity('shop_cheese', 0, 4), 24);
     assert.equal(parsePrice({ price: 0 }), null);
     assert.equal(parsePrice({ price: 12 }), 12);
     assert.equal(parsePrice({ price: 0.01 }), 0.01);
@@ -978,6 +981,8 @@ describe('fazenda leiteira e demanda configurável', () => {
       'demanda_intermediaria.vegetables=0.05',
       'demanda_intermediaria.salt=0.04',
       'demanda_intermediaria.spices=0.01',
+      'demanda_avancada.bread=1',
+      'demanda_avancada.cheese=0.1',
     ].join('\n'));
     assert.equal(multipliers.get('rice'), 0.03);
     assert.equal(multipliers.get('wheat'), 0.03);
@@ -989,6 +994,8 @@ describe('fazenda leiteira e demanda configurável', () => {
     assert.equal(multipliers.get('vegetables'), 0.05);
     assert.equal(multipliers.get('salt'), 0.04);
     assert.equal(multipliers.get('spices'), 0.01);
+    assert.equal(multipliers.get('bread'), 1);
+    assert.equal(multipliers.get('cheese'), 0.1);
     assert.equal(multipliers.get('red_meat'), 0.03);
     assert.equal(multipliers.get('milk'), 1);
     assert.throws(() => parseBasicDemandConfig('demanda_basica.milk=-1'), /linha 1/);
@@ -1041,6 +1048,8 @@ describe('fazenda leiteira e demanda configurável', () => {
         ['vegetables', 0.05],
         ['salt', 0.04],
         ['spices', 0.01],
+        ['bread', 1],
+        ['cheese', 0.1],
       ],
     );
     assert.equal(
@@ -1558,6 +1567,8 @@ describe('municipal zones', () => {
         ironStock: 0,
         charcoalStock: 0,
         sugarcaneStock: 0,
+        inputStocks: {},
+        selectedInputProductId: null,
         averageIncome: 0,
         efficiencyPenalty: 0,
         farmAutomation: {
@@ -1614,6 +1625,8 @@ describe('municipal zones', () => {
         ironStock: 0,
         charcoalStock: 0,
         sugarcaneStock: 0,
+        inputStocks: {},
+        selectedInputProductId: null,
         averageIncome: 0,
         efficiencyPenalty: 0,
         farmAutomation: {
@@ -2056,6 +2069,119 @@ describe('recursos e ferramentaria', () => {
     assert.deepEqual(
       transfers.map((t) => [t.productId, t.quantity, t.direction]),
       [['iron', 3, 'in'], ['charcoal', 20, 'in']],
+    );
+  });
+
+  it('supplies selected mill and factory inputs from a linked warehouse', () => {
+    const transfers = planTransfers(
+      {
+        stock: new Map([
+          ['wheat', 20],
+          ['barley', 20],
+          ['flour', 30],
+          ['milk', 2000],
+        ]),
+        minimumStock: new Map(),
+        maximumStock: new Map(),
+        capacityM3: 50,
+        workPoints: 1e6,
+      },
+      [
+        {
+          buildingId: 'mill',
+          type: 'flour_mill',
+          stock: 0,
+          selectedInputProductId: 'barley',
+          inputStocks: {},
+        },
+        { buildingId: 'bread-factory', type: 'bread_factory', stock: 0, inputStocks: { flour: 29 } },
+        { buildingId: 'cheese-factory', type: 'cheese_factory', stock: 0, inputStocks: { milk: 1990 } },
+      ],
+    );
+    assert.deepEqual(transfers, [
+      { buildingId: 'bread-factory', productId: 'flour', quantity: 1, direction: 'in' },
+      { buildingId: 'cheese-factory', productId: 'milk', quantity: 10, direction: 'in' },
+      { buildingId: 'mill', productId: 'barley', quantity: 20, direction: 'in' },
+    ]);
+  });
+
+  it('defines flour production, factories, shops, and the mill input selector', () => {
+    const flour = PRODUCTS.find((product) => product.id === 'flour');
+    assert.deepEqual(
+      flour && [flour.name, flour.category, flour.unit, flour.weightKg, flour.volumeM3, flour.shelfLifeDays],
+      ['Farinha', 'processed', 'unit', 5, 0.01, 365],
+    );
+    assert.deepEqual(
+      [
+        RESIDENCES.flour_mill.width,
+        RESIDENCES.flour_mill.height,
+        RESIDENCES.flour_mill.maxWorkers,
+        RESIDENCES.flour_mill.stockCapacity,
+        RESIDENCES.flour_mill.workPoints,
+      ],
+      [3, 3, 60, 100, 60000],
+    );
+    assert.deepEqual(RESIDENCES.flour_mill.inputCapacities, { wheat: 20, barley: 20, corn: 20 });
+    assert.equal(RESIDENCES.flour_mill.defaultInputProductId, 'wheat');
+    assert.equal(parseInputProductSelection('flour_mill', { productId: 'corn' }), 'corn');
+    assert.equal(parseInputProductSelection('flour_mill', { productId: 'rice' }), null);
+    assert.equal(parseInputProductSelection('bread_factory', { productId: 'flour' }), null);
+    assert.deepEqual(
+      [
+        RESIDENCES.bread_factory.stockCapacity,
+        RESIDENCES.bread_factory.maxWorkers,
+        RESIDENCES.bread_factory.workPoints,
+        RESIDENCES.bread_factory.inputCapacities?.flour,
+        RESIDENCES.cheese_factory.stockCapacity,
+        RESIDENCES.cheese_factory.maxWorkers,
+        RESIDENCES.cheese_factory.workPoints,
+        RESIDENCES.cheese_factory.inputCapacities?.milk,
+      ],
+      [300, 60, 80000, 30, 100, 200, 100000, 2000],
+    );
+    assert.deepEqual(
+      [
+        RESIDENCES.shop_bread.stockCapacity,
+        RESIDENCES.shop_bread.maxWorkers,
+        RESIDENCES.shop_bread.salesPerWorkerPerDay,
+        RESIDENCES.shop_cheese.stockCapacity,
+        RESIDENCES.shop_cheese.maxWorkers,
+        RESIDENCES.shop_cheese.salesPerWorkerPerDay,
+      ],
+      [100, 4, 25, 30, 5, 6],
+    );
+    assert.equal(SHOP_TYPES.includes('shop_bread'), true);
+    assert.equal(SHOP_TYPES.includes('shop_cheese'), true);
+    assert.equal(canLinkToWarehouse('flour_mill'), true);
+    assert.equal(canLinkToWarehouse('bread_factory'), true);
+  });
+
+  it('uses input stocks and work points for flour, bread, and cheese production batches', () => {
+    const recipes = [
+      ['flour_mill', 300, 1, 100, 5, 1],
+      ['bread_factory', 200, 1, 300, 10, 1],
+      ['cheese_factory', 200, 20, 100, 1, 20],
+    ] as const;
+    for (const [type, workPoints, input, capacity, output, consumed] of recipes) {
+      const rule = RESIDENCES[type].production!;
+      const result = planProduction(rule, {
+        progress: 0,
+        workPoints,
+        penalty: 0,
+        freeSpace: capacity,
+        batchStock: input,
+      });
+      assert.deepEqual([result.units, result.batchStockUsed], [output, consumed]);
+    }
+    assert.equal(
+      planProduction(RESIDENCES.cheese_factory.production!, {
+        progress: 0,
+        workPoints: 200,
+        penalty: 0,
+        freeSpace: 100,
+        batchStock: 19,
+      }).units,
+      0,
     );
   });
 

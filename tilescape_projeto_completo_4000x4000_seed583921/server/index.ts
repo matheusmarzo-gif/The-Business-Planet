@@ -34,6 +34,7 @@ import {
   getResidencePlacementError,
   isPlayerBuildableConstructionType,
   planConstructionMaterialWithdrawals,
+  parseInputProductSelection,
   parseRent,
   parseWorkSettings,
   RESIDENCES,
@@ -391,6 +392,8 @@ type ResidentialBuildingRow = {
   iron_stock: number;
   charcoal_stock: number;
   sugarcane_stock: number;
+  input_stocks: Record<string, number>;
+  selected_input_product_id: string | null;
   efficiency_penalty: number;
   crop_phase: Crop['phase'] | null;
   crop_planted_day: string | null;
@@ -408,7 +411,11 @@ type ResidentialBuildingRow = {
   created_by?: string;
 };
 
-const RESIDENTIAL_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, efficiency_penalty,
+const RESIDENTIAL_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
+  COALESCE((SELECT jsonb_object_agg(input.product_id, input.quantity)
+            FROM building_input_stock input
+            WHERE input.building_id = residential_buildings.id), '{}'::jsonb) AS input_stocks,
+  efficiency_penalty,
   farm_auto_planting_enabled, farm_auto_planting_months, farm_planting_workers, farm_harvest_workers,
   crop_phase, to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day, crop_ratio_sum, crop_days,
   crop_yield, crop_harvested,
@@ -457,6 +464,8 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     ironStock: row.iron_stock,
     charcoalStock: row.charcoal_stock,
     sugarcaneStock: row.sugarcane_stock,
+    inputStocks: row.input_stocks,
+    selectedInputProductId: row.selected_input_product_id,
     efficiencyPenalty: row.efficiency_penalty,
     farmAutomation,
     crop:
@@ -557,6 +566,39 @@ async function applyDailySpoilage(client: PoolClient): Promise<boolean> {
        FROM UNNEST($1::uuid[], $2::integer[]) AS spoiled(id, quantity)
        WHERE building.id = spoiled.id`,
       [spoiledSugarcane.map(({ id }) => id), spoiledSugarcane.map(({ quantity }) => quantity)],
+    );
+    changed = true;
+  }
+  const { rows: inputStocks } = await client.query<{
+    building_id: string;
+    product_id: string;
+    quantity: number;
+  }>(
+    `SELECT building_id, product_id, quantity
+     FROM building_input_stock
+     WHERE quantity > 0 AND product_id = ANY($1::text[])
+     FOR UPDATE`,
+    [perishableProducts.map((product) => product.id)],
+  );
+  const spoiledInputs = inputStocks.flatMap((stock) => {
+    const shelfLifeDays = shelfLifeByProduct.get(stock.product_id);
+    if (shelfLifeDays === undefined) return [];
+    const quantity = planDailySpoilage(stock.quantity, shelfLifeDays);
+    return quantity > 0 ? [{ ...stock, spoiled: quantity }] : [];
+  });
+  if (spoiledInputs.length > 0) {
+    await client.query(
+      `UPDATE building_input_stock stock
+       SET quantity = stock.quantity - spoiled.spoiled
+       FROM UNNEST($1::uuid[], $2::text[], $3::integer[])
+         AS spoiled(building_id, product_id, spoiled)
+       WHERE stock.building_id = spoiled.building_id
+         AND stock.product_id = spoiled.product_id`,
+      [
+        spoiledInputs.map((stock) => stock.building_id),
+        spoiledInputs.map((stock) => stock.product_id),
+        spoiledInputs.map((stock) => stock.spoiled),
+      ],
     );
     changed = true;
   }
@@ -966,7 +1008,15 @@ interface ManualWarehouseTransferQuote {
   destinationStock: number;
   destinationCapacity: number | null;
   sourceMinimumStock: number;
-  destinationColumn: 'stock' | 'tool_stock' | 'wood_stock' | 'iron_stock' | 'charcoal_stock' | 'sugarcane_stock' | null;
+  destinationColumn:
+    | 'stock'
+    | 'tool_stock'
+    | 'wood_stock'
+    | 'iron_stock'
+    | 'charcoal_stock'
+    | 'sugarcane_stock'
+    | 'input_stock'
+    | null;
   destinationType: ResidenceType;
   day: string;
 }
@@ -1019,9 +1069,11 @@ async function getManualWarehouseTransferQuote(
     iron_stock: number;
     charcoal_stock: number;
     sugarcane_stock: number;
+    selected_input_product_id: string | null;
   }>(
     `SELECT id, building_type, created_by, status, tile_x, tile_y, work_hours_per_day,
-            stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock
+            stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock,
+            selected_input_product_id
      FROM residential_buildings
      WHERE id = ANY($1::uuid[])
      ORDER BY id
@@ -1138,6 +1190,19 @@ async function getManualWarehouseTransferQuote(
       destinationStock = destination.sugarcane_stock;
       destinationCapacity = definition.sugarcaneCapacity ?? 0;
       destinationColumn = 'sugarcane_stock';
+    } else if (
+      definition.inputCapacities?.[productId] !== undefined &&
+      (!definition.selectableInputProductIds ||
+        destination.selected_input_product_id === productId)
+    ) {
+      const { rows: inputStocks } = await client.query<{ quantity: number }>(
+        `SELECT quantity FROM building_input_stock
+         WHERE building_id = $1 AND product_id = $2 FOR UPDATE`,
+        [destinationId, productId],
+      );
+      destinationStock = inputStocks[0]?.quantity ?? 0;
+      destinationCapacity = definition.inputCapacities[productId];
+      destinationColumn = 'input_stock';
     } else {
       return { error: 'transfer_product_not_storable' };
     }
@@ -1739,6 +1804,7 @@ async function runDailyEmployment(): Promise<boolean> {
             row.building_type,
             (workers.get(row.id) ?? 0) *
               getDailyWorkPoints(row.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness),
+            workers.get(row.id) ?? 0,
           ),
         };
       });
@@ -1939,10 +2005,12 @@ async function runDailyEmployment(): Promise<boolean> {
             iron_stock: number;
             charcoal_stock: number;
             sugarcane_stock: number;
+            selected_input_product_id: string | null;
             efficiency_penalty: number;
             production_progress: number;
           }>(
             `SELECT id, stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock,
+                    selected_input_product_id,
                     efficiency_penalty, production_progress
              FROM residential_buildings
              WHERE id = ANY($1::uuid[])`,
@@ -1950,6 +2018,20 @@ async function runDailyEmployment(): Promise<boolean> {
           )
         : { rows: [] };
       const productionStateById = new Map(productionStates.map((row) => [row.id, row]));
+      const { rows: productionInputStocks } = productiveSites.length > 0
+        ? await client.query<{ building_id: string; product_id: string; quantity: number }>(
+            `SELECT building_id, product_id, quantity
+             FROM building_input_stock
+             WHERE building_id = ANY($1::uuid[])`,
+            [productiveSites.map((site) => site.id)],
+          )
+        : { rows: [] };
+      const inputStocksByBuilding = new Map<string, Map<string, number>>();
+      for (const stock of productionInputStocks) {
+        const stocks = inputStocksByBuilding.get(stock.building_id) ?? new Map<string, number>();
+        stocks.set(stock.product_id, stock.quantity);
+        inputStocksByBuilding.set(stock.building_id, stocks);
+      }
       const productionUpdates: {
         id: string;
         units: number;
@@ -1959,6 +2041,8 @@ async function runDailyEmployment(): Promise<boolean> {
         ironUsed: number;
         charcoalUsed: number;
         sugarcaneUsed: number;
+        inputProductId: string | null;
+        inputStockUsed: number;
         penalty: number;
       }[] = [];
       const productionHistory: ProductionHistoryEntry[] = [];
@@ -1979,6 +2063,12 @@ async function runDailyEmployment(): Promise<boolean> {
         const month = Number(state.day.slice(5, 7));
         const seasonalEfficiency =
           site.building_type === 'farm_dairy' ? getDairyFarmEfficiency(month) : 1;
+        const batchProductId = definition.selectableInputProductIds
+          ? current.selected_input_product_id
+          : definition.production.batchStockProductId;
+        const batchStock = batchProductId === 'sugarcane'
+          ? current.sugarcane_stock
+          : inputStocksByBuilding.get(site.id)?.get(batchProductId ?? '') ?? 0;
         const result = planProduction(definition.production, {
           progress: current.production_progress,
           workPoints: generatedPoints * seasonalEfficiency,
@@ -1987,8 +2077,9 @@ async function runDailyEmployment(): Promise<boolean> {
           wood: current.wood_stock,
           iron: current.iron_stock,
           charcoal: current.charcoal_stock,
-          batchStock: current.sugarcane_stock,
+          batchStock,
         });
+        const usesGenericInput = Boolean(batchProductId && definition.inputCapacities?.[batchProductId]);
         productionUpdates.push({
           id: site.id,
           units: result.units,
@@ -1997,7 +2088,9 @@ async function runDailyEmployment(): Promise<boolean> {
           woodUsed: result.woodUsed,
           ironUsed: result.ironUsed,
           charcoalUsed: result.charcoalUsed,
-          sugarcaneUsed: result.batchStockUsed,
+          sugarcaneUsed: batchProductId === 'sugarcane' ? result.batchStockUsed : 0,
+          inputProductId: usesGenericInput ? batchProductId! : null,
+          inputStockUsed: usesGenericInput ? result.batchStockUsed : 0,
           penalty,
         });
         productionHistory.push({
@@ -2037,6 +2130,28 @@ async function runDailyEmployment(): Promise<boolean> {
             productionUpdates.map((update) => update.penalty),
           ],
         );
+        const inputConsumptions = productionUpdates.filter(
+          (update) => update.inputProductId && update.inputStockUsed > 0,
+        );
+        if (inputConsumptions.length > 0) {
+          const { rowCount } = await client.query(
+            `UPDATE building_input_stock stock
+             SET quantity = stock.quantity - consumption.quantity
+             FROM UNNEST($1::uuid[], $2::text[], $3::integer[])
+               AS consumption(building_id, product_id, quantity)
+             WHERE stock.building_id = consumption.building_id
+               AND stock.product_id = consumption.product_id
+               AND stock.quantity >= consumption.quantity`,
+            [
+              inputConsumptions.map((update) => update.id),
+              inputConsumptions.map((update) => update.inputProductId),
+              inputConsumptions.map((update) => update.inputStockUsed),
+            ],
+          );
+          if (rowCount !== inputConsumptions.length) {
+            throw new Error('O estoque de insumos mudou durante a produção diária.');
+          }
+        }
         changed = true;
       }
       await logProductionBatch(client, state.day, productionHistory);
@@ -2204,12 +2319,28 @@ async function runDailyEmployment(): Promise<boolean> {
           iron_stock: number;
           charcoal_stock: number;
           sugarcane_stock: number;
+          selected_input_product_id: string | null;
         }>(
-          `SELECT id, building_type, stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock
+          `SELECT id, building_type, stock, tool_stock, wood_stock, iron_stock, charcoal_stock,
+                  sugarcane_stock, selected_input_product_id
            FROM residential_buildings
            WHERE warehouse_id = $1 AND status = 'completed'`,
           [warehouse.id],
         );
+        const { rows: linkedInputStocks } = linked.length > 0
+          ? await client.query<{ building_id: string; product_id: string; quantity: number }>(
+              `SELECT building_id, product_id, quantity
+               FROM building_input_stock
+               WHERE building_id = ANY($1::uuid[])`,
+              [linked.map((row) => row.id)],
+            )
+          : { rows: [] };
+        const inputStocksByLinked = new Map<string, Record<string, number>>();
+        for (const stock of linkedInputStocks) {
+          const current = inputStocksByLinked.get(stock.building_id) ?? {};
+          current[stock.product_id] = stock.quantity;
+          inputStocksByLinked.set(stock.building_id, current);
+        }
         transportPhase = 'loading_stock';
         const warehouseSite = workplaceById.get(warehouse.id);
         const workPoints =
@@ -2271,6 +2402,8 @@ async function runDailyEmployment(): Promise<boolean> {
             ironStock: row.iron_stock,
             charcoalStock: row.charcoal_stock,
             sugarcaneStock: row.sugarcane_stock,
+            inputStocks: inputStocksByLinked.get(row.id) ?? {},
+            selectedInputProductId: row.selected_input_product_id,
           })),
         );
         transportPhase = 'writing_attempts';
@@ -2321,6 +2454,7 @@ async function runDailyEmployment(): Promise<boolean> {
           iron: number;
           charcoal: number;
           sugarcane: number;
+          inputStocks: Map<string, number>;
         }>();
         const transportedByBuilding = new Map<string, number>();
         const availableStock = new Map(stockRows.map((row) => [row.product_id, row.quantity]));
@@ -2395,9 +2529,17 @@ async function runDailyEmployment(): Promise<boolean> {
         }
         for (const transfer of transfers) {
           const kind = getResidenceDefinition(types.get(transfer.buildingId) ?? '')?.kind;
+          const definition = getResidenceDefinition(types.get(transfer.buildingId) ?? '');
+          const genericInput =
+            transfer.direction === 'in' &&
+            definition?.inputCapacities?.[transfer.productId] !== undefined &&
+            (!definition.selectableInputProductIds ||
+              linked.find((row) => row.id === transfer.buildingId)?.selected_input_product_id ===
+                transfer.productId);
           // 'in' em comércios repõe o estoque principal; nas demais construções é um insumo.
-          const column =
-            transfer.direction === 'out' || kind === 'shop'
+          const column = genericInput
+            ? 'input_stock'
+            : transfer.direction === 'out' || kind === 'shop'
               ? 'stock'
               : ({
                   tools: 'tool_stock',
@@ -2422,6 +2564,7 @@ async function runDailyEmployment(): Promise<boolean> {
             iron: 0,
             charcoal: 0,
             sugarcane: 0,
+            inputStocks: new Map<string, number>(),
           };
           const delta = transfer.direction === 'out' ? -transfer.quantity : transfer.quantity;
           if (column === 'stock') changes.stock += delta;
@@ -2430,6 +2573,12 @@ async function runDailyEmployment(): Promise<boolean> {
           else if (column === 'iron_stock') changes.iron += delta;
           else if (column === 'charcoal_stock') changes.charcoal += delta;
           else if (column === 'sugarcane_stock') changes.sugarcane += delta;
+          else if (column === 'input_stock') {
+            changes.inputStocks.set(
+              transfer.productId,
+              (changes.inputStocks.get(transfer.productId) ?? 0) + delta,
+            );
+          }
           buildingChanges.set(transfer.buildingId, changes);
         }
         if (buildingChanges.size > 0) {
@@ -2457,6 +2606,28 @@ async function runDailyEmployment(): Promise<boolean> {
               buildingIds.map((id) => buildingChanges.get(id)?.sugarcane ?? 0),
             ],
           );
+          const inputChanges = [...buildingChanges].flatMap(([buildingId, changes]) =>
+            [...changes.inputStocks].map(([productId, quantity]) => ({
+              buildingId,
+              productId,
+              quantity,
+            })),
+          );
+          if (inputChanges.length > 0) {
+            await client.query(
+              `INSERT INTO building_input_stock (building_id, product_id, quantity)
+               SELECT batch.building_id, batch.product_id, batch.quantity
+               FROM UNNEST($1::uuid[], $2::text[], $3::integer[])
+                 AS batch(building_id, product_id, quantity)
+               ON CONFLICT (building_id, product_id) DO UPDATE
+               SET quantity = building_input_stock.quantity + EXCLUDED.quantity`,
+              [
+                inputChanges.map((change) => change.buildingId),
+                inputChanges.map((change) => change.productId),
+                inputChanges.map((change) => change.quantity),
+              ],
+            );
+          }
           changed = true;
         }
         await logProductionBatch(
@@ -3334,8 +3505,9 @@ async function createResidentialBuilding(
 
     const { rows } = await client.query<ResidentialBuildingRow>(
       `INSERT INTO residential_buildings
-         (id, building_type, building_number, tile_x, tile_y, city_id, status, completed_at, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7 = 'completed' THEN clock_timestamp() ELSE NULL END, $8)
+         (id, building_type, building_number, tile_x, tile_y, city_id, status, completed_at, created_by,
+          selected_input_product_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7 = 'completed' THEN clock_timestamp() ELSE NULL END, $8, $9)
        RETURNING ${RESIDENTIAL_COLUMNS}`,
       [
         randomUUID(),
@@ -3346,6 +3518,7 @@ async function createResidentialBuilding(
         city.id,
         isFirstWarehouse ? 'completed' : 'under_construction',
         userId,
+        definition.defaultInputProductId ?? null,
       ],
     );
     await client.query('COMMIT');
@@ -4259,7 +4432,27 @@ async function start() {
           response.status(409).json({ error: 'transfer_stock_changed' });
           return;
         }
-        if (result.quote.destinationColumn) {
+        if (result.quote.destinationColumn === 'input_stock') {
+          failureStage = 'adding_product_to_destination';
+          const { rowCount: destinationUpdated } = await client.query(
+            `INSERT INTO building_input_stock (building_id, product_id, quantity)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (building_id, product_id) DO UPDATE
+             SET quantity = building_input_stock.quantity + EXCLUDED.quantity
+             WHERE building_input_stock.quantity + EXCLUDED.quantity <= $4`,
+            [
+              destinationId,
+              productId,
+              quantity,
+              result.quote.destinationCapacity ?? 0,
+            ],
+          );
+          if (destinationUpdated !== 1) {
+            await client.query('ROLLBACK');
+            response.status(409).json({ error: 'transfer_destination_full' });
+            return;
+          }
+        } else if (result.quote.destinationColumn) {
           failureStage = 'adding_product_to_destination';
           const column = result.quote.destinationColumn;
           const { rowCount: destinationUpdated } = await client.query(
@@ -4753,6 +4946,86 @@ async function start() {
         console.error('Não foi possível atualizar o preço:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
+  });
+  app.patch('/api/residential-buildings/:id/input-product', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (!residenceIdPattern.test(request.params.id) || !userId) {
+      response.status(!userId ? 401 : 400).json({ error: !userId ? 'unauthorized' : 'invalid_residence' });
+      return;
+    }
+
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const { rows: buildings } = await client.query<{
+          building_type: ResidenceType;
+          created_by: string;
+          status: string;
+        }>(
+          `SELECT building_type, created_by, status
+           FROM residential_buildings
+           WHERE id = $1 FOR UPDATE`,
+          [request.params.id],
+        );
+        const existing = buildings[0];
+        if (!existing) {
+          await client.query('ROLLBACK');
+          response.status(404).json({ error: 'residence_not_found' });
+          return;
+        }
+        if (existing.created_by !== userId) {
+          await client.query('ROLLBACK');
+          response.status(403).json({ error: 'residence_not_owned' });
+          return;
+        }
+        const productId = parseInputProductSelection(existing.building_type, request.body);
+        if (!productId) {
+          await client.query('ROLLBACK');
+          response.status(400).json({ error: 'invalid_input_product' });
+          return;
+        }
+        if (existing.status !== 'completed') {
+          await client.query('ROLLBACK');
+          response.status(409).json({ error: 'building_not_completed' });
+          return;
+        }
+        await client.query(
+          `DELETE FROM building_input_stock
+           WHERE building_id = $1 AND product_id <> $2`,
+          [request.params.id, productId],
+        );
+        await client.query(
+          `UPDATE residential_buildings
+           SET selected_input_product_id = $2
+           WHERE id = $1`,
+          [request.params.id, productId],
+        );
+        const { rows } = await client.query<ResidentialBuildingRow>(
+          `SELECT ${RESIDENTIAL_COLUMNS}
+           FROM residential_buildings
+           WHERE id = $1`,
+          [request.params.id],
+        );
+        await client.query('COMMIT');
+        response.json(mapResidentialBuilding(rows[0]));
+        void publishCities().catch((error: unknown) => {
+          console.error('A matéria-prima foi atualizada, mas a publicação do mundo falhou:', error);
+        });
+      } catch (error) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter a troca de matéria-prima:', rollbackError);
+        });
+        console.error('Não foi possível trocar a matéria-prima da construção:', error);
+        response.status(503).json({ error: 'input_product_update_unavailable' });
+      } finally {
+        client.release();
+      }
+    })().catch((error: unknown) => {
+      console.error('Não foi possível iniciar a troca de matéria-prima:', error);
+      response.status(503).json({ error: 'input_product_update_unavailable' });
+    });
   });
   app.put('/api/residential-buildings/:id/farm-automation', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);

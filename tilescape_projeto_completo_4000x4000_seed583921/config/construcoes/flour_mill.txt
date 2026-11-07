@@ -1,0 +1,28 @@
+{
+  "type": "flour_mill",
+  "kind": "industry",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Moinho",
+  "asset": "/buildings/industrial/moinho.png",
+  "width": 3,
+  "height": 3,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 60, "stone": 20 },
+  "workPoints": 60000,
+  "maxWorkers": 60,
+  "stockProduct": "Farinha",
+  "stockProductId": "flour",
+  "stockCapacity": 100,
+  "inputCapacities": { "wheat": 20, "barley": 20, "corn": 20 },
+  "selectableInputProductIds": ["wheat", "barley", "corn"],
+  "defaultInputProductId": "wheat",
+  "production": {
+    "mode": "batch",
+    "workPointsPerUnit": 300,
+    "batchSize": 5,
+    "batchStockProductId": "wheat",
+    "batchStockAmount": 1
+  }
+}

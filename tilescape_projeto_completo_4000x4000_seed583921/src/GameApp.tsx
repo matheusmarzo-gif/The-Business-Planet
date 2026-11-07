@@ -57,6 +57,7 @@ import {
 import type { RoadPlacementError, RoadPosition, RoadTile } from './types/road';
 import { TileInfo } from './types/map';
 import { formatMoney } from './types/wallet';
+import { PRODUCTS } from './types/product';
 import type { PerformanceLogRecord } from './types/performanceLog';
 import { loadCommerceDiagnostics, saveCommerceDiagnostics } from './utils/commerceDiagnosticsStorage';
 import { createMapGenerator } from './utils/mapGenerator';
@@ -84,7 +85,6 @@ const CATEGORY_LABELS: Record<ConstructionCategory, string> = {
   industrias: 'Indústrias',
   prefeitura: 'Prefeitura',
 };
-
 interface WarehouseTransferFlow {
   sourceId: string;
   productId: string;
@@ -1169,6 +1169,36 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setIsSavingWorkSettings(false);
     }
   };
+  const saveInputProduct = async (buildingId: string, productId: string) => {
+    if (!window.confirm('Trocar a matéria-prima descartará o estoque atual dela. Deseja continuar?')) {
+      return;
+    }
+    setIsSavingWorkSettings(true);
+    setWorkSettingsError('');
+    try {
+      const building = await cityRequest<ResidentialBuilding>(
+        `/api/residential-buildings/${buildingId}/input-product`,
+        { method: 'PATCH', body: JSON.stringify({ productId }) },
+      );
+      setResidentialBuildings((current) =>
+        current.map((item) =>
+          item.id === building.id
+            ? {
+                ...building,
+                ownerName: building.ownerName ?? item.ownerName,
+                isOwnedByCurrentUser: item.isOwnedByCurrentUser,
+              }
+            : item,
+        ),
+      );
+    } catch (error) {
+      setWorkSettingsError(
+        error instanceof Error ? error.message : 'Não foi possível trocar a matéria-prima.',
+      );
+    } finally {
+      setIsSavingWorkSettings(false);
+    }
+  };
   const cameraKeys = useRef(new Set<string>());
   useEffect(() => {
     const arrows = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
@@ -1409,6 +1439,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       ironStock: 0,
       charcoalStock: 0,
       sugarcaneStock: 0,
+      inputStocks: {},
+      selectedInputProductId: RESIDENCES[type].defaultInputProductId ?? null,
       averageIncome: 0,
       efficiencyPenalty: 0,
       farmAutomation: {
@@ -1790,6 +1822,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onSave={(settings) => void saveWorkSettings(selectedResidence.id, settings)}
             onSaveRent={(rent) => void saveRent(selectedResidence.id, rent)}
             onSavePrice={(price) => void savePrice(selectedResidence.id, price)}
+            onSaveInputProduct={(productId) =>
+              void saveInputProduct(selectedResidence.id, productId)
+            }
             onOpenWarehouse={() => void openWarehouse(selectedResidence.id)}
             warehouseStock={warehouseStock}
             warehouseStockLoaded={warehouseStockLoaded}
@@ -2049,7 +2084,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                       {residence.kind === 'warehouse'
                         ? `Até ${residence.maxWorkers} funcionários · Capacidade ${residence.storageCapacityM3} m³ de qualquer produto`
                         : residence.kind !== 'residence'
-                        ? `Até ${residence.maxWorkers} funcionários · Estoque máx. ${residence.stockCapacity} ${residence.stockProduct}${residence.toolCapacity ? ` · ${residence.toolCapacity} Ferramentas` : ''}${residence.woodCapacity ? ` · ${residence.woodCapacity} Madeira` : ''}${residence.ironCapacity ? ` · ${residence.ironCapacity} Ferro` : ''}`
+                        ? `Até ${residence.maxWorkers} funcionários · Estoque máx. ${residence.stockCapacity} ${residence.stockProduct}${Object.entries(residence.inputCapacities ?? {}).map(([productId, capacity]) => {
+                            const product = PRODUCTS.find((entry) => entry.id === productId);
+                            return ` · ${capacity}${product?.unit === 'liter' ? ' litros de ' : ' '}${product?.name ?? productId}`;
+                          }).join('')}${residence.toolCapacity ? ` · ${residence.toolCapacity} Ferramentas` : ''}${residence.woodCapacity ? ` · ${residence.woodCapacity} Madeira` : ''}${residence.ironCapacity ? ` · ${residence.ironCapacity} Ferro` : ''}`
                         : `Capacidade ${residence.capacity} pessoas`}
                     </small>
                     <small>

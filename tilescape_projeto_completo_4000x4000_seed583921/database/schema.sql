@@ -177,7 +177,15 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS wood_stock INTEGER NOT NULL DEFAULT 0 CHECK (wood_stock >= 0),
   ADD COLUMN IF NOT EXISTS iron_stock INTEGER NOT NULL DEFAULT 0 CHECK (iron_stock >= 0),
   ADD COLUMN IF NOT EXISTS charcoal_stock INTEGER NOT NULL DEFAULT 0 CHECK (charcoal_stock >= 0),
-  ADD COLUMN IF NOT EXISTS sugarcane_stock INTEGER NOT NULL DEFAULT 0 CHECK (sugarcane_stock >= 0);
+  ADD COLUMN IF NOT EXISTS sugarcane_stock INTEGER NOT NULL DEFAULT 0 CHECK (sugarcane_stock >= 0),
+  ADD COLUMN IF NOT EXISTS selected_input_product_id TEXT;
+
+CREATE TABLE IF NOT EXISTS building_input_stock (
+  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL,
+  quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+  PRIMARY KEY (building_id, product_id)
+);
 
 -- O caixa dos jogadores pode ficar negativo (folha de pagamento).
 ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_check;
@@ -185,7 +193,7 @@ ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_chec
 ALTER TABLE residential_buildings
   DROP CONSTRAINT IF EXISTS residential_buildings_building_type_check,
   ADD CONSTRAINT residential_buildings_building_type_check
-    CHECK (building_type IN ('house_poor1', 'house_poor2', 'house_poor3', 'farm_rice', 'farm_potato', 'farm_wheat', 'farm_barley', 'farm_corn', 'farm_cattle', 'farm_dairy', 'farm_cane', 'farm_spices', 'farm_vegetables', 'shop_rice', 'shop_potato', 'shop_corn', 'shop_barley', 'shop_wheat', 'shop_butcher', 'shop_milk', 'shop_sugar', 'shop_vegetables', 'shop_salt', 'shop_spices', 'warehouse', 'fishery', 'shop_fish', 'salt_gatherer', 'lumber_mill', 'quarry', 'iron_mine', 'toolmaker', 'sugar_mill', 'charcoal_works'));
+    CHECK (building_type IN ('house_poor1', 'house_poor2', 'house_poor3', 'farm_rice', 'farm_potato', 'farm_wheat', 'farm_barley', 'farm_corn', 'farm_cattle', 'farm_dairy', 'farm_cane', 'farm_spices', 'farm_vegetables', 'shop_rice', 'shop_potato', 'shop_corn', 'shop_barley', 'shop_wheat', 'shop_butcher', 'shop_milk', 'shop_sugar', 'shop_vegetables', 'shop_salt', 'shop_spices', 'shop_bread', 'shop_cheese', 'warehouse', 'fishery', 'shop_fish', 'salt_gatherer', 'lumber_mill', 'quarry', 'iron_mine', 'toolmaker', 'sugar_mill', 'charcoal_works', 'flour_mill', 'bread_factory', 'cheese_factory'));
 
 CREATE TABLE IF NOT EXISTS warehouse_product_settings (
   building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,

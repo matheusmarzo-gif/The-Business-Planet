@@ -356,9 +356,17 @@ export function parsePrice(value: unknown): number | null {
 export function getShopSalesCapacity(
   type: ResidenceType,
   dailyWorkPoints: number,
+  workers = 0,
 ): number {
   if (!Number.isFinite(dailyWorkPoints) || dailyWorkPoints < 0) {
     throw new RangeError('Work Points diários inválidos para calcular a capacidade de vendas.');
+  }
+  const definition = getResidenceDefinition(type);
+  if (definition?.salesPerWorkerPerDay !== undefined) {
+    if (!Number.isInteger(workers) || workers < 0) {
+      throw new RangeError('Quantidade de funcionários inválida para calcular a capacidade de vendas.');
+    }
+    return workers * definition.salesPerWorkerPerDay;
   }
   const workPointsPerUnit = (() => {
     switch (type) {

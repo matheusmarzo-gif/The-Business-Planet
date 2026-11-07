@@ -1,0 +1,26 @@
+{
+  "type": "cheese_factory",
+  "kind": "industry",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fábrica de Queijo",
+  "asset": "/buildings/industrial/fabrica_queijo.png",
+  "width": 3,
+  "height": 3,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 120, "stone": 60 },
+  "workPoints": 100000,
+  "maxWorkers": 200,
+  "stockProduct": "Queijo",
+  "stockProductId": "cheese",
+  "stockCapacity": 100,
+  "inputCapacities": { "milk": 2000 },
+  "production": {
+    "mode": "batch",
+    "workPointsPerUnit": 200,
+    "batchSize": 1,
+    "batchStockProductId": "milk",
+    "batchStockAmount": 20
+  }
+}

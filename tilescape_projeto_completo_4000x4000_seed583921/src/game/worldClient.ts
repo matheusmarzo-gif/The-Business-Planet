@@ -85,6 +85,11 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
     isCurrencyAmount(building.price) &&
     Number.isInteger(building.stock) &&
     (building.warehouseId === null || typeof building.warehouseId === 'string') &&
+    (building.selectedInputProductId === null || typeof building.selectedInputProductId === 'string') &&
+    typeof building.inputStocks === 'object' &&
+    building.inputStocks !== null &&
+    !Array.isArray(building.inputStocks) &&
+    Object.values(building.inputStocks).every((quantity) => Number.isInteger(quantity) && quantity >= 0) &&
     (building.crop === null ||
       (typeof building.crop === 'object' && typeof (building.crop as { phase?: unknown }).phase === 'string')) &&
     Number.isInteger(building.employed)

@@ -33,6 +33,7 @@ interface ResidencePanelProps {
   onSave: (settings: { wage: number; workHoursPerDay: number; desiredWorkers: number }) => void;
   onSaveRent: (rent: number) => void;
   onSavePrice: (price: number) => void;
+  onSaveInputProduct: (productId: string) => void;
   onOpenWarehouse: () => void;
   warehouseStock: ReadonlyMap<string, number>;
   warehouseStockLoaded: boolean;
@@ -68,7 +69,10 @@ const monthNames = [
   'Dezembro',
 ];
 
-function getProductionDescription(type: ResidenceType): string | null {
+function getProductionDescription(
+  type: ResidenceType,
+  selectedInputProductId: string | null,
+): string | null {
   const definition = RESIDENCES[type];
   if (definition.kind === 'farm') {
     if (type === 'farm_dairy' && definition.production) {
@@ -83,6 +87,9 @@ function getProductionDescription(type: ResidenceType): string | null {
     }
   }
   if (definition.kind === 'shop') {
+    if (definition.salesPerWorkerPerDay) {
+      return `Cada funcionário permite vender até ${number.format(definition.salesPerWorkerPerDay)} ${definition.stockProduct?.toLowerCase() ?? 'unidades'} por dia, limitado pela demanda e pelo estoque abastecido pelo armazém ligado.`;
+    }
     const workPointsPerUnit =
       type === 'shop_milk'
         ? GAME_RULES.consumption.salesCapacity.literWorkPointsPerSale
@@ -98,9 +105,13 @@ function getProductionDescription(type: ResidenceType): string | null {
   if (!rule || !definition.stockProduct) return null;
   const product = definition.stockProduct.toLocaleLowerCase('pt-BR');
   if (rule.mode === 'batch') {
+    const batchProductId = definition.selectableInputProductIds
+      ? selectedInputProductId ?? definition.defaultInputProductId
+      : rule.batchStockProductId;
+    const batchProduct = PRODUCTS.find(({ id }) => id === batchProductId);
     const inputs = [
-      rule.batchStockProductId
-        ? `${number.format(rule.batchStockAmount ?? 0)} ${PRODUCTS.find(({ id }) => id === rule.batchStockProductId)?.name.toLocaleLowerCase('pt-BR') ?? rule.batchStockProductId}`
+      batchProductId
+        ? `${number.format(rule.batchStockAmount ?? 0)}${batchProduct?.unit === 'liter' ? ' litros de ' : ' '}${batchProduct?.name.toLocaleLowerCase('pt-BR') ?? batchProductId}`
         : '',
       rule.batchWood ? `${number.format(rule.batchWood)} madeiras` : '',
       rule.batchIron ? `${number.format(rule.batchIron)} ferro` : '',
@@ -122,6 +133,7 @@ export default function ResidencePanel({
   onSave,
   onSaveRent,
   onSavePrice,
+  onSaveInputProduct,
   onOpenWarehouse,
   warehouseStock,
   warehouseStockLoaded,
@@ -145,12 +157,19 @@ export default function ResidencePanel({
   const [rent, setRent] = useState(String(building.rent));
   const [desired, setDesired] = useState(String(building.desiredWorkers));
   const [price, setPrice] = useState(String(building.price));
+  const [inputProductId, setInputProductId] = useState(
+    building.selectedInputProductId ?? definition.defaultInputProductId ?? '',
+  );
   const [isFarmAdvancedOpen, setIsFarmAdvancedOpen] = useState(false);
   const [farmAutomation, setFarmAutomation] = useState<FarmAutomationSettings>(building.farmAutomation);
 
   useEffect(() => {
     setPrice(String(building.price));
   }, [building.id, building.price]);
+
+  useEffect(() => {
+    setInputProductId(building.selectedInputProductId ?? definition.defaultInputProductId ?? '');
+  }, [building.id, building.selectedInputProductId, definition.defaultInputProductId]);
 
   useEffect(() => {
     setWage(String(building.wage));
@@ -203,7 +222,10 @@ export default function ResidencePanel({
   const cropProduct = definition.stockProduct ?? 'produto';
   const cropAction =
     building.type === 'farm_cattle' ? 'Iniciar criação' : `Plantar ${cropProduct.toLowerCase()}`;
-  const productionDescription = getProductionDescription(building.type);
+  const productionDescription = getProductionDescription(
+    building.type,
+    building.selectedInputProductId,
+  );
   const maxDesiredWorkers = getMaxDesiredWorkers(building.type, building.status);
   const openJobs = Math.max(0, Math.min(building.desiredWorkers, maxDesiredWorkers) - building.employed);
   const jobRows: [string, string][] = [
@@ -258,6 +280,18 @@ export default function ResidencePanel({
             ...(definition.sugarcaneCapacity
               ? ([['Estoque de Cana', `${number.format(building.sugarcaneStock)} / ${number.format(definition.sugarcaneCapacity)}`]] as [string, string][])
               : []),
+            ...Object.entries(definition.inputCapacities ?? {}).map(([productId, capacity]) => {
+              const product = PRODUCTS.find((entry) => entry.id === productId);
+              const activeCapacity =
+                !definition.selectableInputProductIds ||
+                building.selectedInputProductId === productId
+                  ? capacity
+                  : 0;
+              return [
+                `Estoque de ${product?.name ?? productId}${product?.unit === 'liter' ? ' (litros)' : ''}`,
+                `${number.format(building.inputStocks[productId] ?? 0)} / ${number.format(activeCapacity)}`,
+              ] as [string, string];
+            }),
           ]
         : [
             ['Ocupantes atuais', number.format(building.occupants)],
@@ -285,6 +319,8 @@ export default function ResidencePanel({
                 ? 'RECURSO'
                 : definition.kind === 'fishery' || definition.kind === 'workshop'
                 ? 'CONSTRUÇÃO ARTESANAL'
+                : definition.kind === 'industry'
+                  ? 'INDÚSTRIA'
                 : definition.kind === 'shop'
                 ? 'COMÉRCIO'
                 : definition.kind === 'warehouse'
@@ -316,7 +352,7 @@ export default function ResidencePanel({
           Ver consumo da casa
         </button>
       )}
-      {['farm', 'resource', 'fishery', 'workshop'].includes(definition.kind) && building.status === 'completed' && (
+      {['farm', 'resource', 'fishery', 'workshop', 'industry'].includes(definition.kind) && building.status === 'completed' && (
         <button type="button" className="warehouse-open" onClick={onOpenProductionHistory}>
           Histórico de produção
         </button>
@@ -578,6 +614,52 @@ export default function ResidencePanel({
             </button>
           ) : (
             <small>Somente o dono da loja pode editar.</small>
+          )}
+          {definition.selectableInputProductIds && (
+            <form
+              className="work-settings"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (inputProductId) onSaveInputProduct(inputProductId);
+              }}
+            >
+              <label>
+                Matéria-prima do moinho
+                <select
+                  value={inputProductId}
+                  disabled={!isOwner || isSaving || building.status !== 'completed'}
+                  onChange={(event) => setInputProductId(event.target.value)}
+                >
+                  {definition.selectableInputProductIds.map((productId) => (
+                    <option key={productId} value={productId}>
+                      {PRODUCTS.find((product) => product.id === productId)?.name ?? productId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {inputProductId !== building.selectedInputProductId &&
+                (building.inputStocks[building.selectedInputProductId ?? ''] ?? 0) > 0 && (
+                  <small>
+                    Ao salvar, as{' '}
+                    {number.format(building.inputStocks[building.selectedInputProductId ?? ''] ?? 0)} unidades
+                    restantes da matéria-prima atual serão descartadas.
+                  </small>
+                )}
+              {isOwner ? (
+                <button
+                  type="submit"
+                  disabled={
+                    isSaving ||
+                    building.status !== 'completed' ||
+                    inputProductId === building.selectedInputProductId
+                  }
+                >
+                  {isSaving ? 'Salvando…' : 'Salvar matéria-prima'}
+                </button>
+              ) : (
+                <small>Somente o dono do moinho pode alterar a matéria-prima.</small>
+              )}
+            </form>
           )}
         </form>
       )}

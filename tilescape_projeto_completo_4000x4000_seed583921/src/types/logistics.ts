@@ -29,6 +29,8 @@ export interface LogisticsLink {
   ironStock?: number;
   charcoalStock?: number;
   sugarcaneStock?: number;
+  inputStocks?: Readonly<Record<string, number>>;
+  selectedInputProductId?: string | null;
 }
 
 export type InputProduct = 'tools' | 'wood' | 'iron' | 'charcoal' | 'sugarcane';
@@ -81,7 +83,27 @@ export function parseWarehouseLink(value: unknown): { warehouseId: string | null
 
 export function canLinkToWarehouse(type: string): boolean {
   const kind = getResidenceDefinition(type)?.kind;
-  return kind === 'farm' || kind === 'shop' || kind === 'fishery' || kind === 'resource' || kind === 'workshop';
+  return (
+    kind === 'farm' ||
+    kind === 'shop' ||
+    kind === 'fishery' ||
+    kind === 'resource' ||
+    kind === 'workshop' ||
+    kind === 'industry'
+  );
+}
+
+function getActiveInputProductIds(
+  definition: NonNullable<ReturnType<typeof getResidenceDefinition>>,
+  selectedInputProductId?: string | null,
+): string[] {
+  const selectable = definition.selectableInputProductIds;
+  if (selectable) {
+    return selectedInputProductId && selectable.includes(selectedInputProductId)
+      ? [selectedInputProductId]
+      : [];
+  }
+  return Object.keys(definition.inputCapacities ?? {});
 }
 
 export function isWithinLinkRadius(
@@ -168,29 +190,39 @@ export function planTransfersDetailed(
   const move = (
     link: LogisticsLink,
     direction: TransferDirection,
-    input?: InputProduct,
+    input?: string,
     proportionalStockLimit?: number,
   ) => {
     const definition = getResidenceDefinition(link.type);
     const product = PRODUCTS.find((item) => item.id === (input ?? definition?.stockProductId));
     if (!definition || !product) return;
-    const current = input
-      ? {
-          tools: link.toolStock,
-          wood: link.woodStock,
-          iron: link.ironStock,
-          charcoal: link.charcoalStock,
-          sugarcane: link.sugarcaneStock,
-        }[input] ?? 0
-      : link.stock;
+    const currentInputStock =
+      input === 'tools'
+        ? link.toolStock
+        : input === 'wood'
+          ? link.woodStock
+          : input === 'iron'
+            ? link.ironStock
+            : input === 'charcoal'
+              ? link.charcoalStock
+              : input === 'sugarcane'
+                ? link.sugarcaneStock
+                : undefined;
+    const inputCapacity =
+      input === 'tools'
+        ? definition.toolCapacity
+        : input === 'wood'
+          ? definition.woodCapacity
+          : input === 'iron'
+            ? definition.ironCapacity
+            : input === 'charcoal'
+              ? definition.charcoalCapacity
+              : input === 'sugarcane'
+                ? definition.sugarcaneCapacity
+                : undefined;
+    const current = input ? currentInputStock ?? link.inputStocks?.[input] ?? 0 : link.stock;
     const capacity = input
-      ? {
-          tools: definition.toolCapacity,
-          wood: definition.woodCapacity,
-          iron: definition.ironCapacity,
-          charcoal: definition.charcoalCapacity,
-          sugarcane: definition.sugarcaneCapacity,
-        }[input] ?? 0
+      ? inputCapacity ?? definition.inputCapacities?.[input] ?? 0
       : (definition.stockCapacity ?? 0);
     const inWarehouse = stock.get(product.id) ?? 0;
     const unitDemand = getTransportDemand(product.id, 1);
@@ -232,7 +264,13 @@ export function planTransfersDetailed(
   // Produtores enviam ao armazém; depois comércios recebem a mercadoria e produtores recebem insumos.
   for (const link of sorted) {
     const kind = getResidenceDefinition(link.type)?.kind;
-    if (kind === 'farm' || kind === 'fishery' || kind === 'resource' || kind === 'workshop') {
+    if (
+      kind === 'farm' ||
+      kind === 'fishery' ||
+      kind === 'resource' ||
+      kind === 'workshop' ||
+      kind === 'industry'
+    ) {
       move(link, 'out');
     }
   }
@@ -261,6 +299,15 @@ export function planTransfersDetailed(
         definition.sugarcaneCapacity - (link.sugarcaneStock ?? 0),
       );
     }
+    if (definition) {
+      for (const productId of getActiveInputProductIds(definition, link.selectedInputProductId)) {
+        addDemand(
+          link,
+          productId,
+          (definition.inputCapacities?.[productId] ?? 0) - (link.inputStocks?.[productId] ?? 0),
+        );
+      }
+    }
   }
   const linkedAllocations = new Map<string, number>();
   for (const [productId, demands] of linkedDemands) {
@@ -288,6 +335,11 @@ export function planTransfersDetailed(
     if (definition?.charcoalCapacity) move(link, 'in', 'charcoal', allocationFor('charcoal'));
     if (definition?.sugarcaneCapacity) {
       move(link, 'in', 'sugarcane', allocationFor('sugarcane'));
+    }
+    if (definition) {
+      for (const productId of getActiveInputProductIds(definition, link.selectedInputProductId)) {
+        move(link, 'in', productId, allocationFor(productId));
+      }
     }
   }
   return { transfers, attempts };

@@ -24,6 +24,8 @@ export const SHOP_TYPES = [
   'shop_vegetables',
   'shop_salt',
   'shop_spices',
+  'shop_bread',
+  'shop_cheese',
 ] as const satisfies readonly ResidenceType[];
 export type BuildingKind =
   | 'residence'
@@ -32,7 +34,8 @@ export type BuildingKind =
   | 'warehouse'
   | 'fishery'
   | 'resource'
-  | 'workshop';
+  | 'workshop'
+  | 'industry';
 
 // Categoria da barra de construção em que cada tipo aparece.
 export const KIND_CATEGORY: Record<BuildingKind, ConstructionCategory> = {
@@ -40,6 +43,7 @@ export const KIND_CATEGORY: Record<BuildingKind, ConstructionCategory> = {
   farm: 'fazendas',
   shop: 'comerciais',
   warehouse: 'industrias',
+  industry: 'industrias',
   fishery: 'artesanais',
   workshop: 'artesanais',
   resource: 'recursos',
@@ -102,6 +106,10 @@ export interface ResidenceDefinition {
   charcoalCapacity?: number;
   // Estoque de cana recebido por armazém e consumido pela Casa de Engenho.
   sugarcaneCapacity?: number;
+  inputCapacities?: Record<string, number>;
+  selectableInputProductIds?: readonly string[];
+  defaultInputProductId?: string;
+  salesPerWorkerPerDay?: number;
   // Demanda diária de Ferramentas por funcionário (valores abaixo de 1 são probabilidade).
   toolDemandPerWorker?: number;
   production?: ProductionRule;
@@ -201,6 +209,13 @@ export function parseRent(value: unknown): number | null {
 
 export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = BUILDING_CONFIGS;
 
+export function parseInputProductSelection(type: ResidenceType, value: unknown): string | null {
+  const selectableProducts = RESIDENCES[type].selectableInputProductIds;
+  if (!selectableProducts || typeof value !== 'object' || value === null) return null;
+  const { productId } = value as Record<string, unknown>;
+  return typeof productId === 'string' && selectableProducts.includes(productId) ? productId : null;
+}
+
 export const UNDER_CONSTRUCTION_ASSET = '/buildings/em_construcao.png';
 
 export interface ResidentialBuilding {
@@ -230,6 +245,8 @@ export interface ResidentialBuilding {
   ironStock: number;
   charcoalStock: number;
   sugarcaneStock: number;
+  inputStocks: Record<string, number>;
+  selectedInputProductId: string | null;
   efficiencyPenalty: number;
   farmAutomation: FarmAutomationSettings;
   // Plantio/ciclo das fazendas agrícolas; null quando não há plantio.

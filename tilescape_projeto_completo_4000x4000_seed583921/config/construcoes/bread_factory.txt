@@ -1,0 +1,26 @@
+{
+  "type": "bread_factory",
+  "kind": "industry",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fábrica de Pães",
+  "asset": "/buildings/industrial/fabrica_paes.png",
+  "width": 3,
+  "height": 3,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 60, "stone": 30 },
+  "workPoints": 80000,
+  "maxWorkers": 60,
+  "stockProduct": "Pães",
+  "stockProductId": "bread",
+  "stockCapacity": 300,
+  "inputCapacities": { "flour": 30 },
+  "production": {
+    "mode": "batch",
+    "workPointsPerUnit": 200,
+    "batchSize": 10,
+    "batchStockProductId": "flour",
+    "batchStockAmount": 1
+  }
+}

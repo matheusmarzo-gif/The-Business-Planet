@@ -1,0 +1,19 @@
+{
+  "type": "shop_bread",
+  "kind": "shop",
+  "requiredZone": "urban",
+  "requiresRoad": true,
+  "name": "Padaria",
+  "asset": "/buildings/commerce/padaria.png",
+  "width": 2,
+  "height": 2,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 4, "stone": 4 },
+  "workPoints": 2000,
+  "maxWorkers": 4,
+  "stockProduct": "Pães",
+  "stockProductId": "bread",
+  "stockCapacity": 100,
+  "salesPerWorkerPerDay": 25
+}

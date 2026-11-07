@@ -808,11 +808,12 @@ Na inicialização, instalações existentes recebem números por data de criaç
 demolições não reutilizam números. O cliente formata esses números em algarismos
 romanos (`getResidentialBuildingName`) no painel descritivo. O nome do criador é
 obtido de `neon_auth."user"` e aparece no painel de detalhes; a etiqueta sobre
-cada construção do próprio jogador mostra somente esse nome, sem o nome
-numerado da construção. O servidor envia a cada socket apenas um booleano de
-propriedade para controlar a etiqueta; o ID interno do proprietário é removido
-antes da transmissão ao navegador. **Visualizar** no painel contábil centraliza
-a câmera e seleciona a construção pelo ID recebido.
+cada construção do próprio jogador mostra esse nome. A partir do zoom 4,5 (de
+6), uma segunda etiqueta abaixo identifica o tipo de construção. O servidor
+envia a cada socket apenas um booleano de propriedade para controlar as
+etiquetas; o ID interno do proprietário é removido antes da transmissão ao
+navegador. **Visualizar** no painel contábil centraliza a câmera e seleciona a
+construção pelo ID recebido.
 
 ## Variáveis de ambiente
 

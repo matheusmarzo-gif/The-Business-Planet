@@ -33,6 +33,8 @@ import {
 } from '../types/residence';
 
 const BASE_TILE_SIZE = 24;
+const MAX_CAMERA_ZOOM = 6;
+const BUILDING_TYPE_LABEL_MIN_ZOOM = 4.5;
 const ASSEMBLY_ASSET = '/buildings/assembleia.png';
 const ROAD_ASSETS = Array.from(
   { length: 11 },
@@ -70,6 +72,43 @@ function createCityLabel(name: string, x: number, y: number): PIXI.Container {
   );
   background.endFill();
   container.addChild(background, label);
+  return container;
+}
+
+function createBuildingLabel(
+  ownerName: string,
+  buildingType: string,
+  x: number,
+  y: number,
+): PIXI.Container {
+  const ownerLabel = createCityLabel(ownerName, 0, 0);
+  const typeLabel = new PIXI.Text(buildingType, {
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 10,
+    fontWeight: 'bold',
+    fill: 0xf4e7c2,
+    stroke: 0x101914,
+    strokeThickness: 2,
+    align: 'center',
+  });
+  typeLabel.anchor.set(0.5, 0);
+  typeLabel.position.set(0, 4);
+
+  const typeBackground = new PIXI.Graphics();
+  typeBackground.lineStyle(1, 0xd5c08b, 0.75);
+  typeBackground.beginFill(0x101914, 0.94);
+  typeBackground.drawRoundedRect(
+    -typeLabel.width / 2 - 5,
+    2,
+    typeLabel.width + 10,
+    typeLabel.height + 4,
+    4,
+  );
+  typeBackground.endFill();
+
+  const container = new PIXI.Container();
+  container.position.set(x, y);
+  container.addChild(ownerLabel, typeBackground, typeLabel);
   return container;
 }
 
@@ -385,13 +424,13 @@ export function GameMap({
     }
     for (const building of residentialBuildings) {
       if (!building.isOwnedByCurrentUser || !building.ownerName) continue;
-      const { width } = RESIDENCES[building.type];
+      const definition = RESIDENCES[building.type];
+      const labelX = camera.x + (building.x + definition.width / 2) * tilePixels;
+      const labelY = camera.y + (building.y - 0.35) * tilePixels;
       labelsLayer.addChild(
-        createCityLabel(
-          building.ownerName,
-          camera.x + (building.x + width / 2) * tilePixels,
-          camera.y + (building.y - 0.35) * tilePixels,
-        ),
+        camera.zoom >= BUILDING_TYPE_LABEL_MIN_ZOOM
+          ? createBuildingLabel(building.ownerName, definition.name, labelX, labelY)
+          : createCityLabel(building.ownerName, labelX, labelY),
       );
     }
     if (zonePreview) {
@@ -851,7 +890,11 @@ export function GameMap({
     const currentCamera = cameraRef.current;
     const mouseX = event.clientX - bounds.left;
     const mouseY = event.clientY - bounds.top;
-    const zoom = clamp(currentCamera.zoom * (event.deltaY < 0 ? 1.2 : 1 / 1.2), 0.004, 6);
+    const zoom = clamp(
+      currentCamera.zoom * (event.deltaY < 0 ? 1.2 : 1 / 1.2),
+      0.004,
+      MAX_CAMERA_ZOOM,
+    );
     const ratio = zoom / currentCamera.zoom;
     onCameraChange({
       zoom,

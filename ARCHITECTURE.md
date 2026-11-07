@@ -165,13 +165,16 @@ das cidades legíveis em tamanho fixo na tela.
 - A Prefeitura e a criação/edição de Assembleias são restritas à conta master.
 - A conta master pode abrir o editor de regiões ao clicar em uma Assembleia e
   definir até 100 retângulos urbanos ou rurais por cidade, arrastando no mapa.
-  Cada retângulo deve ficar dentro dos limites municipais e nenhum tile pode
-  pertencer a mais de uma região. O servidor repete a validação sob o lock
-  transacional antes de substituir a lista persistida.
+  Cada retângulo deve ficar dentro dos limites municipais. Regiões do mesmo
+  tipo podem se sobrepor; regiões urbanas e rurais não podem compartilhar
+  tiles. O servidor repete a validação sob o lock transacional antes de
+  substituir a lista persistida.
 - Áreas urbanas são mostradas em azul e rurais em verde somente durante a
   edição master ou ao selecionar uma categoria correspondente. Artesanais,
   Comerciais e Residências mapeiam à área urbana; Fazendas, Recursos e
   Indústrias mapeiam à rural. Prefeitura e Estrada de Terra não usam zonas.
+  Cada tile do footprint pode pertencer a qualquer região do tipo exigido,
+  permitindo construções na interseção de regiões do mesmo tipo.
   Todas as seis categorias de construções são exibidas para jogadores
   autenticados; a Prefeitura permanece restrita à conta master. O servidor
   aplica o mapeamento de zonas ao posicionar qualquer construção do catálogo.

@@ -51,8 +51,9 @@ export interface CityAssembly {
 
 export function getCityZonePlacementError(
   bounds: CityZoneBounds,
+  type: CityZoneType,
   city: Pick<CityAssembly, 'centerX' | 'centerY'>,
-  existingZones: CityZoneBounds[],
+  existingZones: CityZone[],
 ): CityZonePlacementError | null {
   if (
     !Number.isInteger(bounds.minX) ||
@@ -81,6 +82,7 @@ export function getCityZonePlacementError(
   if (
     existingZones.some(
       (zone) =>
+        zone.type !== type &&
         bounds.minX <= zone.maxX &&
         bounds.maxX >= zone.minX &&
         bounds.minY <= zone.maxY &&

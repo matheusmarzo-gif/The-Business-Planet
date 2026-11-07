@@ -1391,6 +1391,7 @@ describe('municipal zones', () => {
     assert.equal(
       getCityZonePlacementError(
         { minX: 849, minY: 849, maxX: 1151, maxY: 1151 },
+        'urban',
         city,
         [],
       ),
@@ -1399,6 +1400,7 @@ describe('municipal zones', () => {
     assert.equal(
       getCityZonePlacementError(
         { minX: 848, minY: 849, maxX: 850, maxY: 850 },
+        'urban',
         city,
         [],
       ),
@@ -1660,21 +1662,101 @@ describe('municipal zones', () => {
     });
   });
 
-  it('rejects shared tiles between zones but allows adjacent rectangles', () => {
-    const existing = [{ minX: 840, minY: 900, maxX: 850, maxY: 910 }];
+  it('allows overlapping zones of the same type', () => {
+    const existing: CityZone[] = [{
+      id: 'urban-1',
+      cityId: 'city',
+      type: 'urban',
+      minX: 840,
+      minY: 900,
+      maxX: 850,
+      maxY: 910,
+    }];
     assert.equal(
       getCityZonePlacementError(
         { minX: 850, minY: 900, maxX: 860, maxY: 910 },
+        'urban',
+        city,
+        existing,
+      ),
+      null,
+    );
+  });
+
+  it('rejects overlapping urban and rural zones but allows them to touch', () => {
+    const existing: CityZone[] = [{
+      id: 'urban',
+      cityId: 'city',
+      type: 'urban',
+      minX: 840,
+      minY: 900,
+      maxX: 850,
+      maxY: 910,
+    }];
+    assert.equal(
+      getCityZonePlacementError(
+        { minX: 851, minY: 900, maxX: 860, maxY: 910 },
+        'rural',
+        city,
+        existing,
+      ),
+      null,
+    );
+    assert.equal(
+      getCityZonePlacementError(
+        { minX: 850, minY: 900, maxX: 860, maxY: 910 },
+        'rural',
         city,
         existing,
       ),
       'zone_overlap',
     );
+  });
+
+  it('accepts a building footprint inside the intersection of same-type zones', () => {
+    const overlappingUrbanZones: CityZone[] = [
+      {
+        id: 'urban-1',
+        cityId: 'city',
+        type: 'urban',
+        minX: 10,
+        minY: 10,
+        maxX: 20,
+        maxY: 20,
+      },
+      {
+        id: 'urban-2',
+        cityId: 'city',
+        type: 'urban',
+        minX: 15,
+        minY: 15,
+        maxX: 25,
+        maxY: 25,
+      },
+    ];
+    const footprint = [
+      { minX: 16, minY: 16, maxX: 17, maxY: 17 },
+    ];
+    assert.equal(isFootprintInCityZone(footprint, overlappingUrbanZones, 'urban'), true);
+    assert.equal(isFootprintInCityZone(footprint, overlappingUrbanZones, 'rural'), false);
     assert.equal(
-      getCityZonePlacementError(
-        { minX: 851, minY: 900, maxX: 860, maxY: 910 },
-        city,
-        existing,
+      getResidencePlacementError(
+        'house_poor1',
+        { x: 16, y: 16 },
+        [{
+          id: 'city',
+          name: 'Test',
+          centerX: 100,
+          centerY: 100,
+          population: 0,
+          wellbeing: 0,
+          economy: 0,
+          zones: overlappingUrbanZones,
+        }],
+        [],
+        [{ x: 15, y: 16 }],
+        () => true,
+        { width: 4000, height: 4000 },
       ),
       null,
     );

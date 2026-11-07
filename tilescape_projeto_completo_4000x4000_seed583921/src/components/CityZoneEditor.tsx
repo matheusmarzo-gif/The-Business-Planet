@@ -36,7 +36,7 @@ export default function CityZoneEditor({
           <X size={17} />
         </button>
       </header>
-      <p>Arraste no mapa para marcar cada área. As regiões não podem se sobrepor.</p>
+      <p>Áreas do mesmo tipo podem se sobrepor; áreas urbanas e rurais não.</p>
       {error && <p className="city-zone-editor-error" role="alert">{error}</p>}
       <div className="city-zone-editor-actions">
         {(['urban', 'rural'] as const).map((type) => (

@@ -404,7 +404,8 @@ export function GameMap({
       const targetCity = cities.find((city) => city.id === zoneEditorCityId);
       const isValid =
         targetCity !== undefined &&
-        getCityZonePlacementError(bounds, targetCity, targetCity.zones) === null;
+        zoneDrawingType !== null &&
+        getCityZonePlacementError(bounds, zoneDrawingType, targetCity, targetCity.zones) === null;
       const zoneColor = isValid
         ? zoneDrawingType === 'urban'
           ? 0x59a8eb

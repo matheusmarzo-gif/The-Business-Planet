@@ -3118,6 +3118,7 @@ async function replaceCityZones(
     for (const zone of zones) {
       const placementError = getCityZonePlacementError(
         zone,
+        zone.type,
         { centerX: cityRow.center_x, centerY: cityRow.center_y },
         normalizedZones,
       );

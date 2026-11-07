@@ -203,11 +203,14 @@ preço médio pago por produto. O rótulo da cidade mantém tamanho legível mes
 ao mudar o zoom. Bem-estar e economia começam em zero.
 Na janela da Assembleia, a conta master pode abrir **Configurar áreas urbanas
 e rurais** e arrastar no mapa para desenhar vários retângulos por tipo. Cada
-região precisa ficar dentro dos 303 × 303 tiles municipais e as áreas não
-podem se sobrepor. Regiões urbanas aparecem em azul e rurais em verde durante
+região precisa ficar dentro dos 303 × 303 tiles municipais. Regiões do mesmo
+tipo podem se sobrepor entre si, mas uma área urbana e uma rural não podem
+compartilhar tiles. Regiões urbanas aparecem em azul e rurais em verde durante
 a edição; jogadores também veem somente a região relevante quando selecionam
 uma categoria: Construções Artesanais, Comerciais e Residências usam áreas
-urbanas; Fazendas, Recursos e Indústrias usam áreas rurais. A definição das
+urbanas; Fazendas, Recursos e Indústrias usam áreas rurais. Cada tile da
+construção precisa estar dentro de pelo menos uma região do tipo exigido,
+incluindo quando a construção ocupa a interseção de regiões. A definição das
 zonas é persistida e sincronizada em tempo real. Jogadores autenticados podem
 iniciar construções em todas as seis categorias; os requisitos de zona, terreno,
 estrada e espaço continuam sendo validados pelo servidor. Residências e demais

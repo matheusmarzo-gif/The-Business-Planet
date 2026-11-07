@@ -169,7 +169,7 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'zone_outside_municipality') {
           error = 'As regiões precisam ficar dentro da área municipal.';
         } else if (body.error === 'zone_overlap') {
-          error = 'As áreas urbanas e rurais não podem se sobrepor.';
+          error = 'Áreas urbanas e rurais não podem se sobrepor.';
         } else if (body.error === 'road_not_owned') {
           error = 'Você só pode demolir estradas que construiu.';
         } else if (body.error === 'road_not_found') {
@@ -1532,13 +1532,13 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     const city = visibleCities.find((item) => item.id === zoneEditorCityId);
     if (!city) return;
     const existingZones = city.zones;
-    const zoneError = getCityZonePlacementError(bounds, city, existingZones);
+    const zoneError = getCityZonePlacementError(bounds, zoneDrawingType, city, existingZones);
     if (zoneError) {
       setZoneEditorError(
         zoneError === 'zone_outside_municipality'
           ? 'A região precisa ficar dentro da área municipal.'
           : zoneError === 'zone_overlap'
-            ? 'As áreas urbanas e rurais não podem se sobrepor.'
+            ? 'Áreas urbanas e rurais não podem se sobrepor.'
             : 'A região desenhada é inválida.',
       );
       return;

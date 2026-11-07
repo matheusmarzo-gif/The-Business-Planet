@@ -1713,7 +1713,7 @@ describe('municipal zones', () => {
     );
   });
 
-  it('accepts a building footprint inside the intersection of same-type zones', () => {
+  it('accepts a building footprint covered by the union of same-type zones', () => {
     const overlappingUrbanZones: CityZone[] = [
       {
         id: 'urban-1',
@@ -1721,17 +1721,17 @@ describe('municipal zones', () => {
         type: 'urban',
         minX: 10,
         minY: 10,
-        maxX: 20,
-        maxY: 20,
+        maxX: 17,
+        maxY: 16,
       },
       {
         id: 'urban-2',
         cityId: 'city',
         type: 'urban',
-        minX: 15,
-        minY: 15,
-        maxX: 25,
-        maxY: 25,
+        minX: 16,
+        minY: 16,
+        maxX: 22,
+        maxY: 22,
       },
     ];
     const footprint = [
@@ -1752,6 +1752,56 @@ describe('municipal zones', () => {
           wellbeing: 0,
           economy: 0,
           zones: overlappingUrbanZones,
+        }],
+        [],
+        [{ x: 15, y: 16 }],
+        () => true,
+        { width: 4000, height: 4000 },
+      ),
+      null,
+    );
+    assert.equal(
+      isFootprintInCityZone(
+        [{ minX: 16, minY: 16, maxX: 17, maxY: 17 }],
+        [overlappingUrbanZones[0]],
+        'urban',
+      ),
+      false,
+    );
+    assert.equal(
+      isFootprintInCityZone(
+        [{ minX: 16, minY: 16, maxX: 17, maxY: 17 }],
+        [
+          overlappingUrbanZones[0],
+          { ...overlappingUrbanZones[1], minY: 18 },
+        ],
+        'urban',
+      ),
+      false,
+    );
+    const ruralZones: CityZone[] = [
+      { ...overlappingUrbanZones[0], maxX: 17, maxY: 22, type: 'rural' },
+      {
+        ...overlappingUrbanZones[1],
+        minX: 17,
+        minY: 10,
+        maxX: 22,
+        type: 'rural',
+      },
+    ];
+    assert.equal(
+      getResidencePlacementError(
+        'warehouse',
+        { x: 16, y: 16 },
+        [{
+          id: 'city',
+          name: 'Test',
+          centerX: 100,
+          centerY: 100,
+          population: 0,
+          wellbeing: 0,
+          economy: 0,
+          zones: ruralZones,
         }],
         [],
         [{ x: 15, y: 16 }],

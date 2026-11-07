@@ -210,12 +210,13 @@ compartilhar tiles. Regiões urbanas aparecem em azul e rurais em verde durante
 a edição; jogadores também veem somente a região relevante quando selecionam
 uma categoria: Construções Artesanais, Comerciais e Residências usam áreas
 urbanas; Fazendas, Recursos e Indústrias usam áreas rurais. Cada tile da
-construção precisa estar dentro de pelo menos uma região do tipo exigido,
-incluindo quando a construção ocupa a interseção de regiões. A definição das
-zonas é persistida e sincronizada em tempo real. Jogadores autenticados podem
-iniciar construções em todas as seis categorias; os requisitos de zona, terreno,
-estrada e espaço continuam sendo validados pelo servidor. Residências e demais
-construções são descritas abaixo.
+construção precisa estar coberto por pelo menos uma região do tipo exigido; a
+construção pode atravessar várias áreas do mesmo tipo, desde que a união delas
+cubra todo o footprint, inclusive tiles compartilhados pela interseção. A
+definição das zonas é persistida e sincronizada em tempo real. Jogadores
+autenticados podem iniciar construções em todas as seis categorias; os
+requisitos de zona, terreno, estrada e espaço continuam sendo validados pelo
+servidor. Residências e demais construções são descritas abaixo.
 Depois de confirmar o local, a Assembleia aparece imediatamente enquanto o
 servidor salva; se a operação falhar, ela é removida e a mensagem de erro é
 exibida.
@@ -248,9 +249,10 @@ por litro de leite.
 ### Residências
 
 Na categoria **Residências**, selecione uma das três casas para ver no cursor
-uma prévia verde/vermelha. A casa precisa caber inteira em uma área urbana da
-cidade, ficar em terra, não ocupar outra construção ou estrada e estar ao lado
-de uma estrada. Clique para iniciar a obra:
+uma prévia verde/vermelha. Cada tile da casa precisa estar coberto por uma ou
+mais áreas urbanas da cidade; o footprint pode atravessar regiões urbanas
+vizinhas. Também precisa ficar em terra, sem ocupar outra construção ou estrada
+e ao lado de uma estrada. Clique para iniciar a obra:
 
 | Residência | Tamanho | Capacidade | Apreço local | Custo | Trabalho necessário |
 | --- | --- | --- | --- | --- | --- |
@@ -317,10 +319,11 @@ pesada; cada compra é limitada aos Work Points disponíveis naquela rodada.
 
 Na categoria **Comerciais**, a **Loja de Arroz** (2 × 2 tiles, até 4 funcionários,
 estoque máximo de 20 unidades de arroz) custa 100 madeiras e 20 pedras e exige
-9.000 Work Points. Deve ficar inteira em área urbana, ao lado de uma estrada e
-sem sobrepor outras construções. O fluxo (prévia, obra, demolição, painel
-lateral com raio de busca de 60 tiles) é o mesmo das fazendas. As vendas usam
-arroz entregue pelo armazém ligado e o preço configurado pelo dono.
+9.000 Work Points. Cada tile deve estar coberto por uma ou mais áreas urbanas,
+ao lado de uma estrada e sem sobrepor outras construções. O fluxo (prévia, obra,
+demolição, painel lateral com raio de busca de 60 tiles) é o mesmo das fazendas.
+As vendas usam arroz entregue pelo armazém ligado e o preço configurado pelo
+dono.
 
 As **Lojas de Batata, Milho, Cevada e Trigo** e o **Açougue** usam os mesmos
 parâmetros de construção e estoque da Loja de Arroz: 2 × 2 tiles, até 4
@@ -442,12 +445,12 @@ validade infinita.
 
 Na categoria **Fazendas**, as fazendas de arroz, batata, trigo, cevada, milho e
 bovina têm 4 × 4 tiles, até 30 funcionários, estoque máximo de 300 unidades,
-custo de 200 madeiras e 20 pedras e exigem 12.000 Work Points. Todas devem ficar
-inteiramente em área rural, sem sobrepor estradas ou construções, e ao lado de
-uma estrada. Toda obra e fazenda concluída têm um raio de 60 tiles para procurar
-trabalhadores (exibido no painel; veja "Empregos e salários"). O funcionamento
-é o mesmo das residências (prévia, obra, demolição e painel lateral), mas sem
-moradores nem aluguel.
+custo de 200 madeiras e 20 pedras e exigem 12.000 Work Points. Cada tile deve
+estar coberto por uma ou mais áreas rurais, sem sobrepor estradas ou construções,
+e ao lado de uma estrada. Toda obra e fazenda concluída têm um raio de 60 tiles
+para procurar trabalhadores (exibido no painel; veja "Empregos e salários"). O
+funcionamento é o mesmo das residências (prévia, obra, demolição e painel
+lateral), mas sem moradores nem aluguel.
 
 | Fazenda | Produto | Eficiência pelo mês de plantio (1–3 / 4–6 / 7–9 / 10–12) | Crescimento | Work Points por dia / por unidade colhida | Rendimento máximo |
 |---|---|---|---:|---:|---:|

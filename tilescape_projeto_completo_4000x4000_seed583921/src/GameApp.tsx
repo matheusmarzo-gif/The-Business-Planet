@@ -179,9 +179,9 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'residence_not_found') {
           error = 'Essa residência não existe mais.';
         } else if (body.error === 'outside_urban_zone') {
-          error = 'A construção precisa ficar dentro de uma área urbana.';
+          error = 'Cada tile da construção precisa estar coberto por uma ou mais áreas urbanas.';
         } else if (body.error === 'outside_rural_zone') {
-          error = 'A construção precisa ficar dentro de uma área rural.';
+          error = 'Cada tile da construção precisa estar coberto por uma ou mais áreas rurais.';
         } else if (body.error === 'residence_outside_municipality') {
           error = 'A construção precisa ficar dentro da área municipal.';
         } else if (body.error === 'not_adjacent_to_road') {
@@ -1365,8 +1365,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       invalid_residence: 'A residência ou o local escolhido é inválido.',
       map_bounds: 'A residência precisa caber inteira dentro do mapa.',
       outside_municipality: 'A residência precisa ficar dentro da área municipal.',
-      outside_urban_zone: 'A residência precisa ficar inteiramente dentro de uma área urbana.',
-      outside_rural_zone: 'A construção precisa ficar inteiramente dentro de uma área rural.',
+      outside_urban_zone: 'Cada tile da construção precisa estar coberto por uma ou mais áreas urbanas.',
+      outside_rural_zone: 'Cada tile da construção precisa estar coberto por uma ou mais áreas rurais.',
       water: 'A residência só pode ser construída em terra.',
       not_on_water: 'O Pesqueiro precisa ter pelo menos um tile sobre a água.',
       not_adjacent_to_water: 'A Coleta de Sal precisa ficar ao lado de um tile de água.',

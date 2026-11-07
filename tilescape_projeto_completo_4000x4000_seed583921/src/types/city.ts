@@ -117,19 +117,35 @@ export function isFootprintInCityZone(
   zones: CityZone[],
   requiredType: CityZoneType,
 ): boolean {
-  return (
-    footprint.length > 0 &&
-    footprint.every((tile) =>
-      zones.some(
-        (zone) =>
-          zone.type === requiredType &&
-          tile.minX >= zone.minX &&
-          tile.maxX <= zone.maxX &&
-          tile.minY >= zone.minY &&
-          tile.maxY <= zone.maxY,
-      ),
-    )
-  );
+  if (footprint.length === 0) return false;
+  const matchingZones = zones.filter((zone) => zone.type === requiredType);
+
+  for (const area of footprint) {
+    if (
+      !Number.isInteger(area.minX) ||
+      !Number.isInteger(area.minY) ||
+      !Number.isInteger(area.maxX) ||
+      !Number.isInteger(area.maxY) ||
+      area.minX > area.maxX ||
+      area.minY > area.maxY
+    ) {
+      return false;
+    }
+
+    for (let y = area.minY; y <= area.maxY; y += 1) {
+      for (let x = area.minX; x <= area.maxX; x += 1) {
+        if (
+          !matchingZones.some(
+            (zone) => x >= zone.minX && x <= zone.maxX && y >= zone.minY && y <= zone.maxY,
+          )
+        ) {
+          return false;
+        }
+      }
+    }
+  }
+
+  return true;
 }
 
 export function getCityPlacementError(

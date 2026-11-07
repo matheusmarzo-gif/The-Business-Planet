@@ -173,8 +173,9 @@ das cidades legíveis em tamanho fixo na tela.
   edição master ou ao selecionar uma categoria correspondente. Artesanais,
   Comerciais e Residências mapeiam à área urbana; Fazendas, Recursos e
   Indústrias mapeiam à rural. Prefeitura e Estrada de Terra não usam zonas.
-  Cada tile do footprint pode pertencer a qualquer região do tipo exigido,
-  permitindo construções na interseção de regiões do mesmo tipo.
+  Cada tile do footprint deve estar coberto por pelo menos uma região do tipo
+  exigido; a união de várias regiões do mesmo tipo pode cobrir a construção
+  inteira, inclusive quando ela atravessa a interseção delas.
   Todas as seis categorias de construções são exibidas para jogadores
   autenticados; a Prefeitura permanece restrita à conta master. O servidor
   aplica o mapeamento de zonas ao posicionar qualquer construção do catálogo.

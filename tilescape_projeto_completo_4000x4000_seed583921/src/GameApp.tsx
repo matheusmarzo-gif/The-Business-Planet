@@ -54,6 +54,7 @@ import {
   DEFAULT_WAGE,
   DEFAULT_WORK_HOURS,
   RESIDENCES,
+  getConstructionMenuDefinitions,
   RESIDENCE_STATS,
   KIND_CATEGORY,
   ResidentialBuilding,
@@ -2157,9 +2158,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             activeCategory === 'comerciais' ||
             activeCategory === 'industrias' ? (
             <>
-              {Object.values(RESIDENCES)
-                .filter((residence) => KIND_CATEGORY[residence.kind] === activeCategory)
-                .map((residence) => (
+              {getConstructionMenuDefinitions(activeCategory).map((residence) => (
                 <button
                   className={`construction-card${residencePlacementType === residence.type ? ' active' : ''}`}
                   key={residence.type}
@@ -2183,7 +2182,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                     <small>
                       {residence.type === 'warehouse'
                         ? `Primeiro armazém gratuito e instantâneo · seguintes: ${residence.cost.wood} madeira, ${residence.cost.stone} pedra`
-                        : `Custo: ${residence.cost.wood} madeira · ${residence.cost.stone} pedra`}
+                        : `Custo: ${residence.cost.wood} madeira · ${residence.cost.stone} pedra${residence.cost.iron ? ` · ${residence.cost.iron} ferro` : ''}`}
                     </small>
                     <small>
                       {residence.type === 'warehouse'

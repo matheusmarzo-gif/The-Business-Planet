@@ -163,12 +163,21 @@ produção do jogador conectado. Ao selecionar uma categoria de construção na
 barra inferior, o catálogo abre em um painel lateral à direita; escolha um
 edifício no painel e clique no mapa para posicioná-lo.
 
+A ordem dos cartões é definida por categoria: Comerciais lista primeiro as
+lojas de arroz, trigo, cevada, batata e milho, depois Peixaria, Leitaria e
+Açougue; em seguida lojas de açúcar, especiarias, vegetais e sal, Padaria,
+Queijaria, Frutaria e Chocolateria. Fazendas lista arroz, trigo, cevada,
+batata, milho, leiteira, bovina, cana, vegetais, especiarias, cacau e frutas.
+Construções Artesanais lista Pesqueiro, Ferramentaria, Carvoaria e Casa de
+Engenho; Indústrias lista Armazém, Moinho, Fábrica de Pães, Fábrica de Queijo
+e Fábrica de Chocolate.
+
 ### Configuração editável do jogo
 
 Os dados das 44 construções ficam em arquivos individuais
 [`config/construcoes/`](./config/construcoes/), um JSON válido por arquivo
 `.txt` nomeado pelo tipo interno (por exemplo, `farm_rice.txt`). É possível
-ajustar dimensões, zona, estrada/água exigida, custo de Madeira/Pedra, Work
+ajustar dimensões, zona, estrada/água exigida, custo de Madeira/Pedra/Ferro, Work
 Points de construção, funcionários, capacidade e estoques de produtos e
 insumos, receitas, regras de produção e safras sazonais. Os parâmetros das
 fórmulas residem em [`config/formulas/consumo.txt`](./config/formulas/consumo.txt),
@@ -320,20 +329,20 @@ automática. Pedra exige mais Work Points por unidade que Madeira por ser mais
 pesada; cada compra é limitada aos Work Points disponíveis naquela rodada.
 
 O **Moinho**, a **Fábrica de Pães** e a **Fábrica de Queijo** também ficam na
-categoria Indústrias. O Moinho (3 × 3, 60 funcionários) custa 60 madeiras e 20
-pedras, exige 60.000 Work Points e guarda até 100 farinhas. Seu dono escolhe no
+categoria Indústrias. O Moinho (3 × 3, 60 funcionários) custa 100 madeiras,
+40 pedras e 40 ferros, exige 110.000 Work Points e guarda até 100 farinhas. Seu dono escolhe no
 painel lateral da construção concluída se o insumo será trigo, cevada ou milho;
 somente a matéria-prima escolhida é recebida do armazém ligado, até 20 unidades.
 Trocar a seleção descarta o
 estoque restante da matéria-prima anterior. Cada unidade de grão e 300 Work
-Points produz 5 farinhas. A Fábrica de Pães (3 × 3, 60 funcionários) custa 60
-madeiras e 30 pedras, exige 80.000 Work Points e guarda 30 farinhas e 300 pães;
+Points produz 5 farinhas. A Fábrica de Pães (3 × 3, 60 funcionários) custa 180
+madeiras, 120 pedras e 60 ferros, exige 480.000 Work Points e guarda 30 farinhas e 300 pães;
 cada farinha e 200 Work Points produz 10 pães. A Fábrica de Queijo (3 × 3, 200
-funcionários) custa 120 madeiras e 60 pedras, exige 100.000 Work Points e guarda
+funcionários) custa 360 madeiras, 240 pedras e 120 ferros, exige 960.000 Work Points e guarda
 2.000 litros de leite e 100 queijos; cada 20 litros e 200 Work Points produz 1
 queijo. Os três edifícios recebem seus insumos pelo armazém ligado e enviam a
 produção ao armazém. A **Fábrica de Chocolate** (4 × 4, 40 funcionários) custa
-200 madeiras e 100 pedras, exige 150.000 Work Points e guarda 50 chocolates, 5
+180 madeiras, 120 pedras e 60 ferros, exige 480.000 Work Points e guarda 50 chocolates, 5
 cacaus, 130 litros de leite, 10 açúcares, 100 carvões e 200 Ferramentas. A cada
 400 Work Points produz 1 chocolate: consome 2 carvões, 2 leites e 4 Ferramentas;
 há 10% de chance proporcional de consumir 1 cacau, 20% de consumir 1 açúcar e
@@ -383,8 +392,8 @@ recebidos no mapa e os valores digitados no formulário.
 ### Pesqueiro e Peixaria
 
 Na categoria **Construções Artesanais**, o **Pesqueiro** (2 × 2 tiles, até 40
-funcionários, estoque máximo de 300 peixes e 10 Ferramentas) custa 60 madeiras e
-10 pedras e exige 12.000 Work Points. Deve ficar em área urbana, ao lado de uma
+funcionários, estoque máximo de 300 peixes e 10 Ferramentas) custa 50 madeiras e
+15 pedras e exige 25.000 Work Points. Deve ficar em área urbana, ao lado de uma
 estrada e com pelo menos um tile sobre a água (o resto pode ser terra). Produz
 diariamente (00:00) 1 peixe a cada 100 Work Points. Consome Ferramentas: 0,05 por
 funcionário/dia (valores abaixo de 1 são probabilidade). Sem Ferramentas, a
@@ -400,8 +409,8 @@ peixe aparece em "Ver consumo da casa".
 ### Fazenda leiteira e Leitaria
 
 Na categoria **Fazendas**, a **Fazenda leiteira** (3 × 3 tiles, até 10
-funcionários, estoque máximo de 400 litros) custa 60 madeiras e 60 pedras e
-exige 12.000 Work Points. Ela produz 1 litro a cada 5 Work Points efetivos; sua
+funcionários, estoque máximo de 400 litros) custa 50 madeiras e 15 pedras e
+exige 25.000 Work Points. Ela produz 1 litro a cada 5 Work Points efetivos; sua
 eficiência é de 40% nos meses 1–3, 100% nos meses 4–6, 80% nos meses 7–9 e
 60% nos meses 10–12. O leite produzido segue para o armazém ligado.
 
@@ -459,10 +468,10 @@ Na categoria **Recursos** (área rural, ao lado de estrada):
 
 | Construção | Tam. | Func. | Estoque máx. | Custo | Work Points | Produção diária |
 |---|---|---|---|---|---|---|
-| Madeireira | 2 × 2 | 10 | 30 madeiras, 5 Ferramentas | 60 madeira, 10 pedra | 6.000 | 1 madeira / 1000 WP |
-| Pedreira | 2 × 2 | 30 | 10 pedras, 5 Ferramentas | 60 madeira, 10 pedra | 6.000 | 1 pedra / 3000 WP |
-| Mina de Ferro | 3 × 3 | 30 | 5 ferro, 5 Ferramentas | 120 madeira, 60 pedra | 24.000 | 1 ferro / 3000 WP |
-| Coleta de Sal | 2 × 2 | 10 | 100 sal, 5 Ferramentas | 30 madeira, 20 pedra | 6.000 | 1 sal / 400 WP efetivos; fração é chance diária |
+| Madeireira | 2 × 2 | 10 | 30 madeiras, 5 Ferramentas | 20 madeira, 5 pedra | 35.000 | 1 madeira / 1000 WP |
+| Pedreira | 2 × 2 | 30 | 10 pedras, 5 Ferramentas | 60 madeira, 20 pedra | 120.000 | 1 pedra / 3000 WP |
+| Mina de Ferro | 3 × 3 | 30 | 5 ferro, 5 Ferramentas | 60 madeira, 20 pedra | 120.000 | 1 ferro / 3000 WP |
+| Coleta de Sal | 2 × 2 | 10 | 100 sal, 5 Ferramentas | 100 madeira, 40 pedra, 40 ferro | 10.000 | 1 sal / 400 WP efetivos; fração é chance diária |
 
 Abaixo do mínimo de WP, a fração vira probabilidade de produzir 1 unidade. A
 demanda de Ferramentas é 0,05 por funcionário/dia (0,15 na Mina) com a mesma
@@ -473,20 +482,20 @@ aceita.
 
 Na categoria **Artesanais** (área urbana, ao lado de estrada), a **Ferramentaria**
 (2 × 2, 30 funcionários, estoque máx. 100 Ferramentas, 30 carvões e 5 ferro)
-custa 60 madeiras e 60 pedras e exige 12.000 Work Points. Por dia, cada lote de
+custa 60 madeiras e 20 pedras e exige 120.000 Work Points. Por dia, cada lote de
 1.000 WP + 5 carvões + 1 ferro produz 100 Ferramentas. Carvão e ferro chegam pelo
 armazém ligado.
 
 Na mesma categoria **Artesanais**, a **Casa de Engenho** (3 × 3, até 60
-funcionários) custa 30 madeiras e 80 pedras e exige 12.000 Work Points.
+funcionários) custa 100 madeiras, 40 pedras e 40 ferros e exige 60.000 Work Points.
 Armazena até 200 unidades de açúcar, 400 de cana, 30 de carvão e 5 Ferramentas.
 Cada lote de 600 Work Points efetivos, 3 carvões e 6 canas produz 1 açúcar. A
 demanda de Ferramentas é 0,05 por funcionário/dia, com a mesma penalidade de eficiência do
 Pesqueiro. Cana, carvão e Ferramentas são recebidos pelo armazém ligado; a cana
 armazenada na construção também está sujeita à validade de 3 dias.
 
-A **Carvoaria** (3 × 3, até 20 funcionários) custa 30 madeiras e 60 pedras e
-exige 12.000 Work Points. Armazena até 100 carvões, 10 Ferramentas e 30 madeiras
+A **Carvoaria** (3 × 3, até 20 funcionários) custa 60 madeiras e 20 pedras e
+exige 120.000 Work Points. Armazena até 100 carvões, 10 Ferramentas e 30 madeiras
 (limite de madeira adotado como nas outras oficinas). Cada 200 Work Points
 efetivos e 1 madeira produzem 5 carvões. Ferramentas e madeira são recebidas
 pelo armazém ligado; a demanda de Ferramentas é 0,05 por funcionário/dia e
@@ -495,9 +504,11 @@ validade infinita.
 
 ### Fazendas
 
-Na categoria **Fazendas**, as fazendas de arroz, batata, trigo, cevada, milho e
-bovina têm 4 × 4 tiles, até 30 funcionários, estoque máximo de 300 unidades,
-custo de 200 madeiras e 20 pedras e exigem 12.000 Work Points. Cada tile deve
+Na categoria **Fazendas**, as fazendas de arroz, batata, trigo, cevada e milho
+têm 4 × 4 tiles, até 30 funcionários, estoque máximo de 300 unidades, custo de
+100 madeiras e 40 pedras e exigem 30.000 Work Points. A Fazenda Bovina também
+ocupa 4 × 4 e emprega até 30; custa 250 madeiras e 75 pedras e exige 125.000
+Work Points. Cada tile deve
 estar coberto por uma ou mais áreas rurais, sem sobrepor estradas ou construções,
 e ao lado de uma estrada. Toda obra e fazenda concluída têm um raio de 60 tiles
 para procurar trabalhadores (exibido no painel; veja "Empregos e salários"). O
@@ -523,12 +534,13 @@ de `min(1, Work Points / requisito diário)` durante o crescimento também reduz
 proporcionalmente o rendimento. O botão do painel inicia ou reinicia o ciclo;
 durante a colheita (ou corte, na fazenda bovina), cada unidade exige os Work
 Points indicados e a produção é limitada ao estoque livre. A carne vermelha tem
-validade de 30 dias. A Fazenda de Cana e a Fazenda de Especiarias ocupam 3 × 3,
-empregam até 10 e 50 funcionários, respectivamente, custam 60 madeiras e 60
-pedras e exigem 12.000 Work Points. Seus estoques máximos são 2.000 canas e 400
+validade de 30 dias. A Fazenda de Cana e a Fazenda de Especiarias ocupam 3 × 3
+e empregam até 10 e 50 funcionários, respectivamente. Cana custa 100 madeiras,
+40 pedras e 40 ferros, com 10.000 Work Points; especiarias custa 200 madeiras,
+80 pedras e 80 ferros, com 320.000 Work Points. Seus estoques máximos são 2.000 canas e 400
 especiarias; o excedente da colheita aguarda no campo até haver espaço livre.
 A Fazenda de Vegetais também ocupa 3 × 3, emprega até 50 funcionários, custa
-60 madeiras e 60 pedras, exige 12.000 Work Points e guarda até 100 vegetais.
+100 madeiras, 40 pedras e 40 ferros, exige 110.000 Work Points e guarda até 100 vegetais.
 Nas fazendas agrícolas com ciclo de cultivo, **Configurações avançadas** permite
 automatizar o replantio: selecione os meses permitidos e quantos funcionários
 deseja durante o crescimento e durante a colheita. A automação não interrompe um
@@ -668,7 +680,10 @@ indicados, limitada ao estoque livre (300; ligar a um armazém libera espaço).
 Durante a colheita, a fazenda não inicia outro ciclo; a automação espera a
 colheita terminar e um mês selecionado para replantar.
 A **Fazenda de Frutas** e a **Fazenda de Cacau** ocupam 4 × 4 tiles, empregam
-até 50 funcionários e levam 12 meses para crescer. A Fazenda de Frutas exige
+até 50 funcionários e levam 12 meses para crescer. A Fazenda de Frutas custa
+360 madeiras, 240 pedras e 120 ferros e exige 960.000 Work Points. A Fazenda de
+Cacau custa 180 madeiras, 120 pedras e 60 ferros e exige 480.000 Work Points.
+A Fazenda de Frutas exige
 5.000 Work Points/dia, colhe até 1.000 unidades a 20 Work Points por unidade
 e tem eficiência sazonal de 100%, 80%, 60% e 40%. A Fazenda de Cacau exige
 2.000 Work Points/dia, colhe até 400 unidades a 62 Work Points por unidade

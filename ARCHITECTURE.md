@@ -246,6 +246,14 @@ mapeamento e verificar todas as curvas.
 
 ## Residências
 
+- A ordem de construção é explícita em `getConstructionMenuDefinitions`:
+  Comerciais (lojas de arroz, trigo, cevada, batata e milho; Peixaria, Leitaria,
+  Açougue; lojas de açúcar, especiarias, vegetais e sal; Padaria, Queijaria,
+  Frutaria, Chocolateria), Fazendas (arroz, trigo, cevada, batata, milho,
+  leiteira, bovina, cana, vegetais, especiarias, cacau, frutas), Artesanais
+  (Pesqueiro, Ferramentaria, Carvoaria, Casa de Engenho) e Indústrias (Armazém,
+  Moinho, Fábrica de Pães, Fábrica de Queijo, Fábrica de Chocolate). O painel
+  exibe custos em madeira, pedra e ferro quando definidos.
 - O catálogo gerado em `src/generated/gameConfig.ts` define `house_poor1`
   (2 × 2 tiles, capacidade 4, apreço local 50, custo de 100 madeiras e 30
   pedras, 18.000 Work Points), `house_poor2` (3 × 3, capacidade 32, apreço
@@ -288,7 +296,10 @@ mapeamento e verificar todas as curvas.
   `loja_cevada.png`, `loja_trigo.png` e `loja_acougue.png`.
 - `farm_rice` (categoria Fazendas, área rural) usa o mesmo catálogo e a mesma
   tabela `residential_buildings`: 4 × 4, até 30 funcionários, estoque máximo de
-  300 de Arroz, custo de 200 madeiras e 20 pedras, 12.000 Work Points. Exige
+  300 de Arroz, custo de 100 madeiras e 40 pedras, 30.000 Work Points. As
+  fazendas de trigo, cevada, batata e milho compartilham dimensão, limite de
+  funcionários e custos. A Fazenda Bovina custa 250 madeiras/75 pedras e exige
+  125.000 Work Points. Exige
   zona rural, estrada ortogonalmente adjacente (como as casas), não recebe imigrantes e não tem aluguel
   (`PATCH .../rent` só vale para casas). Toda obra e a fazenda concluída têm
   uma área de busca de trabalhadores de 60 tiles de raio a partir do centro
@@ -296,13 +307,15 @@ mapeamento e verificar todas as curvas.
   não existe. O CHECK de `building_type` é recriado
   de forma idempotente no schema. Sprite: `public/buildings/farms/fazenda_arroz.png`.
 - `farm_dairy` (categoria Fazendas, área rural) ocupa 3 × 3 tiles, emprega até
-  10 funcionários, guarda até 400 litros de leite, custa 60 madeiras e 60
-  pedras e exige 12.000 Work Points. A regra `accumulate` produz 1 litro a
+  10 funcionários, guarda até 400 litros de leite, custa 50 madeiras/15 pedras
+  e exige 25.000 Work Points. A regra `accumulate` produz 1 litro a
   cada 5 Work Points efetivos, com eficiência mensal de 40%, 100%, 80% e 60%
   nos respectivos trimestres. Seu leite é transferido ao armazém ligado.
   Sprite: `public/buildings/farms/fazenda_leiteira.png`.
 - `farm_cane`, `farm_spices` e `farm_vegetables` (categoria Fazendas) usam o ciclo agrícola comum
-  em áreas rurais: 3 × 3, 60 madeiras e 60 pedras, 12.000 Work Points.
+  em áreas rurais: 3 × 3. Cana custa 100 madeiras/40 pedras/40 ferros e exige
+  10.000 Work Points; especiarias custa 200/80/80 e exige 320.000 WP; vegetais
+  custa 100/40/40 e exige 110.000 WP.
   Cana e especiarias empregam até 10/50 pessoas, armazenam 2.000 canas/400
   especiarias e têm requisitos diários de 100/5.000 WP, crescimento de seis
   meses, colheita de 25/10 WP por unidade, rendimento de 2.000/600 e eficiências
@@ -314,8 +327,9 @@ mapeamento e verificar todas as curvas.
   `public/buildings/farms/fazenda_especiarias.png` e
   `public/buildings/farms/fazenda_vegetais.png`.
 - `farm_fruit` e `farm_cocoa` usam o ciclo agrícola comum em áreas rurais. Ambas
-  ocupam 4 × 4, empregam até 50, custam 200 madeiras/100 pedras e exigem
-  120.000 WP. A Fazenda de Frutas armazena 1.000 unidades, exige 5.000 WP/dia,
+  ocupam 4 × 4 e empregam até 50. Frutas custa 360 madeiras/240 pedras/120 ferros
+  e exige 960.000 WP; cacau custa 180/120/60 e exige 480.000 WP. A Fazenda de
+  Frutas armazena 1.000 unidades, exige 5.000 WP/dia,
   cresce por 12 meses, colhe a 20 WP/unidade, rende até 1.000 e tem eficiências
   sazonais 100/80/60/40%. A Fazenda de Cacau armazena 400, exige 2.000 WP/dia,
   cresce por 12 meses, colhe a 62 WP/unidade, rende até 400 e tem eficiências
@@ -506,7 +520,7 @@ mapeamento e verificar todas as curvas.
 
   ## Configuração editável das regras
 
-  Os 33 arquivos `config/construcoes/<tipo>.txt` são a fonte dos dados do catálogo:
+  Os 44 arquivos `config/construcoes/<tipo>.txt` são a fonte dos dados do catálogo:
   nome, imagem pública, categoria funcional, zona e requisitos de posicionamento,
   dimensões, custos, Work Points de obra, capacidade de trabalhadores, estoques
   de produtos/insumos, receitas, regras de produção e safras sazonais. Os arquivos
@@ -582,8 +596,9 @@ mapeamento e verificar todas as curvas.
   `shop_spices`):
   `src/types/fishing.ts`
   concentra as regras puras. O Pesqueiro (categoria Artesanais, `kind: 'fishery'`,
-  2 × 2, 10 funcionários, estoque de 300 peixes e 10 Ferramentas) precisa de área
-  urbana, ao lado de estrada e com pelo menos 1 tile sobre água (`requiresWater`;
+  2 × 2, 40 funcionários, estoque de 300 peixes e 10 Ferramentas, custa
+  50 madeiras/15 pedras e exige 25.000 WP. Precisa de área urbana, ao lado de
+  estrada e com pelo menos 1 tile sobre água (`requiresWater`;
   erro `not_on_water`; demais tiles podem ser terra). Colunas
   `tool_stock`, `efficiency_penalty` (0–90) e `production_progress` em
   `residential_buildings` (migração aditiva em `schema.sql`, que também amplia o
@@ -614,14 +629,18 @@ mapeamento e verificar todas as curvas.
   `ResidenceDefinition.production` (`ProductionRule`: `accumulate`, `chance` ou
   `batch`) e executada por `planProduction` (`fishing.ts`) no bloco diário de
   `runDailyEmployment`, que serve a qualquer construção com `production`.
-  Madeireira: 1 madeira/1000 WP; Pedreira e Mina: 1 pedra/ferro a cada 3000 WP
+  Madeireira custa 20 madeiras/5 pedras e exige 35.000 WP; Pedreira e Mina
+  custam 60 madeiras/20 pedras e exigem 120.000 WP. Madeireira: 1 madeira/1000
+  WP; Pedreira e Mina: 1 pedra/ferro a cada 3000 WP
   (fração = probabilidade); demanda de Ferramentas 0,05 (0,15 na Mina) com a
   penalidade do Pesqueiro. Ferramentaria: armazena 30 carvões e 5 ferros; cada
   lote de 1.000 WP + 5 carvões + 1 ferro = 100 Ferramentas, sem penalidade.
+  Ferramentaria e Carvoaria custam 60 madeiras/20 pedras e exigem 120.000 WP.
   Estoques de carvão e ferro são abastecidos pelo armazém ligado (`InputProduct`),
   em `charcoal_stock` e `iron_stock`.
 - `salt_gatherer` (categoria Recursos, zona rural) ocupa 2 × 2, emprega até 10,
-  guarda 100 sal e 5 Ferramentas, custa 30 madeiras/20 pedras e exige 6.000 WP.
+  guarda 100 sal e 5 Ferramentas, custa 100 madeiras/40 pedras/40 ferros e
+  exige 10.000 WP.
   Precisa de estrada adjacente e água adjacente, sem ocupar água. A categoria
   de mapa ainda não distingue rios de outros tiles aquáticos, então qualquer
   água adjacente atende ao requisito. Produz sal pelo modo `chance`: 1 unidade
@@ -629,7 +648,7 @@ mapeamento e verificar todas as curvas.
   0,05 por funcionário e penalidade igual à do Pesqueiro. Sprite
   `public/buildings/resources/coleta_sal.png`.
 - `sugar_mill` (Casa de Engenho, categoria Artesanais, zona urbana) ocupa 3 × 3,
-  emprega até 60, custa 30 madeiras/80 pedras e exige 12.000 WP. Guarda 200
+  emprega até 60, custa 100 madeiras/40 pedras/40 ferros e exige 60.000 WP. Guarda 200
   açúcares, 400 canas, 30 carvões e 5 Ferramentas. Cada lote de 600 WP efetivos
   + 3 carvões + 6 canas produz 1 açúcar; a penalidade por Ferramentas é igual à
   do Pesqueiro. `charcoal_stock` e `sugarcane_stock` são colunas aditivas no
@@ -637,7 +656,7 @@ mapeamento e verificar todas as curvas.
   `planProduction`; a cana nesse insumo também sofre validade de 3 dias. Sprite
   `public/buildings/artisan/casa_de_engenho.png`.
 - `charcoal_works` (Carvoaria, categoria Artesanais, zona urbana) ocupa 3 × 3,
-  emprega até 20, custa 30 madeiras/60 pedras e exige 12.000 WP. Guarda 100
+  emprega até 20, custa 60 madeiras/20 pedras e exige 120.000 WP. Guarda 100
   carvões, 10 Ferramentas e 30 madeiras (capacidade de insumo definida pelo
   padrão de outras oficinas). Cada lote de 200 WP efetivos e 1 madeira produz
   5 carvões. A demanda de Ferramentas é 0,05 por funcionário/dia, com a
@@ -647,18 +666,18 @@ mapeamento e verificar todas as curvas.
   `public/buildings/artisan/carvoaria.png` e `public/products/carvao.png`.
 - `flour_mill`, `bread_factory`, `cheese_factory` e `chocolate_factory` (categoria Indústrias, zona
   rural) recebem seus insumos pelo armazém ligado. O Moinho ocupa 3 × 3, emprega
-  até 60, custa 60 madeiras/20 pedras e exige 60.000 WP; armazena 100 farinhas e
+  até 60, custa 100 madeiras/40 pedras/40 ferros e exige 110.000 WP; armazena 100 farinhas e
   até 20 unidades de cada grão elegível, mas só recebe o item selecionado pelo
   dono no painel lateral do Moinho concluído (trigo por padrão). O seletor e sua
   ação de salvar são renderizados independentemente do formulário de preço das
   lojas. Cada 300 WP + 1 grão produz 5 farinhas. Trocar a
   matéria-prima remove o saldo anterior de `building_input_stock`. A Fábrica de
-  Pães ocupa 3 × 3, emprega 60, custa 60 madeiras/30 pedras, exige 80.000 WP,
-  armazena 300 pães/30 farinhas e produz 10 pães por farinha + 200 WP. A
-  Fábrica de Queijo ocupa 3 × 3, emprega 200, custa 120 madeiras/60 pedras,
-  exige 100.000 WP, armazena 100 queijos/2.000 litros de leite e produz 1 queijo
-  por 20 litros + 200 WP. A Fábrica de Chocolate ocupa 4 × 4, emprega 40,
-  custa 200 madeiras/100 pedras, exige 150.000 WP e armazena 50 chocolates,
+  Pães ocupa 3 × 3, emprega 60, custa 180 madeiras/120 pedras/60 ferros e exige
+  480.000 WP, armazena 300 pães/30 farinhas e produz 10 pães por farinha + 200 WP.
+  A Fábrica de Queijo ocupa 3 × 3, emprega 200, custa 360 madeiras/240 pedras/
+  120 ferros, exige 960.000 WP, armazena 100 queijos/2.000 litros de leite e
+  produz 1 queijo por 20 litros + 200 WP. A Fábrica de Chocolate ocupa 4 × 4,
+  emprega 40, custa 180 madeiras/120 pedras/60 ferros e exige 480.000 WP e armazena 50 chocolates,
   5 cacaus, 130 litros de leite, 10 açúcares, 100 carvões e 200 Ferramentas.
   Cada 400 WP gera 1 chocolate, consumindo 2 carvões, 2 leites e 4 Ferramentas;
   os consumos esperados de cacau (0,1), açúcar (0,2) e leite extra (0,6) por

@@ -216,6 +216,64 @@ export function parseRent(value: unknown): number | null {
 
 export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = BUILDING_CONFIGS;
 
+const CONSTRUCTION_MENU_ORDER: Partial<Record<ConstructionCategory, readonly ResidenceType[]>> = {
+  artesanais: ['fishery', 'toolmaker', 'charcoal_works', 'sugar_mill'],
+  comerciais: [
+    'shop_rice',
+    'shop_wheat',
+    'shop_barley',
+    'shop_potato',
+    'shop_corn',
+    'shop_fish',
+    'shop_milk',
+    'shop_butcher',
+    'shop_sugar',
+    'shop_spices',
+    'shop_vegetables',
+    'shop_salt',
+    'shop_bread',
+    'shop_cheese',
+    'shop_fruit',
+    'shop_chocolate',
+  ],
+  fazendas: [
+    'farm_rice',
+    'farm_wheat',
+    'farm_barley',
+    'farm_potato',
+    'farm_corn',
+    'farm_dairy',
+    'farm_cattle',
+    'farm_cane',
+    'farm_vegetables',
+    'farm_spices',
+    'farm_cocoa',
+    'farm_fruit',
+  ],
+  industrias: [
+    'warehouse',
+    'flour_mill',
+    'bread_factory',
+    'cheese_factory',
+    'chocolate_factory',
+  ],
+};
+
+export function getConstructionMenuDefinitions(
+  category: ConstructionCategory,
+): ResidenceDefinition[] {
+  const orderedTypes = CONSTRUCTION_MENU_ORDER[category];
+  const definitions = Object.values(RESIDENCES).filter(
+    (residence) => KIND_CATEGORY[residence.kind] === category,
+  );
+  if (!orderedTypes) return definitions;
+  const orderedSet = new Set(orderedTypes);
+  return [
+    ...orderedTypes.map((type) => RESIDENCES[type]),
+    ...definitions.filter((residence) => !orderedSet.has(residence.type)),
+  ];
+}
+
 export function parseInputProductSelection(type: ResidenceType, value: unknown): string | null {
   const selectableProducts = RESIDENCES[type].selectableInputProductIds;
   if (!selectableProducts || typeof value !== 'object' || value === null) return null;

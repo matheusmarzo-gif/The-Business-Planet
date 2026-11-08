@@ -10,10 +10,11 @@
     "capacity":  0,
     "localAppeal":  0,
     "cost":  {
-                 "wood":  60,
-                 "stone":  60
+                 "wood":  200,
+                 "stone":  80,
+                 "iron": 80
              },
-    "workPoints":  12000,
+    "workPoints":  320000,
     "maxWorkers":  50,
     "stockProduct":  "Especiarias",
     "stockProductId":  "spices",

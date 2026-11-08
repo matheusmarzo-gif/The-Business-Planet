@@ -10,10 +10,10 @@
     "capacity":  0,
     "localAppeal":  0,
     "cost":  {
-                 "wood":  200,
-                 "stone":  20
+                 "wood":  250,
+                 "stone":  75
              },
-    "workPoints":  12000,
+    "workPoints":  125000,
     "maxWorkers":  30,
     "stockProduct":  "Carne Vermelha",
     "stockProductId":  "red_meat",

@@ -10,10 +10,10 @@
     "capacity":  0,
     "localAppeal":  0,
     "cost":  {
-                 "wood":  30,
-                 "stone":  60
+                 "wood":  60,
+                 "stone":  20
              },
-    "workPoints":  12000,
+    "workPoints":  120000,
     "maxWorkers":  20,
     "stockProduct":  "Carvão",
     "stockProductId":  "charcoal",

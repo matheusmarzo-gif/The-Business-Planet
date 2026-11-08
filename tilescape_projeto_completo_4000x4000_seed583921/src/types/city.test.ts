@@ -338,16 +338,17 @@ describe('other crop farms', () => {
       'farm_wheat',
       'farm_barley',
       'farm_corn',
-      'farm_cattle',
     ] as const) {
       const farm = RESIDENCES[farmType];
       assert.equal(farm.width, 4);
       assert.equal(farm.height, 4);
-      assert.deepEqual(farm.cost, { wood: 200, stone: 20 });
+      assert.deepEqual(farm.cost, { wood: 100, stone: 40 });
       assert.equal(farm.stockCapacity, 300);
       assert.equal(farm.maxWorkers, 30);
-      assert.equal(farm.workPoints, 12000);
+      assert.equal(farm.workPoints, 30000);
     }
+    assert.deepEqual(RESIDENCES.farm_cattle.cost, { wood: 250, stone: 75 });
+    assert.equal(RESIDENCES.farm_cattle.workPoints, 125000);
   });
 
   it('uses the configured daily and per-unit Work Point requirements', () => {
@@ -1133,9 +1134,10 @@ describe('fazenda leiteira e demanda configurável', () => {
     const dairy = RESIDENCES.farm_dairy;
     assert.deepEqual(
       [dairy.width, dairy.height, dairy.maxWorkers, dairy.stockCapacity, dairy.workPoints],
-      [3, 3, 10, 400, 12000],
+      [3, 3, 10, 400, 25000],
     );
-    assert.deepEqual(dairy.cost, { wood: 60, stone: 60 });
+    assert.deepEqual(dairy.cost, { wood: 50, stone: 15 });
+    assert.equal(dairy.workPoints, 25000);
     assert.equal(dairy.asset, '/buildings/farms/fazenda_leiteira.png');
     assert.deepEqual(
       planProduction(
@@ -1378,9 +1380,9 @@ describe('fazenda leiteira e demanda configurável', () => {
   it('defines the vegetable farm crop cycle and construction limits', () => {
     const farm = RESIDENCES.farm_vegetables;
     assert.deepEqual([farm.width, farm.height, farm.maxWorkers, farm.stockCapacity, farm.workPoints], [
-      3, 3, 50, 100, 12000,
+      3, 3, 50, 100, 110000,
     ]);
-    assert.deepEqual(farm.cost, { wood: 60, stone: 60 });
+    assert.deepEqual(farm.cost, { wood: 100, stone: 40, iron: 40 });
     assert.equal(farm.stockProductId, 'vegetables');
     assert.deepEqual(farm.cropRule, FARM_CROP_RULES.farm_vegetables);
     assert.equal(canLinkToWarehouse('farm_vegetables'), true);
@@ -2135,7 +2137,7 @@ describe('fishery', () => {
           RESIDENCES.salt_gatherer.maxWorkers,
           RESIDENCES.salt_gatherer.workPoints,
         ],
-        [2, 2, 10, 6000],
+        [2, 2, 10, 10000],
       );
     });
   });
@@ -2242,12 +2244,12 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.farm_spices.stockCapacity,
         RESIDENCES.farm_spices.workPoints,
       ],
-      [3, 10, 2000, 12000, 3, 50, 400, 12000],
+      [3, 10, 2000, 10000, 3, 50, 400, 320000],
     );
-    assert.deepEqual(RESIDENCES.farm_cane.cost, { wood: 60, stone: 60 });
-    assert.deepEqual(RESIDENCES.farm_spices.cost, { wood: 60, stone: 60 });
-    assert.deepEqual(RESIDENCES.salt_gatherer.cost, { wood: 30, stone: 20 });
-    assert.deepEqual(RESIDENCES.sugar_mill.cost, { wood: 30, stone: 80 });
+    assert.deepEqual(RESIDENCES.farm_cane.cost, { wood: 100, stone: 40, iron: 40 });
+    assert.deepEqual(RESIDENCES.farm_spices.cost, { wood: 200, stone: 80, iron: 80 });
+    assert.deepEqual(RESIDENCES.salt_gatherer.cost, { wood: 100, stone: 40, iron: 40 });
+    assert.deepEqual(RESIDENCES.sugar_mill.cost, { wood: 100, stone: 40, iron: 40 });
     assert.equal(RESIDENCES.salt_gatherer.maxWorkers, 10);
     assert.equal(RESIDENCES.salt_gatherer.toolDemandPerWorker, 0.05);
     assert.equal(RESIDENCES.toolmaker.woodCapacity, undefined);
@@ -2265,9 +2267,9 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.charcoal_works.woodCapacity,
         RESIDENCES.charcoal_works.workPoints,
       ],
-      [3, 3, 20, 100, 10, 30, 12000],
+      [3, 3, 20, 100, 10, 30, 120000],
     );
-    assert.deepEqual(RESIDENCES.charcoal_works.cost, { wood: 30, stone: 60 });
+    assert.deepEqual(RESIDENCES.charcoal_works.cost, { wood: 60, stone: 20 });
     assert.equal(RESIDENCES.charcoal_works.toolDemandPerWorker, 0.05);
   });
 
@@ -2338,7 +2340,7 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.flour_mill.stockCapacity,
         RESIDENCES.flour_mill.workPoints,
       ],
-      [3, 3, 60, 100, 60000],
+      [3, 3, 60, 100, 110000],
     );
     assert.deepEqual(RESIDENCES.flour_mill.inputCapacities, { wheat: 20, barley: 20, corn: 20 });
     assert.equal(RESIDENCES.flour_mill.defaultInputProductId, 'wheat');
@@ -2356,7 +2358,7 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.cheese_factory.workPoints,
         RESIDENCES.cheese_factory.inputCapacities?.milk,
       ],
-      [300, 60, 80000, 30, 100, 200, 100000, 2000],
+      [300, 60, 480000, 30, 100, 200, 960000, 2000],
     );
     assert.deepEqual(
       [
@@ -2463,7 +2465,7 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.sugar_mill.toolCapacity,
         RESIDENCES.sugar_mill.workPoints,
       ],
-      [3, 3, 60, 200, 400, 5, 12000],
+      [3, 3, 60, 200, 400, 5, 60000],
     );
     assert.equal(
       planProduction(rule, { ...input, workPoints: 600, penalty: 50 }).units,

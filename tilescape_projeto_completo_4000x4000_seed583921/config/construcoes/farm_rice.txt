@@ -10,10 +10,10 @@
     "capacity":  0,
     "localAppeal":  0,
     "cost":  {
-                 "wood":  200,
-                 "stone":  20
+                 "wood":  100,
+                 "stone":  40
              },
-    "workPoints":  12000,
+    "workPoints":  30000,
     "maxWorkers":  30,
     "stockProduct":  "Arroz",
     "stockProductId":  "rice",

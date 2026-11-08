@@ -10,10 +10,11 @@
     "capacity":  0,
     "localAppeal":  0,
     "cost":  {
-                 "wood":  60,
-                 "stone":  60
+                 "wood":  100,
+                 "stone":  40,
+                 "iron": 40
              },
-    "workPoints":  12000,
+    "workPoints":  110000,
     "maxWorkers":  50,
     "stockProduct":  "Vegetais",
     "stockProductId":  "vegetables",

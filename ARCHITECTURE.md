@@ -42,7 +42,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/main.tsx` | Monta o React, envolve o jogo com autenticação e carrega o CSS. |
 | `src/auth/` | Neon Auth, recuperação de senha, confirmação de e-mail e restauração de sessão. |
 | `src/GameApp.tsx` | Tela ativa do mundo, interface, estado de interação e chamadas da API. |
-| `src/game/GameMap.tsx` | Renderização PixiJS, câmera, seleção de tiles, prévias e interação com cidades, estradas e residências. |
+| `src/game/GameMap.tsx` | Renderização PixiJS, câmera, seleção de tiles, prévias e interação com cidades, estradas e residências. Usa camadas separadas para terreno, estradas, construções e etiquetas; construções fora do viewport não são anexadas à camada visível, sprites são reutilizados por ID e texturas são cacheadas por asset. |
 | `src/game/worldClient.ts` | Autentica o WebSocket, valida mensagens recebidas e atualiza o estado compartilhado. |
 | `src/components/ConstructionBar.tsx` | Barra inferior de categorias; a seleção abre o catálogo de construções no painel lateral direito. |
 | `src/components/CityAssemblyModal.tsx` | Informações da cidade, inclusive salário mínimo; edição do piso restrita à conta master. |

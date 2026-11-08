@@ -40,8 +40,17 @@ const ROAD_ASSETS = Array.from(
   { length: 11 },
   (_, index) => `/buildings/roads/grass_dirt${index + 1}.png?v=11`,
 );
+const textureCache = new Map<string, PIXI.Texture>();
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
+
+function getCachedTexture(asset: string): PIXI.Texture {
+  const cached = textureCache.get(asset);
+  if (cached) return cached;
+  const texture = PIXI.Texture.from(asset);
+  textureCache.set(asset, texture);
+  return texture;
+}
 
 function createCityLabel(name: string, x: number, y: number): PIXI.Container {
   const label = new PIXI.Text(name, {
@@ -181,10 +190,14 @@ export function GameMap({
 }: GameMapProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
-  const layerRef = useRef<PIXI.Container | null>(null);
+  const terrainLayerRef = useRef<PIXI.Container | null>(null);
+  const roadsLayerRef = useRef<PIXI.Container | null>(null);
+  const buildingsLayerRef = useRef<PIXI.Container | null>(null);
   const previewLayerRef = useRef<PIXI.Container | null>(null);
   const roadPreviewLayerRef = useRef<PIXI.Container | null>(null);
   const labelsLayerRef = useRef<PIXI.Container | null>(null);
+  const buildingSpritesRef = useRef(new Map<string, PIXI.Sprite>());
+  const assemblySpritesRef = useRef(new Map<string, PIXI.Sprite>());
   const cameraRef = useRef(camera);
   const dragRef = useRef<{ x: number; y: number; cameraX: number; cameraY: number } | null>(null);
   const draggedRef = useRef(false);
@@ -216,39 +229,44 @@ export function GameMap({
       resolution: Math.min(window.devicePixelRatio || 1, 2),
       resizeTo: host,
     });
-    const layer = new PIXI.Container();
+    const terrainLayer = new PIXI.Container();
+    const roadsLayer = new PIXI.Container();
+    const buildingsLayer = new PIXI.Container();
     const previewLayer = new PIXI.Container();
     const roadPreviewLayer = new PIXI.Container();
     const labelsLayer = new PIXI.Container();
-    app.stage.addChild(layer);
+    app.stage.addChild(terrainLayer);
+    app.stage.addChild(roadsLayer);
+    app.stage.addChild(buildingsLayer);
     app.stage.addChild(previewLayer);
     app.stage.addChild(roadPreviewLayer);
     app.stage.addChild(labelsLayer);
     host.appendChild(app.view as HTMLCanvasElement);
     appRef.current = app;
-    layerRef.current = layer;
+    terrainLayerRef.current = terrainLayer;
+    roadsLayerRef.current = roadsLayer;
+    buildingsLayerRef.current = buildingsLayer;
     previewLayerRef.current = previewLayer;
     roadPreviewLayerRef.current = roadPreviewLayer;
     labelsLayerRef.current = labelsLayer;
 
     return () => {
-      layerRef.current = null;
+      terrainLayerRef.current = null;
+      roadsLayerRef.current = null;
+      buildingsLayerRef.current = null;
       previewLayerRef.current = null;
       roadPreviewLayerRef.current = null;
       labelsLayerRef.current = null;
+      buildingSpritesRef.current.clear();
+      assemblySpritesRef.current.clear();
       appRef.current = null;
       app.destroy(true, { children: true, texture: false, baseTexture: false });
     };
   }, []);
 
-  const renderMap = useCallback(() => {
+  const getViewport = useCallback(() => {
     const app = appRef.current;
-    const layer = layerRef.current;
-    if (!app || !layer || !app.renderer) return;
-
-    for (const child of layer.removeChildren()) {
-      child.destroy({ children: true, texture: false, baseTexture: false });
-    }
+    if (!app || !app.renderer) return null;
 
     const { width, height } = app.screen;
     const { x, y, zoom } = camera;
@@ -257,12 +275,22 @@ export function GameMap({
     const maxX = clamp(Math.ceil((width - x) / tilePixels), 0, generator.config.width);
     const minY = clamp(Math.floor(-y / tilePixels), 0, generator.config.height - 1);
     const maxY = clamp(Math.ceil((height - y) / tilePixels), 0, generator.config.height);
+    return { minX, maxX, minY, maxY, tilePixels };
+  }, [camera, generator]);
 
-    layer.position.set(x, y);
+  const renderTerrain = useCallback(() => {
+    const layer = terrainLayerRef.current;
+    const viewport = getViewport();
+    if (!layer || !viewport) return;
+    for (const child of layer.removeChildren()) {
+      child.destroy({ children: true, texture: false, baseTexture: false });
+    }
+    const { minX, maxX, minY, maxY, tilePixels } = viewport;
+    layer.position.set(camera.x, camera.y);
     layer.scale.set(tilePixels);
     if (tilePixels >= 12) {
       const tileTextures = new Map(
-        generator.tiles.map((tile) => [tile.id, PIXI.Texture.from(tile.src)]),
+        generator.tiles.map((tile) => [tile.id, getCachedTexture(tile.src)]),
       );
       for (let ty = minY; ty < maxY; ty += 1) {
         for (let tx = minX; tx < maxX; tx += 1) {
@@ -289,24 +317,6 @@ export function GameMap({
         }
       }
       layer.addChild(graphics);
-    }
-
-    const roadKeys = new Set(roads.map((road) => `${road.x},${road.y}`));
-    const visibleRoads = roads.filter(
-      (road) =>
-        road.x >= minX - 1 &&
-        road.x <= maxX &&
-        road.y >= minY - 1 &&
-        road.y <= maxY,
-    );
-    for (const road of visibleRoads) {
-      const sprite = new PIXI.Sprite(
-        PIXI.Texture.from(ROAD_ASSETS[getRoadAssetIndex(road, roads, roadKeys) - 1]),
-      );
-      sprite.position.set(road.x, road.y);
-      sprite.width = 1.02;
-      sprite.height = 1.02;
-      layer.addChild(sprite);
     }
 
     const municipalAreas = new PIXI.Graphics();
@@ -363,39 +373,118 @@ export function GameMap({
     border.drawRect(0, 0, generator.config.width, generator.config.height);
     layer.addChild(border);
 
-    if (tilePixels >= 2) {
-      const assemblyTexture = PIXI.Texture.from(ASSEMBLY_ASSET);
-      for (const city of cities) {
-        const assembly = new PIXI.Sprite(assemblyTexture);
-        assembly.position.set(
-          city.centerX - Math.floor(ASSEMBLY_SIZE / 2),
-          city.centerY - Math.floor(ASSEMBLY_SIZE / 2),
-        );
-        assembly.width = ASSEMBLY_SIZE;
-        assembly.height = ASSEMBLY_SIZE;
-        layer.addChild(assembly);
-      }
-      for (const building of residentialBuildings) {
-        const definition = RESIDENCES[building.type];
-        const sprite = new PIXI.Sprite(
-          PIXI.Texture.from(
-            building.status === 'under_construction'
-              ? UNDER_CONSTRUCTION_ASSET
-              : definition.asset,
-          ),
-        );
-        sprite.position.set(building.x, building.y);
-        sprite.width = definition.width;
-        sprite.height = definition.height;
-        layer.addChild(sprite);
-      }
-    }
-
-  }, [camera, cities, generator, roads, residentialBuildings, zoneEditorCityId, zoneOverlay, influenceBuilding]);
+  }, [camera, cities, generator, getViewport, influenceBuilding, zoneEditorCityId, zoneOverlay]);
 
   useEffect(() => {
-    renderMap();
-  }, [renderMap]);
+    renderTerrain();
+  }, [renderTerrain]);
+
+  const renderRoads = useCallback(() => {
+    const layer = roadsLayerRef.current;
+    const viewport = getViewport();
+    if (!layer || !viewport) return;
+    for (const child of layer.removeChildren()) {
+      child.destroy({ children: true, texture: false, baseTexture: false });
+    }
+    const { minX, maxX, minY, maxY, tilePixels } = viewport;
+    layer.position.set(camera.x, camera.y);
+    layer.scale.set(tilePixels);
+    const roadKeys = new Set(roads.map((road) => `${road.x},${road.y}`));
+    for (const road of roads) {
+      if (road.x < minX - 1 || road.x > maxX || road.y < minY - 1 || road.y > maxY) continue;
+      const sprite = new PIXI.Sprite(
+        getCachedTexture(ROAD_ASSETS[getRoadAssetIndex(road, roads, roadKeys) - 1]),
+      );
+      sprite.position.set(road.x, road.y);
+      sprite.width = 1.02;
+      sprite.height = 1.02;
+      layer.addChild(sprite);
+    }
+  }, [camera, getViewport, roads]);
+
+  useEffect(() => {
+    renderRoads();
+  }, [renderRoads]);
+
+  const renderBuildings = useCallback(() => {
+    const layer = buildingsLayerRef.current;
+    const viewport = getViewport();
+    if (!layer || !viewport) return;
+    const { minX, maxX, minY, maxY, tilePixels } = viewport;
+    layer.position.set(camera.x, camera.y);
+    layer.scale.set(tilePixels);
+    const buildingsById = new Map(residentialBuildings.map((building) => [building.id, building]));
+    for (const [id, sprite] of buildingSpritesRef.current) {
+      if (buildingsById.has(id)) continue;
+      sprite.destroy({ children: true, texture: false, baseTexture: false });
+      buildingSpritesRef.current.delete(id);
+    }
+    const isVisible = (x: number, y: number, width: number, height: number) =>
+      x + width >= minX && x <= maxX && y + height >= minY && y <= maxY;
+    if (tilePixels < 2) {
+      for (const sprite of buildingSpritesRef.current.values()) {
+        if (sprite.parent === layer) layer.removeChild(sprite);
+      }
+      for (const sprite of assemblySpritesRef.current.values()) {
+        if (sprite.parent === layer) layer.removeChild(sprite);
+      }
+      return;
+    }
+    for (const building of residentialBuildings) {
+      const definition = RESIDENCES[building.type];
+      let sprite = buildingSpritesRef.current.get(building.id);
+      if (!sprite) {
+        sprite = new PIXI.Sprite(PIXI.Texture.EMPTY);
+        buildingSpritesRef.current.set(building.id, sprite);
+      }
+      sprite.texture = getCachedTexture(
+        building.status === 'under_construction' ? UNDER_CONSTRUCTION_ASSET : definition.asset,
+      );
+      sprite.position.set(building.x, building.y);
+      sprite.width = definition.width;
+      sprite.height = definition.height;
+      const shouldRender = isVisible(building.x, building.y, definition.width, definition.height);
+      if (shouldRender) {
+        if (sprite.parent !== layer) layer.addChild(sprite);
+      } else if (sprite.parent === layer) {
+        layer.removeChild(sprite);
+      }
+    }
+    const cityIds = new Set(cities.map((city) => city.id));
+    for (const [id, sprite] of assemblySpritesRef.current) {
+      if (cityIds.has(id)) continue;
+      sprite.destroy({ children: true, texture: false, baseTexture: false });
+      assemblySpritesRef.current.delete(id);
+    }
+    const assemblyTexture = getCachedTexture(ASSEMBLY_ASSET);
+    for (const city of cities) {
+      let sprite = assemblySpritesRef.current.get(city.id);
+      if (!sprite) {
+        sprite = new PIXI.Sprite(assemblyTexture);
+        assemblySpritesRef.current.set(city.id, sprite);
+      }
+      sprite.position.set(
+        city.centerX - Math.floor(ASSEMBLY_SIZE / 2),
+        city.centerY - Math.floor(ASSEMBLY_SIZE / 2),
+      );
+      sprite.width = ASSEMBLY_SIZE;
+      sprite.height = ASSEMBLY_SIZE;
+      if (isVisible(
+        city.centerX - Math.floor(ASSEMBLY_SIZE / 2),
+        city.centerY - Math.floor(ASSEMBLY_SIZE / 2),
+        ASSEMBLY_SIZE,
+        ASSEMBLY_SIZE,
+      )) {
+        if (sprite.parent !== layer) layer.addChild(sprite);
+      } else if (sprite.parent === layer) {
+        layer.removeChild(sprite);
+      }
+    }
+  }, [camera, cities, getViewport, residentialBuildings]);
+
+  useEffect(() => {
+    renderBuildings();
+  }, [renderBuildings]);
 
   useEffect(() => {
     const app = appRef.current;
@@ -413,6 +502,7 @@ export function GameMap({
     const tilePixels = BASE_TILE_SIZE * camera.zoom;
     previewLayer.position.set(camera.x, camera.y);
     previewLayer.scale.set(tilePixels);
+    const viewport = getViewport();
     for (const city of cities) {
       labelsLayer.addChild(
         createCityLabel(
@@ -425,6 +515,15 @@ export function GameMap({
     for (const building of residentialBuildings) {
       if (!building.isOwnedByCurrentUser || !building.ownerName) continue;
       const definition = RESIDENCES[building.type];
+      if (
+        viewport &&
+        (building.x + definition.width < viewport.minX ||
+          building.x > viewport.maxX ||
+          building.y + definition.height < viewport.minY ||
+          building.y > viewport.maxY)
+      ) {
+        continue;
+      }
       const labelX = camera.x + (building.x + definition.width / 2) * tilePixels;
       const labelY = camera.y + (building.y - 0.35) * tilePixels;
       labelsLayer.addChild(
@@ -502,7 +601,7 @@ export function GameMap({
       previewLayer.addChild(footprint);
 
       const preview = new PIXI.Sprite(
-        PIXI.Texture.from(residenceDefinition?.asset ?? ASSEMBLY_ASSET),
+        getCachedTexture(residenceDefinition?.asset ?? ASSEMBLY_ASSET),
       );
       preview.position.set(
         residenceDefinition
@@ -532,6 +631,7 @@ export function GameMap({
     camera,
     cities,
     generator,
+    getViewport,
     landTileIds,
     placementMode,
     placementName,
@@ -582,7 +682,7 @@ export function GameMap({
           residentialBuildings,
         ) === null;
       const sprite = new PIXI.Sprite(
-        PIXI.Texture.from(ROAD_ASSETS[getRoadAssetIndex(position, combinedRoads, roadKeys) - 1]),
+        getCachedTexture(ROAD_ASSETS[getRoadAssetIndex(position, combinedRoads, roadKeys) - 1]),
       );
       sprite.position.set(position.x, position.y);
       sprite.width = 1.02;

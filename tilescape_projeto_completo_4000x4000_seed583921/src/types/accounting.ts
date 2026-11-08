@@ -3,6 +3,8 @@ import { roundCurrency } from './currency.js';
 
 export const ACCOUNTING_PERIOD_DAYS = [1, 7, 30] as const;
 export type AccountingPeriodDays = (typeof ACCOUNTING_PERIOD_DAYS)[number];
+export const ACCOUNTING_WEEK_OFFSETS = [0, 1, 2, 3, 4] as const;
+export type AccountingWeekOffset = (typeof ACCOUNTING_WEEK_OFFSETS)[number];
 
 export function parseAccountingPeriodDays(value: unknown): AccountingPeriodDays | null {
   const parsed = typeof value === 'string' ? Number(value) : value;
@@ -12,6 +14,25 @@ export function parseAccountingPeriodDays(value: unknown): AccountingPeriodDays 
 export function getAccountingPeriodLabel(days: AccountingPeriodDays): string {
   if (days === 1) return 'último dia';
   return `últimos ${days} dias`;
+}
+
+export function parseAccountingWeekOffset(value: unknown): AccountingWeekOffset | null {
+  const parsed = typeof value === 'string' ? Number(value) : value;
+  return ACCOUNTING_WEEK_OFFSETS.find((offset) => offset === parsed) ?? null;
+}
+
+export function getAccountingWeekRange(day: string, weekOffset: AccountingWeekOffset): {
+  startDay: string;
+  endDay: string;
+} {
+  const end = new Date(`${day}T00:00:00.000Z`);
+  end.setUTCDate(end.getUTCDate() - weekOffset * 7);
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - 6);
+  return {
+    startDay: start.toISOString().slice(0, 10),
+    endDay: end.toISOString().slice(0, 10),
+  };
 }
 
 export interface AccountingBuildingPosition {
@@ -70,6 +91,17 @@ export interface AccountingProductionBuilding {
 
 export interface AccountingSummary {
   periodDays: AccountingPeriodDays;
+  weekOffset: AccountingWeekOffset;
+  weeklySummary: {
+    startDay: string;
+    endDay: string;
+    revenue: number;
+    expenses: number;
+    profitLoss: number;
+    employees: number;
+    companyValue: number;
+    inventoryValue: number;
+  };
   shops: AccountingShop[];
   residences: AccountingResidence[];
   production: AccountingProductionBuilding[];

@@ -9,11 +9,11 @@
   "height": 2,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 10, "stone": 10 },
-  "workPoints": 8000,
-  "maxWorkers": 5,
+  "cost":  { "wood":  180, "stone":  120, "iron":  60 },
+  "workPoints":  480000,
+  "maxWorkers":  8,
   "stockProduct": "Queijo",
   "stockProductId": "cheese",
-  "stockCapacity": 30,
-  "salesPerWorkerPerDay": 6
+  "stockCapacity":  35,
+  "salesWorkPointsPerUnit":  26
 }

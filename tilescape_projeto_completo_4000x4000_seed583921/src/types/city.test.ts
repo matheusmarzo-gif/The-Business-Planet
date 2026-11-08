@@ -54,6 +54,7 @@ import {
   getPurchaseBenefitCalculation,
   getShopSalesCapacity,
   isShopResidenceTransaction,
+  simulateShopSales,
   parsePrice,
   planShopSales,
   planShopSalesDetailed,
@@ -82,14 +83,35 @@ import { parseBasicDemandConfig } from './commerceDemand';
 const city = { centerX: 1000, centerY: 1000 };
 
 describe('wallet', () => {
-  it('starts with C$ 10.000 and formats money in Brazilian style', () => {
-    assert.equal(STARTING_BALANCE, 10000);
-    assert.equal(formatMoney(STARTING_BALANCE).replace(/\u00a0/g, ' '), 'C$ 10.000');
+  it('starts with C$ 25.000 and formats money in Brazilian style', () => {
+    assert.equal(STARTING_BALANCE, 25000);
+    assert.equal(formatMoney(STARTING_BALANCE).replace(/\u00a0/g, ' '), 'C$ 25.000');
     assert.equal(formatMoney(1.23).replace(/\u00a0/g, ' '), 'C$ 1,23');
     assert.equal(isCurrencyAmount(1.23), true);
     assert.equal(isCurrencyAmount(1.234), false);
     assert.equal(isCurrencyAmount(1.2300000000001), false);
     assert.equal(roundCurrency(1.23 * 3), 3.69);
+  });
+
+  it('applies the requested benefit multipliers by job-offer size', () => {
+    const expectedMultipliers = [
+      [1, 5],
+      [4, 5],
+      [5, 3],
+      [10, 3],
+      [11, 2],
+      [20, 2],
+      [21, 1],
+      [40, 1],
+      [41, 0.9],
+      [100, 0.9],
+      [101, 0.8],
+      [300, 0.8],
+      [301, 0.7],
+    ] as const;
+    for (const [offers, multiplier] of expectedMultipliers) {
+      assert.equal(getWorkBenefit(offers, 80, 8) / (offers * 80 / 8), multiplier);
+    }
   });
 
   it('scales chocolate production inputs and their fractional chances with Work Points', () => {
@@ -306,7 +328,7 @@ describe('other crop farms', () => {
     assert.equal(grow('2026-01-10', 'farm_vegetables', 2500).yieldUnits, 100);
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_vegetables.growthMonths), '2026-03-31');
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_cattle.growthMonths), '2028-01-31');
-    assert.equal(grow('2026-04-10', 'farm_cattle', 500).yieldUnits, 1000);
+    assert.equal(grow('2026-04-10', 'farm_cattle', 500).yieldUnits, 4000);
   });
 
   it('matches the rice farm construction and storage limits', () => {
@@ -402,10 +424,9 @@ describe('warehouse logistics', () => {
       { stock: new Map(), minimumStock: new Map(), maximumStock: new Map([['rice', 100]]), capacityM3: 50, workPoints: 1000 },
       [link('farm', 'farm_rice', 300), link('shop', 'shop_rice', 5)],
     );
-    // A fazenda envia 100 (desejável) = 200 pontos; a loja recebe 15 (20 - 5) = 30 pontos.
+    // A fazenda envia 100; a loja já atingiu o novo limite de estoque de 5.
     assert.deepEqual(transfers, [
       { buildingId: 'farm', productId: 'rice', quantity: 100, direction: 'out' },
-      { buildingId: 'shop', productId: 'rice', quantity: 15, direction: 'in' },
     ]);
 
     const limited = planTransfers(
@@ -435,7 +456,7 @@ describe('warehouse logistics', () => {
       { stock: new Map([['rice', 8]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 1e6 },
       [link('shop', 'shop_rice', 0)],
     );
-    assert.equal(supply[0].quantity, 8);
+    assert.equal(supply[0].quantity, 5);
   });
 
   it('caps producer deliveries at the warehouse maximum and reserves its minimum for linked buildings', () => {
@@ -461,7 +482,7 @@ describe('warehouse logistics', () => {
       },
       [{ buildingId: 'shop', type: 'shop_fish', stock: 0 }],
     );
-    assert.deepEqual(supply, [{ buildingId: 'shop', productId: 'fish', quantity: 30, direction: 'in' }]);
+    assert.deepEqual(supply, [{ buildingId: 'shop', productId: 'fish', quantity: 5, direction: 'in' }]);
   });
 
   it('distributes scarce product stock proportionally across linked shops', () => {
@@ -474,35 +495,35 @@ describe('warehouse logistics', () => {
       { stock: new Map([['fish', 200]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 10000 },
       shops,
     );
-    assert.deepEqual(transfers.map((transfer) => transfer.quantity), Array(10).fill(20));
+    assert.deepEqual(transfers.map((transfer) => transfer.quantity), Array(10).fill(5));
   });
 
   it('scales each shop share to its remaining stock need', () => {
     const transfers = planTransfers(
-      { stock: new Map([['fish', 30]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 10000 },
+      { stock: new Map([['fish', 6]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 10000 },
       [
-        { buildingId: 'shop-a', type: 'shop_fish', stock: 20 },
+        { buildingId: 'shop-a', type: 'shop_fish', stock: 4 },
         { buildingId: 'shop-b', type: 'shop_fish', stock: 0 },
       ],
     );
     assert.deepEqual(
       transfers.map(({ buildingId, quantity }) => [buildingId, quantity]),
-      [['shop-a', 10], ['shop-b', 20]],
+      [['shop-a', 1], ['shop-b', 5]],
     );
   });
 
   it('logs shared stock rationing as proportional distribution', async () => {
     const { planTransfersDetailed } = await import('./logistics');
     const { attempts } = planTransfersDetailed(
-      { stock: new Map([['fish', 40]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 10000 },
+      { stock: new Map([['fish', 8]]), minimumStock: new Map(), maximumStock: new Map(), capacityM3: 50, workPoints: 10000 },
       [
         { buildingId: 'shop-a', type: 'shop_fish', stock: 0 },
         { buildingId: 'shop-b', type: 'shop_fish', stock: 0 },
       ],
     );
     assert.deepEqual(attempts.map(({ wanted, moved, reason }) => [wanted, moved, reason]), [
-      [40, 20, 'insufficient_stock'],
-      [40, 20, 'insufficient_stock'],
+      [5, 4, 'insufficient_stock'],
+      [5, 4, 'insufficient_stock'],
     ]);
   });
 });
@@ -577,15 +598,15 @@ describe('shop sales', () => {
   });
 
   it('computes store benefit with the basic-basket formula and zero guards', () => {
-    assert.equal(getShopSalesCapacity('shop_rice', 19), 0);
-    assert.equal(getShopSalesCapacity('shop_rice', 20), 1);
+    assert.equal(getShopSalesCapacity('shop_rice', 24), 0);
+    assert.equal(getShopSalesCapacity('shop_rice', 25), 1);
     const newShopTypes = ['shop_potato', 'shop_corn', 'shop_barley', 'shop_wheat', 'shop_butcher'] as const;
-    assert.deepEqual(newShopTypes.map((type) => getShopSalesCapacity(type, 40)), [2, 2, 2, 2, 2]);
-    assert.equal(getShopSalesCapacity('shop_fish', 40), 2);
+    assert.deepEqual(newShopTypes.map((type) => getShopSalesCapacity(type, 25)), [1, 1, 1, 1, 1]);
+    assert.equal(getShopSalesCapacity('shop_fish', 50), 1);
     assert.equal(getShopSalesCapacity('shop_milk', 1), 1);
     assert.equal(getShopSalesCapacity('shop_milk', 0.9), 0);
-    assert.equal(getShopSalesCapacity('shop_bread', 0, 3), 75);
-    assert.equal(getShopSalesCapacity('shop_cheese', 0, 4), 24);
+    assert.equal(getShopSalesCapacity('shop_bread', 3), 1);
+    assert.equal(getShopSalesCapacity('shop_cheese', 26), 1);
     assert.equal(parsePrice({ price: 0 }), null);
     assert.equal(parsePrice({ price: 12 }), 12);
     assert.equal(parsePrice({ price: 0.01 }), 0.01);
@@ -627,6 +648,53 @@ describe('shop sales', () => {
     const fartherStore = getPurchaseBenefitCalculation(income, price, basicNeed, rr, 40);
     assert.ok(fartherStore.errorBenefit < calculation.errorBenefit);
     assert.ok(fartherStore.associatedBenefit < calculation.associatedBenefit);
+  });
+
+  it('simulates sales from cached transactions and applies current stock, capacity, and payroll', () => {
+    assert.equal(simulateShopSales([], {
+      price: 3,
+      stock: 5,
+      dailyCapacity: 8,
+      wage: 2,
+      workers: 4,
+    }), null);
+    const result = simulateShopSales(
+      [{
+        residenceId: 'home',
+        occupants: 100,
+        averageIncome: 100,
+        areaAveragePrice: 1,
+        expectedDemand: 100,
+        desiredQuantity: 100,
+        basicNeedPerPerson: 1,
+        referenceBasketCost: 10,
+        candidate: {
+          shopId: 'shop',
+          price: 1,
+          distance: 0,
+          desiredQuantity: 100,
+          benefit: 1,
+          rank: 1,
+          stockAvailable: 100,
+          capacityAvailable: 100,
+          available: 100,
+          demandBefore: 100,
+          purchased: 0,
+          demandAfter: 100,
+          allocatedResidents: 100,
+          basicNeedPerPerson: 1,
+          referenceBasketCost: 10,
+          outcome: 'purchased',
+        },
+      }],
+      { price: 3, stock: 5, dailyCapacity: 8, wage: 2, workers: 4 },
+    );
+    assert.deepEqual(result, {
+      unitsSold: 5,
+      revenue: 15,
+      employeeExpense: 8,
+      profitLoss: 7,
+    });
   });
 
   it('accepts fractional shop prices in commerce diagnostics', () => {
@@ -1204,10 +1272,10 @@ describe('fazenda leiteira e demanda configurável', () => {
     const fishShop = RESIDENCES.shop_fish;
     assert.deepEqual(
       [dairyShop.width, dairyShop.height, dairyShop.maxWorkers, dairyShop.workPoints],
-      [fishShop.width, fishShop.height, fishShop.maxWorkers, fishShop.workPoints],
+      [fishShop.width, fishShop.height, 1, fishShop.workPoints],
     );
-    assert.equal(dairyShop.stockCapacity, 400);
-    assert.deepEqual(dairyShop.cost, fishShop.cost);
+    assert.equal(dairyShop.stockCapacity, 120);
+    assert.deepEqual(dairyShop.cost, { wood: 10, stone: 5 });
     assert.equal(dairyShop.stockProductId, 'milk');
     assert.equal(dairyShop.asset, '/buildings/commerce/loja_leite.png');
     assert.equal(canLinkToWarehouse('farm_dairy'), true);
@@ -1217,7 +1285,7 @@ describe('fazenda leiteira e demanda configurável', () => {
         {
           stock: new Map(),
           minimumStock: new Map(),
-          maximumStock: new Map([['milk', 400]]),
+          maximumStock: new Map([['milk', 120]]),
           capacityM3: 50,
           workPoints: 100000,
         },
@@ -1247,7 +1315,6 @@ describe('fazenda leiteira e demanda configurável', () => {
       ['shop_corn', 'corn', 'Loja de Milho', '/buildings/commerce/loja_milho.png'],
       ['shop_barley', 'barley', 'Loja de Cevada', '/buildings/commerce/loja_cevada.png'],
       ['shop_wheat', 'wheat', 'Loja de Trigo', '/buildings/commerce/loja_trigo.png'],
-      ['shop_butcher', 'red_meat', 'Açougue', '/buildings/commerce/loja_acougue.png'],
     ] as const;
     for (const [type, productId, name, asset] of expectedShops) {
       const shop = RESIDENCES[type];
@@ -1262,34 +1329,40 @@ describe('fazenda leiteira e demanda configurável', () => {
       assert.equal(shop.asset, asset);
       assert.equal(canLinkToWarehouse(type), true);
     }
+    const butcher = RESIDENCES.shop_butcher;
+    assert.deepEqual(
+      [butcher.maxWorkers, butcher.stockCapacity, butcher.workPoints, butcher.cost],
+      [1, 5, 5000, { wood: 15, stone: 10 }],
+    );
+    assert.equal(butcher.stockProductId, 'red_meat');
   });
 
-  it('defines sugar, vegetable, salt, and spice shops like the fish shop', () => {
-    const fishShop = RESIDENCES.shop_fish;
+  it('defines sugar, vegetable, salt, and spice shops with their own capacities and work rates', () => {
     const expectedShops = [
-      ['shop_sugar', 'sugar', 'Loja de Açúcar', '/buildings/commerce/loja_acucar.png'],
-      ['shop_vegetables', 'vegetables', 'Loja de Vegetais', '/buildings/commerce/loja_vegetais.png'],
-      ['shop_salt', 'salt', 'Loja de Sal', '/buildings/commerce/loja_sal.png'],
-      ['shop_spices', 'spices', 'Loja de Especiarias', '/buildings/commerce/loja_especiarias.png'],
+      ['shop_sugar', 'sugar', 'Loja de Açúcar', '/buildings/commerce/loja_acucar.png', 5, 125],
+      ['shop_vegetables', 'vegetables', 'Loja de Vegetais', '/buildings/commerce/loja_vegetais.png', 25, 20],
+      ['shop_salt', 'salt', 'Loja de Sal', '/buildings/commerce/loja_sal.png', 25, 20],
+      ['shop_spices', 'spices', 'Loja de Especiarias', '/buildings/commerce/loja_especiarias.png', 5, 125],
     ] as const;
-    for (const [type, productId, name, asset] of expectedShops) {
+    for (const [type, productId, name, asset, stockCapacity, workPointsPerUnit] of expectedShops) {
       const shop = RESIDENCES[type];
       assert.equal(shop.kind, 'shop');
       assert.deepEqual(
         [shop.width, shop.height, shop.maxWorkers, shop.stockCapacity, shop.workPoints],
-        [fishShop.width, fishShop.height, fishShop.maxWorkers, fishShop.stockCapacity, fishShop.workPoints],
+        [2, 2, 4, stockCapacity, 70000],
       );
-      assert.deepEqual(shop.cost, fishShop.cost);
+      assert.deepEqual(shop.cost, { wood: 60, stone: 40 });
       assert.equal(shop.stockProductId, productId);
       assert.equal(shop.name, name);
       assert.equal(shop.asset, asset);
-      assert.equal(getShopSalesCapacity(type, 40), 2);
+      assert.equal(shop.salesWorkPointsPerUnit, workPointsPerUnit);
+      assert.equal(getShopSalesCapacity(type, workPointsPerUnit), 1);
       assert.equal(SHOP_TYPES.includes(type), true);
       assert.equal(canLinkToWarehouse(type), true);
       assert.deepEqual(
         planTransfers(
           {
-            stock: new Map([[productId, 40]]),
+            stock: new Map([[productId, stockCapacity]]),
             minimumStock: new Map(),
             maximumStock: new Map(),
             capacityM3: 50,
@@ -1297,7 +1370,7 @@ describe('fazenda leiteira e demanda configurável', () => {
           },
           [{ buildingId: 'warehouse-shop', type, stock: 0 }],
         ),
-        [{ buildingId: 'warehouse-shop', productId, quantity: 40, direction: 'in' }],
+        [{ buildingId: 'warehouse-shop', productId, quantity: stockCapacity, direction: 'in' }],
       );
     }
   });
@@ -1340,7 +1413,7 @@ describe('work settings', () => {
 
   it('allows up to 100 workers during construction and applies the building limit on completion', () => {
     assert.equal(getMaxDesiredWorkers('shop_milk', 'under_construction'), 100);
-    assert.equal(getMaxDesiredWorkers('shop_milk', 'completed'), 4);
+    assert.equal(getMaxDesiredWorkers('shop_milk', 'completed'), 1);
 
     const homes = [{ id: 'home', type: 'house_poor2' as const, x: 0, y: 0, occupants: 100 }];
     const workplace = {
@@ -1359,13 +1432,13 @@ describe('work settings', () => {
     );
     assert.deepEqual(
       allocateWorkers(homes, [{ ...workplace, status: 'completed' }]),
-      [{ workplaceId: 'dairy-shop', residenceId: 'home', count: 4 }],
+      [{ workplaceId: 'dairy-shop', residenceId: 'home', count: 1 }],
     );
     assert.deepEqual(
       getEmploymentSummary([
-        { type: 'shop_milk', status: 'completed', wage: 10, desiredWorkers: 100, employed: 4 },
+        { type: 'shop_milk', status: 'completed', wage: 10, desiredWorkers: 100, employed: 1 },
       ]),
-      { employed: 4, jobOffers: 0, averageWage: 10 },
+      { employed: 1, jobOffers: 0, averageWage: 10 },
     );
   });
 
@@ -1377,7 +1450,7 @@ describe('work settings', () => {
         { type: 'house_poor1', status: 'completed', wage: 25, desiredWorkers: 6, employed: 3 },
         { type: 'house_poor1', status: 'under_construction', wage: 25, desiredWorkers: 2, employed: 0 },
       ]),
-      { employed: 12, jobOffers: 94, averageWage: 700 / 12 },
+      { employed: 12, jobOffers: 92, averageWage: 700 / 12 },
     );
   });
 
@@ -1407,8 +1480,8 @@ describe('work settings', () => {
     assert.equal(getHoursFactor(8), 1);
     assert.equal(getHoursFactor(14), 0.5);
     assert.equal(getHoursFactor(2), 0.5);
-    assert.equal(getWorkBenefit(10, 80, 8), 100);
-    assert.ok(Math.abs(getWorkBenefit(10, 80, 8, 60) - 100 * Math.sqrt(0.5)) < 1e-12);
+    assert.equal(getWorkBenefit(10, 80, 8), 300);
+    assert.ok(Math.abs(getWorkBenefit(10, 80, 8, 60) - 300 * Math.sqrt(0.5)) < 1e-12);
     assert.equal(getRestFactor(4), 1.2);
     assert.equal(getRestFactor(8), 1);
     assert.ok(Math.abs(getRestFactor(14) - 0.8) < 1e-9);
@@ -2131,7 +2204,7 @@ describe('fishery', () => {
       [{ buildingId: 'shop', type: 'shop_fish', stock: 0 }],
     );
     assert.deepEqual(transfers, [
-      { buildingId: 'shop', productId: 'fish', quantity: 40, direction: 'in' },
+      { buildingId: 'shop', productId: 'fish', quantity: 5, direction: 'in' },
     ]);
   });
 });
@@ -2289,18 +2362,18 @@ describe('recursos e ferramentaria', () => {
       [
         RESIDENCES.shop_bread.stockCapacity,
         RESIDENCES.shop_bread.maxWorkers,
-        RESIDENCES.shop_bread.salesPerWorkerPerDay,
+        RESIDENCES.shop_bread.salesWorkPointsPerUnit,
         RESIDENCES.shop_cheese.stockCapacity,
         RESIDENCES.shop_cheese.maxWorkers,
-        RESIDENCES.shop_cheese.salesPerWorkerPerDay,
+        RESIDENCES.shop_cheese.salesWorkPointsPerUnit,
         RESIDENCES.shop_chocolate.stockCapacity,
         RESIDENCES.shop_chocolate.maxWorkers,
-        RESIDENCES.shop_chocolate.salesPerWorkerPerDay,
+        RESIDENCES.shop_chocolate.salesWorkPointsPerUnit,
         RESIDENCES.shop_fruit.stockCapacity,
         RESIDENCES.shop_fruit.maxWorkers,
-        RESIDENCES.shop_fruit.salesPerWorkerPerDay,
+        RESIDENCES.shop_fruit.salesWorkPointsPerUnit,
       ],
-      [100, 4, 25, 30, 5, 6, 12, 4, 3, 12, 4, 3],
+      [350, 8, 3, 35, 8, 26, 20, 8, 54, 6, 8, 160],
     );
     assert.equal(SHOP_TYPES.includes('shop_bread'), true);
     assert.equal(SHOP_TYPES.includes('shop_cheese'), true);

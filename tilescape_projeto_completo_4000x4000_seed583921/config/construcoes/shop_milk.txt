@@ -3,19 +3,20 @@
     "kind":  "shop",
     "requiredZone":  "urban",
     "requiresRoad":  true,
-    "name":  "Loja de Leite",
+    "name":  "Leitaria",
     "asset":  "/buildings/commerce/loja_leite.png",
     "width":  2,
     "height":  2,
     "capacity":  0,
     "localAppeal":  0,
     "cost":  {
-                 "wood":  30,
-                 "stone":  10
+                 "wood":  10,
+                 "stone":  5
              },
-    "workPoints":  6000,
-    "maxWorkers":  4,
+    "workPoints":  5000,
+    "maxWorkers":  1,
     "stockProduct":  "Leite",
     "stockProductId":  "milk",
-    "stockCapacity":  400
+    "stockCapacity":  120,
+    "salesWorkPointsPerUnit":  1
 }

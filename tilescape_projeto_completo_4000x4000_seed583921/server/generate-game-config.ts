@@ -160,6 +160,7 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
     'selectableInputProductIds',
     'defaultInputProductId',
     'salesPerWorkerPerDay',
+    'salesWorkPointsPerUnit',
     'toolDemandPerWorker',
     'production',
     'requiresWater',
@@ -197,9 +198,9 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
   for (const field of ['capacity', 'localAppeal', 'maxWorkers']) {
     if (readNumber(value, field) < 0) fail(path, `"${field}" não pode ser negativo.`);
   }
-  validateKeys(value.cost, `${path}:cost`, ['wood', 'stone']);
-  for (const material of ['wood', 'stone']) {
-    const amount = value.cost[material];
+  validateKeys(value.cost, `${path}:cost`, ['wood', 'stone'], ['iron']);
+  for (const material of ['wood', 'stone', 'iron']) {
+    const amount = value.cost[material] ?? 0;
     if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
       fail(path, `custo de "${material}" inválido.`);
     }
@@ -269,6 +270,14 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
       value.salesPerWorkerPerDay <= 0)
   ) {
     fail(path, '"salesPerWorkerPerDay" precisa ser um inteiro positivo.');
+  }
+  if (
+    'salesWorkPointsPerUnit' in value &&
+    (typeof value.salesWorkPointsPerUnit !== 'number' ||
+      !Number.isFinite(value.salesWorkPointsPerUnit) ||
+      value.salesWorkPointsPerUnit <= 0)
+  ) {
+    fail(path, '"salesWorkPointsPerUnit" precisa ser um número positivo.');
   }
   if ('requiresWater' in value && typeof value.requiresWater !== 'boolean') {
     fail(path, '"requiresWater" precisa ser booleano.');

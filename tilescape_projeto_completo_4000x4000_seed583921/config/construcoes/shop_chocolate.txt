@@ -9,11 +9,11 @@
   "height": 2,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 10, "stone": 10 },
-  "workPoints": 12000,
-  "maxWorkers": 4,
+  "cost":  { "wood":  180, "stone":  120, "iron":  60 },
+  "workPoints":  480000,
+  "maxWorkers":  8,
   "stockProduct": "Chocolate",
   "stockProductId": "chocolate",
-  "stockCapacity": 12,
-  "salesPerWorkerPerDay": 3
+  "stockCapacity":  20,
+  "salesWorkPointsPerUnit":  54
 }

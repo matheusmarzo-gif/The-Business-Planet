@@ -1,4 +1,4 @@
-export const STARTING_BALANCE = 10000;
+export const STARTING_BALANCE = 25000;
 
 const currency = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 

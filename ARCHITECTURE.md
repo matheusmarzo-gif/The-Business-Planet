@@ -273,14 +273,15 @@ mapeamento e verificar todas as curvas.
   o dono, compra imediata respeitando ordem, preço, distância, espaço e Work
   Points).
 - `shop_rice` (categoria Comerciais, área urbana, `kind: 'shop'`) também usa o
-  catálogo e a tabela `residential_buildings`: 2 × 2, até 4 funcionários,
-  estoque máximo de 20 de Arroz, 100 madeiras e 20 pedras, 9.000 Work Points.
+  catálogo e a tabela `residential_buildings`: 2 × 2, até 1 funcionário,
+  estoque máximo de 5 de Arroz, 10 madeiras e 5 pedras, 5.000 Work Points.
   Exige zona urbana e estrada adjacente; sem moradores nem aluguel. Sprite:
   `public/buildings/commerce/loja_arroz.png`.
-- `shop_potato`, `shop_corn`, `shop_barley`, `shop_wheat` e `shop_butcher`
-  (Lojas de Batata, Milho, Cevada, Trigo e Açougue) são lojas urbanas 2 × 2,
-  com até 4 funcionários, estoque máximo de 20 unidades e os mesmos custos da
-  Loja de Arroz: 100 madeiras, 20 pedras e 9.000 Work Points. Vendem,
+- `shop_potato`, `shop_corn`, `shop_barley` e `shop_wheat` (Lojas de Batata,
+  Milho, Cevada e Trigo) são lojas urbanas 2 × 2, com até 1 funcionário,
+  estoque máximo de 5 unidades e custo de 10 madeiras, 5 pedras e 5.000 Work
+  Points. `shop_butcher` (Açougue) tem 1 funcionário, estoque máximo de 5,
+  custo de 15 madeiras, 10 pedras e 5.000 Work Points. Vendem,
   respectivamente, `potato`, `corn`, `barley`, `wheat` e `red_meat`, recebem
   estoque do armazém ligado e têm preço editável pelo dono. Os sprites ficam em
   `public/buildings/commerce/loja_batata.png`, `loja_milho.png`,
@@ -327,22 +328,22 @@ mapeamento e verificar todas as curvas.
   somente se o mês atual estiver selecionado; ciclos ativos não são interrompidos.
   A equipe desejada muda conforme a fase e as configurações são propagadas pelo
   mesmo snapshot de construções. Desativá-la não cancela um ciclo em andamento.
-- `shop_milk` (categoria Comerciais) usa a mesma definição, preço editável e
-  fluxo de venda da Loja de Peixes: 2 × 2 tiles, 4 funcionários, estoque máximo
-  de 400 litros, custo de 30 madeiras e 10 pedras e 6.000 Work Points. Produto
-  `milk`; sprite `public/buildings/commerce/loja_leite.png`.
-- `shop_sugar`, `shop_vegetables`, `shop_salt` e `shop_spices` seguem os
-  parâmetros da Loja de Peixes: 2 × 2 tiles, até 4 funcionários, estoque máximo
-  de 40 unidades, 30 madeiras, 10 pedras e 6.000 Work Points. Vendem,
+- `shop_fish` (Peixaria) usa 2 × 2 tiles, 2 funcionários, estoque máximo de
+  5 peixes, custo de 15 madeiras/10 pedras e 5.000 Work Points; vende 1 unidade
+  por 50 WP. `shop_milk` (Leitaria) tem 1 funcionário, 120 litros, custo de 10
+  madeiras/5 pedras e 5.000 WP; vende 1 litro por WP. Sprite da Leitaria:
+  `public/buildings/commerce/loja_leite.png`.
+- `shop_sugar`, `shop_vegetables`, `shop_salt` e `shop_spices` ocupam 2 × 2 e
+  empregam até 4 pessoas, com 60 madeiras/40 pedras e 70.000 Work Points.
+  Açúcar/especiarias guardam 5 unidades e usam 125 WP/unidade; vegetais/sal
+  guardam 25 e usam 20 WP/unidade. Vendem,
   respectivamente, `sugar`, `vegetables`, `salt` e `spices`, abastecidas pelo
   armazém ligado. Seus sprites ficam em `public/buildings/commerce/`.
-- `shop_bread` (Padaria) e `shop_cheese` (Queijaria) são comércios urbanos 2 × 2,
-  respectivamente com estoque máximo de 100 pães/4 funcionários e 30 queijos/
-  5 funcionários. Custam 4 madeiras/4 pedras e 2.000 WP, e 10 madeiras/10 pedras
-  e 8.000 WP. Cada funcionário adiciona capacidade diária de 25 pães ou 6
-  queijos, independente dos WP. `shop_chocolate` (Chocolateria) e `shop_fruit`
-  (Frutaria) têm 12 unidades de estoque, 4 funcionários, custam 10 madeiras/
-  10 pedras e exigem 12.000 WP; cada funcionário permite vender 3 unidades/dia.
+- `shop_bread` (Padaria), `shop_cheese` (Queijaria), `shop_chocolate`
+  (Chocolateria) e `shop_fruit` (Frutaria) são comércios urbanos 2 × 2, com
+  até 8 funcionários cada. Custam 180 madeiras, 120 pedras, 60 ferros e
+  480.000 WP. Estoques máximos: 350 pães, 35 queijos, 20 chocolates e 6 frutas;
+  limites de venda: 3, 26, 54 e 160 WP/unidade, respectivamente.
   Seus produtos participam da cesta avançada e recebem estoque do armazém ligado.
   Sprites em `public/buildings/commerce/`.
 - O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
@@ -411,8 +412,10 @@ mapeamento e verificar todas as curvas.
   `advanceClock`) às 12:00 do mundo recalcula do zero `job_assignments`
   (`workplace_id`, `residence_id`, `count`): `allocateWorkers` percorre as
   residências por id e considera todas as ofertas com vagas no raio de 60 tiles.
-  Para cada residência, cada oferta recebe `benefícioᵢ = vagas · F_H² · salário /
-  horas · √(60 / (60 + dᵢ))`, onde `F_H = 1 − 0,5·(|H−8|/6)²` e `dᵢ` é a
+  Para cada residência, cada oferta recebe `benefícioᵢ = vagas · bônus · F_H² · salário /
+  horas · √(60 / (60 + dᵢ))`, onde o bônus é ×5 para 1–4 vagas, ×3 para 5–10,
+  ×2 para 11–20, ×1 para 21–40, ×0,9 para 41–100, ×0,8 para 101–300 e ×0,7
+  acima de 300; `F_H = 1 − 0,5·(|H−8|/6)²` e `dᵢ` é a
   distância entre os centros da casa e do trabalho. Os moradores são repartidos
   proporcionalmente aos benefícios; o método dos maiores restos garante
   alocações inteiras cuja soma é a população empregável da casa, limitada pelas
@@ -484,10 +487,9 @@ mapeamento e verificar todas as curvas.
   estoque e capacidade diários; o dono recebe `quantidade × preço`.
   `employed` em `ResidentialBuilding` é calculado por subquery em
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
-  Os comércios configurados com `salesPerWorkerPerDay` usam funcionários ×
-  esse limite, em vez de converter Work Points em unidades; Padaria e Queijaria
-  usam 25 pães e 6 queijos, e Chocolateria e Frutaria 3 unidades por funcionário/
-  dia. `bread`, `cheese`, `fruit` e `chocolate` participam da cesta avançada.
+  A capacidade de venda converte Work Points diários pelos limites
+  `salesWorkPointsPerUnit` definidos por construção; `bread`, `cheese`, `fruit`
+  e `chocolate` participam da cesta avançada.
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
   preço unitário de venda. Os detalhes do diagnóstico (renda, moradores,
@@ -541,8 +543,10 @@ mapeamento e verificar todas as curvas.
   Receita e lucro/prejuízo são calculados dos dados financeiros.
   Como o abastecimento pelo armazém do mesmo dono é uma transferência interna
   sem cobrança, esse movimento registra C$ 0 de gasto com produto. O histórico
-  financeiro conserva 30 dias e só o dono consulta pela rota de histórico do
-  comércio. Os diagnósticos locais também conservam até 30 dias. A coluna
+  financeiro conserva no mínimo 35 dias para os cinco períodos semanais e só o dono consulta pela rota de histórico do
+  comércio. Os diagnósticos locais conservam até 30 dias e alimentam a simulação
+  de venda no navegador; a simulação de contratação também usa o snapshot local,
+  sem novas consultas ao servidor. A coluna
   `transaction_details` de instalações anteriores não é mais lida ou atualizada;
   os registros existentes expiram junto com o histórico financeiro.
 - Produção das fazendas agrícolas (`src/types/farming.ts`): `POST
@@ -749,8 +753,8 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/performance-logs` | Autenticado | Retorna até 100 medições recentes de etapas globais, armazenadas no Redis por até sete dias. |
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo médio por cidadão da cidade e preço médio ponderado, no último dia e nos últimos 30 dias. |
-| `GET /api/wallet` | Autenticado | Cria a carteira do usuário com C$ 10.000 no primeiro acesso (idempotente) e retorna `{ balance }`. |
-| `GET /api/accounting?days=1\|7\|30` | Autenticado | Retorna, apenas para o jogador da sessão, salários/receita das lojas, aluguel gerado por residência, salários e produção por construção produtiva, além dos relatórios de armazéns, no período indicado (padrão: 30 dias, incluindo o dia corrente). |
+| `GET /api/wallet` | Autenticado | Cria a carteira sem saldo prévio com C$ 25.000 (idempotente), preserva saldos existentes e retorna `{ balance }`. |
+| `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. |
 | `PUT /api/residential-buildings/:id/farm-automation` | Dono da fazenda agrícola concluída | Valida e salva meses de replantio e limites de trabalhadores por fase; desativar mantém as preferências e o ciclo atual, mas interrompe novos plantios automáticos. |
 | `PATCH /api/residential-buildings/:id/input-product` | Dono do Moinho concluído | Seleciona trigo, cevada ou milho; descarta o estoque de outro insumo na mesma transação e publica a seleção/estoques. |
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
@@ -771,7 +775,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/roads` | Master | Valida e grava um caminho de estrada de até 600 tiles. |
 | `DELETE /api/roads/:x/:y` | Criador do tile | Demole um tile de estrada sem confirmação; publica o novo estado. |
 | `DELETE /api/roads` | Autenticado | Demole os tiles próprios de um caminho de até 600 tiles e publica o novo estado. |
-| `POST /api/residential-buildings` | Autenticado | Valida o estoque e desconta atomicamente os materiais (exceto para Master); o primeiro armazém do jogador é concluído e gratuito. |
+| `POST /api/residential-buildings` | Autenticado | Valida o estoque e desconta atomicamente Madeira, Pedra e Ferro quando exigido pela configuração (exceto para Master); o primeiro armazém do jogador é concluído e gratuito. |
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |
@@ -818,8 +822,11 @@ de sucesso.
   **Produção** combina essa tabela com `building_payroll_history`; **Residências**
   combina população/capacidade atuais com a receita de
   `residence_rent_history`. O endpoint contábil restringe os relatórios ao dono
-  autenticado e filtra os históricos pelo período selecionado (1, 7 ou 30 dias,
-  incluindo o dia corrente).
+  autenticado e filtra os relatórios detalhados pelo período selecionado (1, 7
+  ou 30 dias, incluindo o dia corrente). O resumo usa semanas de sete dias
+  ancoradas no dia atual do jogo e mantém 35 dias de históricos financeiros.
+  Valor empresarial e estoque usam preços médios atuais de venda anunciados nos
+  armazéns; produtos sem preço anunciado não entram na estimativa.
 - A tabela `neon_auth."user"` é gerenciada pelo Neon Auth, não pelo esquema do
   jogo.
 

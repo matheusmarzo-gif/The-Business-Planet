@@ -48,7 +48,9 @@ import { STARTING_BALANCE } from '../src/types/wallet.js';
 import { roundCurrency } from '../src/types/currency.js';
 import {
   calculateDailyRentRevenue,
+  getAccountingWeekRange,
   parseAccountingPeriodDays,
+  parseAccountingWeekOffset,
 } from '../src/types/accounting.js';
 import {
   isPastDailyWorldRefreshTime,
@@ -2007,7 +2009,7 @@ async function runDailyEmployment(): Promise<boolean> {
       }
       await client.query(
         'DELETE FROM commerce_history WHERE day < $1::date - $2::integer',
-        [state.day, GAME_RULES.consumption.averagePriceWindowDays],
+        [state.day, Math.max(34, GAME_RULES.consumption.averagePriceWindowDays)],
       );
       });
       if (salesStageSucceeded) pendingCommerceDiagnostics.push(...salesDiagnostics);
@@ -2751,22 +2753,22 @@ async function runDailyEmployment(): Promise<boolean> {
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
       await client.query(
         `DELETE FROM warehouse_payroll_history
-         WHERE day < $1::date - 29`,
+         WHERE day < $1::date - 34`,
         [state.day],
       );
       await client.query(
         `DELETE FROM building_payroll_history
-         WHERE day < $1::date - 29`,
+         WHERE day < $1::date - 34`,
         [state.day],
       );
       await client.query(
         `DELETE FROM residence_rent_history
-         WHERE day < $1::date - 29`,
+         WHERE day < $1::date - 34`,
         [state.day],
       );
       await client.query(
         `DELETE FROM warehouse_trade_history
-         WHERE day < $1::date - 29`,
+         WHERE day < $1::date - 34`,
         [state.day],
       );
     }
@@ -3499,7 +3501,7 @@ async function createResidentialBuilding(
       const constructionCenterY = position.y + definition.height / 2;
       const { rows: materialRows } = await client.query<{
         building_id: string;
-        product_id: 'wood' | 'stone';
+        product_id: 'wood' | 'stone' | 'iron';
         quantity: number;
       }>(
         `SELECT warehouse.id AS building_id, stock.product_id, stock.quantity
@@ -3508,7 +3510,7 @@ async function createResidentialBuilding(
          WHERE warehouse.building_type = 'warehouse'
            AND warehouse.status = 'completed'
            AND warehouse.created_by = $1
-           AND stock.product_id IN ('wood', 'stone')
+           AND stock.product_id IN ('wood', 'stone', 'iron')
            AND POWER(warehouse.tile_x + $4 - $2, 2)
              + POWER(warehouse.tile_y + $4 - $3, 2) <= $5
          ORDER BY POWER(warehouse.tile_x + $4 - $2, 2)
@@ -3658,6 +3660,42 @@ async function start() {
     'utf8',
   );
   await pool.query(schema);
+  const capacityClient = await pool.connect();
+  try {
+    await capacityClient.query('BEGIN');
+    await capacityClient.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const { rows: limitedBuildings } = await capacityClient.query<{
+      id: string;
+      building_type: ResidenceType;
+    }>(
+      `UPDATE residential_buildings AS building
+       SET desired_workers = limits.maximum_workers
+       FROM UNNEST($1::text[], $2::integer[]) AS limits(building_type, maximum_workers)
+       WHERE building.building_type = limits.building_type
+         AND building.status = 'completed'
+         AND building.desired_workers > limits.maximum_workers
+       RETURNING building.id, building.building_type`,
+      [
+        Object.keys(RESIDENCES),
+        Object.values(RESIDENCES).map((definition) => definition.maxWorkers),
+      ],
+    );
+    for (const building of limitedBuildings) {
+      await limitJobAssignments(
+        capacityClient,
+        building.id,
+        RESIDENCES[building.building_type].maxWorkers,
+      );
+    }
+    await capacityClient.query('COMMIT');
+  } catch (error) {
+    await capacityClient.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter o ajuste de funcionários às capacidades atuais:', rollbackError);
+    });
+    throw error;
+  } finally {
+    capacityClient.release();
+  }
   const demandConfig = await readFile(
     fileURLToPath(new URL('../config/demanda_basica.txt', import.meta.url)),
     'utf8',
@@ -3743,8 +3781,28 @@ async function start() {
         response.status(503).json({ error: 'world_unavailable' });
         return;
       }
+      const weekOffset =
+        request.query.week === undefined ? 0 : parseAccountingWeekOffset(request.query.week);
+      if (weekOffset === null) {
+        response.status(400).json({ error: 'invalid_accounting_week' });
+        return;
+      }
+      const weekRange = getAccountingWeekRange(day, weekOffset);
 
-      const [shopResult, payrollResult, warehouseBuildingsResult, productResult, residenceResult, productionResult] = await Promise.all([
+      const [
+        shopResult,
+        payrollResult,
+        warehouseBuildingsResult,
+        productResult,
+        residenceResult,
+        productionResult,
+        weeklyFinanceResult,
+        employeeCountResult,
+        assetBuildingsResult,
+        inventoryWarehouseResult,
+        inventoryInputResult,
+        marketPriceResult,
+      ] = await Promise.all([
         pool.query<{
           id: string;
           building_type: ResidenceType;
@@ -3867,8 +3925,126 @@ async function start() {
            ORDER BY building.building_type, building.building_number`,
           [userId, day, PRODUCTION_BUILDING_TYPES, periodDays],
         ),
+        pool.query<{ revenue: string; expenses: string }>(
+          `SELECT COALESCE(SUM(parts.revenue), 0)::text AS revenue,
+                  COALESCE(SUM(parts.expenses), 0)::text AS expenses
+           FROM (
+             SELECT COALESCE(SUM(history.units_sold::bigint * history.sale_price), 0) AS revenue,
+                    COALESCE(SUM(history.product_expense), 0) AS expenses
+             FROM commerce_history history
+             JOIN residential_buildings building ON building.id = history.building_id
+             WHERE building.created_by = $1 AND history.day BETWEEN $2::date AND $3::date
+             UNION ALL
+             SELECT COALESCE(SUM(history.rent_revenue), 0), 0
+             FROM residence_rent_history history
+             JOIN residential_buildings building ON building.id = history.building_id
+             WHERE building.created_by = $1 AND history.day BETWEEN $2::date AND $3::date
+             UNION ALL
+             SELECT COALESCE(SUM(history.quantity::bigint * history.unit_price)
+                       FILTER (WHERE seller.id IS NOT NULL), 0),
+                    COALESCE(SUM(history.quantity::bigint * history.unit_price)
+                       FILTER (WHERE buyer.id IS NOT NULL), 0)
+             FROM warehouse_trade_history history
+             LEFT JOIN residential_buildings buyer
+               ON buyer.id = history.buyer_id AND buyer.created_by = $1
+             LEFT JOIN residential_buildings seller
+               ON seller.id = history.seller_id AND seller.created_by = $1
+             WHERE history.day BETWEEN $2::date AND $3::date
+               AND (buyer.id IS NOT NULL OR seller.id IS NOT NULL)
+             UNION ALL
+             SELECT 0, COALESCE(SUM(history.employee_expense), 0)
+             FROM building_payroll_history history
+             JOIN residential_buildings building ON building.id = history.building_id
+             WHERE building.created_by = $1 AND history.day BETWEEN $2::date AND $3::date
+           ) AS parts`,
+          [userId, weekRange.startDay, weekRange.endDay],
+        ),
+        pool.query<{ employees: string }>(
+          `SELECT COALESCE(SUM(assignment.count), 0)::text AS employees
+           FROM job_assignments assignment
+           JOIN residential_buildings workplace ON workplace.id = assignment.workplace_id
+           WHERE workplace.created_by = $1`,
+          [userId],
+        ),
+        pool.query<{
+          building_type: ResidenceType;
+          stock: number;
+          tool_stock: number;
+          wood_stock: number;
+          iron_stock: number;
+          charcoal_stock: number;
+          sugarcane_stock: number;
+        }>(
+          `SELECT building_type, stock, tool_stock, wood_stock, iron_stock,
+                  charcoal_stock, sugarcane_stock
+           FROM residential_buildings
+           WHERE created_by = $1`,
+          [userId],
+        ),
+        pool.query<{ product_id: string; quantity: string }>(
+          `SELECT stock.product_id, SUM(stock.quantity)::text AS quantity
+           FROM warehouse_stock stock
+           JOIN residential_buildings building ON building.id = stock.building_id
+           WHERE building.created_by = $1
+           GROUP BY stock.product_id`,
+          [userId],
+        ),
+        pool.query<{ product_id: string; quantity: string }>(
+          `SELECT stock.product_id, SUM(stock.quantity)::text AS quantity
+           FROM building_input_stock stock
+           JOIN residential_buildings building ON building.id = stock.building_id
+           WHERE building.created_by = $1
+           GROUP BY stock.product_id`,
+          [userId],
+        ),
+        pool.query<{ product_id: string; average_price: string }>(
+          `SELECT product_id, AVG(price)::text AS average_price
+           FROM warehouse_product_settings
+           WHERE mode = 'sell' AND price > 0
+           GROUP BY product_id`,
+        ),
       ]);
 
+      const marketPrices = new Map(
+        marketPriceResult.rows.map((row) => [row.product_id, Number(row.average_price)]),
+      );
+      const inventoryQuantities = new Map<string, number>();
+      const addInventory = (productId: string | undefined, quantity: number): void => {
+        if (!productId || quantity <= 0) return;
+        inventoryQuantities.set(productId, (inventoryQuantities.get(productId) ?? 0) + quantity);
+      };
+      for (const row of inventoryWarehouseResult.rows) {
+        addInventory(row.product_id, Number(row.quantity));
+      }
+      for (const row of inventoryInputResult.rows) {
+        addInventory(row.product_id, Number(row.quantity));
+      }
+      for (const row of assetBuildingsResult.rows) {
+        const definition = getResidenceDefinition(row.building_type);
+        addInventory(definition?.stockProductId, row.stock);
+        addInventory('tools', row.tool_stock);
+        addInventory('wood', row.wood_stock);
+        addInventory('iron', row.iron_stock);
+        addInventory('charcoal', row.charcoal_stock);
+        addInventory('sugarcane', row.sugarcane_stock);
+      }
+      const companyValue = roundCurrency(
+        assetBuildingsResult.rows.reduce((total, row) => {
+          const cost = RESIDENCES[row.building_type].cost;
+          return total +
+            cost.wood * (marketPrices.get('wood') ?? 0) +
+            cost.stone * (marketPrices.get('stone') ?? 0) +
+            (cost.iron ?? 0) * (marketPrices.get('iron') ?? 0);
+        }, 0),
+      );
+      const inventoryValue = roundCurrency(
+        [...inventoryQuantities].reduce(
+          (total, [productId, quantity]) => total + quantity * (marketPrices.get(productId) ?? 0),
+          0,
+        ),
+      );
+      const weeklyRevenue = Number(weeklyFinanceResult.rows[0]?.revenue ?? 0);
+      const weeklyExpenses = Number(weeklyFinanceResult.rows[0]?.expenses ?? 0);
       const products = productResult.rows.map((row) => {
         const purchaseExpense = Number(row.purchase_expense);
         const salesRevenue = Number(row.sales_revenue);
@@ -3883,6 +4059,16 @@ async function start() {
       });
       response.json({
         periodDays,
+        weekOffset,
+        weeklySummary: {
+          ...weekRange,
+          revenue: roundCurrency(weeklyRevenue),
+          expenses: roundCurrency(weeklyExpenses),
+          profitLoss: roundCurrency(weeklyRevenue - weeklyExpenses),
+          employees: Number(employeeCountResult.rows[0]?.employees ?? 0),
+          companyValue,
+          inventoryValue,
+        },
         shops: shopResult.rows.map((row) => ({
           id: row.id,
           type: row.building_type,

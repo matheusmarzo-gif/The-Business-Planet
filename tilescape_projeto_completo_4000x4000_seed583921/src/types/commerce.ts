@@ -131,6 +131,69 @@ export interface CommerceDiagnosticsUpdate {
   transactions: ShopResidenceTransaction[];
 }
 
+export interface ShopSalesSimulation {
+  unitsSold: number;
+  revenue: number;
+  employeeExpense: number;
+  profitLoss: number;
+}
+
+export function simulateShopSales(
+  transactions: readonly ShopResidenceTransaction[],
+  settings: {
+    price: number;
+    stock: number;
+    dailyCapacity: number;
+    wage: number;
+    workers: number;
+  },
+): ShopSalesSimulation | null {
+  if (transactions.length === 0) return null;
+  if (
+    !isCurrencyAmount(settings.price) ||
+    settings.price < MIN_SHOP_PRICE ||
+    !Number.isInteger(settings.stock) ||
+    settings.stock < 0 ||
+    !Number.isFinite(settings.dailyCapacity) ||
+    settings.dailyCapacity < 0 ||
+    !isCurrencyAmount(settings.wage) ||
+    settings.wage < 0 ||
+    !Number.isInteger(settings.workers) ||
+    settings.workers < 0
+  ) {
+    throw new RangeError('As configurações atuais da loja são inválidas para simular vendas.');
+  }
+
+  const expectedQuantity = transactions.reduce((total, transaction) => {
+    const candidate = transaction.candidate;
+    const residents = candidate.allocatedResidents ?? 0;
+    const need = candidate.basicNeedPerPerson ?? transaction.basicNeedPerPerson ?? 0;
+    const calculation = getPurchaseBenefitCalculation(
+      transaction.averageIncome,
+      settings.price,
+      need,
+      candidate.referenceBasketCost ?? transaction.referenceBasketCost ?? 0,
+      candidate.distance,
+      {
+        basketType: transaction.basketType,
+        intermediateBasketCost:
+          candidate.intermediateBasketCost ?? transaction.intermediateBasketCost,
+        advancedBasketCost: candidate.advancedBasketCost ?? transaction.advancedBasketCost,
+      },
+    );
+    return total + getExpectedStoreDemand(residents, need, calculation.logAssociatedBenefit);
+  }, 0);
+  const unitsSold = Math.floor(Math.min(settings.stock, settings.dailyCapacity, expectedQuantity));
+  const revenue = roundCurrency(unitsSold * settings.price);
+  const employeeExpense = roundCurrency(settings.wage * settings.workers);
+  return {
+    unitsSold,
+    revenue,
+    employeeExpense,
+    profitLoss: roundCurrency(revenue - employeeExpense),
+  };
+}
+
 const SHOP_TRANSACTION_OUTCOMES = new Set<ShopTransactionCandidate['outcome']>([
   'purchased',
   'negative_benefit',
@@ -378,7 +441,7 @@ export function getShopSalesCapacity(
     }
     return workers * definition.salesPerWorkerPerDay;
   }
-  const workPointsPerUnit = (() => {
+  const workPointsPerUnit = definition?.salesWorkPointsPerUnit ?? (() => {
     switch (type) {
       case 'shop_rice':
       case 'shop_potato':

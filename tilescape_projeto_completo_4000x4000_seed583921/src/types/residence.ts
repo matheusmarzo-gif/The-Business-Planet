@@ -72,17 +72,18 @@ export type ResidentialBuildingStatus = 'under_construction' | 'completed';
 export interface ResidenceCost {
   wood: number;
   stone: number;
+  iron?: number;
 }
 
 export interface ConstructionMaterialStock {
   buildingId: string;
-  productId: 'wood' | 'stone';
+  productId: 'wood' | 'stone' | 'iron';
   quantity: number;
 }
 
 export interface ConstructionMaterialWithdrawal {
   buildingId: string;
-  productId: 'wood' | 'stone';
+  productId: 'wood' | 'stone' | 'iron';
   quantity: number;
 }
 
@@ -115,6 +116,7 @@ export interface ResidenceDefinition {
   selectableInputProductIds?: readonly string[];
   defaultInputProductId?: string;
   salesPerWorkerPerDay?: number;
+  salesWorkPointsPerUnit?: number;
   // Demanda diária de Ferramentas por funcionário (valores abaixo de 1 são probabilidade).
   toolDemandPerWorker?: number;
   production?: ProductionRule;
@@ -147,8 +149,8 @@ export function planConstructionMaterialWithdrawals(
   cost: ResidenceCost,
 ): ConstructionMaterialWithdrawal[] | null {
   const withdrawals: ConstructionMaterialWithdrawal[] = [];
-  for (const productId of ['wood', 'stone'] as const) {
-    let remaining = cost[productId];
+  for (const productId of ['wood', 'stone', 'iron'] as const) {
+    let remaining = cost[productId] ?? 0;
     if (!Number.isInteger(remaining) || remaining < 0) return null;
     for (const stock of stocks) {
       if (stock.productId !== productId || !Number.isInteger(stock.quantity) || stock.quantity <= 0) {

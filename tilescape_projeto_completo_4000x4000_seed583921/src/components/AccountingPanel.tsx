@@ -4,9 +4,11 @@ import { getResidentialBuildingName } from '../types/residence';
 import { formatMoney } from '../types/wallet';
 import {
   getAccountingPeriodLabel,
+  parseAccountingWeekOffset,
   parseAccountingPeriodDays,
   type AccountingBuildingPosition,
   type AccountingPeriodDays,
+  type AccountingWeekOffset,
   type AccountingSummary,
 } from '../types/accounting';
 
@@ -16,6 +18,8 @@ interface AccountingPanelProps {
   error: string;
   periodDays: AccountingPeriodDays;
   onPeriodChange: (days: AccountingPeriodDays) => void;
+  weekOffset: AccountingWeekOffset;
+  onWeekChange: (offset: AccountingWeekOffset) => void;
   onViewBuilding: (building: AccountingBuildingPosition) => void;
   onClose: () => void;
 }
@@ -28,11 +32,15 @@ export default function AccountingPanel({
   error,
   periodDays,
   onPeriodChange,
+  weekOffset,
+  onWeekChange,
   onViewBuilding,
   onClose,
 }: AccountingPanelProps) {
-  const [activeTab, setActiveTab] = useState<'shops' | 'warehouses' | 'residences' | 'production'>('shops');
+  const [activeTab, setActiveTab] = useState<'summary' | 'shops' | 'warehouses' | 'residences' | 'production'>('summary');
   const periodLabel = getAccountingPeriodLabel(periodDays);
+  const weeklySummary = summary?.weeklySummary;
+  const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
 
   return (
     <section className="warehouse-panel accounting-panel" aria-label="Painel contábil">
@@ -44,24 +52,38 @@ export default function AccountingPanel({
         </button>
       </div>
       <p className="warehouse-summary">
-        Período: {periodLabel} do relógio do jogo. {isLoading && 'Carregando…'}
+        {activeTab === 'summary'
+          ? 'O resumo mostra os resultados semanais e as estimativas atuais da empresa.'
+          : `Período: ${periodLabel} do relógio do jogo.`}{' '}
+        {isLoading && 'Carregando…'}
       </p>
-      <label className="accounting-period">
-        Período do relatório
-        <select
-          value={periodDays}
-          disabled={isLoading}
-          onChange={(event) => {
-            const days = parseAccountingPeriodDays(event.target.value);
-            if (days !== null) onPeriodChange(days);
-          }}
-        >
-          <option value={1}>Último dia</option>
-          <option value={7}>Últimos 7 dias</option>
-          <option value={30}>Últimos 30 dias</option>
-        </select>
-      </label>
+      {activeTab !== 'summary' && (
+        <label className="accounting-period">
+          Período do relatório
+          <select
+            value={periodDays}
+            disabled={isLoading}
+            onChange={(event) => {
+              const days = parseAccountingPeriodDays(event.target.value);
+              if (days !== null) onPeriodChange(days);
+            }}
+          >
+            <option value={1}>Último dia</option>
+            <option value={7}>Últimos 7 dias</option>
+            <option value={30}>Últimos 30 dias</option>
+          </select>
+        </label>
+      )}
       <div className="accounting-tabs" role="tablist" aria-label="Relatórios contábeis">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'summary'}
+          className={activeTab === 'summary' ? 'active' : ''}
+          onClick={() => setActiveTab('summary')}
+        >
+          Resumo
+        </button>
         <button
           type="button"
           role="tab"
@@ -100,7 +122,59 @@ export default function AccountingPanel({
         </button>
       </div>
       {error && <p role="alert" className="warehouse-error">{error}</p>}
-      {activeTab === 'shops' ? (
+      {activeTab === 'summary' ? (
+        <>
+          <label className="accounting-period">
+            Semana do relatório
+            <select
+              value={weekOffset}
+              disabled={isLoading}
+              onChange={(event) => {
+                const offset = parseAccountingWeekOffset(event.target.value);
+                if (offset !== null) onWeekChange(offset);
+              }}
+            >
+              <option value={0}>Semana atual</option>
+              <option value={1}>Semana anterior</option>
+              <option value={2}>2 semanas antes</option>
+              <option value={3}>3 semanas antes</option>
+              <option value={4}>4 semanas antes</option>
+            </select>
+          </label>
+          {weeklySummary && (
+            <>
+              <p className="accounting-history-note">
+                Semana do jogo: {formatDay(weeklySummary.startDay)} a {formatDay(weeklySummary.endDay)}.
+                As avaliações de empresa e estoque usam os preços de venda atuais configurados nos armazéns.
+              </p>
+              <div className="accounting-summary-grid">
+                <article>
+                  <span>Lucro / prejuízo da semana</span>
+                  <strong className={weeklySummary.profitLoss < 0 ? 'commerce-loss' : 'commerce-profit'}>
+                    {formatMoney(weeklySummary.profitLoss)}
+                  </strong>
+                  <small>Receitas {formatMoney(weeklySummary.revenue)} · despesas {formatMoney(weeklySummary.expenses)}</small>
+                </article>
+                <article>
+                  <span>Funcionários empregados</span>
+                  <strong>{integer.format(weeklySummary.employees)}</strong>
+                  <small>Empregos atualmente preenchidos</small>
+                </article>
+                <article>
+                  <span>Valor estimado da empresa</span>
+                  <strong>{formatMoney(weeklySummary.companyValue)}</strong>
+                  <small>Custo dos materiais de construção a preços médios atuais</small>
+                </article>
+                <article>
+                  <span>Produtos em estoque</span>
+                  <strong>{formatMoney(weeklySummary.inventoryValue)}</strong>
+                  <small>Estoque de armazéns e construções produtivas</small>
+                </article>
+              </div>
+            </>
+          )}
+        </>
+      ) : activeTab === 'shops' ? (
         <div className="warehouse-list accounting-list">
           <div className="accounting-row warehouse-head">
             <span>Loja</span>

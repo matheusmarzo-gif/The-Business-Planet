@@ -23,25 +23,50 @@ test('plans construction costs across nearby warehouses without allowing partial
   assert.deepEqual(
     planConstructionMaterialWithdrawals(
       [
-        { buildingId: 'near', productId: 'wood', quantity: 20 },
-        { buildingId: 'farther', productId: 'wood', quantity: 10 },
-        { buildingId: 'near', productId: 'stone', quantity: 4 },
-        { buildingId: 'farther', productId: 'stone', quantity: 6 },
+        { buildingId: 'near', productId: 'wood', quantity: 10 },
+        { buildingId: 'near', productId: 'stone', quantity: 5 },
       ],
       cost,
     ),
     [
-      { buildingId: 'near', productId: 'wood', quantity: 20 },
-      { buildingId: 'farther', productId: 'wood', quantity: 10 },
-      { buildingId: 'near', productId: 'stone', quantity: 4 },
-      { buildingId: 'farther', productId: 'stone', quantity: 6 },
+      { buildingId: 'near', productId: 'wood', quantity: 10 },
+      { buildingId: 'near', productId: 'stone', quantity: 5 },
     ],
   );
   assert.equal(
     planConstructionMaterialWithdrawals(
       [
-        { buildingId: 'near', productId: 'wood', quantity: 20 },
-        { buildingId: 'near', productId: 'stone', quantity: 9 },
+        { buildingId: 'near', productId: 'wood', quantity: 10 },
+        { buildingId: 'near', productId: 'stone', quantity: 4 },
+      ],
+      cost,
+    ),
+    null,
+  );
+});
+
+test('requires iron as well as wood and stone for construction costs that specify it', () => {
+  const cost = RESIDENCES.shop_bread.cost;
+  assert.deepEqual(
+    planConstructionMaterialWithdrawals(
+      [
+        { buildingId: 'warehouse', productId: 'wood', quantity: 180 },
+        { buildingId: 'warehouse', productId: 'stone', quantity: 120 },
+        { buildingId: 'warehouse', productId: 'iron', quantity: 60 },
+      ],
+      cost,
+    ),
+    [
+      { buildingId: 'warehouse', productId: 'wood', quantity: 180 },
+      { buildingId: 'warehouse', productId: 'stone', quantity: 120 },
+      { buildingId: 'warehouse', productId: 'iron', quantity: 60 },
+    ],
+  );
+  assert.equal(
+    planConstructionMaterialWithdrawals(
+      [
+        { buildingId: 'warehouse', productId: 'wood', quantity: 180 },
+        { buildingId: 'warehouse', productId: 'stone', quantity: 120 },
       ],
       cost,
     ),

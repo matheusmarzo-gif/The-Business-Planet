@@ -96,9 +96,17 @@ export function getWorkBenefit(
   const factor = getHoursFactor(hours);
   const { radiusTiles, radicandNumerator } = GAME_RULES.work.distanceFactor;
   const distanceFactor = Math.sqrt(radicandNumerator / (radiusTiles + distance));
+  const offerSizeMultiplier =
+    openJobs <= 4 ? 5 :
+    openJobs <= 10 ? 3 :
+    openJobs <= 20 ? 2 :
+    openJobs <= 40 ? 1 :
+    openJobs <= 100 ? 0.9 :
+    openJobs <= 300 ? 0.8 : 0.7;
   return (
     (openJobs * factor ** GAME_RULES.work.hoursFactor.benefitExponent * wage * distanceFactor) /
-    hours
+    hours *
+    offerSizeMultiplier
   );
 }
 

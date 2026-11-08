@@ -15,6 +15,7 @@ import {
 import { getMaxDesiredWorkers } from '../types/employment';
 import { canLinkToWarehouse } from '../types/logistics';
 import { PRODUCTS } from '../types/product';
+import { formatMoney } from '../types/wallet';
 import {
   getHarvestDay,
   getMonthOfDay,
@@ -33,6 +34,16 @@ interface ResidencePanelProps {
   onSave: (settings: { wage: number; workHoursPerDay: number; desiredWorkers: number }) => void;
   onSaveRent: (rent: number) => void;
   onSavePrice: (price: number) => void;
+  onSimulateSale: (settings: { price: number; wage: number; workHoursPerDay: number }) => {
+    unitsSold: number;
+    profitLoss: number;
+    error?: string;
+  } | null;
+  onSimulateHiring: (settings: {
+    wage: number;
+    workHoursPerDay: number;
+    desiredWorkers: number;
+  }) => number;
   onSaveInputProduct: (productId: string) => void;
   onOpenWarehouse: () => void;
   warehouseStock: ReadonlyMap<string, number>;
@@ -91,9 +102,10 @@ function getProductionDescription(
       return `Cada funcionário permite vender até ${number.format(definition.salesPerWorkerPerDay)} ${definition.stockProduct?.toLowerCase() ?? 'unidades'} por dia, limitado pela demanda e pelo estoque abastecido pelo armazém ligado.`;
     }
     const workPointsPerUnit =
-      type === 'shop_milk'
+      definition.salesWorkPointsPerUnit ??
+      (type === 'shop_milk'
         ? GAME_RULES.consumption.salesCapacity.literWorkPointsPerSale
-        : GAME_RULES.consumption.salesCapacity.unitWorkPointsPerSale;
+        : GAME_RULES.consumption.salesCapacity.unitWorkPointsPerSale);
     const unit = definition.stockProductId === 'milk' ? 'litro' : 'unidade';
     return `A cada ${number.format(workPointsPerUnit)} Work Point${workPointsPerUnit === 1 ? '' : 's'} gerados pelos funcionários, a loja ganha capacidade para vender até 1 ${unit}. As vendas dependem da demanda e do estoque disponível, abastecido pelo armazém ligado.`;
   }
@@ -133,6 +145,8 @@ export default function ResidencePanel({
   onSave,
   onSaveRent,
   onSavePrice,
+  onSimulateSale,
+  onSimulateHiring,
   onSaveInputProduct,
   onOpenWarehouse,
   warehouseStock,
@@ -157,6 +171,8 @@ export default function ResidencePanel({
   const [rent, setRent] = useState(String(building.rent));
   const [desired, setDesired] = useState(String(building.desiredWorkers));
   const [price, setPrice] = useState(String(building.price));
+  const [saleSimulationMessage, setSaleSimulationMessage] = useState('');
+  const [hiringSimulationMessage, setHiringSimulationMessage] = useState('');
   const [inputProductId, setInputProductId] = useState(
     building.selectedInputProductId ?? definition.defaultInputProductId ?? '',
   );
@@ -176,6 +192,8 @@ export default function ResidencePanel({
     setHours(String(building.workHoursPerDay));
     setRent(String(building.rent));
     setDesired(String(building.desiredWorkers));
+    setSaleSimulationMessage('');
+    setHiringSimulationMessage('');
   }, [building.id, building.wage, building.workHoursPerDay, building.rent, building.desiredWorkers]);
 
   useEffect(() => {
@@ -566,6 +584,25 @@ export default function ResidencePanel({
               onChange={(event) => setWage(event.target.value)}
             />
           </label>
+          {isOwner && (
+            <>
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => {
+                  const hired = onSimulateHiring({
+                    wage: Number(wage),
+                    workHoursPerDay: Number(hours),
+                    desiredWorkers: Number(desired),
+                  });
+                  setHiringSimulationMessage(`Estimativa: ${number.format(hired)} pessoa(s) empregada(s).`);
+                }}
+              >
+                Simular contratação
+              </button>
+              {hiringSimulationMessage && <small role="status">{hiringSimulationMessage}</small>}
+            </>
+          )}
           <label>
             Carga horária por dia (horas)
             <input
@@ -608,6 +645,41 @@ export default function ResidencePanel({
               onChange={(event) => setPrice(event.target.value)}
             />
           </label>
+          {isOwner && (
+            <>
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => {
+                  const result = onSimulateSale({
+                    price: Number(price),
+                    wage: Number(wage),
+                    workHoursPerDay: Number(hours),
+                  });
+                  if (result === null) {
+                    setSaleSimulationMessage(
+                      'ainda é muito cedo para uma simulação! Só conseguimos simular os dados com base em comportamentos passados.',
+                    );
+                  } else if (result.error) {
+                    setSaleSimulationMessage(result.error);
+                  } else {
+                    const outcome =
+                      result.profitLoss < 0
+                        ? 'prejuízo estimado'
+                        : result.profitLoss > 0
+                          ? 'lucro estimado'
+                          : 'resultado equilibrado';
+                    setSaleSimulationMessage(
+                      `Estimativa: ${number.format(result.unitsSold)} unidade(s) vendida(s); ${outcome}: ${formatMoney(Math.abs(result.profitLoss))}.`,
+                    );
+                  }
+                }}
+              >
+                Simular venda
+              </button>
+              {saleSimulationMessage && <small role="status">{saleSimulationMessage}</small>}
+            </>
+          )}
           {isOwner ? (
             <button type="submit" disabled={isSaving}>
               {isSaving ? 'Salvando…' : 'Salvar preço'}

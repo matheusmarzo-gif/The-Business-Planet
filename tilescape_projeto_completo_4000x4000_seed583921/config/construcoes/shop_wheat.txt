@@ -10,12 +10,13 @@
     "capacity":  0,
     "localAppeal":  0,
     "cost":  {
-                 "wood":  100,
-                 "stone":  20
+                 "wood":  10,
+                 "stone":  5
              },
-    "workPoints":  9000,
-    "maxWorkers":  4,
+    "workPoints":  5000,
+    "maxWorkers":  1,
     "stockProduct":  "Trigo",
     "stockProductId":  "wheat",
-    "stockCapacity":  20
+    "stockCapacity":  5,
+    "salesWorkPointsPerUnit":  25
 }

@@ -33,11 +33,16 @@ import {
   getRequiredCityZone,
   MAX_CITY_ZONES,
 } from './types/city';
-import { DEFAULT_SHOP_PRICE } from './types/commerce';
+import {
+  DEFAULT_SHOP_PRICE,
+  getShopSalesCapacity,
+  simulateShopSales,
+} from './types/commerce';
 import { LINK_RADIUS } from './types/logistics';
 import {
   type AccountingBuildingPosition,
   type AccountingPeriodDays,
+  type AccountingWeekOffset,
   type AccountingSummary,
 } from './types/accounting';
 import type { FarmAutomationSettings } from './types/farming';
@@ -49,6 +54,7 @@ import {
   DEFAULT_WAGE,
   DEFAULT_WORK_HOURS,
   RESIDENCES,
+  RESIDENCE_STATS,
   KIND_CATEGORY,
   ResidentialBuilding,
   ResidencePlacementError,
@@ -57,6 +63,7 @@ import {
 import type { RoadPlacementError, RoadPosition, RoadTile } from './types/road';
 import { TileInfo } from './types/map';
 import { formatMoney } from './types/wallet';
+import { allocateWorkers, getDailyWorkPoints } from './types/employment';
 import { PRODUCTS } from './types/product';
 import type { PerformanceLogRecord } from './types/performanceLog';
 import { loadCommerceDiagnostics, saveCommerceDiagnostics } from './utils/commerceDiagnosticsStorage';
@@ -386,6 +393,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [accountingError, setAccountingError] = useState('');
   const [accountingSummary, setAccountingSummary] = useState<AccountingSummary | null>(null);
   const [accountingPeriodDays, setAccountingPeriodDays] = useState<AccountingPeriodDays>(30);
+  const [accountingWeekOffset, setAccountingWeekOffset] = useState<AccountingWeekOffset>(0);
   const [isPerformanceLogOpen, setIsPerformanceLogOpen] = useState(false);
   const [isPerformanceLogLoading, setIsPerformanceLogLoading] = useState(false);
   const [performanceLogError, setPerformanceLogError] = useState('');
@@ -676,14 +684,19 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
-  const loadAccounting = async (periodDays: AccountingPeriodDays = accountingPeriodDays) => {
+  const loadAccounting = async (
+    periodDays: AccountingPeriodDays = accountingPeriodDays,
+    weekOffset: AccountingWeekOffset = accountingWeekOffset,
+  ) => {
     setIsAccountingOpen(true);
     setIsAccountingLoading(true);
     setAccountingError('');
     setAccountingSummary(null);
     try {
       setAccountingSummary(
-        await cityRequest<AccountingSummary>(`/api/accounting?days=${periodDays}`),
+        await cityRequest<AccountingSummary>(
+          `/api/accounting?days=${periodDays}&week=${weekOffset}`,
+        ),
       );
     } catch (error) {
       setAccountingError(error instanceof Error ? error.message : 'Não foi possível carregar o painel contábil.');
@@ -1822,6 +1835,78 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onSave={(settings) => void saveWorkSettings(selectedResidence.id, settings)}
             onSaveRent={(rent) => void saveRent(selectedResidence.id, rent)}
             onSavePrice={(price) => void savePrice(selectedResidence.id, price)}
+            onSimulateSale={(settings) => {
+              try {
+                const cachedDays = loadCommerceDiagnostics(
+                  window.localStorage,
+                  user.email,
+                  selectedResidence.id,
+                );
+                const transactions = [...cachedDays.entries()]
+                  .sort(([firstDay], [secondDay]) => secondDay.localeCompare(firstDay))[0]?.[1];
+                if (!transactions || transactions.length === 0) return null;
+                const workers = selectedResidence.employed;
+                const workPoints = workers * getDailyWorkPoints(
+                  settings.workHoursPerDay,
+                  RESIDENCE_STATS.health,
+                  RESIDENCE_STATS.happiness,
+                );
+                return simulateShopSales(transactions, {
+                  price: settings.price,
+                  stock: selectedResidence.stock,
+                  dailyCapacity: getShopSalesCapacity(
+                    selectedResidence.type,
+                    workPoints,
+                    workers,
+                  ),
+                  wage: settings.wage,
+                  workers,
+                });
+              } catch (error) {
+                return {
+                  unitsSold: 0,
+                  profitLoss: 0,
+                  error: error instanceof Error
+                    ? error.message
+                    : 'Não foi possível simular as vendas com o cache local.',
+                };
+              }
+            }}
+            onSimulateHiring={(settings) => {
+              const residences = residentialBuildings
+                .filter((building) =>
+                  RESIDENCES[building.type].kind === 'residence' &&
+                  building.status === 'completed',
+                )
+                .map((building) => ({
+                  id: building.id,
+                  type: building.type,
+                  x: building.x,
+                  y: building.y,
+                  occupants: building.occupants,
+                }));
+              const workplaces = residentialBuildings
+                .filter((building) => RESIDENCES[building.type].kind !== 'residence')
+                .map((building) => ({
+                  id: building.id,
+                  type: building.type,
+                  x: building.x,
+                  y: building.y,
+                  wage: building.id === selectedResidence.id ? settings.wage : building.wage,
+                  workHoursPerDay:
+                    building.id === selectedResidence.id
+                      ? settings.workHoursPerDay
+                      : building.workHoursPerDay,
+                  desiredWorkers:
+                    building.id === selectedResidence.id
+                      ? settings.desiredWorkers
+                      : building.desiredWorkers,
+                  status: building.status,
+                }));
+              return allocateWorkers(residences, workplaces)
+                .filter((assignment) => assignment.workplaceId === selectedResidence.id)
+                .reduce((total, assignment) => total + assignment.count, 0);
+            }}
             onSaveInputProduct={(productId) =>
               void saveInputProduct(selectedResidence.id, productId)
             }
@@ -1920,6 +2005,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onPeriodChange={(days) => {
               setAccountingPeriodDays(days);
               void loadAccounting(days);
+            }}
+            weekOffset={accountingWeekOffset}
+            onWeekChange={(offset) => {
+              setAccountingWeekOffset(offset);
+              void loadAccounting(accountingPeriodDays, offset);
             }}
             onViewBuilding={viewAccountingBuilding}
             onClose={() => setIsAccountingOpen(false)}

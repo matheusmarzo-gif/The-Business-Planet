@@ -3,19 +3,20 @@
     "kind":  "shop",
     "requiredZone":  "urban",
     "requiresRoad":  true,
-    "name":  "Loja de Peixes",
+    "name":  "Peixaria",
     "asset":  "/buildings/commerce/loja_peixe.png",
     "width":  2,
     "height":  2,
     "capacity":  0,
     "localAppeal":  0,
     "cost":  {
-                 "wood":  30,
+                 "wood":  15,
                  "stone":  10
              },
-    "workPoints":  6000,
-    "maxWorkers":  4,
+    "workPoints":  5000,
+    "maxWorkers":  2,
     "stockProduct":  "Peixe",
     "stockProductId":  "fish",
-    "stockCapacity":  40
+    "stockCapacity":  5,
+    "salesWorkPointsPerUnit":  50
 }

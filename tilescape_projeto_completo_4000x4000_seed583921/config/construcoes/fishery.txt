@@ -14,7 +14,7 @@
                  "stone":  10
              },
     "workPoints":  12000,
-    "maxWorkers":  10,
+    "maxWorkers":  40,
     "stockProduct":  "Peixe",
     "stockProductId":  "fish",
     "stockCapacity":  300,

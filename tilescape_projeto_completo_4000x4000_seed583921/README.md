@@ -241,9 +241,10 @@ remoção é sincronizada com os demais jogadores.
 
 ## Dinheiro
 
-Cada jogador começa com **C$ 10.000**. O saldo aparece na barra superior, ao
+Cada jogador começa com **C$ 25.000**. O saldo aparece na barra superior, ao
 lado do contador de viajantes. A carteira é criada no primeiro acesso após esta
-atualização (inclusive para contas já existentes) e é guardada no servidor.
+atualização para contas sem carteira; saldos já existentes são preservados e a
+carteira é guardada no servidor.
 Preços, salários, aluguéis, negociações e saldos aceitam até duas casas
 decimais (centavos), exibidas no padrão brasileiro; por exemplo, **C$ 1,23**
 por litro de leite.
@@ -263,9 +264,10 @@ e ao lado de uma estrada. Clique para iniciar a obra:
 | Simples 3 | 4 × 4 tiles | 128 pessoas | 30 | 1.200 madeiras, 2.000 pedras | 300.000 Work Points |
 
 Todos os jogadores podem iniciar construções das seis categorias. Para jogadores
-que não são Master, o custo de Madeira e Pedra é descontado dos armazéns
-concluídos do próprio jogador a até 60 tiles do centro da construção; o servidor
-exige os dois materiais e faz a cobrança atomicamente ao iniciar a obra. Se o
+que não são Master, o custo de Madeira, Pedra e, quando indicado, Ferro é
+descontado dos armazéns concluídos do próprio jogador a até 60 tiles do centro
+da construção; o servidor exige os materiais e faz a cobrança atomicamente ao
+iniciar a obra. Se o
 custo não estiver disponível, a construção não é iniciada. Cada jogador pode
 construir um primeiro **Armazém** gratuito, que fica pronto imediatamente; esse
 direito permanece registrado mesmo se o armazém for demolido. As demais
@@ -340,36 +342,47 @@ arredondadas como probabilidades.
 
 ### Comércio
 
-Na categoria **Comerciais**, a **Loja de Arroz** (2 × 2 tiles, até 4 funcionários,
-estoque máximo de 20 unidades de arroz) custa 100 madeiras e 20 pedras e exige
-9.000 Work Points. Cada tile deve estar coberto por uma ou mais áreas urbanas,
+Na categoria **Comerciais**, a **Loja de Arroz** (2 × 2 tiles, até 1 funcionário,
+estoque máximo de 5 unidades de arroz) custa 10 madeiras e 5 pedras e exige
+5.000 Work Points. Cada tile deve estar coberto por uma ou mais áreas urbanas,
 ao lado de uma estrada e sem sobrepor outras construções. O fluxo (prévia, obra,
 demolição, painel lateral com raio de busca de 60 tiles) é o mesmo das fazendas.
 As vendas usam arroz entregue pelo armazém ligado e o preço configurado pelo
 dono.
 
-As **Lojas de Batata, Milho, Cevada e Trigo** e o **Açougue** usam os mesmos
-parâmetros de construção e estoque da Loja de Arroz: 2 × 2 tiles, até 4
-funcionários, estoque máximo de 20 unidades, custo de 100 madeiras e 20 pedras
-e 9.000 Work Points. Cada uma vende, respectivamente, batata, milho, cevada,
-trigo ou carne vermelha. Todas devem ficar em área urbana, ao lado de uma
-estrada, recebem estoque do armazém ligado e permitem ao dono configurar o
-preço. O trabalho dos funcionários gera capacidade de venda à razão de 1
-unidade por 20 Work Points.
+As **Lojas de Batata, Milho, Cevada e Trigo** seguem os mesmos limites de
+funcionários, estoque e custo da Loja de Arroz. Cada uma vende o respectivo
+produto com capacidade de 1 unidade por 25 Work Points. O **Açougue** também
+emprega até 1 funcionário e guarda 5 unidades; cada unidade vendida exige 25
+Work Points, e a construção custa 15 madeiras, 10 pedras e 5.000 Work Points.
+A **Peixaria** emprega até 2 pessoas, guarda 5 peixes e usa 50 Work Points por
+unidade; custa 15 madeiras, 10 pedras e 5.000 Work Points. A **Leitaria**
+emprega 1 pessoa, guarda 120 litros e usa 1 Work Point por litro; custa 10
+madeiras, 5 pedras e 5.000 Work Points.
 
-A **Padaria** (2 × 2, 4 funcionários, até 100 pães) custa 4 madeiras e 4 pedras
-e exige 2.000 Work Points; cada funcionário permite vender até 25 pães por dia.
-A **Queijaria** (2 × 2, 5 funcionários, até 30 queijos) custa 10 madeiras e 10
-pedras e exige 8.000 Work Points; cada funcionário permite vender até 6 queijos
-por dia. Ambas recebem estoque do armazém ligado e permitem ao dono definir o
-preço. A **Chocolateria** e a **Frutaria** (2 × 2, 4 funcionários, estoque
-máximo de 12 unidades) custam 10 madeiras e 10 pedras, exigem 12.000 Work
-Points e vendem até 3 unidades por funcionário/dia. Ambas recebem estoque do
-armazém ligado e permitem configurar o preço.
+As lojas de **Açúcar** e **Especiarias** empregam até 4 pessoas, guardam 5
+unidades e usam 125 Work Points por unidade. As lojas de **Vegetais** e **Sal**
+também empregam até 4 pessoas, guardam 25 unidades e usam 20 Work Points por
+unidade. Todas custam 60 madeiras, 40 pedras e 70.000 Work Points.
 
-### Pesqueiro e Loja de Peixes
+A **Padaria** (2 × 2, até 8 funcionários, estoque máximo de 350 pães), a
+**Queijaria** (até 8 funcionários, 35 queijos), a **Frutaria** (até 8
+funcionários, 6 frutas) e a **Chocolateria** (até 8 funcionários, 20
+chocolates) custam 180 madeiras, 120 pedras e 60 ferros e exigem 480.000 Work
+Points cada. A capacidade de venda considera os Work Points gerados por seus
+funcionários: respectivamente 3, 26, 160 e 54 Work Points por unidade.
+Todas recebem estoque do armazém ligado e permitem definir o preço.
 
-Na categoria **Construções Artesanais**, o **Pesqueiro** (2 × 2 tiles, até 10
+O botão **Simular venda**, abaixo do preço, estima vendas e resultado com o
+histórico de comportamento guardado no navegador, o preço informado, estoque e
+funcionários atuais; não consulta o servidor. Sem histórico local, a interface
+avisa que ainda é cedo para simular. **Simular contratação**, abaixo do salário,
+calcula localmente a estimativa de empregados usando as construções e moradores
+recebidos no mapa e os valores digitados no formulário.
+
+### Pesqueiro e Peixaria
+
+Na categoria **Construções Artesanais**, o **Pesqueiro** (2 × 2 tiles, até 40
 funcionários, estoque máximo de 300 peixes e 10 Ferramentas) custa 60 madeiras e
 10 pedras e exige 12.000 Work Points. Deve ficar em área urbana, ao lado de uma
 estrada e com pelo menos um tile sobre a água (o resto pode ser terra). Produz
@@ -379,12 +392,12 @@ eficiência cai 30% e a penalidade sobe 10% por dia até 90%; ao suprir, ela cai
 por dia até zerar. Ferramentas (5 kg, 0,01 m³, sem validade) chegam por armazém
 ligado.
 
-Na categoria **Comerciais**, a **Loja de Peixes** (2 × 2, 4 funcionários, estoque
-máximo de 40 peixes) custa 30 madeiras e 10 pedras e exige 6.000 Work Points. As
+Na categoria **Comerciais**, a **Peixaria** (2 × 2, 2 funcionários, estoque
+máximo de 5 peixes) custa 15 madeiras e 10 pedras e exige 5.000 Work Points. As
 vendas e o consumo das residências seguem a mesma fórmula do arroz; o consumo de
 peixe aparece em "Ver consumo da casa".
 
-### Fazenda leiteira e Loja de Leite
+### Fazenda leiteira e Leitaria
 
 Na categoria **Fazendas**, a **Fazenda leiteira** (3 × 3 tiles, até 10
 funcionários, estoque máximo de 400 litros) custa 60 madeiras e 60 pedras e
@@ -392,17 +405,16 @@ exige 12.000 Work Points. Ela produz 1 litro a cada 5 Work Points efetivos; sua
 eficiência é de 40% nos meses 1–3, 100% nos meses 4–6, 80% nos meses 7–9 e
 60% nos meses 10–12. O leite produzido segue para o armazém ligado.
 
-Na categoria **Comerciais**, a **Loja de Leite** copia as características da
-Loja de Peixes: 2 × 2 tiles, até 4 funcionários, estoque máximo de 400 litros,
-custo de 30 madeiras e 10 pedras e 6.000 Work Points para construir. Seu preço
-padrão é C$ 10 e pode ser alterado pelo dono. A loja recebe leite do armazém
+Na categoria **Comerciais**, a **Leitaria** ocupa 2 × 2 tiles, emprega até 1
+pessoa, guarda 120 litros, custa 10 madeiras e 5 pedras e exige 5.000 Work
+Points para construir. Seu preço padrão é C$ 10 e pode ser alterado pelo dono.
+A loja recebe leite do armazém
 ligado e vende às residências pelo mesmo cálculo de demanda e benefício usado
 para os demais produtos.
 
-As **Lojas de Açúcar, Vegetais, Sal e Especiarias** também seguem o modelo da
-Loja de Peixes: cada uma ocupa 2 × 2 tiles, emprega até 4 funcionários, guarda
-até 40 unidades, custa 30 madeiras e 10 pedras e exige 6.000 Work Points. Cada
-loja recebe seu produto do armazém ligado e vende por preço definido pelo dono.
+As **Lojas de Açúcar, Vegetais, Sal e Especiarias** ocupam 2 × 2 tiles e seguem
+os limites e custos definidos na seção Comércio. Cada loja recebe seu produto
+do armazém ligado e vende por preço definido pelo dono.
 
 O consumo diário desejável por morador das **cestas básica, intermediária e
 avançada**
@@ -499,7 +511,7 @@ lateral), mas sem moradores nem aluguel.
 | Trigo | Trigo | 40 % / 50 % / 60 % / 100 % | 6 meses | 1.000 / 20 | 1.000 |
 | Cevada | Cevada | 30 % / 70 % / 100 % / 60 % | 6 meses | 1.000 / 20 | 1.000 |
 | Milho | Milho | 80 % / 100 % / 10 % / 10 % | 6 meses | 1.000 / 20 | 1.000 |
-| Bovina | Carne vermelha | 40 % / 100 % / 80 % / 60 % | 24 meses | 500 / 40 | 1.000 |
+| Bovina | Carne vermelha | 40 % / 100 % / 80 % / 60 % | 24 meses | 500 / 40 | 4.000 |
 | Cana | Cana | 90 % / 80 % / 100 % / 90 % | 6 meses | 100 / 25 | 2.000 |
 | Especiarias | Especiarias | 100 % / 60 % / 60 % / 60 % | 6 meses | 5.000 / 10 | 600 |
 | Vegetais | Vegetais | 20 % / 40 % / 100 % / 80 % | 2 meses | 5.000 / 10 | 1.000 |
@@ -530,12 +542,14 @@ Em obras, fazendas, comércios e indústrias o dono define **funcionários
 desejados**, **salário por dia** e **carga horária** (4 a 14 h). Durante a obra,
 é possível definir até 100 funcionários, independentemente do limite final do
 edifício; ao concluir, o número desejado e os empregados são reduzidos ao máximo
-definitivo da construção (por exemplo, 4 na Loja de Leite). Em construções
+definitivo da construção (por exemplo, 1 na Leitaria). Em construções
 concluídas vale o limite do catálogo. Todo dia às 12:00 (horário do mundo), cada
 residência considera todas as ofertas com vagas a até 60 tiles. O benefício de
-cada oferta é `vagas × F_H² × (salário diário ÷ horas) × fator_distância`, com
+cada oferta é `vagas × bônus × F_H² × (salário diário ÷ horas) × fator_distância`, com
 `F_H = 1 − 0,5·(|H−8|/6)²` e `fator_distância = √(60 / (60 + d))`, onde `d` é a
-distância entre os centros da residência e do trabalho. Os moradores são
+distância entre os centros da residência e do trabalho. O bônus depende das
+vagas abertas: ×5 (1–4), ×3 (5–10), ×2 (11–20), ×1 (21–40), ×0,9 (41–100),
+×0,8 (101–300) e ×0,7 (mais de 300). Os moradores são
 repartidos entre os postos proporcionalmente a esses benefícios. O arredondamento
 inteiro pelo método dos maiores restos mantém a soma igual ao número de moradores
 que podem ser contratados; se uma oferta atingir suas vagas, o excedente é
@@ -550,10 +564,11 @@ necessário. Saúde e felicidade ainda são fixas em 100.
 Nas lojas de arroz, batata, milho, cevada, trigo, peixe, leite, açúcar, vegetais,
 sal, especiarias e no Açougue, o dono define o preço (a partir de C$ 0,01, com
 até duas casas decimais). Às 00:00, a capacidade de venda considera os Work
-Points gerados pelos funcionários no dia: as lojas de produtos por unidade
-(arroz, batata, milho, cevada, trigo, peixe, açúcar, vegetais, sal, especiarias
-e carne vermelha) ganham 1 unidade por 20 Work Points; a Loja de Leite ganha 1
-litro por Work Point. Para cada produto, as residências consideram lojas do
+Points gerados pelos funcionários no dia: arroz/batata/milho/cevada/trigo e
+carne vermelha usam 25 WP/unidade; peixe, 50; açúcar/especiarias, 125;
+vegetais/sal, 20; e leite, 1 WP/litro. Padaria, Queijaria, Frutaria e
+Chocolateria usam, respectivamente, 3, 26, 160 e 54 WP por unidade. Para cada
+produto, as residências consideram lojas do
 produto em até 60 tiles. O custo de referência `RR` é o custo diário por pessoa
 da cesta básica e `RR2`, o da cesta intermediária. Ambos usam preços médios
 ponderados pelas unidades vendidas nos últimos 30 dias. Produtos sem vendas no
@@ -714,10 +729,18 @@ transferência interna sem cobrança e aparece com gasto de produto C$ 0.
 
 ## Contábil
 
-O botão **Contábil** na barra inferior tem quatro abas e permite escolher entre
-o último dia ou os últimos 7 ou 30 dias do relógio do jogo. **Lojas comerciais**
+O botão **Contábil** na barra inferior tem uma aba **Resumo** e quatro abas
+detalhadas. O resumo permite consultar a semana atual ou qualquer uma das quatro
+semanas anteriores. O lucro/prejuízo inclui receitas das lojas, aluguéis e
+vendas de armazéns, menos compras de armazéns, despesas de produtos e salários.
+Também mostra o número atual de funcionários empregados e os valores estimados
+da empresa e do estoque. A empresa é avaliada pelo custo de materiais de cada
+construção aos preços médios atuais de venda configurados nos armazéns; o estoque
+usa os mesmos preços e inclui armazéns, produtos principais e insumos das
+construções. Produtos sem preço anunciado ficam fora do valor estimado.
+**Lojas comerciais**
 lista todas as lojas do jogador e soma salários pagos e receita de vendas no
-período selecionado; **Visualizar** centraliza a loja no mapa e abre seus
+período selecionado (último dia ou últimos 7 ou 30 dias); **Visualizar** centraliza a loja no mapa e abre seus
 detalhes. **Armazéns** mostra os armazéns do jogador (também com **Visualizar**),
 salários pagos e, por produto,
 quantidades e valores comprados/vendidos, além do resultado bruto (receita de

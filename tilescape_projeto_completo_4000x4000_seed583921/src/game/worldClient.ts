@@ -26,6 +26,10 @@ function isCityAssembly(value: unknown): value is CityAssembly {
     typeof city.name === 'string' &&
     Number.isInteger(city.centerX) &&
     Number.isInteger(city.centerY) &&
+    typeof city.minimumWage === 'number' &&
+    Number.isFinite(city.minimumWage) &&
+    city.minimumWage >= 1 &&
+    city.minimumWage <= 100000 &&
     Number.isInteger(city.population) &&
     Number.isInteger(city.wellbeing) &&
     Number.isInteger(city.economy) &&

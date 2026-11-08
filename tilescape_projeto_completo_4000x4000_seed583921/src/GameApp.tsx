@@ -172,6 +172,12 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Essa cidade não existe mais.';
         } else if (body.error === 'invalid_city') {
           error = 'Essa cidade é inválida.';
+        } else if (body.error === 'invalid_minimum_wage') {
+          error = 'O salário mínimo deve ficar entre C$ 1 e C$ 100.000, com até 2 casas decimais.';
+        } else if (body.error === 'minimum_wage_update_unavailable') {
+          error = 'Não foi possível atualizar o salário mínimo da cidade.';
+        } else if (body.error === 'wage_below_minimum') {
+          error = 'O salário ofertado não pode ser menor que o salário mínimo da cidade.';
         } else if (body.error === 'invalid_zones') {
           error = 'As regiões enviadas são inválidas.';
         } else if (body.error === 'zone_outside_municipality') {
@@ -585,6 +591,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const selectedResidence = selectedResidenceId
     ? visibleResidentialBuildings.find((building) => building.id === selectedResidenceId) ?? null
     : null;
+  const selectedResidenceMinimumWage = selectedResidence
+    ? cities.find((city) => city.id === selectedResidence.cityId)?.minimumWage ?? 1
+    : 1;
   const selectedResidenceKey = selectedResidence && !selectedResidence.id.startsWith('pending-')
     ? selectedResidence.id
     : null;
@@ -1294,6 +1303,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       name: cityName,
       centerX: center.x,
       centerY: center.y,
+      minimumWage: 1,
       population: 0,
       wellbeing: 0,
       economy: 0,
@@ -1545,6 +1555,32 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setCityName(updated.name);
     } catch (error) {
       setCityError(error instanceof Error ? error.message : 'Não foi possível salvar o nome.');
+    } finally {
+      setIsCitySaving(false);
+    }
+  };
+
+  const saveCityMinimumWage = async (minimumWage: number) => {
+    if (!selectedCity || !user.isMaster) return;
+    setIsCitySaving(true);
+    setCityError('');
+    try {
+      const updated = await cityRequest<Pick<CityAssembly, 'id' | 'minimumWage'>>(
+        `/api/cities/${selectedCity.id}/minimum-wage`,
+        { method: 'PATCH', body: JSON.stringify({ minimumWage }) },
+      );
+      setCities((current) =>
+        current.map((city) =>
+          city.id === updated.id ? { ...city, minimumWage: updated.minimumWage } : city,
+        ),
+      );
+      setSelectedCity((current) =>
+        current?.id === updated.id
+          ? { ...current, minimumWage: updated.minimumWage }
+          : current,
+      );
+    } catch (error) {
+      setCityError(error instanceof Error ? error.message : 'Não foi possível salvar o salário mínimo.');
     } finally {
       setIsCitySaving(false);
     }
@@ -1830,6 +1866,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         {selectedResidence && (
           <ResidencePanel
             building={selectedResidence}
+            cityMinimumWage={selectedResidenceMinimumWage}
             isOwner={isResidenceOwner}
             isSaving={isSavingWorkSettings}
             error={workSettingsError}
@@ -2271,6 +2308,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             setCityError('');
           }}
           onSave={() => void saveCityName()}
+          onSaveMinimumWage={(minimumWage) => void saveCityMinimumWage(minimumWage)}
           onChooseLocation={chooseCityLocation}
           onManageZones={openCityZoneEditor}
           onOpenConsumption={() => {

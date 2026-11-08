@@ -1,7 +1,11 @@
+import { isCurrencyAmount } from './currency.js';
+
 export const MUNICIPAL_AREA_SIZE = 303;
 export const MUNICIPAL_AREA_RADIUS = Math.floor(MUNICIPAL_AREA_SIZE / 2);
 export const ASSEMBLY_SIZE = 3;
 export const MAX_CITY_ZONES = 100;
+export const MIN_CITY_MINIMUM_WAGE = 1;
+export const MAX_CITY_MINIMUM_WAGE = 100000;
 
 export type CityPlacementError =
   | 'map_bounds'
@@ -40,6 +44,7 @@ export interface CityAssembly {
   name: string;
   centerX: number;
   centerY: number;
+  minimumWage: number;
   population: number;
   wellbeing: number;
   economy: number;
@@ -47,6 +52,17 @@ export interface CityAssembly {
   jobOffers?: number;
   averageWage?: number;
   zones: CityZone[];
+}
+
+export function parseCityMinimumWage(value: unknown): number | null {
+  if (
+    !isCurrencyAmount(value) ||
+    value < MIN_CITY_MINIMUM_WAGE ||
+    value > MAX_CITY_MINIMUM_WAGE
+  ) {
+    return null;
+  }
+  return value;
 }
 
 export function getCityZonePlacementError(

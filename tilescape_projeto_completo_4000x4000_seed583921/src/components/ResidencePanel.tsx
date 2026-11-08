@@ -1,5 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react';
 import {
+  MAX_CITY_MINIMUM_WAGE,
+  MIN_CITY_MINIMUM_WAGE,
+} from '../types/city';
+import {
   MAX_RENT,
   MAX_WAGE,
   MAX_WORK_HOURS,
@@ -28,6 +32,7 @@ import { GAME_RULES } from '../generated/gameConfig';
 
 interface ResidencePanelProps {
   building: ResidentialBuilding;
+  cityMinimumWage: number;
   isOwner: boolean;
   isSaving: boolean;
   error: string;
@@ -139,6 +144,7 @@ function getProductionDescription(
 
 export default function ResidencePanel({
   building,
+  cityMinimumWage,
   isOwner,
   isSaving,
   error,
@@ -576,7 +582,7 @@ export default function ResidencePanel({
             Salário ofertado (C$ por dia de trabalho)
             <input
               type="number"
-              min={0}
+              min={Math.max(MIN_CITY_MINIMUM_WAGE, cityMinimumWage)}
               max={MAX_WAGE}
               step={0.01}
               value={wage}
@@ -584,6 +590,7 @@ export default function ResidencePanel({
               onChange={(event) => setWage(event.target.value)}
             />
           </label>
+          <small>Salário mínimo da cidade: {formatMoney(cityMinimumWage)} por dia.</small>
           {isOwner && (
             <>
               <button

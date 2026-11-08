@@ -19,6 +19,7 @@ import {
   type CityPlacementError,
   getCityZonePlacementError,
   getCityPlacementError,
+  parseCityMinimumWage,
   MAX_CITY_ZONES,
   MUNICIPAL_AREA_RADIUS,
 } from '../src/types/city.js';
@@ -364,6 +365,7 @@ interface CityAssembly {
   name: string;
   centerX: number;
   centerY: number;
+  minimumWage: number;
   population: number;
   wellbeing: number;
   economy: number;
@@ -806,12 +808,13 @@ async function getCities(): Promise<CityAssembly[]> {
       name: string;
       center_x: number;
       center_y: number;
+      minimum_wage: number;
       population: number;
       wellbeing: number;
       economy: number;
       zones: CityZone[];
     }>(
-      `SELECT city.id, city.name, city.center_x, city.center_y,
+      `SELECT city.id, city.name, city.center_x, city.center_y, city.minimum_wage,
             COALESCE((
               SELECT SUM(home.occupants)::integer
               FROM residential_buildings AS home
@@ -869,6 +872,7 @@ async function getCities(): Promise<CityAssembly[]> {
     name: row.name,
     centerX: row.center_x,
     centerY: row.center_y,
+    minimumWage: row.minimum_wage,
     population: row.population,
     wellbeing: row.wellbeing,
     economy: row.economy,
@@ -3307,13 +3311,14 @@ async function createCityAssembly(
       name: string;
       center_x: number;
       center_y: number;
+      minimum_wage: number;
       population: number;
       wellbeing: number;
       economy: number;
     }>(
       `INSERT INTO city_assemblies (id, name, center_x, center_y, created_by)
        VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, center_x, center_y, population, wellbeing, economy`,
+       RETURNING id, name, center_x, center_y, population, wellbeing, economy, minimum_wage`,
       [randomUUID(), city.name, city.centerX, city.centerY, userId],
     );
     await client.query('COMMIT');
@@ -3324,6 +3329,7 @@ async function createCityAssembly(
         name: row.name,
         centerX: row.center_x,
         centerY: row.center_y,
+        minimumWage: row.minimum_wage,
         population: row.population,
         wellbeing: row.wellbeing,
         economy: row.economy,
@@ -3354,6 +3360,7 @@ async function replaceCityZones(
       name: string;
       center_x: number;
       center_y: number;
+      minimum_wage: number;
       population: number;
       wellbeing: number;
       economy: number;
@@ -3364,7 +3371,7 @@ async function replaceCityZones(
                 FROM residential_buildings AS home
                 WHERE home.city_id = city_assemblies.id
               ), 0) AS population,
-              wellbeing, economy
+              wellbeing, economy, minimum_wage
        FROM city_assemblies WHERE id = $1 FOR UPDATE`,
       [cityId],
     );
@@ -3404,6 +3411,7 @@ async function replaceCityZones(
         name: cityRow.name,
         centerX: cityRow.center_x,
         centerY: cityRow.center_y,
+        minimumWage: cityRow.minimum_wage,
         population: cityRow.population,
         wellbeing: cityRow.wellbeing,
         economy: cityRow.economy,
@@ -3452,12 +3460,13 @@ async function createResidentialBuilding(
       name: string;
       center_x: number;
       center_y: number;
+      minimum_wage: number;
       population: number;
       wellbeing: number;
       economy: number;
       zones: CityZone[];
     }>(
-      `SELECT city.id, city.name, city.center_x, city.center_y,
+      `SELECT city.id, city.name, city.center_x, city.center_y, city.minimum_wage,
               city.population, city.wellbeing, city.economy,
               COALESCE(
                 json_agg(json_build_object(
@@ -3481,6 +3490,7 @@ async function createResidentialBuilding(
       name: city.name,
       centerX: city.center_x,
       centerY: city.center_y,
+      minimumWage: city.minimum_wage,
       population: city.population,
       wellbeing: city.wellbeing,
       economy: city.economy,
@@ -3595,8 +3605,8 @@ async function createResidentialBuilding(
     const { rows } = await client.query<ResidentialBuildingRow>(
       `INSERT INTO residential_buildings
          (id, building_type, building_number, tile_x, tile_y, city_id, status, completed_at, created_by,
-          selected_input_product_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7 = 'completed' THEN clock_timestamp() ELSE NULL END, $8, $9)
+          selected_input_product_id, wage)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7 = 'completed' THEN clock_timestamp() ELSE NULL END, $8, $9, GREATEST(10, $10))
        RETURNING ${RESIDENTIAL_COLUMNS}`,
       [
         randomUUID(),
@@ -3608,6 +3618,7 @@ async function createResidentialBuilding(
         isFirstWarehouse ? 'completed' : 'under_construction',
         userId,
         definition.defaultInputProductId ?? null,
+        city.minimumWage,
       ],
     );
     await client.query('COMMIT');
@@ -5057,15 +5068,20 @@ async function start() {
           building_type: string;
           status: ResidentialBuilding['status'];
           created_by: string;
+          city_minimum_wage: number;
           desired_workers: number;
           crop_phase: Crop['phase'] | null;
           farm_auto_planting_enabled: boolean;
           farm_planting_workers: number;
           farm_harvest_workers: number;
         }>(
-          `SELECT building_type, status, created_by, desired_workers, crop_phase,
-                  farm_auto_planting_enabled, farm_planting_workers, farm_harvest_workers
-           FROM residential_buildings WHERE id = $1 FOR UPDATE`,
+          `SELECT building.building_type, building.status, building.created_by,
+                  city.minimum_wage AS city_minimum_wage, building.desired_workers,
+                  building.crop_phase, building.farm_auto_planting_enabled,
+                  building.farm_planting_workers, building.farm_harvest_workers
+           FROM residential_buildings AS building
+           JOIN city_assemblies AS city ON city.id = building.city_id
+           WHERE building.id = $1 FOR UPDATE OF building`,
           [request.params.id],
         );
         const building = buildingRows[0];
@@ -5077,6 +5093,11 @@ async function start() {
         if (building.created_by !== userId) {
           await client.query('ROLLBACK');
           response.status(403).json({ error: 'residence_not_owned' });
+          return;
+        }
+        if (settings.wage < building.city_minimum_wage) {
+          await client.query('ROLLBACK');
+          response.status(400).json({ error: 'wage_below_minimum' });
           return;
         }
         const definition = getResidenceDefinition(building.building_type);
@@ -5829,6 +5850,61 @@ async function start() {
         console.error('Não foi possível atualizar o nome da cidade:', error);
         response.status(503).json({ error: 'city_update_unavailable' });
       });
+  });
+  app.patch('/api/cities/:id/minimum-wage', requireAuth, requireMasterAuth, (request, response) => {
+    const minimumWage = parseCityMinimumWage(request.body?.minimumWage);
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        request.params.id,
+      ) ||
+      minimumWage === null
+    ) {
+      response.status(400).json({ error: 'invalid_minimum_wage' });
+      return;
+    }
+
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const { rows } = await client.query<{ id: string; minimum_wage: number }>(
+          `UPDATE city_assemblies
+           SET minimum_wage = $1
+           WHERE id = $2
+           RETURNING id, minimum_wage`,
+          [minimumWage, request.params.id],
+        );
+        const city = rows[0];
+        if (!city) {
+          await client.query('ROLLBACK');
+          response.status(404).json({ error: 'city_not_found' });
+          return;
+        }
+        await client.query(
+          `UPDATE residential_buildings
+           SET wage = $1
+           WHERE city_id = $2 AND wage < $1`,
+          [city.minimum_wage, city.id],
+        );
+        await client.query('COMMIT');
+        response.json({ id: city.id, minimumWage: city.minimum_wage });
+        void publishCities().catch((error: unknown) => {
+          console.error('O salário mínimo foi salvo, mas a atualização das cidades falhou:', error);
+        });
+      } catch (error: unknown) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter o salário mínimo da cidade:', rollbackError);
+        });
+        console.error('Não foi possível atualizar o salário mínimo da cidade:', error);
+        response.status(503).json({ error: 'minimum_wage_update_unavailable' });
+      } finally {
+        client.release();
+      }
+    })().catch((error: unknown) => {
+      console.error('Não foi possível iniciar a atualização do salário mínimo:', error);
+      response.status(503).json({ error: 'minimum_wage_update_unavailable' });
+    });
   });
   app.delete('/api/cities/:id', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);

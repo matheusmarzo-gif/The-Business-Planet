@@ -36,6 +36,7 @@ interface Draft {
 }
 
 const number = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
+const volume = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 
 export default function WarehousePanel({
   building,
@@ -148,13 +149,20 @@ export default function WarehousePanel({
         {filteredProducts.map((product) => {
           const draft = draftFor(product.id);
           const averagePrice = averagePrices.get(product.id);
+          const quantity = stock.get(product.id) ?? 0;
+          const totalWeight = quantity * product.weightKg;
+          const totalVolume = quantity * product.volumeM3;
           return (
             <div className="warehouse-row" key={product.id}>
               <span className="warehouse-product">
-                <img src={product.icon} alt="" />
+                <img
+                  src={product.icon}
+                  alt=""
+                  title={`${product.name} — peso: ${number.format(product.weightKg)} kg/un. (${number.format(totalWeight)} kg no estoque); volume: ${volume.format(product.volumeM3)} m³/un. (${volume.format(totalVolume)} m³ ocupados).`}
+                />
                 {product.name}
               </span>
-              <span>{number.format(stock.get(product.id) ?? 0)} {product.unit === 'liter' ? 'L' : 'un.'}</span>
+              <span>{number.format(quantity)} {product.unit === 'liter' ? 'L' : 'un.'}</span>
               <span>
                 {averagePrice !== undefined
                   ? `C$ ${number.format(averagePrice)}`

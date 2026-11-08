@@ -163,6 +163,14 @@ produção do jogador conectado. Ao selecionar uma categoria de construção na
 barra inferior, o catálogo abre em um painel lateral à direita; escolha um
 edifício no painel e clique no mapa para posicioná-lo.
 
+No painel da Assembleia, todos os jogadores podem consultar o salário mínimo
+diário da cidade. Somente a conta Master pode alterá-lo; ao aumentar o piso,
+salários menores das construções existentes são reajustados automaticamente.
+O servidor também impede que uma construção ofereça salário abaixo do mínimo
+vigente na cidade. Em **Produtos e estoque** do armazém, passe o mouse sobre o
+ícone de um produto para ver o peso unitário e total e o volume unitário e
+ocupado pelo estoque.
+
 A ordem dos cartões é definida por categoria: Comerciais lista primeiro as
 lojas de arroz, trigo, cevada, batata e milho, depois Peixaria, Leitaria e
 Açougue; em seguida lojas de açúcar, especiarias, vegetais e sal, Padaria,

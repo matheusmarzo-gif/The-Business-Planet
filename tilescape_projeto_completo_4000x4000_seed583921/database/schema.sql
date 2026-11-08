@@ -18,12 +18,17 @@ CREATE TABLE IF NOT EXISTS city_assemblies (
   name VARCHAR(80) NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 80),
   center_x INTEGER NOT NULL CHECK (center_x BETWEEN 151 AND 3848),
   center_y INTEGER NOT NULL CHECK (center_y BETWEEN 151 AND 3848),
+  minimum_wage NUMERIC(12, 2) NOT NULL DEFAULT 1 CHECK (minimum_wage BETWEEN 1 AND 100000),
   population INTEGER NOT NULL DEFAULT 0 CHECK (population >= 0),
   wellbeing INTEGER NOT NULL DEFAULT 0 CHECK (wellbeing BETWEEN 0 AND 100),
   economy INTEGER NOT NULL DEFAULT 0 CHECK (economy >= 0),
   created_by TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
 );
+
+ALTER TABLE city_assemblies
+  ADD COLUMN IF NOT EXISTS minimum_wage NUMERIC(12, 2) NOT NULL DEFAULT 1
+  CHECK (minimum_wage BETWEEN 1 AND 100000);
 
 CREATE TABLE IF NOT EXISTS city_zones (
   id UUID PRIMARY KEY,
@@ -106,6 +111,11 @@ ON CONFLICT (user_id) DO NOTHING;
 
 ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS wage NUMERIC(12, 2) NOT NULL DEFAULT 10 CHECK (wage BETWEEN 0 AND 100000);
+UPDATE residential_buildings AS building
+SET wage = city.minimum_wage
+FROM city_assemblies AS city
+WHERE building.city_id = city.id
+  AND building.wage < city.minimum_wage;
 ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS work_hours_per_day SMALLINT NOT NULL DEFAULT 8
   CHECK (work_hours_per_day BETWEEN 1 AND 24);

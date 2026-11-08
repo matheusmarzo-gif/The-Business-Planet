@@ -6,6 +6,9 @@ import {
   getCityZonePlacementError,
   getRequiredCityZone,
   isFootprintInCityZone,
+  MAX_CITY_MINIMUM_WAGE,
+  MIN_CITY_MINIMUM_WAGE,
+  parseCityMinimumWage,
   type CityZone,
 } from './city';
 import { STARTING_BALANCE, formatMoney } from './wallet';
@@ -81,6 +84,20 @@ import { getDairyFarmEfficiency } from './dairy';
 import { parseBasicDemandConfig } from './commerceDemand';
 
 const city = { centerX: 1000, centerY: 1000 };
+
+describe('city minimum wage', () => {
+  it('accepts currency values from the default minimum through the maximum', () => {
+    assert.equal(parseCityMinimumWage(MIN_CITY_MINIMUM_WAGE), 1);
+    assert.equal(parseCityMinimumWage(12.34), 12.34);
+    assert.equal(parseCityMinimumWage(MAX_CITY_MINIMUM_WAGE), 100000);
+  });
+
+  it('rejects values outside the supported currency range or precision', () => {
+    for (const value of [0, -1, 100000.01, 1.001, '1']) {
+      assert.equal(parseCityMinimumWage(value), null);
+    }
+  });
+});
 
 describe('wallet', () => {
   it('starts with C$ 25.000 and formats money in Brazilian style', () => {
@@ -1635,6 +1652,7 @@ describe('municipal zones', () => {
       name: 'Test',
       centerX: 100,
       centerY: 100,
+      minimumWage: 1,
       population: 0,
       wellbeing: 0,
       economy: 0,
@@ -1973,6 +1991,7 @@ describe('municipal zones', () => {
           name: 'Test',
           centerX: 100,
           centerY: 100,
+          minimumWage: 1,
           population: 0,
           wellbeing: 0,
           economy: 0,
@@ -2023,6 +2042,7 @@ describe('municipal zones', () => {
           name: 'Test',
           centerX: 100,
           centerY: 100,
+          minimumWage: 1,
           population: 0,
           wellbeing: 0,
           economy: 0,
@@ -2076,6 +2096,7 @@ describe('fishery', () => {
     name: 'c',
     centerX: 100,
     centerY: 100,
+    minimumWage: 1,
     population: 0,
     wellbeing: 0,
     economy: 0,
@@ -2107,6 +2128,7 @@ describe('fishery', () => {
       name: 'Rural City',
       centerX: 100,
       centerY: 100,
+      minimumWage: 1,
       population: 0,
       wellbeing: 0,
       economy: 0,

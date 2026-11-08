@@ -41,6 +41,8 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/game/GameMap.tsx` | Renderização PixiJS, câmera, seleção de tiles, prévias e interação com cidades, estradas e residências. |
 | `src/game/worldClient.ts` | Autentica o WebSocket, valida mensagens recebidas e atualiza o estado compartilhado. |
 | `src/components/ConstructionBar.tsx` | Barra inferior de categorias; a seleção abre o catálogo de construções no painel lateral direito. |
+| `src/components/CityAssemblyModal.tsx` | Informações da cidade, inclusive salário mínimo; edição do piso restrita à conta master. |
+| `src/components/WarehousePanel.tsx` | Produtos e estoque do armazém; tooltip nos ícones mostra peso e volume unitários e totais. |
 | `src/types/city.ts` | Tipos, dimensões e regras geométricas de cidades/Assembleias. |
 | `src/types/road.ts` | Tipos, limites, validação, interpolação e escolha das peças de estrada. |
 | `src/types/residence.ts` | Tipos, validação compartilhada e regras geométricas das construções. |
@@ -422,6 +424,12 @@ mapeamento e verificar todas as curvas.
 - Emprego (`src/types/employment.ts`): obras e construções concluídas que não
   são residências têm `desired_workers` (0 até 100 durante a obra e 0 até
   `maxWorkers` após a conclusão; padrão 0), `wage` e `work_hours_per_day`.
+  Cada cidade guarda `minimum_wage` (padrão C$ 1/dia), visível a todos e
+  editável apenas pela conta master. O servidor rejeita ofertas abaixo do piso;
+  aumentá-lo reajusta na mesma transação os salários menores nas construções
+  daquela cidade. Novas construções começam com salário de pelo menos C$ 10 ou
+  o piso vigente, o que for maior. A inicialização do esquema também eleva
+  salários antigos que estejam abaixo do piso.
   `runDailyEmployment` (mesmo lock `583921303`, chamada em
   `advanceClock`) às 12:00 do mundo recalcula do zero `job_assignments`
   (`workplace_id`, `residence_id`, `count`): `allocateWorkers` percorre as
@@ -813,7 +821,9 @@ de sucesso.
 `server/index.ts` carrega `database/schema.sql` ao iniciar:
 
 - `world_state` guarda o relógio persistente do mundo.
-- `city_assemblies` guarda nomes, centros, métricas e autorias.
+- `city_assemblies` guarda nomes, centros, métricas, autorias e o salário
+  mínimo diário (NUMERIC(12,2), padrão C$ 1); a alteração do piso atualiza
+  salários menores em `residential_buildings` na mesma transação.
 - `city_zones` guarda os retângulos municipais, com cascata ao excluir a cidade.
 - `road_tiles` guarda uma linha por tile, referência à cidade e autoria.
 - `player_wallets` guarda o saldo (`balance`, NUMERIC(14,2), pode ficar negativo) por `user_id` (`sub`

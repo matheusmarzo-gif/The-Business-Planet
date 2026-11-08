@@ -120,6 +120,7 @@ import {
   getCityPopulation,
   IMMIGRATION_POPULATION_LIMIT,
 } from '../src/types/immigration.js';
+import { planResidenceRelocations } from '../src/types/residence-relocation.js';
 import { DEFAULT_TILE_LIST } from '../src/utils/tileAssets.js';
 import { createMapGenerator } from '../src/utils/mapGenerator.js';
 import { WORLD_CONFIG } from '../src/utils/worldConfig.js';
@@ -938,6 +939,7 @@ async function runDailyImmigration(): Promise<boolean> {
       await client.query('ROLLBACK');
       return false;
     }
+
     const currentDay = Date.parse(`${state.day}T00:00:00Z`);
     const lastDay = state.last_day ? Date.parse(`${state.last_day}T00:00:00Z`) : currentDay;
     const missedDays = Math.min(30, Math.round((currentDay - lastDay) / 86_400_000));
@@ -994,6 +996,166 @@ async function runDailyImmigration(): Promise<boolean> {
   } catch (error) {
     await client.query('ROLLBACK').catch((rollbackError: unknown) => {
       console.error('Não foi possível reverter a imigração diária:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function runMonthlyResidenceRelocation(): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const lockStartedAt = performance.now();
+    await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const lockWaitMs = performance.now() - lockStartedAt;
+    const { rows: stateRows } = await client.query<{
+      day: string;
+      day_of_month: number;
+      hour: number;
+      last_day: string | null;
+    }>(
+      `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+              EXTRACT(DAY FROM world_time AT TIME ZONE 'UTC')::int AS day_of_month,
+              EXTRACT(HOUR FROM world_time AT TIME ZONE 'UTC')::int AS hour,
+              to_char(last_residence_relocation_day, 'YYYY-MM-DD') AS last_day
+       FROM world_state WHERE id = 1 FOR UPDATE`,
+    );
+    const state = stateRows[0];
+    if (!state || state.day_of_month !== 7 || state.hour < 3 || state.last_day === state.day) {
+      await client.query('ROLLBACK');
+      return false;
+    }
+
+    const counts = emptyPerformanceCounts();
+    return await measurePerformanceStage(
+      'mudanças de residência',
+      '03:00',
+      state.day,
+      randomUUID(),
+      counts,
+      async () => {
+        const { rows: residences } = await client.query<{
+          id: string;
+          city_id: string;
+          building_type: ResidenceType;
+          rent: number;
+          occupants: number;
+        }>(
+          `SELECT id, city_id, building_type, rent, occupants
+           FROM residential_buildings
+           WHERE status = 'completed'`,
+        );
+        counts.residences = residences.filter(
+          (row) => getResidenceDefinition(row.building_type)?.kind === 'residence',
+        ).length;
+        const { rows: workplaces } = await client.query<{ id: string; wage: number }>(
+          'SELECT id, wage FROM residential_buildings',
+        );
+        const { rows: assignments } = await client.query<{
+          workplace_id: string;
+          residence_id: string;
+          count: number;
+        }>('SELECT workplace_id, residence_id, count FROM job_assignments');
+        const averageIncomes = getAverageIncomes(
+          residences.map((row) => ({ id: row.id, occupants: row.occupants })),
+          new Map(workplaces.map((row) => [row.id, row.wage])),
+          assignments.map((row) => ({
+            workplaceId: row.workplace_id,
+            residenceId: row.residence_id,
+            count: row.count,
+          })),
+        );
+        const { rows: productCosts } = await client.query<{
+          building_id: string;
+          monthly_products_cost: number;
+        }>(
+          `WITH product_costs AS (
+             SELECT building_id, product_id,
+                    SUM(quantity / NULLIF(occupants, 0)) AS per_person_quantity,
+                    SUM(spent) / NULLIF(SUM(quantity), 0) AS average_price
+             FROM residence_consumption
+             WHERE day >= $1::date - 30 AND day < $1::date
+             GROUP BY building_id, product_id
+           )
+           SELECT building_id,
+                  COALESCE(SUM(per_person_quantity * average_price), 0)::float8
+                    AS monthly_products_cost
+           FROM product_costs
+           GROUP BY building_id`,
+          [state.day],
+        );
+        const productsCostByResidence = new Map(
+          productCosts.map((row) => [row.building_id, row.monthly_products_cost]),
+        );
+        const candidates = residences
+          .filter((row) => getResidenceDefinition(row.building_type)?.kind === 'residence')
+          .map((row) => ({
+            id: row.id,
+            cityId: row.city_id,
+            type: row.building_type,
+            rent: row.rent,
+            occupants: row.occupants,
+            capacity: RESIDENCES[row.building_type].capacity,
+            monthlyCost: row.rent + (productsCostByResidence.get(row.id) ?? 0),
+            dailyIncome: averageIncomes.get(row.id) ?? 0,
+          }));
+        const relocations = planResidenceRelocations(candidates);
+        const occupantsByResidence = new Map(candidates.map((row) => [row.id, row.occupants]));
+        for (const relocation of relocations) {
+          occupantsByResidence.set(
+            relocation.sourceId,
+            (occupantsByResidence.get(relocation.sourceId) ?? 0) - relocation.quantity,
+          );
+          occupantsByResidence.set(
+            relocation.destinationId,
+            (occupantsByResidence.get(relocation.destinationId) ?? 0) + relocation.quantity,
+          );
+        }
+        if (relocations.length > 0) {
+          const updates = [...occupantsByResidence.entries()];
+          await client.query(
+            `UPDATE residential_buildings building
+             SET occupants = changes.occupants
+             FROM UNNEST($1::uuid[], $2::integer[]) AS changes(id, occupants)
+             WHERE building.id = changes.id`,
+            [updates.map(([id]) => id), updates.map(([, occupants]) => occupants)],
+          );
+          await client.query(
+            `INSERT INTO residence_relocation_log
+               (day, source_residence_id, destination_residence_id, quantity,
+                associated_source, associated_destination)
+             SELECT $1::date, batch.source_id, batch.destination_id, batch.quantity,
+                    batch.associated_source, batch.associated_destination
+             FROM UNNEST(
+               $2::uuid[], $3::uuid[], $4::integer[],
+               $5::double precision[], $6::double precision[]
+             ) AS batch(source_id, destination_id, quantity, associated_source, associated_destination)`,
+            [
+              state.day,
+              relocations.map((item) => item.sourceId),
+              relocations.map((item) => item.destinationId),
+              relocations.map((item) => item.quantity),
+              relocations.map((item) => item.associatedSource),
+              relocations.map((item) => item.associatedDestination),
+            ],
+          );
+        }
+        await client.query(
+          'UPDATE world_state SET last_residence_relocation_day = $1 WHERE id = 1',
+          [state.day],
+        );
+        await client.query('COMMIT');
+        return relocations.length > 0;
+      },
+      lockWaitMs,
+      false,
+      3,
+    );
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter as mudanças mensais de residência:', rollbackError);
     });
     throw error;
   } finally {
@@ -3034,7 +3196,8 @@ async function advanceClock() {
   if (!clock) throw new Error('O relógio global ainda não foi inicializado.');
   const employmentChanged = await runDailyEmployment();
   const immigrationChanged = await runDailyImmigration();
-  if (immigrationChanged || employmentChanged) {
+  const residenceRelocationChanged = await runMonthlyResidenceRelocation();
+  if (immigrationChanged || employmentChanged || residenceRelocationChanged) {
     const publicationCounts = emptyPerformanceCounts();
     await measurePerformanceStage(
       'publicação de cidades e snapshot',

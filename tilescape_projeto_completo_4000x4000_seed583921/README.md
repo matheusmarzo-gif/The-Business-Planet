@@ -308,8 +308,15 @@ cidades com menos de 1.000 habitantes recebem 40 imigrantes, que ocupam as
 residências concluídas mais baratas com vaga (empate: maior apreço). A população
 da cidade é a soma dos ocupantes das suas residências. Todo dia às 00:00 do
 relógio do jogo, o aluguel por pessoa é multiplicado pelos moradores e creditado
-ao dono da residência. Como moradores são NPCs sem carteira individual, não há
-débito separado. Clique em outro ponto do mapa ou em × para fechar.
+ao dono da residência. No dia 7 de cada mês, às 03:00, moradores também podem
+mudar entre residências concluídas da mesma cidade. A comparação usa o custo
+médio mensal da casa (consumo médio dos últimos 30 dias, valorizado pelo preço
+médio pago de cada produto, mais aluguel), a renda média diária por morador e o
+apreço local. A mudança só ocorre quando o benefício associado da residência de
+destino é maior; a quantidade é limitada pelas vagas e pelos moradores da casa
+de origem. Cada mudança é registrada no histórico do servidor. Como moradores
+são NPCs sem carteira individual, não há débito separado. Clique em outro ponto
+do mapa ou em × para fechar.
 
 ### Indústrias
 

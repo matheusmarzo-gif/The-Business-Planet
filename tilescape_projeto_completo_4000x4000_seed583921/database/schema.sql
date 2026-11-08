@@ -1,8 +1,12 @@
 CREATE TABLE IF NOT EXISTS world_state (
   id SMALLINT PRIMARY KEY CHECK (id = 1),
   world_time TIMESTAMPTZ NOT NULL,
-  last_real_at TIMESTAMPTZ NOT NULL
+  last_real_at TIMESTAMPTZ NOT NULL,
+  last_residence_relocation_day DATE
 );
+
+ALTER TABLE world_state
+  ADD COLUMN IF NOT EXISTS last_residence_relocation_day DATE;
 
 CREATE TABLE IF NOT EXISTS player_wallets (
   user_id TEXT PRIMARY KEY,
@@ -419,6 +423,21 @@ CREATE TABLE IF NOT EXISTS residence_consumption (
 
 ALTER TABLE residence_consumption
   ALTER COLUMN spent TYPE NUMERIC(14, 2) USING spent::numeric(14, 2);
+
+CREATE TABLE IF NOT EXISTS residence_relocation_log (
+  id BIGSERIAL PRIMARY KEY,
+  day DATE NOT NULL,
+  source_residence_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  destination_residence_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  associated_source DOUBLE PRECISION NOT NULL CHECK (associated_source >= 0),
+  associated_destination DOUBLE PRECISION NOT NULL CHECK (associated_destination >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS residence_relocation_log_source_day_idx
+  ON residence_relocation_log (source_residence_id, day DESC);
+CREATE INDEX IF NOT EXISTS residence_relocation_log_destination_day_idx
+  ON residence_relocation_log (destination_residence_id, day DESC);
 
 CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
   ON residential_buildings (city_id);

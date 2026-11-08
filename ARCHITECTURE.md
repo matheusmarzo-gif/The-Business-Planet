@@ -27,7 +27,9 @@ transportam produtos; construções produtoras e comerciais podem se ligar a mai
 de um deles.
 População, bem-estar e economia agregados da cidade ainda não têm dinâmica
 própria; o jogo já processa rotinas diárias de imigração, emprego, consumo,
-produção, vendas e aluguel.
+produção, vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor também
+processa mudanças de moradores entre residências concluídas da mesma cidade,
+persistindo cada transferência em `residence_relocation_log`.
 
 ## Estrutura do repositório
 
@@ -973,5 +975,5 @@ atualizado.
   de entrada atual.
 
 - Obras e economia diária: às 00:00 o progresso das obras usa `advanceConstruction` (employment.ts; conclui quando Work Points >= necessários, para todos os tipos). Vendas, produção, fazendas e transporte rodam, cada etapa, sob seu próprio SAVEPOINT (`runStage`): se uma falhar, as demais, a folha e as obras do dia são preservadas e o erro é registrado com o nome da etapa. As etapas agrupam leituras e gravações de construções com arrays PostgreSQL, preservando o cálculo e as transações; o transporte continua isolando falhas por armazém.
-- Métricas do processamento diário: as etapas de economia, alocação, imigração e publicação registram duração, consultas PostgreSQL, espera pelo lock, contagens globais de residências/locais de trabalho/lojas/armazéns e status; a lista Redis tem limite de 100 registros e expira após sete dias.
+- Métricas do processamento diário: as etapas de economia, alocação, imigração, mudanças de residência e publicação registram duração, consultas PostgreSQL, espera pelo lock, contagens globais de residências/locais de trabalho/lojas/armazéns e status; a lista Redis tem limite de 100 registros e expira após sete dias.
 - Sincronização diária: a partir de 00:30 UTC do relógio do jogo, uma mensagem completa de cidades, estradas e construções é publicada pelo Redis para os jogadores conectados, no máximo uma vez por dia. A atualização não recarrega a página; `worldClient.ts` aplica o estado recebido.

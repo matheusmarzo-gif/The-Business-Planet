@@ -412,6 +412,13 @@ Points cada. A capacidade de venda considera os Work Points gerados por seus
 funcionários: respectivamente 3, 26, 160 e 54 Work Points por unidade.
 Todas recebem estoque do armazém ligado e permitem definir o preço.
 
+Ao terminar a construção de um comércio, o preço inicial deixa de ser sempre
+C$ 10: primeiro é usada a média dos preços atuais de comércios concluídos do
+mesmo tipo pertencentes ao jogador. Se ele ainda não tiver um comércio desse
+tipo, usa-se a média desse tipo na cidade, considerando todos os jogadores.
+Somente quando não houver nenhum comércio similar concluído na cidade o preço
+inicial será C$ 10. O dono pode alterar esse preço depois no painel.
+
 O botão **Simular venda**, abaixo do preço, estima vendas e resultado com o
 histórico de comportamento guardado no navegador, o preço informado, estoque e
 funcionários atuais; não consulta o servidor. Sem histórico local, a interface

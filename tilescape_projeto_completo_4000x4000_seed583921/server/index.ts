@@ -74,6 +74,7 @@ import {
 import {
   isCommerceDiagnosticsUpdate,
   getCityProductAveragePrices,
+  getInitialShopPrice,
   getShopDailyFinancials,
   getShopProfitLoss,
   getShopSalesCapacity,
@@ -3868,8 +3869,10 @@ async function completeResidentialBuilding(
     const { rows: existingRows } = await client.query<{
       building_type: string;
       status: ResidentialBuilding['status'];
+      city_id: string;
+      created_by: string;
     }>(
-      'SELECT building_type, status FROM residential_buildings WHERE id = $1 FOR UPDATE',
+      'SELECT building_type, status, city_id, created_by FROM residential_buildings WHERE id = $1 FOR UPDATE',
       [id],
     );
     if (!existingRows[0]) {
@@ -3882,14 +3885,44 @@ async function completeResidentialBuilding(
     }
     const definition = getResidenceDefinition(existingRows[0].building_type);
     if (!definition) throw new Error(`Tipo de construção inválido: ${existingRows[0].building_type}`);
+    let initialShopPrice: number | null = null;
+    if (definition.kind === 'shop') {
+      const { rows: priceRows } = await client.query<{
+        owner_average: number | null;
+        city_average: number | null;
+      }>(
+        `SELECT
+           (SELECT AVG(price)::float8
+            FROM residential_buildings
+            WHERE created_by = $1
+              AND building_type = $2
+              AND status = 'completed') AS owner_average,
+           (SELECT AVG(price)::float8
+            FROM residential_buildings
+            WHERE city_id = $3
+              AND building_type = $2
+              AND status = 'completed') AS city_average`,
+        [
+          existingRows[0].created_by,
+          existingRows[0].building_type,
+          existingRows[0].city_id,
+        ],
+      );
+      const reference = priceRows[0];
+      initialShopPrice = getInitialShopPrice(
+        reference?.owner_average ?? null,
+        reference?.city_average ?? null,
+      );
+    }
     const { rows } = await client.query<ResidentialBuildingRow>(
       `UPDATE residential_buildings
        SET status = 'completed',
            completed_at = clock_timestamp(),
-           desired_workers = LEAST(desired_workers, $2)
+           desired_workers = LEAST(desired_workers, $2),
+           price = COALESCE($3, price)
        WHERE id = $1 AND status = 'under_construction'
        RETURNING ${RESIDENTIAL_COLUMNS}`,
-      [id, definition.maxWorkers],
+      [id, definition.maxWorkers, initialShopPrice],
     );
     if (!rows[0]) throw new Error(`A obra ${id} mudou durante a conclusão.`);
     await limitJobAssignments(client, id, definition.maxWorkers);

@@ -18,6 +18,17 @@ export const MILK_SALES_WORK_POINTS_PER_LITER =
 const MAX_DIAGNOSTIC_VALUE = Number.MAX_SAFE_INTEGER;
 type BasketType = 'basic' | 'intermediate' | 'advanced';
 
+export function getInitialShopPrice(
+  ownerAverage: number | null,
+  cityAverage: number | null,
+): number {
+  const referencePrice = ownerAverage ?? cityAverage ?? DEFAULT_SHOP_PRICE;
+  if (!Number.isFinite(referencePrice) || referencePrice < MIN_SHOP_PRICE) {
+    return DEFAULT_SHOP_PRICE;
+  }
+  return roundCurrency(referencePrice);
+}
+
 export interface SalesShop {
   id: string;
   cityId: string;

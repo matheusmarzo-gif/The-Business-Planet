@@ -854,6 +854,11 @@ de sucesso.
   números para a API, e `formatMoney` os exibe em pt-BR. O esquema converte as
   antigas colunas inteiras/`BIGINT`/`DOUBLE PRECISION` para `NUMERIC` preservando
   os valores já existentes.
+- Ao concluir um comércio, o servidor define o preço inicial pela média dos
+  preços atuais de comércios concluídos do mesmo tipo pertencentes ao jogador.
+  Se ele ainda não tiver um comércio desse tipo, usa a média do mesmo tipo na
+  cidade, considerando todos os jogadores. Sem referência na cidade, o preço
+  inicial é C$ 10. A decisão ocorre dentro da transação de conclusão.
 - `residential_buildings` guarda tipo, footprint, cidade, status, autoria e
   horários de início/conclusão, `wage`, `work_hours_per_day`, `desired_workers`, `rent` e
   `occupants`, o estado do ciclo agrícola e as preferências de automação das

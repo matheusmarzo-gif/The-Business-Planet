@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   getMaxManualTransferQuantity,
   getTransportDemand,
+  planWarehouseStockWrites,
   planWarehouseTrades,
   type TradeWarehouse,
 } from './logistics.js';
@@ -72,5 +73,27 @@ test('manual transfer limit respects reserved source stock, destination capacity
       availableWorkPoints: 100,
     }),
     0,
+  );
+});
+
+test('plans negative warehouse stock deltas as updates, never inserts', () => {
+  const writes = planWarehouseStockWrites(
+    [
+      { warehouseId: 'warehouse-a', productId: 'milk', quantity: -21 },
+      { warehouseId: 'warehouse-a', productId: 'potato', quantity: 5 },
+    ],
+    new Map([['warehouse-a', new Set(['milk'])]]),
+  );
+  assert.deepEqual(writes, {
+    updates: [{ warehouseId: 'warehouse-a', productId: 'milk', quantity: -21 }],
+    inserts: [{ warehouseId: 'warehouse-a', productId: 'potato', quantity: 5 }],
+  });
+  assert.throws(
+    () =>
+      planWarehouseStockWrites(
+        [{ warehouseId: 'warehouse-a', productId: 'milk', quantity: -21 }],
+        new Map([['warehouse-a', new Set<string>()]]),
+      ),
+    /sem uma linha de estoque existente/,
   );
 });

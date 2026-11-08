@@ -723,8 +723,10 @@ mapeamento e verificar todas as curvas.
   ordem Compra/Venda não bloqueia transferências locais. Cada carga
   consome Work Points do armazém (`100 · m³ + 0,125 · kg`; pontos = empregados
   do armazém × `getDailyWorkPoints`); envios ao armazém fazem upsert positivo e
-  retiradas decrementam apenas uma linha existente com saldo suficiente, sem
-  tentar inserir estoque negativo. Quando o produto disponível acima do mínimo
+  retiradas atualizam apenas uma linha existente com saldo suficiente. Os
+  deltas são separados antes da persistência para nunca tentar inserir uma
+  quantidade negativa, evitando violar `warehouse_stock.quantity >= 0`. Quando
+  o produto disponível acima do mínimo
   não cobre a soma dos déficits das construções ligadas, `allocateProportionalStock` divide as
   unidades proporcionalmente ao que falta em cada uma, com arredondamento
   inteiro determinístico; o histórico informa essa distribuição. O que não

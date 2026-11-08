@@ -89,6 +89,7 @@ import {
   isWithinLinkRadius,
   parseWarehouseLink,
   planTransfersDetailed,
+  planWarehouseStockWrites,
   planWarehouseTrades,
   LINK_RADIUS,
   type TradeWarehouse,
@@ -2341,6 +2342,7 @@ async function runDailyEmployment(): Promise<boolean> {
         quantity: number;
         minimum_stock: number;
         maximum_stock: number | null;
+        has_stock_row: boolean;
       };
       const warehouseIds = warehouseRows.map((warehouse) => warehouse.id);
       const { rows: linked } = warehouseIds.length > 0
@@ -2368,7 +2370,8 @@ async function runDailyEmployment(): Promise<boolean> {
                     COALESCE(stock.product_id, settings.product_id) AS product_id,
                     COALESCE(stock.quantity, 0) AS quantity,
                     COALESCE(settings.minimum_stock, 0) AS minimum_stock,
-                    settings.maximum_stock
+                    settings.maximum_stock,
+                    stock.building_id IS NOT NULL AS has_stock_row
              FROM warehouse_stock stock
              FULL OUTER JOIN warehouse_product_settings settings
                ON settings.building_id = stock.building_id
@@ -2395,12 +2398,14 @@ async function runDailyEmployment(): Promise<boolean> {
         stock: Map<string, number>;
         minimumStock: Map<string, number>;
         maximumStock: Map<string, number | null>;
+        existingStockProducts: Set<string>;
       }>();
       for (const warehouse of warehouseRows) {
         inventoryByWarehouse.set(warehouse.id, {
           stock: new Map(),
           minimumStock: new Map(),
           maximumStock: new Map(),
+          existingStockProducts: new Set(),
         });
       }
       for (const row of inventoryRows) {
@@ -2409,6 +2414,7 @@ async function runDailyEmployment(): Promise<boolean> {
         inventory.stock.set(row.product_id, row.quantity);
         inventory.minimumStock.set(row.product_id, row.minimum_stock);
         inventory.maximumStock.set(row.product_id, row.maximum_stock);
+        if (row.has_stock_row) inventory.existingStockProducts.add(row.product_id);
       }
 
       const transportLogRows: {
@@ -2617,6 +2623,15 @@ async function runDailyEmployment(): Promise<boolean> {
           );
         }
       }
+      const stockWrites = planWarehouseStockWrites(
+        stockDeltaRows,
+        new Map(
+          [...inventoryByWarehouse].map(([warehouseId, inventory]) => [
+            warehouseId,
+            inventory.existingStockProducts,
+          ]),
+        ),
+      );
 
       if (warehouseIds.length > 0) {
         await client.query(
@@ -2653,30 +2668,41 @@ async function runDailyEmployment(): Promise<boolean> {
           ],
         );
       }
-      if (stockDeltaRows.length > 0) {
+      if (stockWrites.updates.length > 0) {
+        const { rowCount } = await client.query(
+          `UPDATE warehouse_stock AS current
+           SET quantity = current.quantity + changes.quantity
+           FROM UNNEST($1::uuid[], $2::text[], $3::integer[])
+             AS changes(warehouse_id, product_id, quantity)
+           WHERE current.building_id = changes.warehouse_id
+             AND current.product_id = changes.product_id
+             AND current.quantity + changes.quantity >= 0`,
+          [
+            stockWrites.updates.map((row) => row.warehouseId),
+            stockWrites.updates.map((row) => row.productId),
+            stockWrites.updates.map((row) => row.quantity),
+          ],
+        );
+        if (rowCount !== stockWrites.updates.length) {
+          throw new Error('O estoque de um armazém mudou durante o transporte diário.');
+        }
+      }
+      if (stockWrites.inserts.length > 0) {
         const { rowCount } = await client.query(
           `INSERT INTO warehouse_stock (building_id, product_id, quantity)
            SELECT changes.warehouse_id, changes.product_id, changes.quantity
            FROM UNNEST($1::uuid[], $2::text[], $3::integer[])
              AS changes(warehouse_id, product_id, quantity)
-           WHERE changes.quantity > 0
-              OR EXISTS (
-                SELECT 1 FROM warehouse_stock current
-                WHERE current.building_id = changes.warehouse_id
-                  AND current.product_id = changes.product_id
-                  AND current.quantity + changes.quantity >= 0
-              )
            ON CONFLICT (building_id, product_id) DO UPDATE
-           SET quantity = warehouse_stock.quantity + EXCLUDED.quantity
-           WHERE warehouse_stock.quantity + EXCLUDED.quantity >= 0`,
+           SET quantity = warehouse_stock.quantity + EXCLUDED.quantity`,
           [
-            stockDeltaRows.map((row) => row.warehouseId),
-            stockDeltaRows.map((row) => row.productId),
-            stockDeltaRows.map((row) => row.quantity),
+            stockWrites.inserts.map((row) => row.warehouseId),
+            stockWrites.inserts.map((row) => row.productId),
+            stockWrites.inserts.map((row) => row.quantity),
           ],
         );
-        if (rowCount !== stockDeltaRows.length) {
-          throw new Error('O estoque de um armazém mudou durante o transporte diário.');
+        if (rowCount !== stockWrites.inserts.length) {
+          throw new Error('Não foi possível gravar o estoque recebido pelos armazéns.');
         }
       }
 

@@ -43,6 +43,36 @@ export interface WarehouseLogistics {
   workPoints: number;
 }
 
+export interface WarehouseStockDelta {
+  warehouseId: string;
+  productId: string;
+  quantity: number;
+}
+
+export function planWarehouseStockWrites(
+  deltas: readonly WarehouseStockDelta[],
+  existingProductsByWarehouse: ReadonlyMap<string, ReadonlySet<string>>,
+): { updates: WarehouseStockDelta[]; inserts: WarehouseStockDelta[] } {
+  const updates: WarehouseStockDelta[] = [];
+  const inserts: WarehouseStockDelta[] = [];
+  for (const delta of deltas) {
+    const existingProducts = existingProductsByWarehouse.get(delta.warehouseId);
+    if (!existingProducts) {
+      throw new Error(`O armazém ${delta.warehouseId} não foi encontrado no inventário.`);
+    }
+    if (existingProducts.has(delta.productId)) {
+      updates.push(delta);
+    } else if (delta.quantity > 0) {
+      inserts.push(delta);
+    } else {
+      throw new Error(
+        `Não é possível retirar ${delta.productId} do armazém ${delta.warehouseId} sem uma linha de estoque existente.`,
+      );
+    }
+  }
+  return { updates, inserts };
+}
+
 export function getTransportDemand(productId: string, quantity: number): number {
   const product = PRODUCTS.find((item) => item.id === productId);
   if (!product) return Infinity;

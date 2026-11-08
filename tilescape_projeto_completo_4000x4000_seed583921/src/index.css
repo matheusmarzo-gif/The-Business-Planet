@@ -88,6 +88,8 @@ button { color: inherit; }
 .warehouse-open { margin-top: 18px; width: 100%; padding: 9px; border: 1px solid rgba(207,178,116,.4); border-radius: 8px; background: rgba(193,162,100,.15); color: #e6dfce; cursor: pointer; }
 .warehouse-link, .crop-panel { margin-top: 18px; display: grid; gap: 8px; color: #e6dfce; }
 .warehouse-link p, .crop-panel p { margin: 0; color: #e6dfce; }
+.warehouse-link ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.warehouse-link li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .warehouse-link button, .crop-panel button { padding: 9px; border: 1px solid rgba(207,178,116,.4); border-radius: 8px; background: rgba(193,162,100,.15); color: #e6dfce; cursor: pointer; }
 .warehouse-link button:disabled, .crop-panel button:disabled { opacity: .5; cursor: default; }
 .farm-automation-settings { display: grid; gap: 10px; padding: 10px; border: 1px solid rgba(219,201,158,.16); border-radius: 8px; background: rgba(255,255,255,.025); }

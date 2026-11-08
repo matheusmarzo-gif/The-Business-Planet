@@ -55,6 +55,8 @@ import {
   DEFAULT_WORK_HOURS,
   RESIDENCES,
   getConstructionMenuDefinitions,
+  getResidentialBuildingName,
+  isStorageBuilding,
   RESIDENCE_STATS,
   KIND_CATEGORY,
   ResidentialBuilding,
@@ -885,13 +887,18 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   }, [refreshWarehouse]);
 
   useEffect(() => {
-    if (selectedResidenceKey && selectedResidence?.type === 'warehouse') {
+    if (selectedResidenceKey && selectedResidence && isStorageBuilding(selectedResidence.type)) {
       void refreshWarehouseRef.current(selectedResidenceKey);
     }
   }, [selectedResidenceKey, selectedResidence?.type]);
 
   useEffect(() => {
-    if (!selectedResidenceKey || selectedResidence?.type !== 'warehouse' || !warehouseStockLoaded) return;
+    if (
+      !selectedResidenceKey ||
+      !selectedResidence ||
+      !isStorageBuilding(selectedResidence.type) ||
+      !warehouseStockLoaded
+    ) return;
     const timer = window.setInterval(() => {
       void refreshWarehouseRef.current(selectedResidenceKey);
     }, 10_000);
@@ -921,13 +928,17 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
-  const linkWarehouse = async (buildingId: string, warehouseId: string | null) => {
+  const linkWarehouse = async (
+    buildingId: string,
+    warehouseId: string | null,
+    linked = true,
+  ) => {
     setIsSavingWorkSettings(true);
     setWorkSettingsError('');
     try {
       await cityRequest<ResidentialBuilding>(`/api/residential-buildings/${buildingId}/warehouse-link`, {
         method: 'PUT',
-        body: JSON.stringify({ warehouseId }),
+        body: JSON.stringify({ warehouseId, linked }),
       });
     } catch (error) {
       setWorkSettingsError(error instanceof Error ? error.message : 'Não foi possível atualizar o vínculo.');
@@ -1040,7 +1051,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         },
       );
       setWarehouseTransfer(null);
-      if (transfer.destination.type === 'warehouse') {
+      if (isStorageBuilding(transfer.destination.type)) {
         setIsWarehouseOpen(true);
         await refreshWarehouse(transfer.destination.id, true);
       }
@@ -1101,6 +1112,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       return;
     }
     if (linkingFromId && linkingFromId !== building.id) {
+      if (!isStorageBuilding(building.type)) {
+        setWorkSettingsError('Escolha um armazém ou silo para criar o vínculo.');
+        return;
+      }
       void linkWarehouse(linkingFromId, building.id);
       return;
     }
@@ -1457,7 +1472,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       workPointsDone: 0,
       price: DEFAULT_SHOP_PRICE,
       stock: 0,
-      warehouseId: null,
+      warehouseIds: [],
       toolStock: 0,
       woodStock: 0,
       ironStock: 0,
@@ -1955,13 +1970,25 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onOpenProductionHistory={() => void openProductionHistory(selectedResidence.id)}
             onOpenCommerceHistory={() => void openCommerceHistory(selectedResidence.id)}
             onOpenWarehouseLog={() => void openWarehouseLog(selectedResidence.id)}
+            linkedWarehouses={residentialBuildings
+              .filter(
+                (building) =>
+                  selectedResidence.warehouseIds.includes(building.id) &&
+                  isStorageBuilding(building.type),
+              )
+              .map((building) => ({
+                id: building.id,
+                name: getResidentialBuildingName(building.type, building.buildingNumber),
+              }))}
             isLinking={linkingFromId === selectedResidence.id}
             onStartLink={() => {
               setWorkSettingsError('');
               setLinkingFromId(selectedResidence.id);
             }}
             onCancelLink={() => setLinkingFromId(null)}
-            onUnlink={() => void linkWarehouse(selectedResidence.id, null)}
+            onUnlink={(warehouseId) =>
+              void linkWarehouse(selectedResidence.id, warehouseId, false)
+            }
             onPlant={() => void plantCrop(selectedResidence.id)}
             onSaveFarmAutomation={(settings) =>
               void saveFarmAutomation(selectedResidence.id, settings)
@@ -2208,7 +2235,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                     <small>
                       {residence.width} × {residence.height} tiles ·{' '}
                       {residence.kind === 'warehouse'
-                        ? `Até ${residence.maxWorkers} funcionários · Capacidade ${residence.storageCapacityM3} m³ de qualquer produto`
+                        ? `Até ${residence.maxWorkers} funcionários · Capacidade ${residence.storageCapacityM3} m³${residence.allowedStorageProductIds ? ` · Recursos: ${residence.allowedStorageProductIds.map((productId) => PRODUCTS.find((product) => product.id === productId)?.name ?? productId).join(', ')}` : ' de qualquer produto'}`
                         : residence.kind !== 'residence'
                         ? `Até ${residence.maxWorkers} funcionários · Estoque máx. ${residence.stockCapacity} ${residence.stockProduct}${Object.entries(residence.inputCapacities ?? {}).map(([productId, capacity]) => {
                             const product = PRODUCTS.find((entry) => entry.id === productId);

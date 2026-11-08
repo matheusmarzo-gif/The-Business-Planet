@@ -55,14 +55,17 @@ export default function WarehousePanel({
   onClose,
 }: WarehousePanelProps) {
   const capacity = RESIDENCES[building.type].storageCapacityM3 ?? 0;
+  const allowedProductIds = RESIDENCES[building.type].allowedStorageProductIds;
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [search, setSearch] = useState('');
   const filteredProducts = useMemo(() => {
     const query = search.trim().toLocaleLowerCase('pt-BR');
-    return query
-      ? PRODUCTS.filter((product) => product.name.toLocaleLowerCase('pt-BR').includes(query))
-      : PRODUCTS;
-  }, [search]);
+    return PRODUCTS.filter(
+      (product) =>
+        (!allowedProductIds || allowedProductIds.includes(product.id)) &&
+        (!query || product.name.toLocaleLowerCase('pt-BR').includes(query)),
+    );
+  }, [allowedProductIds, search]);
   const usedM3 = PRODUCTS.reduce(
     (total, product) => total + (stock.get(product.id) ?? 0) * product.volumeM3,
     0,
@@ -96,9 +99,12 @@ export default function WarehousePanel({
     setDrafts((current) => ({ ...current, [productId]: { ...draftFor(productId), ...patch } }));
 
   return (
-    <section className="warehouse-panel" aria-label="Estoque do armazém">
+    <section
+      className="warehouse-panel"
+      aria-label={`Estoque do ${building.type === 'silo' ? 'silo' : 'armazém'}`}
+    >
       <div className="panel-title">
-        <div className="eyebrow">ARMAZÉM</div>
+        <div className="eyebrow">{building.type === 'silo' ? 'SILO' : 'ARMAZÉM'}</div>
         <h1>Produtos e estoque</h1>
         <button type="button" className="panel-close" aria-label="Fechar estoque" onClick={onClose}>
           ×

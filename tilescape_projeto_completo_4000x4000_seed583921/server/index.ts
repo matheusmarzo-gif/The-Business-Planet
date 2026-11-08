@@ -33,6 +33,8 @@ import {
 import {
   getResidenceDefinition,
   getResidencePlacementError,
+  isStorageBuilding,
+  canStoreProduct,
   isPlayerBuildableConstructionType,
   planConstructionMaterialWithdrawals,
   parseInputProductSelection,
@@ -84,6 +86,7 @@ import { nextEfficiencyPenalty, planProduction, rollToolDemand } from '../src/ty
 import { getDairyFarmEfficiency } from '../src/types/dairy.js';
 import { parseBasicDemandConfig } from '../src/types/commerceDemand.js';
 import {
+  applyTransferToLinkedBuilding,
   canLinkToWarehouse,
   getTransportDemand,
   getMaxManualTransferQuantity,
@@ -273,7 +276,7 @@ function getPerformanceEntityCounts(
     const definition = getResidenceDefinition(building.building_type);
     if (definition?.kind === 'residence') counts.residences += 1;
     if (definition?.kind === 'shop') counts.shops += 1;
-    if (building.building_type === 'warehouse') counts.warehouses += 1;
+    if (definition?.kind === 'warehouse') counts.warehouses += 1;
     if (
       building.desired_workers > 0 &&
       (definition?.kind !== 'residence' || building.status === 'under_construction')
@@ -289,7 +292,7 @@ function getWorldPerformanceEntityCounts(buildings: ResidentialBuilding[]): Perf
     const definition = getResidenceDefinition(building.type);
     if (definition?.kind === 'residence') counts.residences += 1;
     if (definition?.kind === 'shop') counts.shops += 1;
-    if (building.type === 'warehouse') counts.warehouses += 1;
+    if (getResidenceDefinition(building.type)?.kind === 'warehouse') counts.warehouses += 1;
     if (
       building.desiredWorkers > 0 &&
       (definition?.kind !== 'residence' || building.status === 'under_construction')
@@ -391,7 +394,7 @@ type ResidentialBuildingRow = {
   work_points_done: number;
   price: number;
   stock: number;
-  warehouse_id: string | null;
+  warehouse_ids: string[];
   tool_stock: number;
   wood_stock: number;
   iron_stock: number;
@@ -416,7 +419,10 @@ type ResidentialBuildingRow = {
   created_by?: string;
 };
 
-const RESIDENTIAL_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, warehouse_id, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
+const RESIDENTIAL_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
+  COALESCE((SELECT array_agg(link.warehouse_id::text ORDER BY link.warehouse_id)
+            FROM building_warehouse_links link
+            WHERE link.building_id = residential_buildings.id), ARRAY[]::text[]) AS warehouse_ids,
   COALESCE((SELECT jsonb_object_agg(input.product_id, input.quantity)
             FROM building_input_stock input
             WHERE input.building_id = residential_buildings.id), '{}'::jsonb) AS input_stocks,
@@ -463,7 +469,7 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     workPointsDone: row.work_points_done,
     price: row.price,
     stock: row.stock,
-    warehouseId: row.warehouse_id,
+    warehouseIds: row.warehouse_ids,
     toolStock: row.tool_stock,
     woodStock: row.wood_stock,
     ironStock: row.iron_stock,
@@ -1114,8 +1120,11 @@ async function getManualWarehouseTransferQuote(
   if (source.created_by !== userId || destination.created_by !== userId) {
     return { error: 'transfer_building_not_owned' };
   }
-  if (source.building_type !== 'warehouse' || source.status !== 'completed') {
+  if (!isStorageBuilding(source.building_type) || source.status !== 'completed') {
     return { error: 'transfer_source_not_warehouse' };
+  }
+  if (!canStoreProduct(source.building_type, productId)) {
+    return { error: 'transfer_product_not_storable' };
   }
   if (destination.status !== 'completed') return { error: 'transfer_destination_not_completed' };
   if (
@@ -1162,7 +1171,10 @@ async function getManualWarehouseTransferQuote(
   let destinationFreeCapacity = 0;
   let destinationColumn: ManualWarehouseTransferQuote['destinationColumn'] = null;
 
-  if (destination.building_type === 'warehouse') {
+  if (isStorageBuilding(destination.building_type)) {
+    if (!canStoreProduct(destination.building_type, productId)) {
+      return { error: 'transfer_product_not_storable' };
+    }
     const { rows: destinationInventory } = await client.query<{ product_id: string; quantity: number }>(
       `SELECT product_id, quantity FROM warehouse_stock WHERE building_id = $1 FOR UPDATE`,
       [destinationId],
@@ -1185,7 +1197,7 @@ async function getManualWarehouseTransferQuote(
     const physicalSpace = Math.max(
       0,
       Math.floor(
-        ((RESIDENCES.warehouse.storageCapacityM3 ?? 0) - destinationUsedM3) /
+        ((RESIDENCES[destination.building_type].storageCapacityM3 ?? 0) - destinationUsedM3) /
           product.volumeM3 +
           1e-9,
       ),
@@ -1323,7 +1335,7 @@ function mapWarehouseTradeWarehouses(
       type: building.building_type,
       x: building.tile_x,
       y: building.tile_y,
-      capacityM3: RESIDENCES.warehouse.storageCapacityM3 ?? 0,
+      capacityM3: RESIDENCES[building.building_type].storageCapacityM3 ?? 0,
       workPoints:
         (building.workers *
           getDailyWorkPoints(
@@ -1644,7 +1656,7 @@ async function runDailyEmployment(): Promise<boolean> {
         );
       }
       const warehousePayroll = workplaces.filter(
-        (building) => building.building_type === 'warehouse',
+        (building) => getResidenceDefinition(building.building_type)?.kind === 'warehouse',
       );
       if (warehousePayroll.length > 0) {
         await client.query(
@@ -2325,7 +2337,8 @@ async function runDailyEmployment(): Promise<boolean> {
         building_type: ResidenceType;
       }>(
         `SELECT id, tile_x, tile_y, building_type FROM residential_buildings
-         WHERE building_type = 'warehouse' AND status = 'completed'`,
+         WHERE building_type IN ('warehouse', 'silo') AND status = 'completed'
+         ORDER BY tile_x, tile_y, id`,
       );
       const workplaceById = new Map(workplaces.map((workplace) => [workplace.id, workplace]));
       type LinkedBuildingRow = {
@@ -2339,6 +2352,7 @@ async function runDailyEmployment(): Promise<boolean> {
         charcoal_stock: number;
         sugarcane_stock: number;
         selected_input_product_id: string | null;
+        input_stocks: Record<string, number>;
       };
       type WarehouseInventoryRow = {
         warehouse_id: string;
@@ -2351,11 +2365,14 @@ async function runDailyEmployment(): Promise<boolean> {
       const warehouseIds = warehouseRows.map((warehouse) => warehouse.id);
       const { rows: linked } = warehouseIds.length > 0
         ? await client.query<LinkedBuildingRow>(
-            `SELECT id, warehouse_id, building_type, stock, tool_stock, wood_stock, iron_stock,
-                    charcoal_stock, sugarcane_stock, selected_input_product_id
-             FROM residential_buildings
-             WHERE warehouse_id = ANY($1::uuid[]) AND status = 'completed'
-             ORDER BY warehouse_id, id`,
+            `SELECT building.id, link.warehouse_id, building.building_type, building.stock,
+                    building.tool_stock, building.wood_stock, building.iron_stock,
+                    building.charcoal_stock, building.sugarcane_stock,
+                    building.selected_input_product_id
+             FROM residential_buildings building
+             JOIN building_warehouse_links link ON link.building_id = building.id
+             WHERE link.warehouse_id = ANY($1::uuid[]) AND building.status = 'completed'
+             ORDER BY link.warehouse_id, building.id`,
             [warehouseIds],
           )
         : { rows: [] as LinkedBuildingRow[] };
@@ -2387,6 +2404,35 @@ async function runDailyEmployment(): Promise<boolean> {
 
       const linkedByWarehouse = new Map<string, LinkedBuildingRow[]>();
       const linkedById = new Map(linked.map((building) => [building.id, building]));
+      type LinkedBuildingState = LinkedBuildingRow & {
+        buildingId: string;
+        type: ResidenceType;
+        toolStock: number;
+        woodStock: number;
+        ironStock: number;
+        charcoalStock: number;
+        sugarcaneStock: number;
+        inputStocks: Record<string, number>;
+        selectedInputProductId: string | null;
+      };
+      const linkedStateById = new Map<string, LinkedBuildingState>();
+      for (const building of linked) {
+        if (!linkedStateById.has(building.id)) {
+          linkedStateById.set(building.id, {
+            ...building,
+            buildingId: building.id,
+            type: building.building_type,
+            toolStock: building.tool_stock,
+            woodStock: building.wood_stock,
+            ironStock: building.iron_stock,
+            charcoalStock: building.charcoal_stock,
+            sugarcaneStock: building.sugarcane_stock,
+            inputStocks: {},
+            selectedInputProductId: building.selected_input_product_id,
+            input_stocks: {},
+          });
+        }
+      }
       for (const building of linked) {
         const buildings = linkedByWarehouse.get(building.warehouse_id) ?? [];
         buildings.push(building);
@@ -2397,6 +2443,13 @@ async function runDailyEmployment(): Promise<boolean> {
         const buildingStocks = inputStocksByBuilding.get(stock.building_id) ?? {};
         buildingStocks[stock.product_id] = stock.quantity;
         inputStocksByBuilding.set(stock.building_id, buildingStocks);
+      }
+      for (const [buildingId, stocks] of inputStocksByBuilding) {
+        const linkedState = linkedStateById.get(buildingId);
+        if (linkedState) {
+          linkedState.input_stocks = stocks;
+          linkedState.inputStocks = stocks;
+        }
       }
       const inventoryByWarehouse = new Map<string, {
         stock: Map<string, number>;
@@ -2460,7 +2513,9 @@ async function runDailyEmployment(): Promise<boolean> {
       }
 
       for (const warehouse of warehouseRows) {
-        const linkedBuildings = linkedByWarehouse.get(warehouse.id) ?? [];
+        const linkedBuildings = (linkedByWarehouse.get(warehouse.id) ?? [])
+          .map((building) => linkedStateById.get(building.id))
+          .filter((building): building is LinkedBuildingState => building !== undefined);
         if (linkedBuildings.length === 0) continue;
         const warehouseSite = workplaceById.get(warehouse.id);
         const workPoints =
@@ -2480,20 +2535,25 @@ async function runDailyEmployment(): Promise<boolean> {
               stock: inventory.stock,
               minimumStock: inventory.minimumStock,
               maximumStock: inventory.maximumStock,
-              capacityM3: RESIDENCES.warehouse.storageCapacityM3 ?? 0,
+              capacityM3: RESIDENCES[warehouse.building_type].storageCapacityM3 ?? 0,
               workPoints,
+              allowedProductIds: RESIDENCES[warehouse.building_type].allowedStorageProductIds,
             },
             linkedBuildings.map((building) => ({
               buildingId: building.id,
               type: building.building_type,
               stock: building.stock,
-              toolStock: building.tool_stock,
-              woodStock: building.wood_stock,
-              ironStock: building.iron_stock,
-              charcoalStock: building.charcoal_stock,
-              sugarcaneStock: building.sugarcane_stock,
-              inputStocks: inputStocksByBuilding.get(building.id) ?? {},
-              selectedInputProductId: building.selected_input_product_id,
+              toolStock: linkedStateById.get(building.id)?.toolStock ?? building.tool_stock,
+              woodStock: linkedStateById.get(building.id)?.woodStock ?? building.wood_stock,
+              ironStock: linkedStateById.get(building.id)?.ironStock ?? building.iron_stock,
+              charcoalStock:
+                linkedStateById.get(building.id)?.charcoalStock ?? building.charcoal_stock,
+              sugarcaneStock:
+                linkedStateById.get(building.id)?.sugarcaneStock ?? building.sugarcane_stock,
+              inputStocks: linkedStateById.get(building.id)?.inputStocks ?? {},
+              selectedInputProductId:
+                linkedStateById.get(building.id)?.selectedInputProductId ??
+                building.selected_input_product_id,
             })),
           );
           const types = new Map(
@@ -2578,6 +2638,8 @@ async function runDailyEmployment(): Promise<boolean> {
               );
             }
             buildingChanges.set(transfer.buildingId, changes);
+            const linkedState = linkedStateById.get(transfer.buildingId);
+            if (linkedState) applyTransferToLinkedBuilding(linkedState, transfer);
           }
           warehouseStockDeltas.set(warehouse.id, stockDeltas);
         } catch (transportError) {
@@ -2916,7 +2978,7 @@ async function runDailyEmployment(): Promise<boolean> {
         `SELECT b.id, b.created_by, b.building_type, b.tile_x, b.tile_y, b.work_hours_per_day,
                 COALESCE((SELECT SUM(count) FROM job_assignments j WHERE j.workplace_id = b.id), 0)::int AS workers
          FROM residential_buildings b
-         WHERE b.building_type = 'warehouse' AND b.status = 'completed'`,
+         WHERE b.building_type IN ('warehouse', 'silo') AND b.status = 'completed'`,
       );
       const { rows: stockRows } = await client.query<WarehouseTradeStockRow>(
         'SELECT building_id, product_id, quantity FROM warehouse_stock',
@@ -3868,7 +3930,7 @@ async function start() {
            FROM building_payroll_history history
            JOIN residential_buildings building ON building.id = history.building_id
            WHERE building.created_by = $1
-             AND building.building_type = 'warehouse'
+             AND building.building_type IN ('warehouse', 'silo')
              AND history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date`,
           [userId, day, periodDays],
         ),
@@ -3880,7 +3942,7 @@ async function start() {
         }>(
           `SELECT id, building_number, tile_x, tile_y
            FROM residential_buildings
-           WHERE created_by = $1 AND building_type = 'warehouse'
+           WHERE created_by = $1 AND building_type IN ('warehouse', 'silo')
            ORDER BY building_number`,
           [userId],
         ),
@@ -4838,7 +4900,7 @@ async function start() {
           response.status(404).json({ error: 'residence_not_found' });
           return;
         }
-        if (rows[0].building_type !== 'warehouse') {
+        if (!isStorageBuilding(rows[0].building_type)) {
           response.status(400).json({ error: 'not_a_warehouse' });
           return;
         }
@@ -4872,7 +4934,7 @@ async function start() {
            JOIN warehouse_product_settings AS setting ON setting.building_id = seller.id
            LEFT JOIN warehouse_stock AS stock
              ON stock.building_id = seller.id AND stock.product_id = setting.product_id
-           WHERE seller.building_type = 'warehouse'
+           WHERE seller.building_type IN ('warehouse', 'silo')
              AND seller.status = 'completed'
              AND setting.mode = 'sell'
              AND POWER(seller.tile_x - $1, 2) + POWER(seller.tile_y - $2, 2) <= 3600
@@ -4929,7 +4991,7 @@ async function start() {
           [request.params.id],
         );
         const target = targetRows[0];
-        if (!target || target.building_type !== 'warehouse') {
+        if (!target || !isStorageBuilding(target.building_type)) {
           await client.query('ROLLBACK');
           response.status(404).json({ error: 'warehouse_not_found' });
           return;
@@ -4949,7 +5011,7 @@ async function start() {
           `SELECT b.id, b.created_by, b.building_type, b.tile_x, b.tile_y, b.work_hours_per_day,
                   COALESCE((SELECT SUM(count) FROM job_assignments j WHERE j.workplace_id = b.id), 0)::int AS workers
            FROM residential_buildings b
-           WHERE b.building_type = 'warehouse' AND b.status = 'completed'
+           WHERE b.building_type IN ('warehouse', 'silo') AND b.status = 'completed'
              AND (b.id = $1 OR (ABS(b.tile_x - $2) <= $4 AND ABS(b.tile_y - $3) <= $4))`,
           [target.id, target.tile_x, target.tile_y, LINK_RADIUS],
         );
@@ -5015,8 +5077,12 @@ async function start() {
           response.status(404).json({ error: 'residence_not_found' });
           return;
         }
-        if (building.building_type !== 'warehouse' || building.status !== 'completed') {
+        if (!isStorageBuilding(building.building_type) || building.status !== 'completed') {
           response.status(400).json({ error: 'not_a_warehouse' });
+          return;
+        }
+        if (!canStoreProduct(building.building_type, setting.productId)) {
+          response.status(400).json({ error: 'invalid_warehouse_product' });
           return;
         }
         if (building.created_by !== userId) {
@@ -5473,7 +5539,8 @@ async function start() {
     if (
       !residenceIdPattern.test(request.params.id) ||
       !link ||
-      (link.warehouseId !== null && !residenceIdPattern.test(link.warehouseId))
+      (link.warehouseId !== null && !residenceIdPattern.test(link.warehouseId)) ||
+      (link.warehouseId === request.params.id && link.linked)
     ) {
       response.status(400).json({ error: 'invalid_warehouse_link' });
       return;
@@ -5484,68 +5551,114 @@ async function start() {
     }
 
     void (async () => {
-      const { rows: sources } = await pool.query<{
-        building_type: ResidenceType;
-        status: string;
-        created_by: string;
-        tile_x: number;
-        tile_y: number;
-      }>(
-        'SELECT building_type, status, created_by, tile_x, tile_y FROM residential_buildings WHERE id = $1',
-        [request.params.id],
-      );
-      const source = sources[0];
-      if (!source) {
-        response.status(404).json({ error: 'residence_not_found' });
-        return;
-      }
-      if (source.created_by !== userId) {
-        response.status(403).json({ error: 'residence_not_owned' });
-        return;
-      }
-      if (!canLinkToWarehouse(source.building_type) || source.status !== 'completed') {
-        response.status(400).json({ error: 'invalid_warehouse_link' });
-        return;
-      }
-      if (link.warehouseId !== null) {
-        const { rows: targets } = await pool.query<{
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const { rows: sources } = await client.query<{
           building_type: ResidenceType;
           status: string;
           created_by: string;
           tile_x: number;
           tile_y: number;
         }>(
-          'SELECT building_type, status, created_by, tile_x, tile_y FROM residential_buildings WHERE id = $1',
-          [link.warehouseId],
+          `SELECT building_type, status, created_by, tile_x, tile_y
+           FROM residential_buildings WHERE id = $1 FOR UPDATE`,
+          [request.params.id],
         );
-        const target = targets[0];
-        if (!target || target.building_type !== 'warehouse' || target.status !== 'completed') {
+        const source = sources[0];
+        if (!source) {
+          await client.query('ROLLBACK');
+          response.status(404).json({ error: 'residence_not_found' });
+          return;
+        }
+        if (source.created_by !== userId) {
+          await client.query('ROLLBACK');
+          response.status(403).json({ error: 'residence_not_owned' });
+          return;
+        }
+        if (!canLinkToWarehouse(source.building_type) || source.status !== 'completed') {
+          await client.query('ROLLBACK');
           response.status(400).json({ error: 'invalid_warehouse_link' });
           return;
         }
-        if (target.created_by !== userId) {
-          response.status(403).json({ error: 'warehouse_not_owned' });
-          return;
+
+        if (link.warehouseId !== null) {
+          const { rows: targets } = await client.query<{
+            building_type: ResidenceType;
+            status: string;
+            created_by: string;
+            tile_x: number;
+            tile_y: number;
+          }>(
+            `SELECT building_type, status, created_by, tile_x, tile_y
+             FROM residential_buildings WHERE id = $1 FOR SHARE`,
+            [link.warehouseId],
+          );
+          const target = targets[0];
+          if (!target || !isStorageBuilding(target.building_type) || target.status !== 'completed') {
+            await client.query('ROLLBACK');
+            response.status(400).json({ error: 'invalid_warehouse_link' });
+            return;
+          }
+          if (target.created_by !== userId) {
+            await client.query('ROLLBACK');
+            response.status(403).json({ error: 'warehouse_not_owned' });
+            return;
+          }
+          if (
+            !isWithinLinkRadius(
+              { type: source.building_type, x: source.tile_x, y: source.tile_y },
+              { type: target.building_type, x: target.tile_x, y: target.tile_y },
+            )
+          ) {
+            await client.query('ROLLBACK');
+            response.status(400).json({ error: 'warehouse_out_of_range' });
+            return;
+          }
+          if (link.linked) {
+            await client.query(
+              `INSERT INTO building_warehouse_links (building_id, warehouse_id)
+               VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+              [request.params.id, link.warehouseId],
+            );
+          } else {
+            await client.query(
+              'DELETE FROM building_warehouse_links WHERE building_id = $1 AND warehouse_id = $2',
+              [request.params.id, link.warehouseId],
+            );
+          }
+        } else {
+          await client.query(
+            'DELETE FROM building_warehouse_links WHERE building_id = $1',
+            [request.params.id],
+          );
         }
-        if (
-          !isWithinLinkRadius(
-            { type: source.building_type, x: source.tile_x, y: source.tile_y },
-            { type: target.building_type, x: target.tile_x, y: target.tile_y },
-          )
-        ) {
-          response.status(400).json({ error: 'warehouse_out_of_range' });
-          return;
-        }
+
+        const { rows } = await client.query<ResidentialBuildingRow>(
+          `UPDATE residential_buildings
+           SET warehouse_id = (
+             SELECT warehouse_id FROM building_warehouse_links
+             WHERE building_id = residential_buildings.id
+             ORDER BY warehouse_id LIMIT 1
+           )
+           WHERE id = $1
+           RETURNING ${RESIDENTIAL_COLUMNS}`,
+          [request.params.id],
+        );
+        await client.query('COMMIT');
+        response.json(mapResidentialBuilding(rows[0]));
+        void publishCities().catch((error: unknown) => {
+          console.error('O vínculo foi atualizado, mas a atualização do mundo falhou:', error);
+        });
+      } catch (error) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter a alteração de vínculo:', rollbackError);
+        });
+        throw error;
+      } finally {
+        client.release();
       }
-      const { rows } = await pool.query<ResidentialBuildingRow>(
-        `UPDATE residential_buildings SET warehouse_id = $2 WHERE id = $1
-         RETURNING ${RESIDENTIAL_COLUMNS}`,
-        [request.params.id, link.warehouseId],
-      );
-      response.json(mapResidentialBuilding(rows[0]));
-      void publishCities().catch((error: unknown) => {
-        console.error('O vínculo foi atualizado, mas a atualização do mundo falhou:', error);
-      });
     })().catch((error: unknown) => {
       console.error('Não foi possível atualizar o vínculo:', error);
       response.status(503).json({ error: 'residence_unavailable' });

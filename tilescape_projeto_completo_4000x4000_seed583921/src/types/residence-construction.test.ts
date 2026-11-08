@@ -64,10 +64,28 @@ test('orders construction menus and applies the requested costs', () => {
   );
   assert.deepEqual(
     getConstructionMenuDefinitions('industrias').map(({ type }) => type),
-    ['warehouse', 'flour_mill', 'bread_factory', 'cheese_factory', 'chocolate_factory'],
+    ['warehouse', 'silo', 'flour_mill', 'bread_factory', 'cheese_factory', 'chocolate_factory'],
   );
+  assert.equal(RESIDENCES.silo.width, 4);
+  assert.equal(RESIDENCES.silo.height, 4);
+  assert.equal(RESIDENCES.silo.maxWorkers, 100);
+  assert.equal(RESIDENCES.silo.storageCapacityM3, 400);
+  assert.deepEqual(RESIDENCES.silo.allowedStorageProductIds, [
+    'wheat',
+    'barley',
+    'potato',
+    'corn',
+    'rice',
+    'spices',
+    'cocoa',
+    'sugarcane',
+    'olive',
+    'grape',
+    'tobacco_leaf',
+  ]);
 
   const costs: Partial<Record<keyof typeof RESIDENCES, { wood: number; stone: number; iron?: number; workPoints: number }>> = {
+    silo: { wood: 300, stone: 60, workPoints: 20000 },
     farm_rice: { wood: 100, stone: 40, workPoints: 30000 },
     farm_wheat: { wood: 100, stone: 40, workPoints: 30000 },
     farm_barley: { wood: 100, stone: 40, workPoints: 30000 },

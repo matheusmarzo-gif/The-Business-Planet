@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  applyTransferToLinkedBuilding,
   getMaxManualTransferQuantity,
   getTransportDemand,
   planWarehouseStockWrites,
+  planTransfersDetailed,
   planWarehouseTrades,
   type TradeWarehouse,
+  type WarehouseLogistics,
 } from './logistics.js';
+import { canStoreProduct } from './residence.js';
 
 function createWarehouse(
   id: string,
@@ -74,6 +78,81 @@ test('manual transfer limit respects reserved source stock, destination capacity
     }),
     0,
   );
+});
+
+test('silos only hold their configured resources during local transport and warehouse trade', () => {
+  const silo: WarehouseLogistics = {
+    stock: new Map([['milk', 20]]),
+    minimumStock: new Map(),
+    maximumStock: new Map(),
+    capacityM3: 400,
+    workPoints: 10000,
+    allowedProductIds: ['wheat', 'barley', 'potato', 'corn', 'rice', 'spices', 'cocoa', 'sugarcane', 'olive', 'grape', 'tobacco_leaf'],
+  };
+  const localTransfers = planTransfersDetailed(silo, [
+    { buildingId: 'dairy-farm', type: 'farm_dairy', stock: 20 },
+    { buildingId: 'milk-shop', type: 'shop_milk', stock: 0 },
+  ]);
+  assert.deepEqual(localTransfers.transfers, []);
+  assert.equal(canStoreProduct('silo', 'wheat'), true);
+  assert.equal(canStoreProduct('silo', 'milk'), false);
+  const allowedLocalTransfer = planTransfersDetailed(
+    {
+      ...silo,
+      stock: new Map([['wheat', 5]]),
+    },
+    [{
+      buildingId: 'flour-mill',
+      type: 'flour_mill',
+      stock: 0,
+      selectedInputProductId: 'wheat',
+      inputStocks: { wheat: 0 },
+    }],
+  );
+  assert.deepEqual(allowedLocalTransfer.transfers, [{
+    buildingId: 'flour-mill',
+    productId: 'wheat',
+    quantity: 5,
+    direction: 'in',
+  }]);
+
+  const siloSeller = createWarehouse('silo', 'player-a', 'sell', 5, 20);
+  siloSeller.type = 'silo';
+  siloSeller.capacityM3 = 400;
+  siloSeller.stock.set('milk', 20);
+  siloSeller.settings.set('milk', {
+    minimumStock: 0,
+    maximumStock: null,
+    price: 5,
+    mode: 'sell',
+  });
+  const buyer = createWarehouse('buyer', 'player-b', 'buy', 20, 0);
+  buyer.settings.set('milk', {
+    minimumStock: 0,
+    maximumStock: 100,
+    price: 20,
+    mode: 'buy',
+  });
+  assert.deepEqual(planWarehouseTrades([siloSeller, buyer]).map((trade) => trade.productId), ['rice']);
+});
+
+test('multiple linked warehouses do not overfill a shop in the same transport run', () => {
+  const shop = { buildingId: 'milk-shop', type: 'shop_milk' as const, stock: 0 };
+  const warehouse = (stock: number): WarehouseLogistics => ({
+    stock: new Map([['milk', stock]]),
+    minimumStock: new Map(),
+    maximumStock: new Map(),
+    capacityM3: 50,
+    workPoints: 10000,
+  });
+  const first = planTransfersDetailed(warehouse(50), [shop]).transfers;
+  assert.equal(first[0]?.quantity, 50);
+  for (const transfer of first) applyTransferToLinkedBuilding(shop, transfer);
+
+  const second = planTransfersDetailed(warehouse(100), [shop]).transfers;
+  assert.equal(second[0]?.quantity, 70);
+  for (const transfer of second) applyTransferToLinkedBuilding(shop, transfer);
+  assert.equal(shop.stock, 120);
 });
 
 test('plans negative warehouse stock deltas as updates, never inserts', () => {

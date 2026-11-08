@@ -57,10 +57,11 @@ interface ResidencePanelProps {
   onOpenProductionHistory: () => void;
   onOpenCommerceHistory: () => void;
   onOpenWarehouseLog: () => void;
+  linkedWarehouses: { id: string; name: string }[];
   isLinking: boolean;
   onStartLink: () => void;
   onCancelLink: () => void;
-  onUnlink: () => void;
+  onUnlink: (warehouseId: string | null) => void;
   onPlant: () => void;
   onSaveFarmAutomation: (settings: FarmAutomationSettings) => void;
   showInfluence: boolean;
@@ -161,6 +162,7 @@ export default function ResidencePanel({
   onOpenProductionHistory,
   onOpenCommerceHistory,
   onOpenWarehouseLog,
+  linkedWarehouses,
   isLinking,
   onStartLink,
   onCancelLink,
@@ -542,22 +544,39 @@ export default function ResidencePanel({
           )}
         </div>
       )}
-      {isOwner && building.status === 'completed' && canLinkToWarehouse(building.type) && (
+      {building.status === 'completed' && canLinkToWarehouse(building.type) && (
         <div className="warehouse-link">
-          <p>{building.warehouseId ? 'Ligado a um armazém.' : 'Sem armazém ligado.'}</p>
-          {isLinking ? (
-            <button type="button" onClick={onCancelLink}>
-              Cancelar: clique em um armazém no mapa…
-            </button>
+          <strong>Armazéns e silos ligados</strong>
+          {linkedWarehouses.length > 0 ? (
+            <ul>
+              {linkedWarehouses.map((warehouse) => (
+                <li key={warehouse.id}>
+                  <span>{warehouse.name}</span>
+                  {isOwner && (
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => onUnlink(warehouse.id)}
+                    >
+                      Desligar
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
           ) : (
-            <button type="button" disabled={isSaving} onClick={onStartLink}>
-              Ligar a um armazém
-            </button>
+            <p>Esta construção não está ligada a nenhum armazém ou silo.</p>
           )}
-          {building.warehouseId && !isLinking && (
-            <button type="button" disabled={isSaving} onClick={onUnlink}>
-              Desligar
-            </button>
+          {isOwner && (
+            isLinking ? (
+              <button type="button" onClick={onCancelLink}>
+                Cancelar: clique em um armazém ou silo no mapa…
+              </button>
+            ) : (
+              <button type="button" disabled={isSaving} onClick={onStartLink}>
+                Ligar a outro armazém ou silo
+              </button>
+            )
           )}
         </div>
       )}

@@ -2,6 +2,7 @@ import { readdir, readFile, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseBasicDemandConfig } from '../src/types/commerceDemand.js';
+import { PRODUCTS } from '../src/types/product.js';
 
 const appDirectory = fileURLToPath(new URL('../', import.meta.url));
 const configDirectory = resolve(appDirectory, 'config');
@@ -52,6 +53,7 @@ const expectedBuildingIds = [
   'sugar_mill',
   'toolmaker',
   'warehouse',
+  'silo',
 ] as const;
 
 type JsonRecord = Record<string, unknown>;
@@ -166,6 +168,7 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
     'requiresWater',
     'requiresAdjacentWater',
     'storageCapacityM3',
+    'allowedStorageProductIds',
     'dairyEfficiencyByQuarter',
   ]);
   if (value.type !== buildingId) fail(path, `o campo type precisa ser "${buildingId}".`);
@@ -228,6 +231,19 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
   ]) {
     if (field in value && (typeof value[field] !== 'number' || !Number.isFinite(value[field]) || value[field] < 0)) {
       fail(path, `"${field}" precisa ser um número não negativo.`);
+    }
+    if ('allowedStorageProductIds' in value) {
+      const productIds = value.allowedStorageProductIds;
+      const knownProductIds = new Set(PRODUCTS.map((product) => product.id));
+      if (
+        value.kind !== 'warehouse' ||
+        !Array.isArray(productIds) ||
+        productIds.length === 0 ||
+        productIds.some((productId) => typeof productId !== 'string' || !knownProductIds.has(productId)) ||
+        new Set(productIds).size !== productIds.length
+      ) {
+        fail(path, '"allowedStorageProductIds" precisa listar produtos únicos existentes em um tipo warehouse.');
+      }
     }
   }
   if ('inputCapacities' in value) {

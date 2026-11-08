@@ -182,7 +182,7 @@ e Fábrica de Chocolate.
 
 ### Configuração editável do jogo
 
-Os dados das 44 construções ficam em arquivos individuais
+Os dados das 45 construções ficam em arquivos individuais
 [`config/construcoes/`](./config/construcoes/), um JSON válido por arquivo
 `.txt` nomeado pelo tipo interno (por exemplo, `farm_rice.txt`). É possível
 ajustar dimensões, zona, estrada/água exigida, custo de Madeira/Pedra/Ferro, Work
@@ -335,6 +335,21 @@ preços (inclusive quando a oferta iguala o limite desejado), distância,
 capacidade e Work Points; a ação pode ser repetida sem aguardar a rodada
 automática. Pedra exige mais Work Points por unidade que Madeira por ser mais
 pesada; cada compra é limitada aos Work Points disponíveis naquela rodada.
+
+O **Silo** também fica em Indústrias. Tem 4 × 4 tiles, até 100 funcionários,
+capacidade de 400 m³ e custa 300 madeiras, 60 pedras e 20.000 Work Points.
+Só pode armazenar Trigo, Cevada, Batata, Milho, Arroz, Especiarias, Cacau, Cana,
+Azeitona, Uva e Fumo; transferências e compras/vendas respeitam essa lista.
+Assim como o Armazém, ao clicar nele é possível abrir **Produtos e estoque** e
+configurar os produtos permitidos.
+
+Uma construção produtora ou comercial pode ser ligada a vários armazéns e
+silos concluídos do mesmo dono, dentro de 60 tiles. No painel da construção,
+a lista **Armazéns e silos ligados** mostra os depósitos conectados. O dono pode
+adicionar outro ao escolher **Ligar a outro armazém ou silo** e clicar nele no
+mapa, ou remover individualmente um vínculo com **Desligar**. A rotina diária
+considera o estoque já movimentado entre depósitos, evitando enviar ou abastecer
+mais que o necessário.
 
 O **Moinho**, a **Fábrica de Pães** e a **Fábrica de Queijo** também ficam na
 categoria Indústrias. O Moinho (3 × 3, 60 funcionários) custa 100 madeiras,

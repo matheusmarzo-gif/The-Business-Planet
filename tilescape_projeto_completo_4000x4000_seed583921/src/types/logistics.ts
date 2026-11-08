@@ -1,5 +1,6 @@
 import { PRODUCTS } from './product.js';
 import {
+  canStoreProduct,
   getResidenceDefinition,
   RESIDENCES,
   type ResidenceType,
@@ -33,6 +34,39 @@ export interface LogisticsLink {
   selectedInputProductId?: string | null;
 }
 
+export function applyTransferToLinkedBuilding(
+  building: LogisticsLink,
+  transfer: Transfer,
+): void {
+  const definition = getResidenceDefinition(building.type);
+  const delta = transfer.direction === 'out' ? -transfer.quantity : transfer.quantity;
+  if (transfer.direction === 'out') {
+    building.stock += delta;
+  } else if (definition?.kind === 'shop') {
+    building.stock += delta;
+  } else if (
+    definition?.inputCapacities?.[transfer.productId] !== undefined &&
+    (!definition.selectableInputProductIds ||
+      building.selectedInputProductId === transfer.productId)
+  ) {
+    building.inputStocks = {
+      ...building.inputStocks,
+      [transfer.productId]:
+        (building.inputStocks?.[transfer.productId] ?? 0) + delta,
+    };
+  } else if (transfer.productId === 'tools') {
+    building.toolStock = (building.toolStock ?? 0) + delta;
+  } else if (transfer.productId === 'wood') {
+    building.woodStock = (building.woodStock ?? 0) + delta;
+  } else if (transfer.productId === 'iron') {
+    building.ironStock = (building.ironStock ?? 0) + delta;
+  } else if (transfer.productId === 'charcoal') {
+    building.charcoalStock = (building.charcoalStock ?? 0) + delta;
+  } else if (transfer.productId === 'sugarcane') {
+    building.sugarcaneStock = (building.sugarcaneStock ?? 0) + delta;
+  }
+}
+
 export type InputProduct = 'tools' | 'wood' | 'iron' | 'charcoal' | 'sugarcane';
 
 export interface WarehouseLogistics {
@@ -41,6 +75,7 @@ export interface WarehouseLogistics {
   maximumStock: Map<string, number | null>;
   capacityM3: number;
   workPoints: number;
+  allowedProductIds?: readonly string[];
 }
 
 export interface WarehouseStockDelta {
@@ -104,11 +139,21 @@ export function getMaxManualTransferQuantity(input: {
   );
 }
 
-export function parseWarehouseLink(value: unknown): { warehouseId: string | null } | null {
+export function parseWarehouseLink(
+  value: unknown,
+): { warehouseId: string | null; linked: boolean } | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { warehouseId } = value as Record<string, unknown>;
-  if (warehouseId === null) return { warehouseId: null };
-  return typeof warehouseId === 'string' ? { warehouseId } : null;
+  const { warehouseId, linked } = value as Record<string, unknown>;
+  if (warehouseId === null) {
+    return linked === undefined || linked === false ? { warehouseId: null, linked: false } : null;
+  }
+  if (
+    typeof warehouseId !== 'string' ||
+    (linked !== undefined && typeof linked !== 'boolean')
+  ) {
+    return null;
+  }
+  return { warehouseId, linked: linked !== false };
 }
 
 export function canLinkToWarehouse(type: string): boolean {
@@ -225,7 +270,11 @@ export function planTransfersDetailed(
   ) => {
     const definition = getResidenceDefinition(link.type);
     const product = PRODUCTS.find((item) => item.id === (input ?? definition?.stockProductId));
-    if (!definition || !product) return;
+    if (
+      !definition ||
+      !product ||
+      (warehouse.allowedProductIds && !warehouse.allowedProductIds.includes(product.id))
+    ) return;
     const currentInputStock =
       input === 'tools'
         ? link.toolStock
@@ -419,7 +468,7 @@ export function planWarehouseTrades(
 
   for (const seller of warehouses) {
     for (const [productId, offer] of seller.settings) {
-      if (offer.mode !== 'sell') continue;
+      if (offer.mode !== 'sell' || !canStoreProduct(seller.type, productId)) continue;
       for (const buyer of warehouses) {
         if (onlyBuyerId && buyer.id !== onlyBuyerId) continue;
         const want = buyer.settings.get(productId);
@@ -427,6 +476,7 @@ export function planWarehouseTrades(
           buyer.ownerId === seller.ownerId ||
           want?.mode !== 'buy' ||
           offer.price > want.price ||
+          !canStoreProduct(buyer.type, productId) ||
           !isWithinLinkRadius(buyer, seller)
         ) {
           continue;

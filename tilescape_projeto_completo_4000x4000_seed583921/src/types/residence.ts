@@ -124,6 +124,7 @@ export interface ResidenceDefinition {
   requiresWater?: boolean;
   requiresAdjacentWater?: boolean;
   storageCapacityM3?: number;
+  allowedStorageProductIds?: readonly string[];
   dairyEfficiencyByQuarter?: readonly [number, number, number, number];
 }
 
@@ -252,6 +253,7 @@ const CONSTRUCTION_MENU_ORDER: Partial<Record<ConstructionCategory, readonly Res
   ],
   industrias: [
     'warehouse',
+    'silo',
     'flour_mill',
     'bread_factory',
     'cheese_factory',
@@ -303,7 +305,7 @@ export interface ResidentialBuilding {
   workPointsDone: number;
   price: number;
   stock: number;
-  warehouseId: string | null;
+  warehouseIds: string[];
   // Ferramentas em estoque e penalidade de eficiência (0–90, em %) para construções que as usam.
   toolStock: number;
   woodStock: number;
@@ -371,6 +373,15 @@ export type ResidencePlacementError =
 
 export function getResidenceDefinition(type: string): ResidenceDefinition | null {
   return Object.prototype.hasOwnProperty.call(RESIDENCES, type) ? RESIDENCES[type as ResidenceType] : null;
+}
+
+export function isStorageBuilding(type: string): boolean {
+  return getResidenceDefinition(type)?.kind === 'warehouse';
+}
+
+export function canStoreProduct(type: string, productId: string): boolean {
+  const allowedProductIds = getResidenceDefinition(type)?.allowedStorageProductIds;
+  return !allowedProductIds || allowedProductIds.includes(productId);
 }
 
 export function isTileInResidenceFootprint(

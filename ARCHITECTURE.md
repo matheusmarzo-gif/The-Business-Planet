@@ -22,7 +22,9 @@ ao lado de estradas; o primeiro armazém de cada jogador é gratuito e instantâ
 e as obras regulares progridem por Work Points. A conta master pode concluí-las
 instantaneamente. O jogo também possui um catálogo de produtos, estoques
 persistentes e produção para as construções habilitadas; estoques perecíveis
-sofrem deterioração diária conforme a validade.
+sofrem deterioração diária conforme a validade. Armazéns e silos armazenam e
+transportam produtos; construções produtoras e comerciais podem se ligar a mais
+de um deles.
 População, bem-estar e economia agregados da cidade ainda não têm dinâmica
 própria; o jogo já processa rotinas diárias de imigração, emprego, consumo,
 produção, vendas e aluguel.
@@ -42,7 +44,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/game/worldClient.ts` | Autentica o WebSocket, valida mensagens recebidas e atualiza o estado compartilhado. |
 | `src/components/ConstructionBar.tsx` | Barra inferior de categorias; a seleção abre o catálogo de construções no painel lateral direito. |
 | `src/components/CityAssemblyModal.tsx` | Informações da cidade, inclusive salário mínimo; edição do piso restrita à conta master. |
-| `src/components/WarehousePanel.tsx` | Produtos e estoque do armazém; tooltip nos ícones mostra peso e volume unitários e totais. |
+| `src/components/WarehousePanel.tsx` | Produtos e estoque de armazéns e silos; tooltip nos ícones mostra peso e volume unitários e totais. |
 | `src/types/city.ts` | Tipos, dimensões e regras geométricas de cidades/Assembleias. |
 | `src/types/road.ts` | Tipos, limites, validação, interpolação e escolha das peças de estrada. |
 | `src/types/residence.ts` | Tipos, validação compartilhada e regras geométricas das construções. |
@@ -63,7 +65,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `server/index.ts` | API Express, autenticação de tokens, banco, Redis, relógio e WebSocket. |
 | `database/schema.sql` | DDL aplicado pelo servidor durante a inicialização. |
 | `config/demanda_basica.txt` | Multiplicadores de demanda residencial por produto, carregados na inicialização do servidor. |
-| `config/construcoes/*.txt` | Dados editáveis das 44 construções, um JSON por arquivo. |
+| `config/construcoes/*.txt` | Dados editáveis das 45 construções, um JSON por arquivo. |
 | `config/formulas/*.txt` | Parâmetros editáveis de consumo, trabalho e transporte. |
 | `server/generate-game-config.ts` | Valida os TXT e gera o módulo de configuração compartilhado. |
 | `src/generated/gameConfig.ts` | Saída ignorada pelo Git, regenerada pelos comandos npm antes de uso. |
@@ -282,6 +284,12 @@ mapeamento e verificar todas as curvas.
   chamada) e `POST /api/residential-buildings/:id/warehouse/suppliers` (somente
   o dono, compra imediata respeitando ordem, preço, distância, espaço e Work
   Points).
+- `silo` (categoria Indústrias, `kind: 'warehouse'`, área rural, estrada
+  adjacente) ocupa 4 × 4, emprega até 100 pessoas e tem 400 m³ de capacidade.
+  Custa 300 madeiras, 60 pedras e 20.000 Work Points. Só armazena Trigo,
+  Cevada, Batata, Milho, Arroz, Especiarias, Cacau, Cana, Azeitona, Uva e Fumo;
+  a restrição também é aplicada a transferências locais/manuais, compras e
+  vendas. Sprite `public/buildings/industrial/silo.png`.
 - `shop_rice` (categoria Comerciais, área urbana, `kind: 'shop'`) também usa o
   catálogo e a tabela `residential_buildings`: 2 × 2, até 1 funcionário,
   estoque máximo de 5 de Arroz, 10 madeiras e 5 pedras, 5.000 Work Points.
@@ -718,19 +726,26 @@ mapeamento e verificar todas as curvas.
   empregados × `getDailyWorkPoints`).
 - Câmera: sem botões de zoom/centralizar; zoom pela roda do mouse e movimento
   pelas setas do teclado (`GameApp.tsx`, laço `requestAnimationFrame`, ignorado
-  em campos de formulário). (`src/types/logistics.ts`): `residential_buildings.
-  warehouse_id` (FK própria, `ON DELETE SET NULL`) liga uma construção
-  produtora ou comércio concluído a um único armazém concluído do mesmo dono, a até 60 tiles
-  (`PUT /api/residential-buildings/:id/warehouse-link`, corpo `{warehouseId|null}`,
-  validado no servidor). O estoque real do armazém fica em `warehouse_stock`
+  em campos de formulário).
+- Vínculos logísticos (`src/types/logistics.ts`): `building_warehouse_links`
+  permite ligar uma construção produtora ou comercial concluída a vários
+  armazéns/silos concluídos do mesmo dono, a até 60 tiles. O endpoint
+  `PUT /api/residential-buildings/:id/warehouse-link` adiciona um vínculo com
+  `{warehouseId}`, remove um vínculo com `{warehouseId, linked:false}` ou limpa
+  todos com `{warehouseId:null}`; o servidor valida dono, tipo, status e distância
+  sob o lock transacional. `residential_buildings.warehouse_id` mantém o primeiro
+  vínculo legado e é migrado para a tabela associativa na inicialização. O painel
+  da construção lista todos os depósitos conectados. O estoque real fica em `warehouse_stock`
   (`building_id, product_id, quantity`, cascata) e é devolvido por
   `GET .../warehouse` junto das configurações. No job das 00:00 (depois das
-  vendas), `planTransfers` move: construções produtoras ligadas → armazém até o
-  estoque máximo configurado e o espaço livre (50 m³); armazém → comércios e
-  insumos das construções ligadas usando o saldo acima do estoque mínimo. A
-  ordem Compra/Venda não bloqueia transferências locais. Cada carga
-  consome Work Points do armazém (`100 · m³ + 0,125 · kg`; pontos = empregados
-  do armazém × `getDailyWorkPoints`); envios ao armazém fazem upsert positivo e
+  vendas), `planTransfersDetailed` move produção dos ligados para cada depósito
+  e abastece comércios/insumos a partir do saldo acima do mínimo. A rotina
+  atualiza o estoque das construções entre depósitos na mesma rodada para não
+  duplicar envios nem abastecimentos. O silo usa capacidade de 400 m³ e sua
+  lista restrita de produtos; o armazém comum mantém 50 m³ para qualquer produto.
+  A ordem Compra/Venda não bloqueia transferências locais. Cada carga consome
+  Work Points do depósito (`100 · m³ + 0,125 · kg`; pontos = empregados ×
+  `getDailyWorkPoints`); envios ao depósito fazem upsert positivo e
   retiradas atualizam apenas uma linha existente com saldo suficiente. Os
   deltas são separados antes da persistência para nunca tentar inserir uma
   quantidade negativa, evitando violar `warehouse_stock.quantity >= 0`. Quando

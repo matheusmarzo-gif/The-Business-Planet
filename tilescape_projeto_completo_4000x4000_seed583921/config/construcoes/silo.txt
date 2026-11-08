@@ -1,0 +1,32 @@
+{
+  "type": "silo",
+  "kind": "warehouse",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Silo",
+  "asset": "/buildings/industrial/silo.png",
+  "width": 4,
+  "height": 4,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": {
+    "wood": 300,
+    "stone": 60
+  },
+  "workPoints": 20000,
+  "maxWorkers": 100,
+  "storageCapacityM3": 400,
+  "allowedStorageProductIds": [
+    "wheat",
+    "barley",
+    "potato",
+    "corn",
+    "rice",
+    "spices",
+    "cocoa",
+    "sugarcane",
+    "olive",
+    "grape",
+    "tobacco_leaf"
+  ]
+}

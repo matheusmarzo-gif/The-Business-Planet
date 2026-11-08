@@ -23,6 +23,8 @@ import {
   parseRent,
   getResidencePlacementError,
   getResidentialBuildingName,
+  canStoreProduct,
+  isStorageBuilding,
   isWithinWorkerSearchRadius,
   parseWorkSettings,
   RESIDENCES,
@@ -419,8 +421,18 @@ describe('warehouse logistics', () => {
     assert.equal(canLinkToWarehouse('farm_rice'), true);
     assert.equal(canLinkToWarehouse('warehouse'), false);
     assert.equal(canLinkToWarehouse('house_poor1'), false);
-    assert.deepEqual(parseWarehouseLink({ warehouseId: null }), { warehouseId: null });
+    assert.deepEqual(parseWarehouseLink({ warehouseId: null }), { warehouseId: null, linked: false });
+    assert.deepEqual(parseWarehouseLink({ warehouseId: 'silo-1' }), { warehouseId: 'silo-1', linked: true });
+    assert.deepEqual(parseWarehouseLink({ warehouseId: 'silo-1', linked: false }), {
+      warehouseId: 'silo-1',
+      linked: false,
+    });
     assert.equal(parseWarehouseLink({}), null);
+    assert.equal(isStorageBuilding('warehouse'), true);
+    assert.equal(isStorageBuilding('silo'), true);
+    assert.equal(isStorageBuilding('farm_rice'), false);
+    assert.equal(canStoreProduct('silo', 'wheat'), true);
+    assert.equal(canStoreProduct('silo', 'milk'), false);
     assert.equal(
       isWithinLinkRadius(
         { type: 'farm_rice', x: 0, y: 0 },
@@ -1791,7 +1803,7 @@ describe('municipal zones', () => {
         workPointsDone: 0,
         price: 10,
         stock: 0,
-        warehouseId: null,
+        warehouseIds: [],
         toolStock: 0,
         woodStock: 0,
         ironStock: 0,
@@ -1849,7 +1861,7 @@ describe('municipal zones', () => {
         workPointsDone: 0,
         price: 10,
         stock: 0,
-        warehouseId: null,
+        warehouseIds: [],
         toolStock: 0,
         woodStock: 0,
         ironStock: 0,

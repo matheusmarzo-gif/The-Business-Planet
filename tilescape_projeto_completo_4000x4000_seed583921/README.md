@@ -103,8 +103,9 @@ entre 10 e o produto do apreço da construção pelo apreço da região. Passe o
 mouse sobre o benefício associado para consultar `Cb` (média de gastos),
 `benefício erro` e `benefício ideal`, além da contribuição individual de cada
 produto para o `Cb`. A média diária de cada produto considera a quantidade
-consumida dividida por `30 × moradores registrados`. Os dados são calculados
-no servidor a partir do histórico persistido da residência.
+consumida por trabalhador empregado, usando os consumidores registrados em cada
+dia. Os dados são calculados no servidor a partir do histórico persistido da
+residência.
 6. Adicione o domínio público do app à lista de domínios confiáveis do Neon Auth:
 
    ```powershell
@@ -330,7 +331,7 @@ Não há confirmação; somente o jogador que iniciou a construção pode remov�
 
 A barra lateral com dados do mundo foi removida. Clique em uma residência (fora
 dos modos de construção e demolição) para abrir o painel lateral: residências
-concluídas mostram ocupantes, capacidade, técnica, saúde, felicidade, empregados
+concluídas mostram ocupantes, capacidade, técnica, saúde, bem-estar, empregados
 e renda média por morador (calculada a partir dos empregos já alocados: soma dos
 salários dos empregos dos moradores ÷ ocupantes); obras mostram Work Points, empregados
 e permitem ao dono editar o salário ofertado (C$ por dia de trabalho) e a carga
@@ -695,7 +696,9 @@ salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). T
 às 00:00 cada funcionário de uma obra gera
 `12,5 × horas × saúde/100 × felicidade/100 × fator de descanso` Work Points (fator
 1,2 com 4 h, 1 com 8 h, 0,8 com 14 h); a obra termina sozinha ao atingir o total
-necessário. Saúde e felicidade ainda são fixas em 100.
+necessário. Saúde e o fator legado de felicidade usado nessa fórmula continuam
+fixos em 100. O bem-estar residencial é convertido em técnica média dos
+trabalhadores no painel, mas ainda não altera os Work Points.
 
 Nas lojas de arroz, batata, milho, cevada, trigo, peixe, leite, açúcar, vegetais,
 sal, especiarias e no Açougue, o dono define o preço (a partir de C$ 0,01, com
@@ -704,29 +707,44 @@ Points gerados pelos funcionários no dia: arroz/batata/milho/cevada/trigo e
 carne vermelha usam 25 WP/unidade; peixe, 50; açúcar/especiarias, 125;
 vegetais/sal, 20; e leite, 1 WP/litro. Padaria, Queijaria, Frutaria e
 Chocolateria usam, respectivamente, 3, 26, 160 e 54 WP por unidade. Para cada
-produto, as residências consideram lojas do
-produto em até 60 tiles. O custo de referência `RR` é o custo diário por pessoa
+produto, cada residência considera lojas do produto em até 60 tiles, mas somente
+moradores empregados entram na demanda e na divisão entre as lojas. O custo de
+referência `RR` é o custo diário por pessoa
 da cesta básica e `RR2`, o da cesta intermediária. Ambos usam preços médios
 ponderados pelas unidades vendidas nos últimos 30 dias. Produtos sem vendas no
 período usam a média dos preços atuais anunciados na cidade; produtos sem loja
 na cidade são omitidos do custo da cesta correspondente.
 
 Para cada residência e loja, `Pf` é o preço local multiplicado pela necessidade
-diária por pessoa, e `Rf` é a renda média por morador. As fórmulas de benefício
+diária por pessoa empregada, e `Rf` é a renda média dos trabalhadores da
+residência. As fórmulas de benefício
 e a distinção entre produtos básicos e intermediários estão descritas acima.
 `Dᵢ = √(60 / (60 + dᵢ))`, onde `dᵢ` é a distância entre a residência e a loja.
-Para cada produto, os moradores são divididos entre as lojas elegíveis em até
-60 tiles, proporcionalmente ao benefício associado. O arredondamento pelo
-método dos maiores restos mantém o número de moradores inteiro e igual à
-população da residência quando existe benefício positivo. Se o custo de
+Para cada produto, os moradores empregados são divididos entre as lojas
+elegíveis em até 60 tiles, proporcionalmente ao benefício associado. O
+arredondamento pelo método dos maiores restos mantém o número de consumidores
+inteiro e igual à população empregada da residência quando existe benefício
+positivo. Se o custo de
 referência da cesta aplicável (`RR` ou `RR + RR2`) for zero, ou todas as lojas
 tiverem benefício zero, não há compra. A quantidade desejada em cada loja é
-moradores alocados × necessidade diária por pessoa × benefício associado e pode
+trabalhadores alocados × necessidade diária por pessoa × benefício associado e pode
 superar a necessidade diária. Frações de unidade são arredondadas
 aleatoriamente, preservando a quantidade esperada ao longo do tempo. Estoque e
-capacidade limitam as vendas; moradores alocados a uma loja sem unidades
+capacidade limitam as vendas; trabalhadores alocados a uma loja sem unidades
 disponíveis não são realocados para outra. O dono recebe o valor das vendas;
 moradores não são cobrados.
+
+### Bem-estar residencial
+
+Cada residência concluída tem um bem-estar calculado pela média móvel dos
+últimos 30 dias do jogo. Para cada produto, a satisfação é a quantidade
+consumida dividida pela necessidade diária multiplicada pelos dias-consumidor
+registrados; cada produto conta no máximo como 100% suprido. Os pesos são 12,5
+pontos para cada produto básico, 6,25 para cada produto intermediário e para
+cada bem, e 3 para cada produto avançado, totalizando até 162 pontos. O painel
+da residência mostra o bem-estar e a técnica média dos trabalhadores: 10 ×
+(1 + Bn/200) até Bn 100; 10 × (1,5 + (Bn−100)/50) até 125; 10 ×
+(2 + (Bn−125)/25) até 150; e 10 × (3 + (Bn−150)/12) até 162.
 
 A loja vende somente o estoque que tiver (começa em 0; pode ser abastecida por
 um armazém ligado). No histórico do comércio, **Ver cálculo** mostra `RR` e

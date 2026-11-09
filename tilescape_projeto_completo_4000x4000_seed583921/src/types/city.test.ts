@@ -583,13 +583,13 @@ describe('shop sales', () => {
     stock,
     capacity,
   });
-  const home = (id: string, x: number, occupants: number, averageIncome: number) => ({
+  const home = (id: string, x: number, consumers: number, averageIncome: number) => ({
     id,
     cityId: 'city-a',
     type: 'house_poor1' as const,
     x,
     y: 0,
-    occupants,
+    consumers,
     averageIncome,
   });
   const demandByProduct = new Map([
@@ -616,6 +616,20 @@ describe('shop sales', () => {
   ]);
   const cityPrices = (productId: string, price: number) =>
     new Map([[getCityProductKey('city-a', productId), price]]);
+
+  it('uses the employed residents as the consumer population', () => {
+    const plan = planShopSalesDetailed(
+      [home('working-home', 0, 2, 100)],
+      [shop('rice-shop', 0, 1, 100, 100)],
+      demandByProduct,
+      cityPrices('rice', 1),
+      () => 0,
+    );
+    const transaction = plan.transactionsByShop.get('rice-shop')?.[0];
+    assert.ok(transaction);
+    assert.equal(transaction.expectedDemand, 2 * 0.03);
+    assert.equal(transaction.occupants, 2);
+  });
 
   it('calculates daily shop revenue and profit from payroll and paid product costs', () => {
     assert.deepEqual(getShopDailyFinancials(20, 3, 12, 15), {
@@ -2007,6 +2021,7 @@ describe('municipal zones', () => {
         workHoursPerDay: 8,
         rent: 10,
         occupants: 0,
+        wellbeing: 0,
         desiredWorkers: 0,
         workPointsDone: 0,
         price: 10,
@@ -2065,6 +2080,7 @@ describe('municipal zones', () => {
         workHoursPerDay: 8,
         rent: 10,
         occupants: 0,
+        wellbeing: 0,
         desiredWorkers: 0,
         workPointsDone: 0,
         price: 10,

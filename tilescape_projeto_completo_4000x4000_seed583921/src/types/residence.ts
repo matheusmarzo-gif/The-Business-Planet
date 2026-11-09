@@ -323,6 +323,7 @@ export interface ResidentialBuilding {
   workHoursPerDay: number;
   rent: number;
   occupants: number;
+  wellbeing: number;
   desiredWorkers: number;
   workPointsDone: number;
   price: number;

@@ -30,6 +30,7 @@ import {
 import { getDairyFarmEfficiency } from '../types/dairy';
 import { GAME_RULES } from '../generated/gameConfig';
 import type { ResidenceBenefitCalculation } from '../types/residence-relocation';
+import { getWorkerTechnique } from '../types/wellbeing';
 
 interface ResidencePanelProps {
   building: ResidentialBuilding;
@@ -73,6 +74,7 @@ interface ResidencePanelProps {
 
 const number = new Intl.NumberFormat('pt-BR');
 const benefitNumber = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 6 });
+const wellbeingNumber = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
 const monthNames = [
   'Janeiro',
@@ -333,9 +335,9 @@ export default function ResidencePanel({
         : [
             ['Ocupantes atuais', number.format(building.occupants)],
             ['Máximo de ocupantes', number.format(definition.capacity)],
-            ['Técnica média dos trabalhadores', String(RESIDENCE_STATS.skill)],
+            ['Técnica média dos trabalhadores', wellbeingNumber.format(getWorkerTechnique(building.wellbeing))],
             ['Saúde dos trabalhadores', String(RESIDENCE_STATS.health)],
-            ['Felicidade dos trabalhadores', String(RESIDENCE_STATS.happiness)],
+            ['Bem-estar dos trabalhadores', wellbeingNumber.format(building.wellbeing)],
             ['Pessoas empregadas', number.format(building.employed)],
             ['Renda média dos trabalhadores', `C$ ${building.averageIncome.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}`],
           ];

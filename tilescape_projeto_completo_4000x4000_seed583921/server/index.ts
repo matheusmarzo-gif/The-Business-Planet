@@ -87,6 +87,10 @@ import { nextEfficiencyPenalty, planProduction, rollToolDemand } from '../src/ty
 import { getDairyFarmEfficiency } from '../src/types/dairy.js';
 import { parseBasicDemandConfig } from '../src/types/commerceDemand.js';
 import {
+  calculateResidenceWellbeing,
+  type ResidenceProductConsumption,
+} from '../src/types/wellbeing.js';
+import {
   applyTransferToLinkedBuilding,
   canLinkToWarehouse,
   getTransportDemand,
@@ -397,6 +401,7 @@ type ResidentialBuildingRow = {
   work_hours_per_day: number;
   rent: number;
   occupants: number;
+  wellbeing: number;
   desired_workers: number;
   work_points_done: number;
   price: number;
@@ -426,7 +431,7 @@ type ResidentialBuildingRow = {
   created_by?: string;
 };
 
-const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
+const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, wellbeing, desired_workers, work_points_done, price, stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
   COALESCE((SELECT array_agg(link.warehouse_id::text ORDER BY link.warehouse_id)
             FROM building_warehouse_links link
             WHERE link.building_id = all_buildings.id), ARRAY[]::text[]) AS warehouse_ids,
@@ -466,6 +471,7 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     workHoursPerDay: row.work_hours_per_day,
     rent: row.rent,
     occupants: row.occupants,
+    wellbeing: row.wellbeing,
     desiredWorkers: farmAutomation.enabled
       ? row.crop_phase === 'growing'
         ? farmAutomation.plantingWorkers
@@ -1108,8 +1114,11 @@ async function runMonthlyResidenceRelocation(): Promise<boolean> {
         }>(
           `WITH product_costs AS (
              SELECT building_id, product_id,
-                    SUM(quantity / NULLIF(30 * occupants, 0)) AS per_person_quantity,
-                    SUM(spent) / NULLIF(SUM(quantity), 0) AS average_price
+                    SUM(quantity) FILTER (WHERE consumers IS NOT NULL)
+                      / NULLIF(SUM(consumers), 0) AS per_person_quantity,
+                    SUM(spent) FILTER (WHERE consumers IS NOT NULL)
+                      / NULLIF(SUM(quantity) FILTER (WHERE consumers IS NOT NULL), 0)
+                      AS average_price
              FROM residence_consumption
              WHERE day >= $1::date - 30 AND day < $1::date
              GROUP BY building_id, product_id
@@ -2008,8 +2017,15 @@ async function runDailyEmployment(): Promise<boolean> {
       const salesStageSucceeded = await runStage('vendas', async () => {
       // Vendas da Cesta Básica: capacidade diária vem dos Work Points das lojas.
       const wageOf = new Map(workplaces.map((row) => [row.id, row.wage]));
-      const incomeByResidence = getAverageIncomes(
-        workplaces,
+      const employedResidents = new Map<string, number>();
+      for (const assignment of assignmentRows) {
+        employedResidents.set(
+          assignment.residence_id,
+          (employedResidents.get(assignment.residence_id) ?? 0) + assignment.count,
+        );
+      }
+      const incomeByEmployedResident = getAverageIncomes(
+        [...employedResidents].map(([id, occupants]) => ({ id, occupants })),
         wageOf,
         assignmentRows.map((row) => ({
           workplaceId: row.workplace_id,
@@ -2091,9 +2107,12 @@ async function runDailyEmployment(): Promise<boolean> {
           type: row.building_type,
           x: row.tile_x,
           y: row.tile_y,
-          occupants: row.occupants,
-          averageIncome: incomeByResidence.get(row.id) ?? 0,
+          consumers: employedResidents.get(row.id) ?? 0,
+          averageIncome: incomeByEmployedResident.get(row.id) ?? 0,
         }));
+      const populationByResidence = new Map(
+        workplaces.map((building) => [building.id, building.occupants]),
+      );
       const sold = new Map<string, number>();
       const bought = new Map<string, { quantity: number; spent: number }>();
       const shopPrice = new Map(shops.map((shop) => [shop.id, shop.price]));
@@ -2121,35 +2140,40 @@ async function runDailyEmployment(): Promise<boolean> {
         quantity: number;
         spent: number;
         occupants: number;
+        consumers: number;
       }[] = [];
       for (const home of homes) {
         for (const productId of demandBasicByProduct.keys()) {
-          const total = bought.get(`${home.id}\u0000${productId}`);
-          if (!total) continue;
+          const total = bought.get(`${home.id}\u0000${productId}`) ?? {
+            quantity: 0,
+            spent: 0,
+          };
           consumptionEntries.push({
             buildingId: home.id,
             productId,
             quantity: total.quantity,
             spent: total.spent,
-            occupants: home.occupants,
+            occupants: populationByResidence.get(home.id) ?? 0,
+            consumers: home.consumers,
           });
         }
       }
       if (consumptionEntries.length > 0) {
         await client.query(
           `INSERT INTO residence_consumption
-             (building_id, product_id, day, quantity, spent, occupants)
+             (building_id, product_id, day, quantity, spent, occupants, consumers)
            SELECT batch.building_id, batch.product_id, $1::date,
-                  batch.quantity, batch.spent, batch.occupants
+                  batch.quantity, batch.spent, batch.occupants, batch.consumers
            FROM UNNEST(
              $2::uuid[], $3::text[], $4::double precision[],
-             $5::numeric[], $6::integer[]
-           ) AS batch(building_id, product_id, quantity, spent, occupants)
+             $5::numeric[], $6::integer[], $7::integer[]
+           ) AS batch(building_id, product_id, quantity, spent, occupants, consumers)
            WHERE TRUE
            ON CONFLICT (building_id, product_id, day) DO UPDATE
            SET quantity = residence_consumption.quantity + EXCLUDED.quantity,
                spent = residence_consumption.spent + EXCLUDED.spent,
-               occupants = EXCLUDED.occupants`,
+               occupants = EXCLUDED.occupants,
+               consumers = EXCLUDED.consumers`,
           [
             state.day,
             consumptionEntries.map((entry) => entry.buildingId),
@@ -2157,8 +2181,61 @@ async function runDailyEmployment(): Promise<boolean> {
             consumptionEntries.map((entry) => entry.quantity),
             consumptionEntries.map((entry) => entry.spent),
             consumptionEntries.map((entry) => entry.occupants),
+            consumptionEntries.map((entry) => entry.consumers),
           ],
         );
+      }
+      const completedResidences = workplaces.filter(
+        (building) =>
+          building.status === 'completed' &&
+          getResidenceDefinition(building.building_type)?.kind === 'residence',
+      );
+      if (completedResidences.length > 0) {
+        const { rows: consumptionRows } = await client.query<{
+          building_id: string;
+          product_id: string;
+          quantity: number;
+          consumer_days: number;
+        }>(
+          `SELECT building_id, product_id,
+                  COALESCE(SUM(quantity) FILTER (WHERE consumers IS NOT NULL), 0)::float8 AS quantity,
+                  COALESCE(SUM(consumers), 0)::float8 AS consumer_days
+           FROM residence_consumption
+           WHERE building_id = ANY($2::uuid[])
+             AND day >= $1::date - 29 AND day <= $1::date
+           GROUP BY building_id, product_id`,
+          [state.day, completedResidences.map((building) => building.id)],
+        );
+        const consumptionByResidence = new Map<string, ResidenceProductConsumption[]>();
+        for (const row of consumptionRows) {
+          const records = consumptionByResidence.get(row.building_id) ?? [];
+          records.push({
+            productId: row.product_id,
+            quantity: row.quantity,
+            consumerDays: row.consumer_days,
+          });
+          consumptionByResidence.set(row.building_id, records);
+        }
+        const wellbeingUpdates = completedResidences.map((building) => ({
+          id: building.id,
+          wellbeing: calculateResidenceWellbeing(
+            consumptionByResidence.get(building.id) ?? [],
+            demandBasicByProduct,
+          ),
+        }));
+        const { rowCount } = await client.query(
+          `UPDATE all_buildings AS building
+           SET wellbeing = changes.wellbeing
+           FROM UNNEST($1::uuid[], $2::double precision[])
+             AS changes(id, wellbeing)
+           WHERE building.id = changes.id
+             AND building.wellbeing IS DISTINCT FROM changes.wellbeing`,
+          [
+            wellbeingUpdates.map((entry) => entry.id),
+            wellbeingUpdates.map((entry) => entry.wellbeing),
+          ],
+        );
+        if (rowCount !== null && rowCount > 0) changed = true;
       }
       const stockSales = shops
         .map((shop) => ({ id: shop.id, quantity: sold.get(shop.id) ?? 0 }))
@@ -4551,12 +4628,8 @@ async function start() {
     }
 
     void (async () => {
-      const { rows: cityRows } = await pool.query<{ population: number }>(
-        `SELECT COALESCE(SUM(building.occupants), 0)::int AS population
-         FROM city_assemblies city
-         LEFT JOIN all_buildings building ON building.city_id = city.id
-         WHERE city.id = $1
-         GROUP BY city.id`,
+      const { rows: cityRows } = await pool.query<{ id: string }>(
+        'SELECT id FROM city_assemblies WHERE id = $1',
         [request.params.id],
       );
       if (!cityRows[0]) {
@@ -4567,9 +4640,13 @@ async function start() {
       const { rows } = await pool.query<{
         product_id: string;
         last_quantity: number;
+        last_consumer_quantity: number;
         last_spent: number;
+        last_consumers: number;
         month_quantity: number;
+        month_consumer_quantity: number;
         month_spent: number;
+        month_consumers: number;
       }>(
         `WITH today AS (
            SELECT (world_time AT TIME ZONE 'UTC')::date AS day
@@ -4578,10 +4655,18 @@ async function start() {
          SELECT consumption.product_id,
                 COALESCE(SUM(consumption.quantity)
                   FILTER (WHERE consumption.day = (SELECT day FROM today)), 0)::float8 AS last_quantity,
+                COALESCE(SUM(consumption.quantity)
+                  FILTER (WHERE consumption.day = (SELECT day FROM today)
+                    AND consumption.consumers IS NOT NULL), 0)::float8 AS last_consumer_quantity,
                 COALESCE(SUM(consumption.spent)
                   FILTER (WHERE consumption.day = (SELECT day FROM today)), 0)::float8 AS last_spent,
+                COALESCE(SUM(consumption.consumers)
+                  FILTER (WHERE consumption.day = (SELECT day FROM today)), 0)::float8 AS last_consumers,
                 COALESCE(SUM(consumption.quantity), 0)::float8 AS month_quantity,
-                COALESCE(SUM(consumption.spent), 0)::float8 AS month_spent
+                COALESCE(SUM(consumption.quantity)
+                  FILTER (WHERE consumption.consumers IS NOT NULL), 0)::float8 AS month_consumer_quantity,
+                COALESCE(SUM(consumption.spent), 0)::float8 AS month_spent,
+                COALESCE(SUM(consumption.consumers), 0)::float8 AS month_consumers
          FROM residence_consumption consumption
          JOIN all_buildings building ON building.id = consumption.building_id
          WHERE building.city_id = $1
@@ -4589,12 +4674,15 @@ async function start() {
          GROUP BY consumption.product_id`,
         [request.params.id],
       );
-      const population = cityRows[0].population;
       response.json({
         products: rows.map((row) => ({
           productId: row.product_id,
-          lastDayPerPerson: population > 0 ? row.last_quantity / population : 0,
-          monthPerPerson: population > 0 ? row.month_quantity / population / 30 : 0,
+          lastDayPerPerson: row.last_consumers > 0
+            ? row.last_consumer_quantity / row.last_consumers
+            : 0,
+          monthPerPerson: row.month_consumers > 0
+            ? row.month_consumer_quantity / row.month_consumers
+            : 0,
           lastDayAveragePrice: row.last_quantity > 0 ? row.last_spent / row.last_quantity : null,
           monthAveragePrice: row.month_quantity > 0 ? row.month_spent / row.month_quantity : null,
         })),
@@ -4634,8 +4722,11 @@ async function start() {
            LEFT JOIN LATERAL (
              WITH product_costs AS (
                SELECT product_id,
-                      SUM(quantity / NULLIF(30 * occupants, 0))
-                        * (SUM(spent) / NULLIF(SUM(quantity), 0)) AS contribution
+                      (SUM(quantity) FILTER (WHERE consumers IS NOT NULL)
+                        / NULLIF(SUM(consumers), 0))
+                        * (SUM(spent) FILTER (WHERE consumers IS NOT NULL)
+                          / NULLIF(SUM(quantity) FILTER (WHERE consumers IS NOT NULL), 0))
+                        AS contribution
                FROM residence_consumption
                WHERE building_id = building.id
                  AND day >= (SELECT world_time::date FROM world_state WHERE id = 1) - 30
@@ -5163,19 +5254,25 @@ async function start() {
         product_id: string;
         last_quantity: number;
         last_spent: number;
-        last_per_person: number;
+        last_consumer_quantity: number;
+        last_consumers: number;
         month_quantity: number;
+        month_consumer_quantity: number;
         month_spent: number;
-        month_per_person: number;
+        month_consumers: number;
       }>(
         `WITH today AS (SELECT (world_time AT TIME ZONE 'UTC')::date AS day FROM world_state WHERE id = 1)
          SELECT product_id,
                 COALESCE(SUM(quantity) FILTER (WHERE day = (SELECT day FROM today)), 0) AS last_quantity,
                 COALESCE(SUM(spent) FILTER (WHERE day = (SELECT day FROM today)), 0) AS last_spent,
-                COALESCE(SUM(quantity / NULLIF(occupants, 0)) FILTER (WHERE day = (SELECT day FROM today)), 0) AS last_per_person,
+                COALESCE(SUM(quantity) FILTER (
+                  WHERE day = (SELECT day FROM today) AND consumers IS NOT NULL
+                ), 0) AS last_consumer_quantity,
+                COALESCE(SUM(consumers) FILTER (WHERE day = (SELECT day FROM today)), 0)::float8 AS last_consumers,
                 COALESCE(SUM(quantity), 0) AS month_quantity,
+                COALESCE(SUM(quantity) FILTER (WHERE consumers IS NOT NULL), 0) AS month_consumer_quantity,
                 COALESCE(SUM(spent), 0) AS month_spent,
-                COALESCE(SUM(quantity / NULLIF(occupants, 0)), 0) / 30 AS month_per_person
+                COALESCE(SUM(consumers), 0)::float8 AS month_consumers
          FROM residence_consumption
          WHERE building_id = $1 AND day > (SELECT day FROM today) - 30
          GROUP BY product_id`,
@@ -5185,8 +5282,12 @@ async function start() {
         response.json({
           products: rows.map((row) => ({
             productId: row.product_id,
-            lastDayPerPerson: row.last_per_person,
-            monthPerPerson: row.month_per_person,
+            lastDayPerPerson: row.last_consumers > 0
+              ? row.last_consumer_quantity / row.last_consumers
+              : 0,
+            monthPerPerson: row.month_consumers > 0
+              ? row.month_consumer_quantity / row.month_consumers
+              : 0,
             lastDayAveragePrice: row.last_quantity > 0 ? row.last_spent / row.last_quantity : null,
             monthAveragePrice: row.month_quantity > 0 ? row.month_spent / row.month_quantity : null,
           })),

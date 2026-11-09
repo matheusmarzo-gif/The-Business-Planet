@@ -172,6 +172,9 @@ ALTER TABLE all_buildings
   ADD CONSTRAINT all_buildings_rent_check CHECK (rent BETWEEN 0.01 AND 100000);
 ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS occupants INTEGER NOT NULL DEFAULT 0 CHECK (occupants >= 0);
+ALTER TABLE all_buildings
+  ADD COLUMN IF NOT EXISTS wellbeing DOUBLE PRECISION NOT NULL DEFAULT 0
+  CHECK (wellbeing BETWEEN 0 AND 162);
 ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS last_immigration_day DATE;
 ALTER TABLE world_state
@@ -472,11 +475,31 @@ CREATE TABLE IF NOT EXISTS residence_consumption (
   quantity DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (quantity >= 0),
   spent NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (spent >= 0),
   occupants INTEGER NOT NULL DEFAULT 0 CHECK (occupants >= 0),
+  consumers INTEGER DEFAULT 0 CHECK (consumers >= 0),
   PRIMARY KEY (building_id, product_id, day)
 );
 
 ALTER TABLE residence_consumption
+  ADD COLUMN IF NOT EXISTS consumers INTEGER;
+ALTER TABLE residence_consumption
+  ALTER COLUMN consumers SET DEFAULT 0;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'public.residence_consumption'::regclass
+      AND conname = 'residence_consumption_consumers_check'
+  ) THEN
+    ALTER TABLE residence_consumption
+      ADD CONSTRAINT residence_consumption_consumers_check CHECK (consumers >= 0);
+  END IF;
+END $$;
+ALTER TABLE residence_consumption
   ALTER COLUMN spent TYPE NUMERIC(14, 2) USING spent::numeric(14, 2);
+
+CREATE INDEX IF NOT EXISTS residence_consumption_day_building_idx
+  ON residence_consumption (day, building_id);
 
 CREATE TABLE IF NOT EXISTS residence_relocation_log (
   id BIGSERIAL PRIMARY KEY,

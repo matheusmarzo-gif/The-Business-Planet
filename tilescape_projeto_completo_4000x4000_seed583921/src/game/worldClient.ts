@@ -84,6 +84,10 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
     Number.isInteger(building.workHoursPerDay) &&
     isCurrencyAmount(building.rent) &&
     Number.isInteger(building.occupants) &&
+    typeof building.wellbeing === 'number' &&
+    Number.isFinite(building.wellbeing) &&
+    building.wellbeing >= 0 &&
+    building.wellbeing <= 162 &&
     Number.isInteger(building.desiredWorkers) &&
     Number.isFinite(building.workPointsDone) &&
     isCurrencyAmount(building.price) &&

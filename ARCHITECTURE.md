@@ -25,9 +25,10 @@ persistentes e produção para as construções habilitadas; estoques perecívei
 sofrem deterioração diária conforme a validade. Armazéns e silos armazenam e
 transportam produtos; construções produtoras e comerciais podem se ligar a mais
 de um deles.
-População, bem-estar e economia agregados da cidade ainda não têm dinâmica
-própria; o jogo já processa rotinas diárias de imigração, emprego, consumo,
-produção, vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor também
+População e economia agregadas da cidade ainda não têm dinâmica própria; o
+bem-estar individual das residências é calculado pelas necessidades supridas.
+O jogo também processa rotinas diárias de imigração, emprego, consumo, produção,
+vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor também
 processa mudanças de moradores entre residências concluídas da mesma cidade,
 persistindo cada transferência em `residence_relocation_log`.
 Na alocação diária de empregos, as residências concluídas com moradores são
@@ -58,8 +59,8 @@ O apreço de empregabilidade é a renda média por morador dividida pela média
 da cidade; o apreço da região é a média dos apreços de empregabilidade das
 residências concluídas da mesma cidade num raio de 10 tiles, incluindo a
 própria residência. O apreço interno é o maior entre 10 e o produto dos
-apreços da construção e da região. A média diária de cada produto usa
-`quantidade / (30 × moradores)` e o tooltip também lista a contribuição de
+apreços da construção e da região. A média diária de cada produto usa a
+quantidade dividida pelo total de dias-consumidor empregados no período e o tooltip também lista a contribuição de
 cada produto para o `Cb`; o cliente exibe os valores abaixo de “Salvar aluguel”.
 
 ## Estrutura do repositório
@@ -82,6 +83,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/types/road.ts` | Tipos, limites, validação, interpolação e escolha das peças de estrada. |
 | `src/types/residence.ts` | Tipos, validação compartilhada e regras geométricas das construções. |
 | `src/types/commerceDemand.ts` | Parsing e validação dos multiplicadores de demanda básica configurados no servidor. |
+| `src/types/wellbeing.ts` | Pontuação residencial de bem-estar e conversão para técnica média dos trabalhadores. |
 | `src/types/dairy.ts` | Eficiência mensal da produção leiteira. |
 | `src/types/product.ts` | Catálogo estático dos produtos, unidades, peso, volume e validade padrão. |
 | `src/components/ProductCatalog.tsx` | Interface pesquisável para consultar as fichas de produtos. |
@@ -449,17 +451,21 @@ mapeamento e verificar todas as curvas.
 - Capacidade limita os moradores e apreço da construção desempata a ordem de ocupação
   quando os aluguéis são iguais; Work Points avançam obras e custos debitam
   materiais. A população é atualizada pela imigração; o consumo das cestas
-  básica, intermediária e avançada é simulado nas lojas.
+  básica, intermediária, avançada e de bens é simulado nas lojas e considera
+  somente moradores empregados.
 - `GET /api/player/resources?x=&y=` agrega Madeira, Pedra, Ferro e Aço dos
   armazéns concluídos do próprio usuário em até 60 tiles do centro da câmera. A
   barra superior atualiza esses totais quando a área muda e em intervalo regular.
 - A antiga barra lateral com dados do mundo foi removida. Fora dos modos de
   construção/demolição, clicar em uma residência abre `ResidencePanel`
   (`onResidenceSelect` em `GameMap`); clicar em outro tile a fecha. Concluída:
-  ocupantes 0/capacidade (reais, vindos de `occupants`), técnica 10, saúde 100, felicidade 100 (fixos em
-  `RESIDENCE_STATS`), empregados reais e renda média (`averageIncome`: subquery em
-  `ALL_BUILDING_COLUMNS` somando `job_assignments.count × wage` ÷ ocupantes; o mesmo
-  cálculo, `getAverageIncomes` em `employment.ts`, alimenta as vendas às 00:00). Em construção: Work Points
+  ocupantes 0/capacidade (reais, vindos de `occupants`), bem-estar persistido em
+  `all_buildings.wellbeing`, técnica calculada por `getWorkerTechnique`, saúde 100
+  e felicidade 100 (fixas em `RESIDENCE_STATS`), empregados reais e renda média
+  (`averageIncome`: subquery em `ALL_BUILDING_COLUMNS` somando
+  `job_assignments.count × wage` ÷ ocupantes). O planejador de vendas usa os
+  moradores empregados como consumidores e calcula a renda média por trabalhador
+  para a demanda. Em construção: Work Points
   0/necessários, empregados 0/até 100, salário diário (`wage`, C$ por dia
   de trabalho) e carga horária (`workHoursPerDay`, 4–14 h), editáveis só pelo
   criador (`created_by`). O criador também define o aluguel (`rent`, ≥ C$ 0,01,
@@ -521,7 +527,8 @@ mapeamento e verificar todas as curvas.
   armazém ligado do mesmo dono. No job das 00:00, lojas de produtos por unidade
   têm capacidade definida pelo `salesWorkPointsPerUnit` do tipo de construção
   (WP = empregados × `getDailyWorkPoints`).
-  `config/demanda_basica.txt` define as necessidades diárias por pessoa: na
+  `config/demanda_basica.txt` define as necessidades diárias por trabalhador
+  empregado: na
   cesta básica, arroz, trigo, cevada, milho, batata, peixe e carne vermelha
   começam em `0.03`, leite em `1`; na cesta intermediária, açúcar `0.01`,
   vegetais `0.05`, sal `0.04` e especiarias `0.01`; na cesta avançada, pão
@@ -536,7 +543,8 @@ mapeamento e verificar todas as curvas.
   por pessoa da cesta básica, `RR2` o da cesta intermediária e `RR3` o da cesta
   avançada. Para todos os produtos, `Pf = preço local × necessidade
   diária por pessoa`, `Dᵢ = √(60 / (60 + dᵢ))`, onde `dᵢ` é a distância entre
-  residência e loja. Na cesta básica, com `Rf` como renda média por morador:
+  residência e loja. Na cesta básica, com `Rf` como renda média por trabalhador
+  empregado:
   `w = (1 − Pf / RR)^4`, `q = (0,8^w − 1) × Rf`,
   `benefício_erro = 0` se `Rf < Pf`, senão
   `Dᵢ × ((Rf − Pf − q) / RR)^4`, e
@@ -558,13 +566,13 @@ mapeamento e verificar todas as curvas.
   `Dᵢ × ((Rf − Pf − q)/RR_total)^3`. O ideal é
   `(Rf/RR_total − 1/(6 × RR_total) + 1/16)^3` e o associado é
   `(benefício_erro / benefício_ideal)^6`.
-  Os moradores são repartidos entre as lojas do produto em 60 tiles na
-  proporção do benefício associado. O método dos maiores restos garante
-  alocações inteiras cuja soma é a população da residência quando há benefício
-  positivo; se o custo da cesta aplicável (`RR` para produtos básicos,
+  Os moradores empregados são repartidos entre as lojas do produto em 60 tiles
+  na proporção do benefício associado. O método dos maiores restos garante
+  alocações inteiras cuja soma é a população empregada da residência quando há
+  benefício positivo; se o custo da cesta aplicável (`RR` para produtos básicos,
   `RR + RR2` para intermediários, `RR + RR2 + RR3` para avançados) ou todos os benefícios forem zero, não há
   compra. A distância define a elegibilidade no raio de 60 tiles e também
-  reduz o benefício por `Dᵢ`. A quantidade desejada por loja é `moradores
+  reduz o benefício por `Dᵢ`.   A quantidade desejada por loja é `trabalhadores
   alocados × necessidade diária por pessoa × benefício associado`, com
   arredondamento aleatório das frações, e pode exceder a necessidade diária.
   Não há redistribuição de moradores quando
@@ -572,10 +580,21 @@ mapeamento e verificar todas as curvas.
   estoque e capacidade diários; o dono recebe `quantidade × preço`.
   `employed` em `ResidentialBuilding` é calculado por subquery em
   `ALL_BUILDING_COLUMNS` (empregados da construção ou moradores empregados).
+  `residence_consumption` registra quantidade, gasto, ocupantes e consumidores
+  empregados por residência/produto/dia. Linhas diárias inclusive sem compras
+  guardam os dias-consumidor usados na média móvel de bem-estar dos últimos 30
+  dias. As APIs usam consumidores para normalizar consumo por pessoa e para o
+  custo residencial (`Cb`). Registros históricos sem a contagem de empregados
+  permanecem com `consumers` nulo e são excluídos dessas médias por trabalhador.
   A capacidade de venda converte Work Points diários pelos limites
   `salesWorkPointsPerUnit` definidos por construção; `bread`, `cheese`, `fruit`
   e `chocolate` participam da cesta avançada; `clothing`, `furniture`,
   `utilities` e `glass` participam da cesta de bens.
+  O bem-estar residencial (`src/types/wellbeing.ts`) soma a satisfação por
+  produto nos últimos 30 dias, limitada a 100% da necessidade: cada produto
+  básico vale até 12,5 pontos, intermediário e bem valem 6,25, e avançado vale
+  3 (máximo 162). O valor é persistido em `all_buildings.wellbeing`; a técnica
+  média exibida no painel segue a fórmula por faixas de Bn definida pelo domínio.
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
   preço unitário de venda. Os detalhes do diagnóstico (renda, moradores,
@@ -1021,7 +1040,8 @@ atualizado.
 
 ## Limites e próximos passos já conhecidos
 
-- Ainda não há evolução de população ou simulação dinâmica de bem-estar.
+- A população e os indicadores agregados da cidade ainda não evoluem; cada
+  residência concluída, porém, tem bem-estar individual dinâmico.
 - O catálogo habilita casas, armazéns, fazendas agrícolas e leite, lojas de
   arroz, peixe e leite, pesqueiro, recursos e ferramentaria para todos os
   jogadores autenticados. Custos de materiais de construção ainda não são

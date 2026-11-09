@@ -48,7 +48,7 @@ export interface SalesResidence {
   type: ResidenceType;
   x: number;
   y: number;
-  occupants: number;
+  consumers: number;
   averageIncome: number;
 }
 
@@ -1111,7 +1111,7 @@ export function planShopSalesDetailed(
     }
     const productShops = shops.filter((shop) => shop.productId === productId);
     for (const residence of sortedResidences) {
-      if (residence.occupants <= 0) continue;
+      if (residence.consumers <= 0) continue;
       const nearby = productShops.filter(
         (shop) =>
           getDistanceBetweenBuildings(shop, residence) <=
@@ -1192,7 +1192,7 @@ export function planShopSalesDetailed(
         let allocated = 0;
         const fractions = eligible
           .map((candidate) => {
-            const exact = residence.occupants * candidate.resultShare;
+            const exact = residence.consumers * candidate.resultShare;
             candidate.allocatedResidents = Math.floor(exact);
             allocated += candidate.allocatedResidents;
             return { candidate, fraction: exact - candidate.allocatedResidents };
@@ -1202,7 +1202,7 @@ export function planShopSalesDetailed(
               b.fraction - a.fraction ||
               a.candidate.shop.id.localeCompare(b.candidate.shop.id),
           );
-        for (let index = 0; index < residence.occupants - allocated; index += 1) {
+        for (let index = 0; index < residence.consumers - allocated; index += 1) {
           fractions[index % fractions.length].candidate.allocatedResidents += 1;
         }
       }
@@ -1264,10 +1264,10 @@ export function planShopSalesDetailed(
         const boundedAssociated = candidate.calculation.associatedBenefit;
         const transaction: ShopResidenceTransaction = {
           residenceId: residence.id,
-          occupants: residence.occupants,
+          occupants: candidate.allocatedResidents,
           averageIncome: residence.averageIncome,
           areaAveragePrice: productAveragePrice,
-          expectedDemand: residence.occupants * basicNeedPerPerson,
+          expectedDemand: residence.consumers * basicNeedPerPerson,
           desiredQuantity: totalDesired,
           productId,
           basketType,

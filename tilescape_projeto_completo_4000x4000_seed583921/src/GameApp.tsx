@@ -1530,6 +1530,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       workHoursPerDay: DEFAULT_WORK_HOURS,
       rent: DEFAULT_RENT,
       occupants: 0,
+      wellbeing: 0,
       desiredWorkers: 0,
       workPointsDone: 0,
       price: DEFAULT_SHOP_PRICE,

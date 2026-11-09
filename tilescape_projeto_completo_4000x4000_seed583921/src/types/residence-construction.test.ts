@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   getConstructionMenuDefinitions,
@@ -17,6 +18,22 @@ test('rejects construction types outside the catalog', () => {
   assert.equal(isPlayerBuildableConstructionType('prefeitura'), false);
   assert.equal(isPlayerBuildableConstructionType('__proto__'), false);
   assert.equal(isPlayerBuildableConstructionType(null), false);
+});
+
+test('allows every catalog construction in the database building type constraint', async () => {
+  const schema = await readFile(new URL('../../database/schema.sql', import.meta.url), 'utf8');
+  const constraint = schema.match(
+    /ADD CONSTRAINT residential_buildings_building_type_check\s+CHECK \(building_type IN \(([\s\S]*?)\)\);/,
+  );
+  assert.ok(constraint, 'database schema must define the building type constraint');
+  const allowedTypes = new Set(
+    [...constraint[1].matchAll(/'([^']+)'/g)].map(([, type]) => type),
+  );
+  assert.deepEqual(
+    Object.keys(RESIDENCES).filter((type) => !allowedTypes.has(type)),
+    [],
+    'every catalog building type must be allowed by PostgreSQL',
+  );
 });
 
 test('orders construction menus and applies the requested costs', () => {

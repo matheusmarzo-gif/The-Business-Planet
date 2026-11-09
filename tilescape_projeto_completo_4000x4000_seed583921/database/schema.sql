@@ -223,7 +223,21 @@ ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_chec
 ALTER TABLE residential_buildings
   DROP CONSTRAINT IF EXISTS residential_buildings_building_type_check,
   ADD CONSTRAINT residential_buildings_building_type_check
-    CHECK (building_type IN ('house_poor1', 'house_poor2', 'house_poor3', 'farm_rice', 'farm_potato', 'farm_wheat', 'farm_barley', 'farm_corn', 'farm_cattle', 'farm_dairy', 'farm_cane', 'farm_spices', 'farm_vegetables', 'farm_fruit', 'farm_cocoa', 'shop_rice', 'shop_potato', 'shop_corn', 'shop_barley', 'shop_wheat', 'shop_butcher', 'shop_milk', 'shop_sugar', 'shop_vegetables', 'shop_salt', 'shop_spices', 'shop_bread', 'shop_cheese', 'shop_chocolate', 'shop_fruit', 'warehouse', 'silo', 'fishery', 'shop_fish', 'salt_gatherer', 'lumber_mill', 'quarry', 'iron_mine', 'toolmaker', 'sugar_mill', 'charcoal_works', 'flour_mill', 'bread_factory', 'cheese_factory', 'chocolate_factory'));
+    CHECK (building_type IN (
+      'house_poor1', 'house_poor2', 'house_poor3',
+      'farm_rice', 'farm_potato', 'farm_wheat', 'farm_barley', 'farm_corn',
+      'farm_cattle', 'farm_dairy', 'farm_cane', 'farm_spices', 'farm_vegetables',
+      'farm_fruit', 'farm_cocoa', 'farm_sheep', 'farm_cotton',
+      'shop_rice', 'shop_potato', 'shop_corn', 'shop_barley', 'shop_wheat',
+      'shop_butcher', 'shop_milk', 'shop_sugar', 'shop_vegetables', 'shop_salt',
+      'shop_spices', 'shop_bread', 'shop_cheese', 'shop_chocolate', 'shop_fruit',
+      'shop_fish', 'shop_clothing', 'shop_furniture', 'shop_utilities', 'shop_glass',
+      'warehouse', 'silo', 'fishery', 'salt_gatherer', 'lumber_mill', 'quarry',
+      'iron_mine', 'toolmaker', 'sugar_mill', 'charcoal_works', 'flour_mill',
+      'bread_factory', 'cheese_factory', 'chocolate_factory', 'steelworks',
+      'thread_factory', 'textile_factory', 'furniture_factory', 'utilities_factory',
+      'glass_factory', 'sand_pit'
+    ));
 
 CREATE TABLE IF NOT EXISTS warehouse_product_settings (
   building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,

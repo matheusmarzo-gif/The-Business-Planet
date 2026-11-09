@@ -35,6 +35,10 @@ inclusive indústrias, e ordena os edifícios alfabeticamente por nome. Clique
 simples em qualquer construção abre seu painel; a conta Master pode arrastar
 uma construção para movê-la. O endpoint valida novamente a posição, mantém o
 estado da construção e rejeita movimentos que invalidem vínculos com armazéns.
+O schema aplicado na inicialização mantém a constraint
+`residential_buildings_building_type_check` sincronizada com todos os tipos do
+catálogo, inclusive em bancos existentes; um teste de domínio verifica essa
+correspondência para evitar que novas construções sejam rejeitadas pelo banco.
 Ao abrir uma residência concluída, o cliente consulta
 `GET /api/residential-buildings/:id/residence-benefit`. A rota calcula sob
 demanda o custo mensal (`Cb`), os apreços de empregabilidade, região,

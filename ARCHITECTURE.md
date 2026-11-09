@@ -31,10 +31,10 @@ produção, vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor tamb�
 processa mudanças de moradores entre residências concluídas da mesma cidade,
 persistindo cada transferência em `residence_relocation_log`.
 O relatório contábil de produção inclui toda construção com regra de produção,
-inclusive indústrias, e ordena os edifícios alfabeticamente por nome. A conta
-Master pode arrastar construções para movê-las; o endpoint valida novamente a
-posição, mantém o estado da construção e rejeita movimentos que invalidem
-vínculos com armazéns.
+inclusive indústrias, e ordena os edifícios alfabeticamente por nome. Clique
+simples em qualquer construção abre seu painel; a conta Master pode arrastar
+uma construção para movê-la. O endpoint valida novamente a posição, mantém o
+estado da construção e rejeita movimentos que invalidem vínculos com armazéns.
 Ao abrir uma residência concluída, o cliente consulta
 `GET /api/residential-buildings/:id/residence-benefit`. A rota calcula sob
 demanda o custo mensal (`Cb`), `benefício erro`, `benefício ideal` e o
@@ -431,9 +431,9 @@ mapeamento e verificar todas as curvas.
   quando os aluguéis são iguais; Work Points avançam obras e custos debitam
   materiais. A população é atualizada pela imigração; o consumo das cestas
   básica, intermediária e avançada é simulado nas lojas.
-- `GET /api/player/resources?x=&y=` agrega Madeira e Pedra dos armazéns
-  concluídos do próprio usuário em até 60 tiles do centro da câmera. A barra
-  superior atualiza esses totais quando a área muda e em intervalo regular.
+- `GET /api/player/resources?x=&y=` agrega Madeira, Pedra, Ferro e Aço dos
+  armazéns concluídos do próprio usuário em até 60 tiles do centro da câmera. A
+  barra superior atualiza esses totais quando a área muda e em intervalo regular.
 - A antiga barra lateral com dados do mundo foi removida. Fora dos modos de
   construção/demolição, clicar em uma residência abre `ResidencePanel`
   (`onResidenceSelect` em `GameMap`); clicar em outro tile a fecha. Concluída:

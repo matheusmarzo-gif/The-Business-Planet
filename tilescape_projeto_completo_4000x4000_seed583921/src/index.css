@@ -30,7 +30,7 @@ button { color: inherit; }
 .world-title { font: 600 13px 'Manrope', sans-serif; color: #eee8d8; }
 .world-seed { margin-left: 7px; color: #a4a48f; font: 500 10px 'DM Sans', sans-serif; }
 .player-money { color: #e2c57f; font: 600 13px 'Manrope', sans-serif; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.player-resources { display: flex; align-items: center; gap: 10px; color: #eee8d8; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.player-resources { display: flex; align-items: center; gap: 7px; color: #eee8d8; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .player-resources span { display: flex; align-items: center; gap: 4px; }
 .player-resources img { width: 18px; height: 18px; object-fit: contain; }
 .topbar-status { margin-left: auto; display: flex; align-items: center; gap: 21px; }
@@ -312,7 +312,7 @@ button { color: inherit; }
   .topbar { padding: 0 17px; gap: 15px; }
   .brand { min-width: 0; }
   .world-name { padding-left: 15px; }
-  .player-resources { gap: 6px; font-size: 10px; }
+  .player-resources { gap: 5px; font-size: 10px; }
   .player-resources img { width: 16px; height: 16px; }
   .time-card { right: 18px; top: 82px; min-width: 0; }
   .realm-panel { width: 300px; padding: 28px 20px 18px; }
@@ -327,8 +327,8 @@ button { color: inherit; }
   .brand-copy small { font-size: 6px; }
   .world-name { display: none; }
   .topbar-status { gap: 11px; }
-  .player-resources { gap: 5px; font-size: 9px; }
-  .player-resources img { width: 15px; height: 15px; }
+  .player-resources { gap: 3px; font-size: 9px; }
+  .player-resources img { width: 14px; height: 14px; }
   .account-menu span { display: none; }
   .account-menu button { padding: 5px 7px; }
   .connection-pill { font-size: 0; }

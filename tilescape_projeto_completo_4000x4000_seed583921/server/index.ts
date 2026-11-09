@@ -4452,10 +4452,12 @@ async function start() {
       return;
     }
     void pool
-      .query<{ wood: number; stone: number }>(
+      .query<{ wood: number; stone: number; iron: number; steel: number }>(
         `SELECT
            COALESCE(SUM(stock.quantity) FILTER (WHERE stock.product_id = 'wood'), 0)::int AS wood,
-           COALESCE(SUM(stock.quantity) FILTER (WHERE stock.product_id = 'stone'), 0)::int AS stone
+           COALESCE(SUM(stock.quantity) FILTER (WHERE stock.product_id = 'stone'), 0)::int AS stone,
+           COALESCE(SUM(stock.quantity) FILTER (WHERE stock.product_id = 'iron'), 0)::int AS iron,
+           COALESCE(SUM(stock.quantity) FILTER (WHERE stock.product_id = 'steel'), 0)::int AS steel
          FROM residential_buildings AS warehouse
          LEFT JOIN warehouse_stock AS stock ON stock.building_id = warehouse.id
          WHERE warehouse.building_type = 'warehouse'
@@ -4465,7 +4467,7 @@ async function start() {
              + POWER(warehouse.tile_y + $4 - $3, 2) <= 3600`,
         [userId, x, y, RESIDENCES.warehouse.width / 2],
       )
-      .then(({ rows }) => response.json({ wood: rows[0].wood, stone: rows[0].stone }))
+      .then(({ rows }) => response.json(rows[0]))
       .catch((error: unknown) => {
         console.error('Não foi possível consultar os recursos próximos do jogador:', error);
         response.status(503).json({ error: 'resources_unavailable' });

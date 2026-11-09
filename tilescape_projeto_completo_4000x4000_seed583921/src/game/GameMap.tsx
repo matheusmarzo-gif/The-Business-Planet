@@ -941,6 +941,7 @@ export function GameMap({
         return;
       }
       setMovePreview(null);
+      if (!draggedRef.current && movingBuilding) onResidenceSelect(movingBuilding);
     }
     if (zoneDrawingRef.current) {
       const tile = getTile(event);

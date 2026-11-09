@@ -200,8 +200,9 @@ Indústrias lista Armazém, Silo,
 Moinho, Fábrica de Chocolate, Usina de Aço, Fábrica de Fiação, Fábrica Têxtil,
 Fábrica de Móveis, Fábrica de Utilitários e Fábrica de Vidros.
 
-A conta Master pode arrastar qualquer construção para reposicioná-la. A
-construção mantém seu estado, funcionários e estoques; o novo local precisa
+A conta Master pode clicar em uma construção para abrir seu painel como antes;
+arrastá-la reposiciona a construção. Ela mantém seu estado, funcionários e
+estoques; o novo local precisa
 respeitar terreno, zona municipal, estradas e ocupação, e não pode deixar
 armazéns ligados fora do raio permitido.
 
@@ -749,8 +750,8 @@ custa Work Points do armazém:
 `100 × m³ + 0,125 × kg`; os pontos vêm dos funcionários do armazém e limites de
 espaço ou Work Points podem impedir parte do transporte.
 O painel do armazém mostra o estoque real e o espaço ocupado. A barra superior
-mostra Madeira e Pedra dos armazéns próprios a até 60 tiles do centro da câmera;
-os totais são atualizados ao explorar outra área e periodicamente.
+mostra Madeira, Pedra, Ferro e Aço dos armazéns próprios a até 60 tiles do centro
+da câmera; os totais são atualizados ao explorar outra área e periodicamente.
 
 **Transferência manual:** no painel **Produtos e estoque** de um armazém seu,
 clique em **Transferir** na linha do produto, selecione outra construção sua

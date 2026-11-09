@@ -383,7 +383,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isSearchingSuppliers, setIsSearchingSuppliers] = useState(false);
   const [warehouseSupplierMessage, setWarehouseSupplierMessage] = useState('');
   const [warehouseTransfer, setWarehouseTransfer] = useState<WarehouseTransferFlow | null>(null);
-  const [localResources, setLocalResources] = useState<{ wood: number; stone: number } | null>(null);
+  const [localResources, setLocalResources] = useState<{
+    wood: number;
+    stone: number;
+    iron: number;
+    steel: number;
+  } | null>(null);
   const [isConsumptionOpen, setIsConsumptionOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
@@ -491,12 +496,17 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     const x = Math.max(0, Math.min(WORLD_CONFIG.width - 1, Math.floor((width / 2 - camera.x) / scale)));
     const y = Math.max(0, Math.min(WORLD_CONFIG.height - 1, Math.floor((height / 2 - camera.y) / scale)));
     try {
-      const resources = await cityRequest<{ wood: number; stone: number }>(
+      const resources = await cityRequest<{
+        wood: number;
+        stone: number;
+        iron: number;
+        steel: number;
+      }>(
         `/api/player/resources?${new URLSearchParams({ x: String(x), y: String(y) })}`,
       );
       if (requestId === localResourceRequestRef.current) setLocalResources(resources);
     } catch (error) {
-      console.error('Não foi possível carregar madeira e pedra próximas:', error);
+      console.error('Não foi possível carregar materiais de construção próximos:', error);
     }
   }, [camera, viewport]);
 
@@ -1835,7 +1845,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           </div>
           <div
             className="player-resources"
-            aria-label={`Madeira ${localResources?.wood ?? 'indisponível'} e Pedra ${localResources?.stone ?? 'indisponível'} nos armazéns próprios a até ${LINK_RADIUS} tiles da área visível`}
+            aria-label={`Materiais nos armazéns próprios a até ${LINK_RADIUS} tiles da área visível: Madeira ${localResources?.wood ?? 'indisponível'}, Pedra ${localResources?.stone ?? 'indisponível'}, Ferro ${localResources?.iron ?? 'indisponível'} e Aço ${localResources?.steel ?? 'indisponível'}`}
           >
             <span title="Madeira nos armazéns próximos">
               <img src="/products/madeira.png" alt="" />
@@ -1844,6 +1854,14 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             <span title="Pedra nos armazéns próximos">
               <img src="/products/pedra.png" alt="" />
               {localResources ? localResources.stone.toLocaleString('pt-BR') : '—'}
+            </span>
+            <span title="Ferro nos armazéns próximos">
+              <img src="/products/ferro.png" alt="" />
+              {localResources ? localResources.iron.toLocaleString('pt-BR') : '—'}
+            </span>
+            <span title="Aço nos armazéns próximos">
+              <img src="/products/aco.png" alt="" />
+              {localResources ? localResources.steel.toLocaleString('pt-BR') : '—'}
             </span>
           </div>
           <div className="player-count"><span className="status-dot" />{snapshot?.onlinePlayers ?? '—'} <span>viajantes</span></div>

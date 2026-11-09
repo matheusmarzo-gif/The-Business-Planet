@@ -508,7 +508,7 @@ Na categoria **Recursos** (área rural, ao lado de estrada):
 | Madeireira | 2 × 2 | 10 | 30 madeiras, 5 Ferramentas | 20 madeira, 5 pedra | 35.000 | 1 madeira / 1000 WP |
 | Pedreira | 2 × 2 | 30 | 10 pedras, 5 Ferramentas | 60 madeira, 20 pedra | 120.000 | 1 pedra / 3000 WP |
 | Mina de Ferro | 3 × 3 | 30 | 5 ferro, 5 Ferramentas | 60 madeira, 20 pedra | 120.000 | 1 ferro / 3000 WP |
-| Coleta de Sal | 2 × 2 | 10 | 100 sal, 5 Ferramentas | 100 madeira, 40 pedra, 40 ferro | 10.000 | 1 sal / 400 WP efetivos; fração é chance diária |
+| Coleta de Sal | 2 × 2 | 40 | 100 sal, 5 Ferramentas | 100 madeira, 40 pedra, 40 ferro | 10.000 | 1 sal / 400 WP efetivos; fração é chance diária |
 
 Abaixo do mínimo de WP, a fração vira probabilidade de produzir 1 unidade. A
 demanda de Ferramentas é 0,05 por funcionário/dia (0,15 na Mina) com a mesma

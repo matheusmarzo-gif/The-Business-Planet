@@ -15,7 +15,7 @@
                  "iron": 40
              },
     "workPoints":  10000,
-    "maxWorkers":  10,
+    "maxWorkers":  40,
     "stockProduct":  "Sal",
     "stockProductId":  "salt",
     "stockCapacity":  100,

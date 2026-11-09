@@ -22,8 +22,9 @@ test('rejects construction types outside the catalog', () => {
 
 test('allows every catalog construction in the database building type constraint', async () => {
   const schema = await readFile(new URL('../../database/schema.sql', import.meta.url), 'utf8');
+  const server = await readFile(new URL('../../server/index.ts', import.meta.url), 'utf8');
   const constraint = schema.match(
-    /ADD CONSTRAINT residential_buildings_building_type_check\s+CHECK \(building_type IN \(([\s\S]*?)\)\);/,
+    /ADD CONSTRAINT all_buildings_building_type_check\s+CHECK \(building_type IN \(([\s\S]*?)\)\);/,
   );
   assert.ok(constraint, 'database schema must define the building type constraint');
   const allowedTypes = new Set(
@@ -33,6 +34,21 @@ test('allows every catalog construction in the database building type constraint
     Object.keys(RESIDENCES).filter((type) => !allowedTypes.has(type)),
     [],
     'every catalog building type must be allowed by PostgreSQL',
+  );
+  assert.match(
+    schema,
+    /ALTER TABLE public\.residential_buildings RENAME TO all_buildings;/,
+    'existing building rows must be preserved by renaming the legacy table',
+  );
+  assert.match(
+    schema,
+    /DROP CONSTRAINT IF EXISTS residential_buildings_building_type_check/,
+    'the legacy building type constraint must be removed after the table rename',
+  );
+  assert.doesNotMatch(
+    server,
+    /\bresidential_buildings\b/,
+    'runtime SQL must use the renamed all_buildings table',
   );
 });
 

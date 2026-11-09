@@ -33,6 +33,11 @@ Estas instruções se aplicam a todo o repositório, inclusive ao aplicativo em
 - O servidor aplica `database/schema.sql` na inicialização. Ao alterar o
   esquema, considere também bancos já existentes: `CREATE TABLE IF NOT EXISTS`
   não migra automaticamente colunas de tabelas existentes.
+- `database/schema.sql` e as consultas do servidor usam `all_buildings` para
+  persistir todos os tipos de construção, inclusive residências. Preserve a
+  migração de dados existentes da tabela legada `residential_buildings`, suas
+  constraints e índices ao mudar o esquema; não mantenha consultas de runtime
+  apontando para o nome antigo.
 - Arquivos servidos pelo navegador devem estar em `public/` e ser referenciados
   por URL pública, não por caminho local da máquina de desenvolvimento.
 - Não leia, registre, copie ou comite `.env`, `.env.local`, credenciais,

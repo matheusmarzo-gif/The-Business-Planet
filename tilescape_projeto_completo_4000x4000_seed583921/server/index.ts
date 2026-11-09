@@ -425,22 +425,22 @@ type ResidentialBuildingRow = {
   created_by?: string;
 };
 
-const RESIDENTIAL_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
+const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, desired_workers, work_points_done, price, stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
   COALESCE((SELECT array_agg(link.warehouse_id::text ORDER BY link.warehouse_id)
             FROM building_warehouse_links link
-            WHERE link.building_id = residential_buildings.id), ARRAY[]::text[]) AS warehouse_ids,
+            WHERE link.building_id = all_buildings.id), ARRAY[]::text[]) AS warehouse_ids,
   COALESCE((SELECT jsonb_object_agg(input.product_id, input.quantity)
             FROM building_input_stock input
-            WHERE input.building_id = residential_buildings.id), '{}'::jsonb) AS input_stocks,
+            WHERE input.building_id = all_buildings.id), '{}'::jsonb) AS input_stocks,
   efficiency_penalty,
   farm_auto_planting_enabled, farm_auto_planting_months, farm_planting_workers, farm_harvest_workers,
   crop_phase, to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day, crop_ratio_sum, crop_days,
   crop_yield, crop_harvested,
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
-   WHERE j.workplace_id = residential_buildings.id OR j.residence_id = residential_buildings.id) AS employed,
+   WHERE j.workplace_id = all_buildings.id OR j.residence_id = all_buildings.id) AS employed,
   COALESCE((SELECT SUM(j.count * w.wage) FROM job_assignments j
-            JOIN residential_buildings w ON w.id = j.workplace_id
-            WHERE j.residence_id = residential_buildings.id), 0)::float8
+            JOIN all_buildings w ON w.id = j.workplace_id
+            WHERE j.residence_id = all_buildings.id), 0)::float8
     / GREATEST(occupants, 1) AS average_income`;
 
 function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuilding {
@@ -522,7 +522,7 @@ async function applyDailySpoilage(client: PoolClient): Promise<boolean> {
     stock: number;
   }>(
     `SELECT id, building_type, stock
-     FROM residential_buildings
+     FROM all_buildings
      WHERE building_type = ANY($1::text[]) AND stock > 0
      FOR UPDATE`,
     [perishableBuildingTypes],
@@ -533,7 +533,7 @@ async function applyDailySpoilage(client: PoolClient): Promise<boolean> {
     if (!productId || shelfLifeDays === undefined) continue;
     const quantity = planDailySpoilage(building.stock, shelfLifeDays);
     if (quantity === 0) continue;
-    await client.query('UPDATE residential_buildings SET stock = stock - $2 WHERE id = $1', [
+    await client.query('UPDATE all_buildings SET stock = stock - $2 WHERE id = $1', [
       building.id,
       quantity,
     ]);
@@ -568,7 +568,7 @@ async function applyDailySpoilage(client: PoolClient): Promise<boolean> {
     sugarcane_stock: number;
   }>(
     `SELECT id, sugarcane_stock
-     FROM residential_buildings
+     FROM all_buildings
      WHERE sugarcane_stock > 0
      FOR UPDATE`,
   );
@@ -578,7 +578,7 @@ async function applyDailySpoilage(client: PoolClient): Promise<boolean> {
   });
   if (spoiledSugarcane.length > 0) {
     await client.query(
-      `UPDATE residential_buildings building
+      `UPDATE all_buildings building
        SET sugarcane_stock = building.sugarcane_stock - spoiled.quantity
        FROM UNNEST($1::uuid[], $2::integer[]) AS spoiled(id, quantity)
        WHERE building.id = spoiled.id`,
@@ -829,7 +829,7 @@ async function getCities(): Promise<CityAssembly[]> {
       `SELECT city.id, city.name, city.center_x, city.center_y, city.minimum_wage,
             COALESCE((
               SELECT SUM(home.occupants)::integer
-              FROM residential_buildings AS home
+              FROM all_buildings AS home
               WHERE home.city_id = city.id
             ), 0) AS population,
             city.wellbeing, city.economy,
@@ -861,7 +861,7 @@ async function getCities(): Promise<CityAssembly[]> {
     }>(
       `SELECT b.city_id, b.building_type, b.status, b.wage, b.desired_workers,
               COALESCE(SUM(j.count), 0)::int AS employed
-       FROM residential_buildings b
+       FROM all_buildings b
        LEFT JOIN job_assignments j ON j.workplace_id = b.id
        GROUP BY b.id`,
     ),
@@ -905,10 +905,10 @@ async function getRoadTiles(): Promise<RoadTile[]> {
 
 async function getResidentialBuildings(): Promise<WorldResidentialBuilding[]> {
   const { rows } = await pool.query<ResidentialBuildingRow & { created_by: string }>(
-    `SELECT ${RESIDENTIAL_COLUMNS}, created_by,
+    `SELECT ${ALL_BUILDING_COLUMNS}, created_by,
             (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
-             FROM neon_auth."user" player WHERE player.id::text = residential_buildings.created_by) AS owner_name
-     FROM residential_buildings
+             FROM neon_auth."user" player WHERE player.id::text = all_buildings.created_by) AS owner_name
+     FROM all_buildings
      ORDER BY started_at, id`,
   );
   return rows.map((row) => ({
@@ -965,7 +965,7 @@ async function runDailyImmigration(): Promise<boolean> {
       immigrationCounts,
       async () => {
     const { rows } = await client.query<ResidentialBuildingRow>(
-      `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings WHERE status = 'completed'`,
+      `SELECT ${ALL_BUILDING_COLUMNS} FROM all_buildings WHERE status = 'completed'`,
     );
     Object.assign(immigrationCounts, getPerformanceEntityCounts(rows));
     const byCity = new Map<string, ResidentialBuilding[]>();
@@ -983,7 +983,7 @@ async function runDailyImmigration(): Promise<boolean> {
           if (!added) continue;
           home.occupants += added;
           changed = true;
-          await client.query('UPDATE residential_buildings SET occupants = $2 WHERE id = $1', [
+          await client.query('UPDATE all_buildings SET occupants = $2 WHERE id = $1', [
             home.id,
             home.occupants,
           ]);
@@ -1051,14 +1051,14 @@ async function runMonthlyResidenceRelocation(): Promise<boolean> {
           occupants: number;
         }>(
           `SELECT id, city_id, building_type, tile_x, tile_y, rent, occupants
-           FROM residential_buildings
+           FROM all_buildings
            WHERE status = 'completed'`,
         );
         counts.residences = residences.filter(
           (row) => getResidenceDefinition(row.building_type)?.kind === 'residence',
         ).length;
         const { rows: workplaces } = await client.query<{ id: string; wage: number }>(
-          'SELECT id, wage FROM residential_buildings',
+          'SELECT id, wage FROM all_buildings',
         );
         const { rows: assignments } = await client.query<{
           workplace_id: string;
@@ -1153,7 +1153,7 @@ async function runMonthlyResidenceRelocation(): Promise<boolean> {
         if (relocations.length > 0) {
           const updates = [...occupantsByResidence.entries()];
           await client.query(
-            `UPDATE residential_buildings building
+            `UPDATE all_buildings building
              SET occupants = changes.occupants
              FROM UNNEST($1::uuid[], $2::integer[]) AS changes(id, occupants)
              WHERE building.id = changes.id`,
@@ -1307,7 +1307,7 @@ async function getManualWarehouseTransferQuote(
     `SELECT id, building_type, created_by, status, tile_x, tile_y, work_hours_per_day,
             stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock,
             selected_input_product_id
-     FROM residential_buildings
+     FROM all_buildings
      WHERE id = ANY($1::uuid[])
      ORDER BY id
      FOR UPDATE`,
@@ -1767,7 +1767,7 @@ async function runDailyEmployment(): Promise<boolean> {
       }>(
         `SELECT id, created_by, city_id, desired_workers, wage, status, building_type, work_hours_per_day, work_points_done,
                 tile_x, tile_y, price, stock, occupants, rent
-         FROM residential_buildings`,
+         FROM all_buildings`,
       );
       Object.assign(payrollCounts, getPerformanceEntityCounts(workplaces));
       const { rows: assignmentRows } = await client.query<{
@@ -1903,7 +1903,7 @@ async function runDailyEmployment(): Promise<boolean> {
       }
       if (constructionUpdates.length > 0) {
         await client.query(
-          `UPDATE residential_buildings building
+          `UPDATE all_buildings building
            SET work_points_done = progress.work_points_done,
                status = CASE WHEN progress.completed THEN 'completed' ELSE building.status END,
                completed_at = CASE
@@ -2057,7 +2057,7 @@ async function runDailyEmployment(): Promise<boolean> {
           }>(
             `SELECT shop.city_id, shop.building_type, history.units_sold, history.sale_price
              FROM commerce_history history
-             JOIN residential_buildings shop ON shop.id = history.building_id
+             JOIN all_buildings shop ON shop.id = history.building_id
              WHERE history.day >= $1::date - $3::integer
                AND history.day < $1::date
                AND shop.status = 'completed'
@@ -2164,7 +2164,7 @@ async function runDailyEmployment(): Promise<boolean> {
         .filter((sale) => sale.quantity > 0);
       if (stockSales.length > 0) {
         await client.query(
-          `UPDATE residential_buildings building
+          `UPDATE all_buildings building
            SET stock = building.stock - sales.quantity
            FROM UNNEST($1::uuid[], $2::integer[]) AS sales(id, quantity)
            WHERE building.id = sales.id`,
@@ -2251,7 +2251,7 @@ async function runDailyEmployment(): Promise<boolean> {
             `SELECT id, stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock,
                     selected_input_product_id,
                     efficiency_penalty, production_progress
-             FROM residential_buildings
+             FROM all_buildings
              WHERE id = ANY($1::uuid[])`,
             [productiveSites.map((site) => site.id)],
           )
@@ -2347,7 +2347,7 @@ async function runDailyEmployment(): Promise<boolean> {
       }
       if (productionUpdates.length > 0) {
         await client.query(
-          `UPDATE residential_buildings building
+          `UPDATE all_buildings building
            SET stock = building.stock + production.units,
                production_progress = production.progress,
                tool_stock = building.tool_stock - production.tool_demand,
@@ -2424,7 +2424,7 @@ async function runDailyEmployment(): Promise<boolean> {
         `SELECT id, building_type, work_hours_per_day, stock, crop_phase,
                 to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day,
                 crop_ratio_sum, crop_days, crop_yield, crop_harvested
-         FROM residential_buildings
+         FROM all_buildings
          WHERE building_type = ANY($1::text[]) AND status = 'completed' AND crop_phase IS NOT NULL`,
         [FARM_CROP_TYPES],
       );
@@ -2498,7 +2498,7 @@ async function runDailyEmployment(): Promise<boolean> {
       }
       if (farmUpdates.length > 0) {
         await client.query(
-          `UPDATE residential_buildings building
+          `UPDATE all_buildings building
            SET stock = building.stock + farm.stock_delta,
                crop_phase = farm.phase,
                crop_planted_day = farm.planted_day,
@@ -2535,7 +2535,7 @@ async function runDailyEmployment(): Promise<boolean> {
         tile_y: number;
         building_type: ResidenceType;
       }>(
-        `SELECT id, tile_x, tile_y, building_type FROM residential_buildings
+        `SELECT id, tile_x, tile_y, building_type FROM all_buildings
          WHERE building_type IN ('warehouse', 'silo') AND status = 'completed'
          ORDER BY tile_x, tile_y, id`,
       );
@@ -2568,7 +2568,7 @@ async function runDailyEmployment(): Promise<boolean> {
                     building.tool_stock, building.wood_stock, building.iron_stock,
                     building.charcoal_stock, building.sugarcane_stock,
                     building.selected_input_product_id
-             FROM residential_buildings building
+             FROM all_buildings building
              JOIN building_warehouse_links link ON link.building_id = building.id
              WHERE link.warehouse_id = ANY($1::uuid[]) AND building.status = 'completed'
              ORDER BY link.warehouse_id, building.id`,
@@ -2974,7 +2974,7 @@ async function runDailyEmployment(): Promise<boolean> {
       if (buildingChanges.size > 0) {
         const buildingIds = [...buildingChanges.keys()];
         const { rowCount } = await client.query(
-          `UPDATE residential_buildings building
+          `UPDATE all_buildings building
            SET stock = building.stock + changes.stock,
                tool_stock = building.tool_stock + changes.tools,
                wood_stock = building.wood_stock + changes.wood,
@@ -3100,7 +3100,7 @@ async function runDailyEmployment(): Promise<boolean> {
                 farm_auto_planting_months AS months,
                 farm_planting_workers AS "plantingWorkers",
                 farm_harvest_workers AS "harvestWorkers"
-         FROM residential_buildings
+         FROM all_buildings
          WHERE building_type = ANY($1::text[]) AND status = 'completed' AND crop_phase IS NULL
            AND farm_auto_planting_enabled = true`,
         [AUTOMATABLE_FARM_TYPES],
@@ -3121,7 +3121,7 @@ async function runDailyEmployment(): Promise<boolean> {
         .map((farm) => farm.id);
       if (farmsToPlant.length > 0) {
         await client.query(
-          `UPDATE residential_buildings
+          `UPDATE all_buildings
            SET crop_phase = 'growing', crop_planted_day = $2::date,
                crop_ratio_sum = 0, crop_days = 0, crop_yield = 0, crop_harvested = 0
            WHERE id = ANY($1::uuid[]) AND crop_phase IS NULL`,
@@ -3130,7 +3130,7 @@ async function runDailyEmployment(): Promise<boolean> {
         changed = true;
       }
       const { rows } = await client.query<ResidentialBuildingRow>(
-        `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings`,
+        `SELECT ${ALL_BUILDING_COLUMNS} FROM all_buildings`,
       );
       Object.assign(allocationCounts, getPerformanceEntityCounts(rows));
       const buildings = rows.map(mapResidentialBuilding);
@@ -3176,7 +3176,7 @@ async function runDailyEmployment(): Promise<boolean> {
       const { rows: warehouseRows } = await client.query<WarehouseTradeBuildingRow>(
         `SELECT b.id, b.created_by, b.building_type, b.tile_x, b.tile_y, b.work_hours_per_day,
                 COALESCE((SELECT SUM(count) FROM job_assignments j WHERE j.workplace_id = b.id), 0)::int AS workers
-         FROM residential_buildings b
+         FROM all_buildings b
          WHERE b.building_type IN ('warehouse', 'silo') AND b.status = 'completed'`,
       );
       const { rows: stockRows } = await client.query<WarehouseTradeStockRow>(
@@ -3484,8 +3484,8 @@ async function createRoadPath(
       centerY: city.center_y,
     }));
     const { rows: residentialRows } = await client.query<ResidentialBuildingRow>(
-      `SELECT ${RESIDENTIAL_COLUMNS}
-       FROM residential_buildings`,
+      `SELECT ${ALL_BUILDING_COLUMNS}
+       FROM all_buildings`,
     );
     const residentialBuildings = residentialRows.map(mapResidentialBuilding);
 
@@ -3630,7 +3630,7 @@ async function replaceCityZones(
       `SELECT id, name, center_x, center_y,
               COALESCE((
                 SELECT SUM(home.occupants)::integer
-                FROM residential_buildings AS home
+                FROM all_buildings AS home
                 WHERE home.city_id = city_assemblies.id
               ), 0) AS population,
               wellbeing, economy, minimum_wage
@@ -3710,7 +3710,7 @@ async function createResidentialBuilding(
         `SELECT EXISTS (
            SELECT 1 FROM player_warehouse_claims WHERE user_id = $1
          ) OR EXISTS (
-           SELECT 1 FROM residential_buildings WHERE building_type = 'warehouse' AND created_by = $1
+           SELECT 1 FROM all_buildings WHERE building_type = 'warehouse' AND created_by = $1
          ) AS has_warehouse`,
         [userId],
       );
@@ -3759,8 +3759,8 @@ async function createResidentialBuilding(
       zones: city.zones,
     }));
     const { rows: buildingRows } = await client.query<ResidentialBuildingRow>(
-      `SELECT ${RESIDENTIAL_COLUMNS}
-       FROM residential_buildings`,
+      `SELECT ${ALL_BUILDING_COLUMNS}
+       FROM all_buildings`,
     );
     const buildings = buildingRows.map(mapResidentialBuilding);
     const { rows: roadRows } = await client.query<{ tile_x: number; tile_y: number }>(
@@ -3803,7 +3803,7 @@ async function createResidentialBuilding(
         quantity: number;
       }>(
         `SELECT warehouse.id AS building_id, stock.product_id, stock.quantity
-         FROM residential_buildings AS warehouse
+         FROM all_buildings AS warehouse
          JOIN warehouse_stock AS stock ON stock.building_id = warehouse.id
          WHERE warehouse.building_type = 'warehouse'
            AND warehouse.status = 'completed'
@@ -3865,11 +3865,11 @@ async function createResidentialBuilding(
     if (!buildingNumber) throw new Error('Não foi possível atribuir o número da construção.');
 
     const { rows } = await client.query<ResidentialBuildingRow>(
-      `INSERT INTO residential_buildings
+      `INSERT INTO all_buildings
          (id, building_type, building_number, tile_x, tile_y, city_id, status, completed_at, created_by,
           selected_input_product_id, wage)
        VALUES ($1, $2, $3, $4, $5, $6, $7, CASE WHEN $7 = 'completed' THEN clock_timestamp() ELSE NULL END, $8, $9, GREATEST(10, $10))
-       RETURNING ${RESIDENTIAL_COLUMNS}`,
+       RETURNING ${ALL_BUILDING_COLUMNS}`,
       [
         randomUUID(),
         type,
@@ -3908,7 +3908,7 @@ async function completeResidentialBuilding(
       city_id: string;
       created_by: string;
     }>(
-      'SELECT building_type, status, city_id, created_by FROM residential_buildings WHERE id = $1 FOR UPDATE',
+      'SELECT building_type, status, city_id, created_by FROM all_buildings WHERE id = $1 FOR UPDATE',
       [id],
     );
     if (!existingRows[0]) {
@@ -3929,12 +3929,12 @@ async function completeResidentialBuilding(
       }>(
         `SELECT
            (SELECT AVG(price)::float8
-            FROM residential_buildings
+            FROM all_buildings
             WHERE created_by = $1
               AND building_type = $2
               AND status = 'completed') AS owner_average,
            (SELECT AVG(price)::float8
-            FROM residential_buildings
+            FROM all_buildings
             WHERE city_id = $3
               AND building_type = $2
               AND status = 'completed') AS city_average`,
@@ -3951,13 +3951,13 @@ async function completeResidentialBuilding(
       );
     }
     const { rows } = await client.query<ResidentialBuildingRow>(
-      `UPDATE residential_buildings
+      `UPDATE all_buildings
        SET status = 'completed',
            completed_at = clock_timestamp(),
            desired_workers = LEAST(desired_workers, $2),
            price = COALESCE($3, price)
        WHERE id = $1 AND status = 'under_construction'
-       RETURNING ${RESIDENTIAL_COLUMNS}`,
+       RETURNING ${ALL_BUILDING_COLUMNS}`,
       [id, definition.maxWorkers, initialShopPrice],
     );
     if (!rows[0]) throw new Error(`A obra ${id} mudou durante a conclusão.`);
@@ -3999,7 +3999,7 @@ async function start() {
       id: string;
       building_type: ResidenceType;
     }>(
-      `UPDATE residential_buildings AS building
+      `UPDATE all_buildings AS building
        SET desired_workers = limits.maximum_workers
        FROM UNNEST($1::text[], $2::integer[]) AS limits(building_type, maximum_workers)
        WHERE building.building_type = limits.building_type
@@ -4147,7 +4147,7 @@ async function start() {
                   building.tile_x, building.tile_y,
                   COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense,
                   COALESCE(SUM(history.units_sold::bigint * history.sale_price), 0)::text AS revenue
-           FROM residential_buildings building
+           FROM all_buildings building
            LEFT JOIN commerce_history history
              ON history.building_id = building.id
             AND history.day BETWEEN $2::date - ($4::integer - 1) AND $2::date
@@ -4160,7 +4160,7 @@ async function start() {
         pool.query<{ employee_expense: string }>(
           `SELECT COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense
            FROM building_payroll_history history
-           JOIN residential_buildings building ON building.id = history.building_id
+           JOIN all_buildings building ON building.id = history.building_id
            WHERE building.created_by = $1
              AND building.building_type IN ('warehouse', 'silo')
              AND history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date`,
@@ -4173,7 +4173,7 @@ async function start() {
           tile_y: number;
         }>(
           `SELECT id, building_number, tile_x, tile_y
-           FROM residential_buildings
+           FROM all_buildings
            WHERE created_by = $1 AND building_type IN ('warehouse', 'silo')
            ORDER BY building_number`,
           [userId],
@@ -4193,9 +4193,9 @@ async function start() {
                   SUM(CASE WHEN seller.id IS NOT NULL THEN history.quantity::bigint * history.unit_price ELSE 0 END)::text
                     AS sales_revenue
            FROM warehouse_trade_history history
-           LEFT JOIN residential_buildings buyer
+           LEFT JOIN all_buildings buyer
              ON buyer.id = history.buyer_id AND buyer.created_by = $1
-           LEFT JOIN residential_buildings seller
+           LEFT JOIN all_buildings seller
              ON seller.id = history.seller_id AND seller.created_by = $1
            WHERE history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date
              AND (buyer.id IS NOT NULL OR seller.id IS NOT NULL)
@@ -4215,7 +4215,7 @@ async function start() {
           `SELECT building.id, building.building_type, building.building_number,
                   building.tile_x, building.tile_y, building.occupants,
                   COALESCE(SUM(history.rent_revenue), 0)::text AS rent_revenue
-           FROM residential_buildings building
+           FROM all_buildings building
            LEFT JOIN residence_rent_history history
              ON history.building_id = building.id
             AND history.day BETWEEN $2::date - ($4::integer - 1) AND $2::date
@@ -4238,7 +4238,7 @@ async function start() {
                   building.tile_x, building.tile_y,
                   COALESCE(payroll.employee_expense, 0)::text AS employee_expense,
                   COALESCE(production.produced, 0)::text AS produced
-           FROM residential_buildings building
+           FROM all_buildings building
            LEFT JOIN (
              SELECT building_id, SUM(employee_expense) AS employee_expense
              FROM building_payroll_history
@@ -4263,12 +4263,12 @@ async function start() {
              SELECT COALESCE(SUM(history.units_sold::bigint * history.sale_price), 0) AS revenue,
                     COALESCE(SUM(history.product_expense), 0) AS expenses
              FROM commerce_history history
-             JOIN residential_buildings building ON building.id = history.building_id
+             JOIN all_buildings building ON building.id = history.building_id
              WHERE building.created_by = $1 AND history.day BETWEEN $2::date AND $3::date
              UNION ALL
              SELECT COALESCE(SUM(history.rent_revenue), 0), 0
              FROM residence_rent_history history
-             JOIN residential_buildings building ON building.id = history.building_id
+             JOIN all_buildings building ON building.id = history.building_id
              WHERE building.created_by = $1 AND history.day BETWEEN $2::date AND $3::date
              UNION ALL
              SELECT COALESCE(SUM(history.quantity::bigint * history.unit_price)
@@ -4276,16 +4276,16 @@ async function start() {
                     COALESCE(SUM(history.quantity::bigint * history.unit_price)
                        FILTER (WHERE buyer.id IS NOT NULL), 0)
              FROM warehouse_trade_history history
-             LEFT JOIN residential_buildings buyer
+             LEFT JOIN all_buildings buyer
                ON buyer.id = history.buyer_id AND buyer.created_by = $1
-             LEFT JOIN residential_buildings seller
+             LEFT JOIN all_buildings seller
                ON seller.id = history.seller_id AND seller.created_by = $1
              WHERE history.day BETWEEN $2::date AND $3::date
                AND (buyer.id IS NOT NULL OR seller.id IS NOT NULL)
              UNION ALL
              SELECT 0, COALESCE(SUM(history.employee_expense), 0)
              FROM building_payroll_history history
-             JOIN residential_buildings building ON building.id = history.building_id
+             JOIN all_buildings building ON building.id = history.building_id
              WHERE building.created_by = $1 AND history.day BETWEEN $2::date AND $3::date
            ) AS parts`,
           [userId, weekRange.startDay, weekRange.endDay],
@@ -4293,7 +4293,7 @@ async function start() {
         pool.query<{ employees: string }>(
           `SELECT COALESCE(SUM(assignment.count), 0)::text AS employees
            FROM job_assignments assignment
-           JOIN residential_buildings workplace ON workplace.id = assignment.workplace_id
+           JOIN all_buildings workplace ON workplace.id = assignment.workplace_id
            WHERE workplace.created_by = $1`,
           [userId],
         ),
@@ -4308,14 +4308,14 @@ async function start() {
         }>(
           `SELECT building_type, stock, tool_stock, wood_stock, iron_stock,
                   charcoal_stock, sugarcane_stock
-           FROM residential_buildings
+           FROM all_buildings
            WHERE created_by = $1`,
           [userId],
         ),
         pool.query<{ product_id: string; quantity: string }>(
           `SELECT stock.product_id, SUM(stock.quantity)::text AS quantity
            FROM warehouse_stock stock
-           JOIN residential_buildings building ON building.id = stock.building_id
+           JOIN all_buildings building ON building.id = stock.building_id
            WHERE building.created_by = $1
            GROUP BY stock.product_id`,
           [userId],
@@ -4323,7 +4323,7 @@ async function start() {
         pool.query<{ product_id: string; quantity: string }>(
           `SELECT stock.product_id, SUM(stock.quantity)::text AS quantity
            FROM building_input_stock stock
-           JOIN residential_buildings building ON building.id = stock.building_id
+           JOIN all_buildings building ON building.id = stock.building_id
            WHERE building.created_by = $1
            GROUP BY stock.product_id`,
           [userId],
@@ -4491,7 +4491,7 @@ async function start() {
            COALESCE(SUM(stock.quantity) FILTER (WHERE stock.product_id = 'stone'), 0)::int AS stone,
            COALESCE(SUM(stock.quantity) FILTER (WHERE stock.product_id = 'iron'), 0)::int AS iron,
            COALESCE(SUM(stock.quantity) FILTER (WHERE stock.product_id = 'steel'), 0)::int AS steel
-         FROM residential_buildings AS warehouse
+         FROM all_buildings AS warehouse
          LEFT JOIN warehouse_stock AS stock ON stock.building_id = warehouse.id
          WHERE warehouse.building_type = 'warehouse'
            AND warehouse.status = 'completed'
@@ -4524,7 +4524,7 @@ async function start() {
       const { rows: cityRows } = await pool.query<{ population: number }>(
         `SELECT COALESCE(SUM(building.occupants), 0)::int AS population
          FROM city_assemblies city
-         LEFT JOIN residential_buildings building ON building.city_id = city.id
+         LEFT JOIN all_buildings building ON building.city_id = city.id
          WHERE city.id = $1
          GROUP BY city.id`,
         [request.params.id],
@@ -4553,7 +4553,7 @@ async function start() {
                 COALESCE(SUM(consumption.quantity), 0)::float8 AS month_quantity,
                 COALESCE(SUM(consumption.spent), 0)::float8 AS month_spent
          FROM residence_consumption consumption
-         JOIN residential_buildings building ON building.id = consumption.building_id
+         JOIN all_buildings building ON building.id = consumption.building_id
          WHERE building.city_id = $1
            AND consumption.day > (SELECT day FROM today) - 30
          GROUP BY consumption.product_id`,
@@ -4598,9 +4598,9 @@ async function start() {
                     / GREATEST(building.occupants, 1) AS daily_income,
                   COALESCE(product_totals.monthly_products_cost, 0)::float8 AS monthly_products_cost,
                   COALESCE(product_totals.product_contributions, '[]'::jsonb) AS product_contributions
-           FROM residential_buildings building
+           FROM all_buildings building
            LEFT JOIN job_assignments assignments ON assignments.residence_id = building.id
-           LEFT JOIN residential_buildings workplace ON workplace.id = assignments.workplace_id
+           LEFT JOIN all_buildings workplace ON workplace.id = assignments.workplace_id
            LEFT JOIN LATERAL (
              WITH product_costs AS (
                SELECT product_id,
@@ -4647,9 +4647,9 @@ async function start() {
       }>(
         `SELECT home.id, home.building_type, home.tile_x, home.tile_y, home.occupants,
                 COALESCE(SUM(assignments.count * workplace.wage), 0)::float8 AS payroll
-         FROM residential_buildings home
+         FROM all_buildings home
          LEFT JOIN job_assignments assignments ON assignments.residence_id = home.id
-         LEFT JOIN residential_buildings workplace ON workplace.id = assignments.workplace_id
+         LEFT JOIN all_buildings workplace ON workplace.id = assignments.workplace_id
          WHERE home.city_id = $1
            AND home.status = 'completed'
            AND home.building_type = ANY($2::text[])
@@ -4719,7 +4719,7 @@ async function start() {
           city_id: string;
         }>(
           `SELECT id, building_type, city_id
-           FROM residential_buildings
+           FROM all_buildings
            WHERE id = $1
            FOR UPDATE`,
           [request.params.id],
@@ -4767,7 +4767,7 @@ async function start() {
           zones: city.zones,
         }));
         const { rows: buildingRows } = await client.query<ResidentialBuildingRow>(
-          `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings`,
+          `SELECT ${ALL_BUILDING_COLUMNS} FROM all_buildings`,
         );
         const buildings = buildingRows.map(mapResidentialBuilding);
         const movingBuilding = buildings.find((building) => building.id === selected.id);
@@ -4812,7 +4812,7 @@ async function start() {
         }>(
           `SELECT other.building_type, other.tile_x, other.tile_y
            FROM building_warehouse_links link
-           JOIN residential_buildings other
+           JOIN all_buildings other
              ON other.id = CASE WHEN link.building_id = $1 THEN link.warehouse_id ELSE link.building_id END
            WHERE link.building_id = $1 OR link.warehouse_id = $1`,
           [selected.id],
@@ -4829,10 +4829,10 @@ async function start() {
         }
 
         const { rows: updatedRows } = await client.query<ResidentialBuildingRow>(
-          `UPDATE residential_buildings
+          `UPDATE all_buildings
            SET tile_x = $2, tile_y = $3, city_id = $4
            WHERE id = $1
-           RETURNING ${RESIDENTIAL_COLUMNS}`,
+           RETURNING ${ALL_BUILDING_COLUMNS}`,
           [selected.id, x, y, destinationCity.id],
         );
         await client.query('COMMIT');
@@ -4945,7 +4945,7 @@ async function start() {
 
     void pool
       .query<{ created_by: string }>(
-        'SELECT created_by FROM residential_buildings WHERE id = $1',
+        'SELECT created_by FROM all_buildings WHERE id = $1',
         [request.params.id],
       )
       .then(({ rows }) => {
@@ -4972,7 +4972,7 @@ async function start() {
     }
     void (async () => {
       const { rows: owners } = await pool.query<{ created_by: string }>(
-        'SELECT created_by FROM residential_buildings WHERE id = $1 AND building_type = $2',
+        'SELECT created_by FROM all_buildings WHERE id = $1 AND building_type = $2',
         [request.params.id, 'warehouse'],
       );
       if (!owners[0]) {
@@ -5071,7 +5071,7 @@ async function start() {
     }
     void (async () => {
       const { rows: owners } = await pool.query<{ created_by: string }>(
-        `SELECT created_by FROM residential_buildings
+        `SELECT created_by FROM all_buildings
          WHERE id = $1 AND building_type = ANY($2::text[])`,
         [request.params.id, SHOP_TYPES],
       );
@@ -5320,7 +5320,7 @@ async function start() {
           failureStage = 'adding_product_to_destination';
           const column = result.quote.destinationColumn;
           const { rowCount: destinationUpdated } = await client.query(
-            `UPDATE residential_buildings
+            `UPDATE all_buildings
              SET ${column} = ${column} + $2
              WHERE id = $1 AND ${column} + $2 <= $3`,
             [
@@ -5410,7 +5410,7 @@ async function start() {
 
     void pool
       .query<{ building_type: string; tile_x: number; tile_y: number }>(
-        'SELECT building_type, tile_x, tile_y FROM residential_buildings WHERE id = $1',
+        'SELECT building_type, tile_x, tile_y FROM all_buildings WHERE id = $1',
         [request.params.id],
       )
       .then(async ({ rows }) => {
@@ -5448,7 +5448,7 @@ async function start() {
                   SUM(setting.price::numeric * GREATEST(COALESCE(stock.quantity, 0) - setting.minimum_stock, 0))
                     / NULLIF(SUM(GREATEST(COALESCE(stock.quantity, 0) - setting.minimum_stock, 0)), 0)
                     AS average_price
-           FROM residential_buildings AS seller
+           FROM all_buildings AS seller
            JOIN warehouse_product_settings AS setting ON setting.building_id = seller.id
            LEFT JOIN warehouse_stock AS stock
              ON stock.building_id = seller.id AND stock.product_id = setting.product_id
@@ -5505,7 +5505,7 @@ async function start() {
           `SELECT b.id, b.building_type, b.created_by, b.status, b.tile_x, b.tile_y,
                   b.work_hours_per_day,
                   COALESCE((SELECT SUM(count) FROM job_assignments j WHERE j.workplace_id = b.id), 0)::int AS workers
-           FROM residential_buildings b WHERE b.id = $1`,
+           FROM all_buildings b WHERE b.id = $1`,
           [request.params.id],
         );
         const target = targetRows[0];
@@ -5528,7 +5528,7 @@ async function start() {
         const { rows: warehouseRows } = await client.query<WarehouseTradeBuildingRow>(
           `SELECT b.id, b.created_by, b.building_type, b.tile_x, b.tile_y, b.work_hours_per_day,
                   COALESCE((SELECT SUM(count) FROM job_assignments j WHERE j.workplace_id = b.id), 0)::int AS workers
-           FROM residential_buildings b
+           FROM all_buildings b
            WHERE b.building_type IN ('warehouse', 'silo') AND b.status = 'completed'
              AND (b.id = $1 OR (ABS(b.tile_x - $2) <= $4 AND ABS(b.tile_y - $3) <= $4))`,
           [target.id, target.tile_x, target.tile_y, LINK_RADIUS],
@@ -5586,7 +5586,7 @@ async function start() {
 
     void pool
       .query<{ building_type: string; created_by: string; status: string }>(
-        'SELECT building_type, created_by, status FROM residential_buildings WHERE id = $1',
+        'SELECT building_type, created_by, status FROM all_buildings WHERE id = $1',
         [request.params.id],
       )
       .then(async ({ rows }) => {
@@ -5663,7 +5663,7 @@ async function start() {
                   city.minimum_wage AS city_minimum_wage, building.desired_workers,
                   building.crop_phase, building.farm_auto_planting_enabled,
                   building.farm_planting_workers, building.farm_harvest_workers
-           FROM residential_buildings AS building
+           FROM all_buildings AS building
            JOIN city_assemblies AS city ON city.id = building.city_id
            WHERE building.id = $1 FOR UPDATE OF building`,
           [request.params.id],
@@ -5696,11 +5696,11 @@ async function start() {
           return;
         }
         const { rows } = await client.query<ResidentialBuildingRow>(
-          `UPDATE residential_buildings
+          `UPDATE all_buildings
            SET wage = $3, work_hours_per_day = $4, desired_workers = $5
            WHERE id = $1 AND created_by = $2
              AND (status = 'under_construction' OR building_type <> ALL($6::text[]))
-           RETURNING ${RESIDENTIAL_COLUMNS}`,
+           RETURNING ${ALL_BUILDING_COLUMNS}`,
           [
             request.params.id,
             userId,
@@ -5724,7 +5724,7 @@ async function start() {
           : settings.desiredWorkers;
         await limitJobAssignments(client, request.params.id, targetWorkers);
         const { rows: updated } = await client.query<ResidentialBuildingRow>(
-          `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings WHERE id = $1`,
+          `SELECT ${ALL_BUILDING_COLUMNS} FROM all_buildings WHERE id = $1`,
           [request.params.id],
         );
         await client.query('COMMIT');
@@ -5756,16 +5756,16 @@ async function start() {
 
     void pool
       .query<ResidentialBuildingRow>(
-        `UPDATE residential_buildings
+        `UPDATE all_buildings
          SET rent = $3
          WHERE id = $1 AND created_by = $2 AND building_type = ANY($4::text[])
-         RETURNING ${RESIDENTIAL_COLUMNS}`,
+         RETURNING ${ALL_BUILDING_COLUMNS}`,
         [request.params.id, userId, rent, RESIDENCE_BUILDING_TYPES],
       )
       .then(async ({ rows }) => {
         if (!rows[0]) {
           const existing = await pool.query(
-            'SELECT 1 FROM residential_buildings WHERE id = $1',
+            'SELECT 1 FROM all_buildings WHERE id = $1',
             [request.params.id],
           );
           response
@@ -5798,15 +5798,15 @@ async function start() {
 
     void pool
       .query<ResidentialBuildingRow>(
-        `UPDATE residential_buildings
+        `UPDATE all_buildings
          SET price = $3
          WHERE id = $1 AND created_by = $2 AND building_type = ANY($4::text[])
-         RETURNING ${RESIDENTIAL_COLUMNS}`,
+         RETURNING ${ALL_BUILDING_COLUMNS}`,
         [request.params.id, userId, price, SHOP_TYPES],
       )
       .then(async ({ rows }) => {
         if (!rows[0]) {
-          const existing = await pool.query('SELECT 1 FROM residential_buildings WHERE id = $1', [
+          const existing = await pool.query('SELECT 1 FROM all_buildings WHERE id = $1', [
             request.params.id,
           ]);
           response
@@ -5843,7 +5843,7 @@ async function start() {
           status: string;
         }>(
           `SELECT building_type, created_by, status
-           FROM residential_buildings
+           FROM all_buildings
            WHERE id = $1 FOR UPDATE`,
           [request.params.id],
         );
@@ -5875,14 +5875,14 @@ async function start() {
           [request.params.id, productId],
         );
         await client.query(
-          `UPDATE residential_buildings
+          `UPDATE all_buildings
            SET selected_input_product_id = $2
            WHERE id = $1`,
           [request.params.id, productId],
         );
         const { rows } = await client.query<ResidentialBuildingRow>(
-          `SELECT ${RESIDENTIAL_COLUMNS}
-           FROM residential_buildings
+          `SELECT ${ALL_BUILDING_COLUMNS}
+           FROM all_buildings
            WHERE id = $1`,
           [request.params.id],
         );
@@ -5930,7 +5930,7 @@ async function start() {
           desired_workers: number;
         }>(
           `SELECT building_type, status, created_by, crop_phase, desired_workers
-           FROM residential_buildings WHERE id = $1 FOR UPDATE`,
+           FROM all_buildings WHERE id = $1 FOR UPDATE`,
           [request.params.id],
         );
         const building = buildingRows[0];
@@ -5958,13 +5958,13 @@ async function start() {
           return;
         }
         const { rows } = await client.query<ResidentialBuildingRow>(
-          `UPDATE residential_buildings
+          `UPDATE all_buildings
            SET farm_auto_planting_enabled = $3,
                farm_auto_planting_months = $4::smallint[],
                farm_planting_workers = $5,
                farm_harvest_workers = $6
            WHERE id = $1 AND created_by = $2
-           RETURNING ${RESIDENTIAL_COLUMNS}`,
+           RETURNING ${ALL_BUILDING_COLUMNS}`,
           [
             request.params.id,
             userId,
@@ -6011,13 +6011,13 @@ async function start() {
     // Iniciar ou reiniciar durante o crescimento zera o contador; durante a colheita não é permitido.
     void pool
       .query<ResidentialBuildingRow>(
-        `UPDATE residential_buildings
+        `UPDATE all_buildings
          SET crop_phase = 'growing',
              crop_planted_day = (SELECT (world_time AT TIME ZONE 'UTC')::date FROM world_state WHERE id = 1),
              crop_ratio_sum = 0, crop_days = 0, crop_yield = 0, crop_harvested = 0
          WHERE id = $1 AND created_by = $2 AND building_type = ANY($3::text[]) AND status = 'completed'
            AND (crop_phase IS NULL OR crop_phase = 'growing')
-         RETURNING ${RESIDENTIAL_COLUMNS}`,
+         RETURNING ${ALL_BUILDING_COLUMNS}`,
         [request.params.id, userId, FARM_CROP_TYPES],
       )
       .then(async ({ rows }) => {
@@ -6026,7 +6026,7 @@ async function start() {
             created_by: string;
             building_type: string;
             status: string;
-          }>('SELECT created_by, building_type, status FROM residential_buildings WHERE id = $1', [
+          }>('SELECT created_by, building_type, status FROM all_buildings WHERE id = $1', [
             request.params.id,
           ]);
           if (!existing[0]) {
@@ -6081,7 +6081,7 @@ async function start() {
           tile_y: number;
         }>(
           `SELECT building_type, status, created_by, tile_x, tile_y
-           FROM residential_buildings WHERE id = $1 FOR UPDATE`,
+           FROM all_buildings WHERE id = $1 FOR UPDATE`,
           [request.params.id],
         );
         const source = sources[0];
@@ -6110,7 +6110,7 @@ async function start() {
             tile_y: number;
           }>(
             `SELECT building_type, status, created_by, tile_x, tile_y
-             FROM residential_buildings WHERE id = $1 FOR SHARE`,
+             FROM all_buildings WHERE id = $1 FOR SHARE`,
             [link.warehouseId],
           );
           const target = targets[0];
@@ -6154,14 +6154,14 @@ async function start() {
         }
 
         const { rows } = await client.query<ResidentialBuildingRow>(
-          `UPDATE residential_buildings
+          `UPDATE all_buildings
            SET warehouse_id = (
              SELECT warehouse_id FROM building_warehouse_links
-             WHERE building_id = residential_buildings.id
+             WHERE building_id = all_buildings.id
              ORDER BY warehouse_id LIMIT 1
            )
            WHERE id = $1
-           RETURNING ${RESIDENTIAL_COLUMNS}`,
+           RETURNING ${ALL_BUILDING_COLUMNS}`,
           [request.params.id],
         );
         await client.query('COMMIT');
@@ -6199,7 +6199,7 @@ async function start() {
 
     void pool
       .query<{ id: string }>(
-        `DELETE FROM residential_buildings
+        `DELETE FROM all_buildings
          WHERE id = $1 AND created_by = $2
          RETURNING id`,
         [request.params.id, userId],
@@ -6207,7 +6207,7 @@ async function start() {
       .then(async ({ rows }) => {
         if (!rows[0]) {
           const existing = await pool.query(
-            'SELECT 1 FROM residential_buildings WHERE id = $1',
+            'SELECT 1 FROM all_buildings WHERE id = $1',
             [request.params.id],
           );
           response
@@ -6513,7 +6513,7 @@ async function start() {
           return;
         }
         await client.query(
-          `UPDATE residential_buildings
+          `UPDATE all_buildings
            SET wage = $1
            WHERE city_id = $2 AND wage < $1`,
           [city.minimum_wage, city.id],

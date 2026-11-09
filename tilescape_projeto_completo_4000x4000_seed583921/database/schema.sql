@@ -34,6 +34,41 @@ ALTER TABLE city_assemblies
   ADD COLUMN IF NOT EXISTS minimum_wage NUMERIC(12, 2) NOT NULL DEFAULT 1
   CHECK (minimum_wage BETWEEN 1 AND 100000);
 
+DO $$
+BEGIN
+  IF to_regclass('public.all_buildings') IS NULL
+     AND to_regclass('public.residential_buildings') IS NOT NULL THEN
+    ALTER TABLE public.residential_buildings RENAME TO all_buildings;
+  ELSIF to_regclass('public.all_buildings') IS NOT NULL
+        AND to_regclass('public.residential_buildings') IS NOT NULL THEN
+    RAISE EXCEPTION 'Both all_buildings and residential_buildings exist; refusing to leave building data split.';
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF to_regclass('public.residential_buildings_owner_type_number_idx') IS NOT NULL
+     AND to_regclass('public.all_buildings_owner_type_number_idx') IS NULL THEN
+    ALTER INDEX public.residential_buildings_owner_type_number_idx
+      RENAME TO all_buildings_owner_type_number_idx;
+  END IF;
+  IF to_regclass('public.residential_buildings_city_id_idx') IS NOT NULL
+     AND to_regclass('public.all_buildings_city_id_idx') IS NULL THEN
+    ALTER INDEX public.residential_buildings_city_id_idx
+      RENAME TO all_buildings_city_id_idx;
+  END IF;
+  IF to_regclass('public.residential_buildings_owner_warehouse_idx') IS NOT NULL
+     AND to_regclass('public.all_buildings_owner_warehouse_idx') IS NULL THEN
+    ALTER INDEX public.residential_buildings_owner_warehouse_idx
+      RENAME TO all_buildings_owner_warehouse_idx;
+  END IF;
+  IF to_regclass('public.residential_warehouse_position_idx') IS NOT NULL
+     AND to_regclass('public.all_buildings_warehouse_position_idx') IS NULL THEN
+    ALTER INDEX public.residential_warehouse_position_idx
+      RENAME TO all_buildings_warehouse_position_idx;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS city_zones (
   id UUID PRIMARY KEY,
   city_id UUID NOT NULL REFERENCES city_assemblies (id) ON DELETE CASCADE,
@@ -49,7 +84,7 @@ CREATE TABLE IF NOT EXISTS city_zones (
 
 CREATE INDEX IF NOT EXISTS city_zones_city_id_idx ON city_zones (city_id);
 
-CREATE TABLE IF NOT EXISTS residential_buildings (
+CREATE TABLE IF NOT EXISTS all_buildings (
   id UUID PRIMARY KEY,
   building_type TEXT NOT NULL,
   building_number INTEGER,
@@ -66,7 +101,7 @@ CREATE TABLE IF NOT EXISTS residential_buildings (
   )
 );
 
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS building_number INTEGER;
 
 WITH numbered_buildings AS (
@@ -75,19 +110,19 @@ WITH numbered_buildings AS (
            PARTITION BY created_by, building_type
            ORDER BY started_at, id
          )::integer AS building_number
-  FROM residential_buildings
+  FROM all_buildings
 )
-UPDATE residential_buildings building
+UPDATE all_buildings building
 SET building_number = numbered_buildings.building_number
 FROM numbered_buildings
 WHERE building.id = numbered_buildings.id
   AND building.building_number IS NULL;
 
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
   ALTER COLUMN building_number SET NOT NULL;
 
-CREATE UNIQUE INDEX IF NOT EXISTS residential_buildings_owner_type_number_idx
-  ON residential_buildings (created_by, building_type, building_number);
+CREATE UNIQUE INDEX IF NOT EXISTS all_buildings_owner_type_number_idx
+  ON all_buildings (created_by, building_type, building_number);
 
 CREATE TABLE IF NOT EXISTS player_building_counters (
   user_id TEXT NOT NULL,
@@ -98,7 +133,7 @@ CREATE TABLE IF NOT EXISTS player_building_counters (
 
 INSERT INTO player_building_counters (user_id, building_type, last_number)
 SELECT created_by, building_type, MAX(building_number)
-FROM residential_buildings
+FROM all_buildings
 GROUP BY created_by, building_type
 ON CONFLICT (user_id, building_type) DO NOTHING;
 
@@ -109,31 +144,33 @@ CREATE TABLE IF NOT EXISTS player_warehouse_claims (
 
 INSERT INTO player_warehouse_claims (user_id)
 SELECT DISTINCT created_by
-FROM residential_buildings
+FROM all_buildings
 WHERE building_type = 'warehouse'
 ON CONFLICT (user_id) DO NOTHING;
 
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS wage NUMERIC(12, 2) NOT NULL DEFAULT 10 CHECK (wage BETWEEN 0 AND 100000);
-UPDATE residential_buildings AS building
+UPDATE all_buildings AS building
 SET wage = city.minimum_wage
 FROM city_assemblies AS city
 WHERE building.city_id = city.id
   AND building.wage < city.minimum_wage;
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS work_hours_per_day SMALLINT NOT NULL DEFAULT 8
   CHECK (work_hours_per_day BETWEEN 1 AND 24);
 
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS rent NUMERIC(12, 2) NOT NULL DEFAULT 10 CHECK (rent BETWEEN 0.01 AND 100000);
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
+  DROP CONSTRAINT IF EXISTS all_buildings_wage_check,
   DROP CONSTRAINT IF EXISTS residential_buildings_wage_check,
+  DROP CONSTRAINT IF EXISTS all_buildings_rent_check,
   DROP CONSTRAINT IF EXISTS residential_buildings_rent_check,
   ALTER COLUMN wage TYPE NUMERIC(12, 2) USING wage::numeric(12, 2),
   ALTER COLUMN rent TYPE NUMERIC(12, 2) USING rent::numeric(12, 2),
-  ADD CONSTRAINT residential_buildings_wage_check CHECK (wage BETWEEN 0 AND 100000),
-  ADD CONSTRAINT residential_buildings_rent_check CHECK (rent BETWEEN 0.01 AND 100000);
-ALTER TABLE residential_buildings
+  ADD CONSTRAINT all_buildings_wage_check CHECK (wage BETWEEN 0 AND 100000),
+  ADD CONSTRAINT all_buildings_rent_check CHECK (rent BETWEEN 0.01 AND 100000);
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS occupants INTEGER NOT NULL DEFAULT 0 CHECK (occupants >= 0);
 ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS last_immigration_day DATE;
@@ -150,27 +187,28 @@ ALTER TABLE world_state
 ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS time_scale DOUBLE PRECISION NOT NULL DEFAULT 15 CHECK (time_scale > 0);
 
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS desired_workers INTEGER NOT NULL DEFAULT 0 CHECK (desired_workers >= 0);
 
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS work_points_done DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (work_points_done >= 0);
 
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS price NUMERIC(12, 2) NOT NULL DEFAULT 10 CHECK (price BETWEEN 0.01 AND 100000);
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
+  DROP CONSTRAINT IF EXISTS all_buildings_price_check,
   DROP CONSTRAINT IF EXISTS residential_buildings_price_check,
   ALTER COLUMN price TYPE NUMERIC(12, 2) USING price::numeric(12, 2);
-ALTER TABLE residential_buildings
-  ADD CONSTRAINT residential_buildings_price_check CHECK (price BETWEEN 0.01 AND 100000);
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
+  ADD CONSTRAINT all_buildings_price_check CHECK (price BETWEEN 0.01 AND 100000);
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0);
-ALTER TABLE residential_buildings
-  ADD COLUMN IF NOT EXISTS warehouse_id UUID REFERENCES residential_buildings (id) ON DELETE SET NULL;
+ALTER TABLE all_buildings
+  ADD COLUMN IF NOT EXISTS warehouse_id UUID REFERENCES all_buildings (id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS building_warehouse_links (
-  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
-  warehouse_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
+  warehouse_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   PRIMARY KEY (building_id, warehouse_id),
   CHECK (building_id <> warehouse_id)
 );
@@ -180,10 +218,10 @@ CREATE INDEX IF NOT EXISTS building_warehouse_links_warehouse_idx
 
 INSERT INTO building_warehouse_links (building_id, warehouse_id)
 SELECT id, warehouse_id
-FROM residential_buildings
+FROM all_buildings
 WHERE warehouse_id IS NOT NULL
 ON CONFLICT DO NOTHING;
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS crop_phase TEXT CHECK (crop_phase IN ('growing', 'harvesting')),
   ADD COLUMN IF NOT EXISTS crop_planted_day DATE,
   ADD COLUMN IF NOT EXISTS crop_ratio_sum DOUBLE PRECISION NOT NULL DEFAULT 0,
@@ -195,12 +233,13 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS farm_planting_workers INTEGER NOT NULL DEFAULT 0 CHECK (farm_planting_workers >= 0),
   ADD COLUMN IF NOT EXISTS farm_harvest_workers INTEGER NOT NULL DEFAULT 0 CHECK (farm_harvest_workers >= 0);
 
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
+  DROP CONSTRAINT IF EXISTS all_buildings_farm_auto_planting_months_check,
   DROP CONSTRAINT IF EXISTS residential_buildings_farm_auto_planting_months_check,
-  ADD CONSTRAINT residential_buildings_farm_auto_planting_months_check
+  ADD CONSTRAINT all_buildings_farm_auto_planting_months_check
     CHECK (farm_auto_planting_months <@ ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]::SMALLINT[]);
 
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS tool_stock INTEGER NOT NULL DEFAULT 0 CHECK (tool_stock >= 0),
   ADD COLUMN IF NOT EXISTS efficiency_penalty INTEGER NOT NULL DEFAULT 0 CHECK (efficiency_penalty BETWEEN 0 AND 90),
   ADD COLUMN IF NOT EXISTS production_progress DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (production_progress >= 0),
@@ -211,7 +250,7 @@ ALTER TABLE residential_buildings
   ADD COLUMN IF NOT EXISTS selected_input_product_id TEXT;
 
 CREATE TABLE IF NOT EXISTS building_input_stock (
-  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   product_id TEXT NOT NULL,
   quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
   PRIMARY KEY (building_id, product_id)
@@ -220,9 +259,10 @@ CREATE TABLE IF NOT EXISTS building_input_stock (
 -- O caixa dos jogadores pode ficar negativo (folha de pagamento).
 ALTER TABLE player_wallets DROP CONSTRAINT IF EXISTS player_wallets_balance_check;
 
-ALTER TABLE residential_buildings
+ALTER TABLE all_buildings
+  DROP CONSTRAINT IF EXISTS all_buildings_building_type_check,
   DROP CONSTRAINT IF EXISTS residential_buildings_building_type_check,
-  ADD CONSTRAINT residential_buildings_building_type_check
+  ADD CONSTRAINT all_buildings_building_type_check
     CHECK (building_type IN (
       'house_poor1', 'house_poor2', 'house_poor3',
       'farm_rice', 'farm_potato', 'farm_wheat', 'farm_barley', 'farm_corn',
@@ -240,7 +280,7 @@ ALTER TABLE residential_buildings
     ));
 
 CREATE TABLE IF NOT EXISTS warehouse_product_settings (
-  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   product_id TEXT NOT NULL,
   minimum_stock INTEGER NOT NULL DEFAULT 0 CHECK (minimum_stock BETWEEN 0 AND 1000000),
   maximum_stock INTEGER CHECK (maximum_stock BETWEEN 0 AND 1000000),
@@ -307,8 +347,8 @@ BEGIN
 END $$;
 
 CREATE TABLE IF NOT EXISTS job_assignments (
-  workplace_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
-  residence_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  workplace_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
+  residence_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   count INTEGER NOT NULL CHECK (count > 0),
   PRIMARY KEY (workplace_id, residence_id)
 );
@@ -316,21 +356,21 @@ CREATE TABLE IF NOT EXISTS job_assignments (
 CREATE INDEX IF NOT EXISTS job_assignments_residence_id_idx ON job_assignments (residence_id);
 
 CREATE TABLE IF NOT EXISTS warehouse_stock (
-  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   product_id TEXT NOT NULL,
   quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0),
   PRIMARY KEY (building_id, product_id)
 );
 
 CREATE TABLE IF NOT EXISTS warehouse_demand (
-  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   day DATE NOT NULL,
   demand DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (demand >= 0),
   PRIMARY KEY (building_id, day)
 );
 
 CREATE TABLE IF NOT EXISTS production_history (
-  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   day DATE NOT NULL,
   work_points DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (work_points >= 0),
   produced DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (produced >= 0),
@@ -340,7 +380,7 @@ CREATE TABLE IF NOT EXISTS production_history (
 );
 
 CREATE TABLE IF NOT EXISTS commerce_history (
-  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   day DATE NOT NULL,
   employee_expense NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (employee_expense >= 0),
   product_expense NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (product_expense >= 0),
@@ -357,7 +397,7 @@ ALTER TABLE commerce_history
   ADD CONSTRAINT commerce_history_sale_price_check CHECK (sale_price >= 0.01);
 
 CREATE TABLE IF NOT EXISTS warehouse_payroll_history (
-  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   day DATE NOT NULL,
   employee_expense NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (employee_expense >= 0),
   PRIMARY KEY (building_id, day)
@@ -367,7 +407,7 @@ ALTER TABLE warehouse_payroll_history
   ALTER COLUMN employee_expense TYPE NUMERIC(14, 2) USING employee_expense::numeric(14, 2);
 
 CREATE TABLE IF NOT EXISTS building_payroll_history (
-  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   day DATE NOT NULL,
   employee_expense NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (employee_expense >= 0),
   PRIMARY KEY (building_id, day)
@@ -380,7 +420,7 @@ SELECT building_id, day, employee_expense FROM warehouse_payroll_history
 ON CONFLICT (building_id, day) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS residence_rent_history (
-  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   day DATE NOT NULL,
   occupants INTEGER NOT NULL CHECK (occupants >= 0),
   rent_per_person NUMERIC(12, 2) NOT NULL CHECK (rent_per_person >= 0.01),
@@ -391,8 +431,8 @@ CREATE TABLE IF NOT EXISTS residence_rent_history (
 CREATE TABLE IF NOT EXISTS warehouse_trade_history (
   id BIGSERIAL PRIMARY KEY,
   day DATE NOT NULL,
-  buyer_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
-  seller_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  buyer_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
+  seller_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   product_id TEXT NOT NULL,
   quantity INTEGER NOT NULL CHECK (quantity > 0),
   unit_price NUMERIC(12, 2) NOT NULL CHECK (unit_price >= 0)
@@ -408,7 +448,7 @@ CREATE INDEX IF NOT EXISTS warehouse_trade_history_seller_day_idx
 
 CREATE TABLE IF NOT EXISTS warehouse_transport_log (
   id BIGSERIAL PRIMARY KEY,
-  warehouse_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  warehouse_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   day DATE NOT NULL,
   linked_id UUID NOT NULL,
   linked_type TEXT NOT NULL,
@@ -426,7 +466,7 @@ ALTER TABLE warehouse_transport_log
 CREATE INDEX IF NOT EXISTS warehouse_transport_log_idx ON warehouse_transport_log (warehouse_id, day DESC);
 
 CREATE TABLE IF NOT EXISTS residence_consumption (
-  building_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   product_id TEXT NOT NULL,
   day DATE NOT NULL,
   quantity DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (quantity >= 0),
@@ -441,8 +481,8 @@ ALTER TABLE residence_consumption
 CREATE TABLE IF NOT EXISTS residence_relocation_log (
   id BIGSERIAL PRIMARY KEY,
   day DATE NOT NULL,
-  source_residence_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
-  destination_residence_id UUID NOT NULL REFERENCES residential_buildings (id) ON DELETE CASCADE,
+  source_residence_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
+  destination_residence_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   quantity INTEGER NOT NULL CHECK (quantity > 0),
   associated_source DOUBLE PRECISION NOT NULL CHECK (associated_source >= 0),
   associated_destination DOUBLE PRECISION NOT NULL CHECK (associated_destination >= 0)
@@ -453,12 +493,12 @@ CREATE INDEX IF NOT EXISTS residence_relocation_log_source_day_idx
 CREATE INDEX IF NOT EXISTS residence_relocation_log_destination_day_idx
   ON residence_relocation_log (destination_residence_id, day DESC);
 
-CREATE INDEX IF NOT EXISTS residential_buildings_city_id_idx
-  ON residential_buildings (city_id);
-CREATE INDEX IF NOT EXISTS residential_buildings_owner_warehouse_idx
-  ON residential_buildings (created_by, building_type, status, tile_x, tile_y);
-CREATE INDEX IF NOT EXISTS residential_warehouse_position_idx
-  ON residential_buildings (building_type, status, tile_x, tile_y);
+CREATE INDEX IF NOT EXISTS all_buildings_city_id_idx
+  ON all_buildings (city_id);
+CREATE INDEX IF NOT EXISTS all_buildings_owner_warehouse_idx
+  ON all_buildings (created_by, building_type, status, tile_x, tile_y);
+CREATE INDEX IF NOT EXISTS all_buildings_warehouse_position_idx
+  ON all_buildings (building_type, status, tile_x, tile_y);
 
 CREATE TABLE IF NOT EXISTS road_tiles (
   tile_x INTEGER NOT NULL CHECK (tile_x BETWEEN 0 AND 3999),

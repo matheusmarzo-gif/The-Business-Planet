@@ -36,9 +36,13 @@ simples em qualquer construção abre seu painel; a conta Master pode arrastar
 uma construção para movê-la. O endpoint valida novamente a posição, mantém o
 estado da construção e rejeita movimentos que invalidem vínculos com armazéns.
 O schema aplicado na inicialização mantém a constraint
-`residential_buildings_building_type_check` sincronizada com todos os tipos do
+`all_buildings_building_type_check` sincronizada com todos os tipos do
 catálogo, inclusive em bancos existentes; um teste de domínio verifica essa
 correspondência para evitar que novas construções sejam rejeitadas pelo banco.
+`all_buildings` é a tabela única de todos os tipos de construção; na inicialização,
+`schema.sql` renomeia a tabela legada `residential_buildings` sem recriar seus
+dados e relacionamentos, renomeia os índices de consulta e recria as constraints
+de domínio com seus nomes atuais.
 Ao abrir uma residência concluída, o cliente consulta
 `GET /api/residential-buildings/:id/residence-benefit`. A rota calcula sob
 demanda o custo mensal (`Cb`), os apreços de empregabilidade, região,
@@ -314,7 +318,7 @@ mapeamento e verificar todas as curvas.
   a restrição também é aplicada a transferências locais/manuais, compras e
   vendas. Sprite `public/buildings/industrial/silo.png`.
 - `shop_rice` (categoria Comerciais, área urbana, `kind: 'shop'`) também usa o
-  catálogo e a tabela `residential_buildings`: 2 × 2, até 1 funcionário,
+  catálogo e a tabela `all_buildings`: 2 × 2, até 1 funcionário,
   estoque máximo de 5 de Arroz, 10 madeiras e 5 pedras, 5.000 Work Points.
   Exige zona urbana e estrada adjacente; sem moradores nem aluguel. Sprite:
   `public/buildings/commerce/loja_arroz.png`.
@@ -328,7 +332,7 @@ mapeamento e verificar todas as curvas.
   `public/buildings/commerce/loja_batata.png`, `loja_milho.png`,
   `loja_cevada.png`, `loja_trigo.png` e `loja_acougue.png`.
 - `farm_rice` (categoria Fazendas, área rural) usa o mesmo catálogo e a mesma
-  tabela `residential_buildings`: 4 × 4, até 30 funcionários, estoque máximo de
+  tabela `all_buildings`: 4 × 4, até 30 funcionários, estoque máximo de
   300 de Arroz, custo de 100 madeiras e 40 pedras, 30.000 Work Points. As
   fazendas de trigo, cevada, batata e milho compartilham dimensão, limite de
   funcionários e custos. A Fazenda Bovina custa 250 madeiras/75 pedras e exige
@@ -448,7 +452,7 @@ mapeamento e verificar todas as curvas.
   (`onResidenceSelect` em `GameMap`); clicar em outro tile a fecha. Concluída:
   ocupantes 0/capacidade (reais, vindos de `occupants`), técnica 10, saúde 100, felicidade 100 (fixos em
   `RESIDENCE_STATS`), empregados reais e renda média (`averageIncome`: subquery em
-  `RESIDENTIAL_COLUMNS` somando `job_assignments.count × wage` ÷ ocupantes; o mesmo
+  `ALL_BUILDING_COLUMNS` somando `job_assignments.count × wage` ÷ ocupantes; o mesmo
   cálculo, `getAverageIncomes` em `employment.ts`, alimenta as vendas às 00:00). Em construção: Work Points
   0/necessários, empregados 0/até 100, salário diário (`wage`, C$ por dia
   de trabalho) e carga horária (`workHoursPerDay`, 4–14 h), editáveis só pelo
@@ -561,7 +565,7 @@ mapeamento e verificar todas as curvas.
   estoque ou capacidade da loja é insuficiente. Vendas são limitadas pelo
   estoque e capacidade diários; o dono recebe `quantidade × preço`.
   `employed` em `ResidentialBuilding` é calculado por subquery em
-  `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
+  `ALL_BUILDING_COLUMNS` (empregados da construção ou moradores empregados).
   A capacidade de venda converte Work Points diários pelos limites
   `salesWorkPointsPerUnit` definidos por construção; `bread`, `cheese`, `fruit`
   e `chocolate` participam da cesta avançada; `clothing`, `furniture`,
@@ -604,7 +608,7 @@ mapeamento e verificar todas as curvas.
   Não há recarga a quente. Reinicie o processo de desenvolvimento com `npm run
   dev` ou gere um novo build/redeploy de produção para aplicar as alterações.
   `employed` em `ResidentialBuilding` é calculado por subquery em
-  `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
+  `ALL_BUILDING_COLUMNS` (empregados da construção ou moradores empregados).
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
   preço unitário de venda. Os detalhes do cálculo da demanda (renda, moradores,
@@ -663,7 +667,7 @@ mapeamento e verificar todas as curvas.
   estrada e com pelo menos 1 tile sobre água (`requiresWater`;
   erro `not_on_water`; demais tiles podem ser terra). Colunas
   `tool_stock`, `efficiency_penalty` (0–90) e `production_progress` em
-  `residential_buildings` (migração aditiva em `schema.sql`, que também amplia o
+  `all_buildings` (migração aditiva em `schema.sql`, que também amplia o
   CHECK de `building_type`). Às 00:00 (`runDailyEmployment`): demanda de
   Ferramentas = 0,05 por funcionário (fração = probabilidade de 1 unidade,
   `rollToolDemand`); atendida se `tool_stock` cobre a demanda (consome), senão a
@@ -779,7 +783,7 @@ mapeamento e verificar todas as curvas.
   `PUT /api/residential-buildings/:id/warehouse-link` adiciona um vínculo com
   `{warehouseId}`, remove um vínculo com `{warehouseId, linked:false}` ou limpa
   todos com `{warehouseId:null}`; o servidor valida dono, tipo, status e distância
-  sob o lock transacional. `residential_buildings.warehouse_id` mantém o primeiro
+  sob o lock transacional. `all_buildings.warehouse_id` mantém o primeiro
   vínculo legado e é migrado para a tabela associativa na inicialização. O painel
   da construção lista todos os depósitos conectados. O estoque real fica em `warehouse_stock`
   (`building_id, product_id, quantity`, cascata) e é devolvido por
@@ -816,7 +820,7 @@ mapeamento e verificar todas as curvas.
   Work Points no `warehouse_demand`. Destinos não armazéns só recebem produtos
   para os quais tenham estoque de saída ou capacidade de insumo configurados.
   Insumos genéricos ficam em `building_input_stock`; o Moinho demanda somente o
-  produto salvo em `residential_buildings.selected_input_product_id`.
+  produto salvo em `all_buildings.selected_input_product_id`.
   Falhas técnicas na execução retornam uma referência, a etapa e uma categoria
   segura do erro; os logs do servidor associam essa referência ao erro técnico
   completo, sem expor detalhes do banco ao cliente.
@@ -884,7 +888,7 @@ de sucesso.
 - `world_state` guarda o relógio persistente do mundo.
 - `city_assemblies` guarda nomes, centros, métricas, autorias e o salário
   mínimo diário (NUMERIC(12,2), padrão C$ 1); a alteração do piso atualiza
-  salários menores em `residential_buildings` na mesma transação.
+  salários menores em `all_buildings` na mesma transação.
 - `city_zones` guarda os retângulos municipais, com cascata ao excluir a cidade.
 - `road_tiles` guarda uma linha por tile, referência à cidade e autoria.
 - `player_wallets` guarda o saldo (`balance`, NUMERIC(14,2), pode ficar negativo) por `user_id` (`sub`
@@ -903,7 +907,7 @@ de sucesso.
   Se ele ainda não tiver um comércio desse tipo, usa a média do mesmo tipo na
   cidade, considerando todos os jogadores. Sem referência na cidade, o preço
   inicial é C$ 10. A decisão ocorre dentro da transação de conclusão.
-- `residential_buildings` guarda tipo, footprint, cidade, status, autoria e
+- `all_buildings` guarda tipo, footprint, cidade, status, autoria e
   horários de início/conclusão, `wage`, `work_hours_per_day`, `desired_workers`, `rent` e
   `occupants`, o estado do ciclo agrícola e as preferências de automação das
   fazendas (`farm_auto_planting_enabled`, meses e trabalhadores por fase) (colunas
@@ -965,7 +969,7 @@ evita duplicatas entre instâncias e a marcação só é gravada após o Pub/Sub
 aceitado a mensagem.
 O nome do criador é obtido de `neon_auth."user"` e aparece no painel de detalhes.
 Cada construção recebe um número sequencial por dono e tipo, mantido em
-`player_building_counters` e persistido em `residential_buildings.building_number`.
+`player_building_counters` e persistido em `all_buildings.building_number`.
 Na inicialização, instalações existentes recebem números por data de criação;
 demolições não reutilizam números. O cliente formata esses números em algarismos
 romanos (`getResidentialBuildingName`) no painel descritivo. O nome do criador é

@@ -82,6 +82,8 @@ button { color: inherit; }
 .work-settings { margin-top: 22px; display: grid; gap: 12px; }
 .work-settings label { display: grid; gap: 5px; color: #a6a897; font-size: 10px; }
 .work-settings input, .work-settings select { padding: 7px 9px; border: 1px solid rgba(219,201,158,.2); border-radius: 7px; background: #19241e; color: #eee7d6; font: 500 12px 'DM Sans', sans-serif; }
+.residence-appeals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.residence-appeals input { min-width: 0; }
 .work-settings button { padding: 8px; border: 1px solid rgba(207,178,116,.4); border-radius: 8px; background: rgba(193,162,100,.15); color: #e6dfce; cursor: pointer; }
 .work-settings small, .work-settings p { margin: 0; color: #a6a897; font-size: 10px; }
 .work-settings p { color: #e58b7d; }

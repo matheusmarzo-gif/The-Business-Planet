@@ -1,4 +1,81 @@
-import { getResidenceDefinition, type ResidenceType } from './residence.js';
+import type { ResidenceType } from './residence.js';
+
+export const RESIDENCE_APPEAL_RADIUS = 10;
+
+export interface ResidenceAppealCandidate {
+  id: string;
+  cityId: string;
+  x: number;
+  y: number;
+  salaryAverage: number;
+  cityAverageSalary: number;
+  constructionAppeal: number;
+}
+
+export interface ResidenceAppealValues {
+  employabilityAppeal: number;
+  regionalAppeal: number;
+  constructionAppeal: number;
+  internalAppeal: number;
+}
+
+export function calculateResidenceAppeals(
+  residences: ResidenceAppealCandidate[],
+): Map<string, ResidenceAppealValues> {
+  const employabilityAppeals = new Map(
+    residences.map((residence) => [
+      residence.id,
+      residence.cityAverageSalary > 0
+        ? residence.salaryAverage / residence.cityAverageSalary
+        : 0,
+    ]),
+  );
+  const cells = new Map<string, ResidenceAppealCandidate[]>();
+  const cellKey = (cityId: string, cellX: number, cellY: number) =>
+    `${cityId}:${cellX}:${cellY}`;
+  for (const residence of residences) {
+    const key = cellKey(
+      residence.cityId,
+      Math.floor(residence.x / RESIDENCE_APPEAL_RADIUS),
+      Math.floor(residence.y / RESIDENCE_APPEAL_RADIUS),
+    );
+    const cell = cells.get(key) ?? [];
+    cell.push(residence);
+    cells.set(key, cell);
+  }
+  return new Map(
+    residences.map((residence) => {
+      const cellX = Math.floor(residence.x / RESIDENCE_APPEAL_RADIUS);
+      const cellY = Math.floor(residence.y / RESIDENCE_APPEAL_RADIUS);
+      const nearbyAppeals: ResidenceAppealCandidate[] = [];
+      for (let dx = -1; dx <= 1; dx += 1) {
+        for (let dy = -1; dy <= 1; dy += 1) {
+          for (const neighbor of cells.get(cellKey(residence.cityId, cellX + dx, cellY + dy)) ?? []) {
+            const distanceX = neighbor.x - residence.x;
+            const distanceY = neighbor.y - residence.y;
+            if (distanceX ** 2 + distanceY ** 2 <= RESIDENCE_APPEAL_RADIUS ** 2) {
+              nearbyAppeals.push(neighbor);
+            }
+          }
+        }
+      }
+      const regionalAppeal = nearbyAppeals.reduce(
+        (total, neighbor) => total + (employabilityAppeals.get(neighbor.id) ?? 0),
+        0,
+      ) / nearbyAppeals.length;
+      const internalAppeal = Math.max(10, residence.constructionAppeal * regionalAppeal);
+      return [
+        residence.id,
+        {
+          employabilityAppeal: employabilityAppeals.get(residence.id) ?? 0,
+          regionalAppeal,
+          constructionAppeal: residence.constructionAppeal,
+          internalAppeal,
+        },
+      ];
+    }),
+  );
+}
 
 export interface ResidenceRelocationCandidate {
   id: string;
@@ -9,6 +86,7 @@ export interface ResidenceRelocationCandidate {
   capacity: number;
   monthlyCost: number;
   dailyIncome: number;
+  internalAppeal: number;
 }
 
 export interface ResidenceRelocation {
@@ -24,6 +102,10 @@ export interface ResidenceBenefitCalculation {
   errorBenefit: number;
   idealBenefit: number;
   associatedBenefit: number;
+  employabilityAppeal: number;
+  regionalAppeal: number;
+  constructionAppeal: number;
+  internalAppeal: number;
   productContributions: { productId: string; contribution: number }[];
 }
 
@@ -31,31 +113,66 @@ export function calculateResidenceBenefit(input: {
   rent: number;
   monthlyCost: number;
   dailyIncome: number;
-  localAppeal: number;
+  employabilityAppeal: number;
+  regionalAppeal: number;
+  constructionAppeal: number;
 }): ResidenceBenefitCalculation {
-  const { rent, monthlyCost, dailyIncome, localAppeal } = input;
+  const {
+    rent,
+    monthlyCost,
+    dailyIncome,
+    employabilityAppeal,
+    regionalAppeal,
+    constructionAppeal,
+  } = input;
+  const internalAppeal = Math.max(10, constructionAppeal * regionalAppeal);
+  const appealValues = {
+    employabilityAppeal,
+    regionalAppeal,
+    constructionAppeal,
+    internalAppeal,
+  };
   if (!Number.isFinite(monthlyCost) || monthlyCost <= 0 || !Number.isFinite(dailyIncome)) {
-    return { monthlyCost, errorBenefit: 0, idealBenefit: 0, associatedBenefit: 0, productContributions: [] };
+    return {
+      monthlyCost,
+      errorBenefit: 0,
+      idealBenefit: 0,
+      associatedBenefit: 0,
+      ...appealValues,
+      productContributions: [],
+    };
   }
 
   const weight = (1 - rent / monthlyCost) ** 4;
   const adjustment = (0.8 ** weight - 1) * Math.max(0, dailyIncome);
   const errorBase = Math.max(0, (dailyIncome - rent - adjustment) / monthlyCost);
   const idealBase = Math.max(0, (dailyIncome - 0.5) / monthlyCost);
-  const errorBenefit = Math.max(0, localAppeal / 50) * errorBase ** 1.25;
+  const errorBenefit = Math.max(0, internalAppeal / 50) * errorBase ** 1.25;
   const idealBenefit = idealBase ** 1.25;
   const associatedBenefit =
     idealBenefit <= 0 || errorBenefit <= 0 ? 0 : (errorBenefit / idealBenefit) ** 1.2;
-  return { monthlyCost, errorBenefit, idealBenefit, associatedBenefit, productContributions: [] };
+  return {
+    monthlyCost,
+    errorBenefit,
+    idealBenefit,
+    associatedBenefit,
+    ...appealValues,
+    productContributions: [],
+  };
 }
 
 export function getAssociatedResidenceBenefit(input: {
   rent: number;
   monthlyCost: number;
   dailyIncome: number;
-  localAppeal: number;
+  internalAppeal: number;
 }): number {
-  return calculateResidenceBenefit(input).associatedBenefit;
+  return calculateResidenceBenefit({
+    ...input,
+    employabilityAppeal: 0,
+    regionalAppeal: 1,
+    constructionAppeal: input.internalAppeal,
+  }).associatedBenefit;
 }
 
 export function planResidenceRelocations(
@@ -73,7 +190,7 @@ export function planResidenceRelocations(
       rent: source.rent,
       monthlyCost: source.monthlyCost,
       dailyIncome: source.dailyIncome,
-      localAppeal: getResidenceDefinition(source.type)?.localAppeal ?? 0,
+      internalAppeal: source.internalAppeal,
     });
     for (const destination of ordered) {
       if (destination.id === source.id || destination.cityId !== source.cityId || sourceOccupants <= 0) {
@@ -86,7 +203,7 @@ export function planResidenceRelocations(
         rent: destination.rent,
         monthlyCost: source.monthlyCost,
         dailyIncome: source.dailyIncome,
-        localAppeal: getResidenceDefinition(destination.type)?.localAppeal ?? 0,
+        internalAppeal: destination.internalAppeal,
       });
       if (associatedDestination <= associatedSource) continue;
 

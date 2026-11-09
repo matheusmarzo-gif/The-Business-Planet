@@ -2324,7 +2324,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                     <small>
                       {residence.type === 'warehouse'
                         ? `Primeiro armazém: sem espera · seguintes: ${residence.workPoints.toLocaleString('pt-BR')} Work Points`
-                        : `${residence.kind === 'residence' ? `Apreço local ${residence.localAppeal} · ` : ''}${residence.workPoints.toLocaleString('pt-BR')} Work Points`}
+                        : `${residence.kind === 'residence' ? `Apreço da construção ${residence.localAppeal} · ` : ''}${residence.workPoints.toLocaleString('pt-BR')} Work Points`}
                     </small>
                     {residencePlacementType === residence.type && (
                       <small className="construction-selected-hint">

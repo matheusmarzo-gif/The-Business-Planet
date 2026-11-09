@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { calculateResidenceBenefit, planResidenceRelocations } from './residence-relocation.js';
+import {
+  calculateResidenceAppeals,
+  calculateResidenceBenefit,
+  planResidenceRelocations,
+} from './residence-relocation.js';
 
 const residence = (overrides: Partial<Parameters<typeof planResidenceRelocations>[0][number]>) => ({
   id: 'source',
@@ -11,7 +15,72 @@ const residence = (overrides: Partial<Parameters<typeof planResidenceRelocations
   capacity: 10,
   monthlyCost: 100,
   dailyIncome: 20,
+  internalAppeal: 50,
   ...overrides,
+});
+
+test('calculates employability and regional appeal from completed homes in the same city and radius', () => {
+  const appeals = calculateResidenceAppeals([
+    {
+      id: 'home',
+      cityId: 'city',
+      x: 0,
+      y: 0,
+      salaryAverage: 10,
+      cityAverageSalary: 20,
+      constructionAppeal: 40,
+    },
+    {
+      id: 'neighbor',
+      cityId: 'city',
+      x: 10,
+      y: 0,
+      salaryAverage: 30,
+      cityAverageSalary: 20,
+      constructionAppeal: 80,
+    },
+    {
+      id: 'far',
+      cityId: 'city',
+      x: 21,
+      y: 0,
+      salaryAverage: 100,
+      cityAverageSalary: 20,
+      constructionAppeal: 100,
+    },
+    {
+      id: 'other-city',
+      cityId: 'other',
+      x: 1,
+      y: 0,
+      salaryAverage: 100,
+      cityAverageSalary: 20,
+      constructionAppeal: 100,
+    },
+  ]);
+  assert.deepEqual(appeals.get('home'), {
+    employabilityAppeal: 0.5,
+    regionalAppeal: 1,
+    constructionAppeal: 40,
+    internalAppeal: 40,
+  });
+  assert.equal(appeals.get('neighbor')?.regionalAppeal, 1);
+  assert.equal(appeals.get('neighbor')?.internalAppeal, 80);
+});
+
+test('keeps internal appeal at least 10', () => {
+  const [appeal] = calculateResidenceAppeals([
+    {
+      id: 'home',
+      cityId: 'city',
+      x: 0,
+      y: 0,
+      salaryAverage: 0,
+      cityAverageSalary: 20,
+      constructionAppeal: 40,
+    },
+  ]).values();
+  assert.equal(appeal.internalAppeal, 10);
 });
 
 test('moves the calculated percentage and respects destination capacity', () => {
@@ -35,14 +104,32 @@ test('does not move residents between cities or when the destination is not bett
   );
 });
 
+test('uses the recalculated internal appeal when comparing residences', () => {
+  const moves = planResidenceRelocations([
+    residence({ id: 'source', occupants: 10, rent: 10, internalAppeal: 20 }),
+    residence({
+      id: 'destination',
+      occupants: 0,
+      capacity: 10,
+      rent: 10,
+      internalAppeal: 80,
+    }),
+  ]);
+  assert.equal(moves.length, 1);
+  assert.ok(moves[0].associatedDestination > moves[0].associatedSource);
+});
+
 test('returns the associated benefit and its tooltip components', () => {
   const calculation = calculateResidenceBenefit({
     rent: 10,
     monthlyCost: 100,
     dailyIncome: 20,
-    localAppeal: 50,
+    employabilityAppeal: 1,
+    regionalAppeal: 1,
+    constructionAppeal: 50,
   });
   assert.equal(calculation.monthlyCost, 100);
+  assert.equal(calculation.internalAppeal, 50);
   assert.deepEqual(calculation.productContributions, []);
   assert.ok(calculation.errorBenefit > 0);
   assert.ok(calculation.idealBenefit > 0);

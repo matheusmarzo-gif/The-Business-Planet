@@ -804,6 +804,10 @@ export default function ResidencePanel({
               `Cb: ${formatMoney(residenceBenefit.monthlyCost)}`,
               `Benefício erro: ${benefitNumber.format(residenceBenefit.errorBenefit)}`,
               `Benefício ideal: ${benefitNumber.format(residenceBenefit.idealBenefit)}`,
+              `Apreço da empregabilidade: ${benefitNumber.format(residenceBenefit.employabilityAppeal)}`,
+              `Apreço da região: ${benefitNumber.format(residenceBenefit.regionalAppeal)}`,
+              `Apreço da construção: ${benefitNumber.format(residenceBenefit.constructionAppeal)}`,
+              `Apreço interno: ${benefitNumber.format(residenceBenefit.internalAppeal)}`,
               ...residenceBenefit.productContributions.map(({ productId, contribution }) =>
                 `${PRODUCTS.find((product) => product.id === productId)?.name ?? productId}: ${benefitNumber.format(contribution)}`,
               ),
@@ -818,6 +822,44 @@ export default function ResidencePanel({
                 aria-label="Benefício associado"
               />
             </label>
+            <div className="residence-appeals">
+              <label>
+                Apreço da empregabilidade
+                <input
+                  type="text"
+                  value={benefitNumber.format(residenceBenefit.employabilityAppeal)}
+                  readOnly
+                  aria-label="Apreço da empregabilidade"
+                />
+              </label>
+              <label>
+                Apreço da região
+                <input
+                  type="text"
+                  value={benefitNumber.format(residenceBenefit.regionalAppeal)}
+                  readOnly
+                  aria-label="Apreço da região"
+                />
+              </label>
+              <label>
+                Apreço da construção
+                <input
+                  type="text"
+                  value={benefitNumber.format(residenceBenefit.constructionAppeal)}
+                  readOnly
+                  aria-label="Apreço da construção"
+                />
+              </label>
+              <label>
+                Apreço interno
+                <input
+                  type="text"
+                  value={benefitNumber.format(residenceBenefit.internalAppeal)}
+                  readOnly
+                  aria-label="Apreço interno"
+                />
+              </label>
+            </div>
           </div>
         )}
         {building.status === 'completed' && error && <p role="alert">{error}</p>}

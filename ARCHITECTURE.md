@@ -37,11 +37,16 @@ uma construção para movê-la. O endpoint valida novamente a posição, mantém
 estado da construção e rejeita movimentos que invalidem vínculos com armazéns.
 Ao abrir uma residência concluída, o cliente consulta
 `GET /api/residential-buildings/:id/residence-benefit`. A rota calcula sob
-demanda o custo mensal (`Cb`), `benefício erro`, `benefício ideal` e o
-benefício associado usando consumo dos últimos 30 dias, aluguel e renda dos
-moradores. A média diária de cada produto usa `quantidade / (30 × moradores)`
-e o tooltip também lista a contribuição de cada produto para o `Cb`; o cliente
-exibe o resultado abaixo de “Salvar aluguel”.
+demanda o custo mensal (`Cb`), os apreços de empregabilidade, região,
+construção e interno, `benefício erro`, `benefício ideal` e o benefício
+associado usando consumo dos últimos 30 dias, aluguel e renda dos moradores.
+O apreço de empregabilidade é a renda média por morador dividida pela média
+da cidade; o apreço da região é a média dos apreços de empregabilidade das
+residências concluídas da mesma cidade num raio de 10 tiles, incluindo a
+própria residência. O apreço interno é o maior entre 10 e o produto dos
+apreços da construção e da região. A média diária de cada produto usa
+`quantidade / (30 × moradores)` e o tooltip também lista a contribuição de
+cada produto para o `Cb`; o cliente exibe os valores abaixo de “Salvar aluguel”.
 
 ## Estrutura do repositório
 
@@ -427,7 +432,7 @@ mapeamento e verificar todas as curvas.
   traçado posterior cubra uma casa. No modo Demolir, clicar em qualquer tile
   do footprint de uma residência a remove sem confirmação; o servidor só
   permite a remoção ao autor e publica o novo estado.
-- Capacidade limita os moradores e apreço local desempata a ordem de ocupação
+- Capacidade limita os moradores e apreço da construção desempata a ordem de ocupação
   quando os aluguéis são iguais; Work Points avançam obras e custos debitam
   materiais. A população é atualizada pela imigração; o consumo das cestas
   básica, intermediária e avançada é simulado nas lojas.

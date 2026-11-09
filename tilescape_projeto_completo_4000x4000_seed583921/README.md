@@ -94,12 +94,17 @@ O servidor cria a tabela necessária (`world_state`) automaticamente ao iniciar.
 
 Ao selecionar uma residência concluída, o painel mostra, logo abaixo de
 **Salvar aluguel**, o benefício associado calculado com o aluguel, a média de
-gastos dos últimos 30 dias e a renda diária média dos moradores. Passe o mouse
-sobre o valor para consultar `Cb` (média de gastos), `benefício erro` e
-`benefício ideal`, além da contribuição individual de cada produto para o
-`Cb`. A média diária de cada produto considera a quantidade consumida dividida
-por `30 × moradores registrados`. Os dados são calculados no servidor a partir
-do histórico persistido da residência.
+gastos dos últimos 30 dias e a renda média por morador. O painel também mostra
+o apreço da empregabilidade (renda média por morador dividida pela média da
+cidade), o apreço da região (média da empregabilidade das residências
+concluídas da mesma cidade num raio de 10 tiles, incluindo a própria casa), o
+apreço da construção e o apreço interno. O apreço interno é o maior valor
+entre 10 e o produto do apreço da construção pelo apreço da região. Passe o
+mouse sobre o benefício associado para consultar `Cb` (média de gastos),
+`benefício erro` e `benefício ideal`, além da contribuição individual de cada
+produto para o `Cb`. A média diária de cada produto considera a quantidade
+consumida dividida por `30 × moradores registrados`. Os dados são calculados
+no servidor a partir do histórico persistido da residência.
 6. Adicione o domínio público do app à lista de domínios confiáveis do Neon Auth:
 
    ```powershell
@@ -301,7 +306,7 @@ mais áreas urbanas da cidade; o footprint pode atravessar regiões urbanas
 vizinhas. Também precisa ficar em terra, sem ocupar outra construção ou estrada
 e ao lado de uma estrada. Clique para iniciar a obra:
 
-| Residência | Tamanho | Capacidade | Apreço local | Custo | Trabalho necessário |
+| Residência | Tamanho | Capacidade | Apreço da construção | Custo | Trabalho necessário |
 | --- | --- | --- | --- | --- | --- |
 | Simples 1 | 2 × 2 tiles | 4 pessoas | 50 | 100 madeiras, 30 pedras | 18.000 Work Points |
 | Simples 2 | 3 × 3 tiles | 32 pessoas | 40 | 300 madeiras, 450 pedras | 67.500 Work Points |

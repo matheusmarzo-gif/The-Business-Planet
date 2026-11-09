@@ -122,6 +122,7 @@ import {
   IMMIGRATION_POPULATION_LIMIT,
 } from '../src/types/immigration.js';
 import {
+  calculateResidenceAppeals,
   calculateResidenceBenefit,
   planResidenceRelocations,
 } from '../src/types/residence-relocation.js';
@@ -1044,10 +1045,12 @@ async function runMonthlyResidenceRelocation(): Promise<boolean> {
           id: string;
           city_id: string;
           building_type: ResidenceType;
+          tile_x: number;
+          tile_y: number;
           rent: number;
           occupants: number;
         }>(
-          `SELECT id, city_id, building_type, rent, occupants
+          `SELECT id, city_id, building_type, tile_x, tile_y, rent, occupants
            FROM residential_buildings
            WHERE status = 'completed'`,
         );
@@ -1069,6 +1072,33 @@ async function runMonthlyResidenceRelocation(): Promise<boolean> {
             workplaceId: row.workplace_id,
             residenceId: row.residence_id,
             count: row.count,
+          })),
+        );
+        const residentialRows = residences.filter(
+          (row) => getResidenceDefinition(row.building_type)?.kind === 'residence',
+        );
+        const cityIncomeTotals = new Map<string, { income: number; occupants: number }>();
+        for (const residence of residentialRows) {
+          const current = cityIncomeTotals.get(residence.city_id) ?? { income: 0, occupants: 0 };
+          current.income += (averageIncomes.get(residence.id) ?? 0) * residence.occupants;
+          current.occupants += residence.occupants;
+          cityIncomeTotals.set(residence.city_id, current);
+        }
+        const cityAverageSalaries = new Map(
+          [...cityIncomeTotals].map(([cityId, totals]) => [
+            cityId,
+            totals.occupants > 0 ? totals.income / totals.occupants : 0,
+          ]),
+        );
+        const appealValues = calculateResidenceAppeals(
+          residentialRows.map((row) => ({
+            id: row.id,
+            cityId: row.city_id,
+            x: row.tile_x + RESIDENCES[row.building_type].width / 2,
+            y: row.tile_y + RESIDENCES[row.building_type].height / 2,
+            salaryAverage: averageIncomes.get(row.id) ?? 0,
+            cityAverageSalary: cityAverageSalaries.get(row.city_id) ?? 0,
+            constructionAppeal: RESIDENCES[row.building_type].localAppeal,
           })),
         );
         const { rows: productCosts } = await client.query<{
@@ -1093,9 +1123,10 @@ async function runMonthlyResidenceRelocation(): Promise<boolean> {
         const productsCostByResidence = new Map(
           productCosts.map((row) => [row.building_id, row.monthly_products_cost]),
         );
-        const candidates = residences
-          .filter((row) => getResidenceDefinition(row.building_type)?.kind === 'residence')
-          .map((row) => ({
+        const candidates = residentialRows.map((row) => {
+          const appeal = appealValues.get(row.id);
+          if (!appeal) throw new Error(`Não foi possível calcular os apreços da residência ${row.id}.`);
+          return {
             id: row.id,
             cityId: row.city_id,
             type: row.building_type,
@@ -1104,7 +1135,9 @@ async function runMonthlyResidenceRelocation(): Promise<boolean> {
             capacity: RESIDENCES[row.building_type].capacity,
             monthlyCost: row.rent + (productsCostByResidence.get(row.id) ?? 0),
             dailyIncome: averageIncomes.get(row.id) ?? 0,
-          }));
+            internalAppeal: appeal.internalAppeal,
+          };
+        });
         const relocations = planResidenceRelocations(candidates);
         const occupantsByResidence = new Map(candidates.map((row) => [row.id, row.occupants]));
         for (const relocation of relocations) {
@@ -4548,7 +4581,10 @@ async function start() {
     }
     void (async () => {
       const { rows } = await pool.query<{
+        city_id: string;
         building_type: ResidenceType;
+        tile_x: number;
+        tile_y: number;
         rent: number;
         occupants: number;
         daily_income: number;
@@ -4556,7 +4592,8 @@ async function start() {
         product_contributions: { productId: string; contribution: number }[];
       }>(
         `WITH selected AS (
-           SELECT building.id, building.building_type, building.rent, building.occupants,
+           SELECT building.id, building.city_id, building.tile_x, building.tile_y,
+                  building.building_type, building.rent, building.occupants,
                   COALESCE(SUM(assignments.count * workplace.wage), 0)::float8
                     / GREATEST(building.occupants, 1) AS daily_income,
                   COALESCE(product_totals.monthly_products_cost, 0)::float8 AS monthly_products_cost,
@@ -4585,7 +4622,8 @@ async function start() {
            WHERE building.id = $1
            GROUP BY building.id, product_totals.monthly_products_cost, product_totals.product_contributions
          )
-         SELECT selected.building_type, selected.rent, selected.occupants,
+         SELECT selected.city_id, selected.building_type, selected.tile_x, selected.tile_y,
+                selected.rent, selected.occupants,
                 selected.daily_income, selected.monthly_products_cost,
                 selected.product_contributions
          FROM selected`,
@@ -4596,11 +4634,51 @@ async function start() {
         response.status(row ? 400 : 404).json({ error: row ? 'not_a_residence' : 'residence_not_found' });
         return;
       }
+      const residenceTypes = Object.values(RESIDENCES)
+        .filter((definition) => definition.kind === 'residence')
+        .map((definition) => definition.type);
+      const { rows: cityResidences } = await pool.query<{
+        id: string;
+        building_type: ResidenceType;
+        tile_x: number;
+        tile_y: number;
+        occupants: number;
+        payroll: number;
+      }>(
+        `SELECT home.id, home.building_type, home.tile_x, home.tile_y, home.occupants,
+                COALESCE(SUM(assignments.count * workplace.wage), 0)::float8 AS payroll
+         FROM residential_buildings home
+         LEFT JOIN job_assignments assignments ON assignments.residence_id = home.id
+         LEFT JOIN residential_buildings workplace ON workplace.id = assignments.workplace_id
+         WHERE home.city_id = $1
+           AND home.status = 'completed'
+           AND home.building_type = ANY($2::text[])
+         GROUP BY home.id`,
+        [row.city_id, residenceTypes],
+      );
+      const cityOccupants = cityResidences.reduce((total, home) => total + home.occupants, 0);
+      const cityAverageSalary = cityOccupants > 0
+        ? cityResidences.reduce((total, home) => total + home.payroll, 0) / cityOccupants
+        : 0;
+      const appealValues = calculateResidenceAppeals(
+        cityResidences.map((home) => ({
+          id: home.id,
+          cityId: row.city_id,
+          x: home.tile_x + RESIDENCES[home.building_type].width / 2,
+          y: home.tile_y + RESIDENCES[home.building_type].height / 2,
+          salaryAverage: home.occupants > 0 ? home.payroll / home.occupants : 0,
+          cityAverageSalary,
+          constructionAppeal: RESIDENCES[home.building_type].localAppeal,
+        })),
+      ).get(request.params.id);
+      if (!appealValues) {
+        throw new Error(`Não foi possível calcular os apreços da residência ${request.params.id}.`);
+      }
       const calculation = calculateResidenceBenefit({
         rent: row.rent,
         monthlyCost: row.rent + row.monthly_products_cost,
         dailyIncome: row.daily_income,
-        localAppeal: getResidenceDefinition(row.building_type)?.localAppeal ?? 0,
+        ...appealValues,
       });
       response.json({ ...calculation, productContributions: row.product_contributions });
     })().catch((error: unknown) => {

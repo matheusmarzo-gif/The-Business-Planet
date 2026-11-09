@@ -34,7 +34,9 @@ Ao abrir uma residência concluída, o cliente consulta
 `GET /api/residential-buildings/:id/residence-benefit`. A rota calcula sob
 demanda o custo mensal (`Cb`), `benefício erro`, `benefício ideal` e o
 benefício associado usando consumo dos últimos 30 dias, aluguel e renda dos
-moradores; o cliente exibe o resultado abaixo de “Salvar aluguel” com tooltip.
+moradores. A média diária de cada produto usa `quantidade / (30 × moradores)`
+e o tooltip também lista a contribuição de cada produto para o `Cb`; o cliente
+exibe o resultado abaixo de “Salvar aluguel”.
 
 ## Estrutura do repositório
 

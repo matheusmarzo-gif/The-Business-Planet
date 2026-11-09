@@ -96,8 +96,10 @@ Ao selecionar uma residência concluída, o painel mostra, logo abaixo de
 **Salvar aluguel**, o benefício associado calculado com o aluguel, a média de
 gastos dos últimos 30 dias e a renda diária média dos moradores. Passe o mouse
 sobre o valor para consultar `Cb` (média de gastos), `benefício erro` e
-`benefício ideal`. Os dados são calculados no servidor a partir do histórico
-persistido da residência.
+`benefício ideal`, além da contribuição individual de cada produto para o
+`Cb`. A média diária de cada produto considera a quantidade consumida dividida
+por `30 × moradores registrados`. Os dados são calculados no servidor a partir
+do histórico persistido da residência.
 6. Adicione o domínio público do app à lista de domínios confiáveis do Neon Auth:
 
    ```powershell

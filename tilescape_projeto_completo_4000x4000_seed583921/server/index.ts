@@ -4547,30 +4547,41 @@ async function start() {
         occupants: number;
         daily_income: number;
         monthly_products_cost: number;
+        product_contributions: { productId: string; contribution: number }[];
       }>(
         `WITH selected AS (
            SELECT building.id, building.building_type, building.rent, building.occupants,
                   COALESCE(SUM(assignments.count * workplace.wage), 0)::float8
                     / GREATEST(building.occupants, 1) AS daily_income,
-                  (SELECT COALESCE(SUM(per_product.per_person_quantity * per_product.average_price), 0)::float8
-                   FROM (
-                     SELECT product_id,
-                            SUM(quantity / NULLIF(consumption.occupants, 0)) AS per_person_quantity,
-                            SUM(spent) / NULLIF(SUM(quantity), 0) AS average_price
-                     FROM residence_consumption consumption
-                     WHERE consumption.building_id = building.id
-                       AND consumption.day >= (SELECT world_time::date FROM world_state WHERE id = 1) - 30
-                       AND consumption.day < (SELECT world_time::date FROM world_state WHERE id = 1)
-                     GROUP BY product_id
-                   ) per_product) AS monthly_products_cost
+                  COALESCE(product_totals.monthly_products_cost, 0)::float8 AS monthly_products_cost,
+                  COALESCE(product_totals.product_contributions, '[]'::jsonb) AS product_contributions
            FROM residential_buildings building
            LEFT JOIN job_assignments assignments ON assignments.residence_id = building.id
            LEFT JOIN residential_buildings workplace ON workplace.id = assignments.workplace_id
+           LEFT JOIN LATERAL (
+             WITH product_costs AS (
+               SELECT product_id,
+                      SUM(quantity / NULLIF(30 * occupants, 0))
+                        * (SUM(spent) / NULLIF(SUM(quantity), 0)) AS contribution
+               FROM residence_consumption
+               WHERE building_id = building.id
+                 AND day >= (SELECT world_time::date FROM world_state WHERE id = 1) - 30
+                 AND day < (SELECT world_time::date FROM world_state WHERE id = 1)
+               GROUP BY product_id
+             )
+             SELECT SUM(contribution)::float8 AS monthly_products_cost,
+                    jsonb_agg(jsonb_build_object(
+                      'productId', product_id,
+                      'contribution', contribution
+                    ) ORDER BY product_id) AS product_contributions
+             FROM product_costs
+           ) product_totals ON TRUE
            WHERE building.id = $1
-           GROUP BY building.id
+           GROUP BY building.id, product_totals.monthly_products_cost, product_totals.product_contributions
          )
          SELECT selected.building_type, selected.rent, selected.occupants,
-                selected.daily_income, selected.monthly_products_cost
+                selected.daily_income, selected.monthly_products_cost,
+                selected.product_contributions
          FROM selected`,
         [request.params.id],
       );
@@ -4585,7 +4596,7 @@ async function start() {
         dailyIncome: row.daily_income,
         localAppeal: getResidenceDefinition(row.building_type)?.localAppeal ?? 0,
       });
-      response.json(calculation);
+      response.json({ ...calculation, productContributions: row.product_contributions });
     })().catch((error: unknown) => {
       console.error('Não foi possível calcular o benefício da residência:', error);
       response.status(503).json({ error: 'residence_benefit_unavailable' });

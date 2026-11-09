@@ -43,6 +43,7 @@ test('returns the associated benefit and its tooltip components', () => {
     localAppeal: 50,
   });
   assert.equal(calculation.monthlyCost, 100);
+  assert.deepEqual(calculation.productContributions, []);
   assert.ok(calculation.errorBenefit > 0);
   assert.ok(calculation.idealBenefit > 0);
   assert.ok(calculation.associatedBenefit > 0);

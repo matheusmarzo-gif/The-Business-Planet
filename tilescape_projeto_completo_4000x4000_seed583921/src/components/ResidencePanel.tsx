@@ -72,6 +72,7 @@ interface ResidencePanelProps {
 }
 
 const number = new Intl.NumberFormat('pt-BR');
+const benefitNumber = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 6 });
 const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
 const monthNames = [
   'Janeiro',
@@ -788,11 +789,24 @@ export default function ResidencePanel({
         {isResidence && building.status === 'completed' && residenceBenefit && (
           <div
             className="residence-benefit"
-            title={`Cb: ${formatMoney(residenceBenefit.monthlyCost)}\nBenefício erro: ${residenceBenefit.errorBenefit.toLocaleString('pt-BR', { maximumFractionDigits: 6 })}\nBenefício ideal: ${residenceBenefit.idealBenefit.toLocaleString('pt-BR', { maximumFractionDigits: 6 })}`}
+            title={[
+              `Cb: ${formatMoney(residenceBenefit.monthlyCost)}`,
+              `Benefício erro: ${benefitNumber.format(residenceBenefit.errorBenefit)}`,
+              `Benefício ideal: ${benefitNumber.format(residenceBenefit.idealBenefit)}`,
+              ...residenceBenefit.productContributions.map(({ productId, contribution }) =>
+                `${PRODUCTS.find((product) => product.id === productId)?.name ?? productId}: ${benefitNumber.format(contribution)}`,
+              ),
+            ].join('\n')}
           >
-            <span>Benefício associado</span>
-            <strong>{residenceBenefit.associatedBenefit.toLocaleString('pt-BR', { maximumFractionDigits: 6 })}</strong>
-            <small>Passe o mouse para ver Cb, benefício erro e benefício ideal.</small>
+            <label>
+              Benefício associado
+              <input
+                type="text"
+                value={benefitNumber.format(residenceBenefit.associatedBenefit)}
+                readOnly
+                aria-label="Benefício associado"
+              />
+            </label>
           </div>
         )}
         {building.status === 'completed' && error && <p role="alert">{error}</p>}

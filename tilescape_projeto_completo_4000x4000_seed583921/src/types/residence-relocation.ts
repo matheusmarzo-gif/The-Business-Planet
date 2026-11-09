@@ -24,6 +24,7 @@ export interface ResidenceBenefitCalculation {
   errorBenefit: number;
   idealBenefit: number;
   associatedBenefit: number;
+  productContributions: { productId: string; contribution: number }[];
 }
 
 export function calculateResidenceBenefit(input: {
@@ -34,7 +35,7 @@ export function calculateResidenceBenefit(input: {
 }): ResidenceBenefitCalculation {
   const { rent, monthlyCost, dailyIncome, localAppeal } = input;
   if (!Number.isFinite(monthlyCost) || monthlyCost <= 0 || !Number.isFinite(dailyIncome)) {
-    return { monthlyCost, errorBenefit: 0, idealBenefit: 0, associatedBenefit: 0 };
+    return { monthlyCost, errorBenefit: 0, idealBenefit: 0, associatedBenefit: 0, productContributions: [] };
   }
 
   const weight = (1 - rent / monthlyCost) ** 4;
@@ -45,7 +46,7 @@ export function calculateResidenceBenefit(input: {
   const idealBenefit = idealBase ** 1.25;
   const associatedBenefit =
     idealBenefit <= 0 || errorBenefit <= 0 ? 0 : (errorBenefit / idealBenefit) ** 1.2;
-  return { monthlyCost, errorBenefit, idealBenefit, associatedBenefit };
+  return { monthlyCost, errorBenefit, idealBenefit, associatedBenefit, productContributions: [] };
 }
 
 export function getAssociatedResidenceBenefit(input: {

@@ -66,6 +66,10 @@ import {
 import type { RoadPlacementError, RoadPosition, RoadTile } from './types/road';
 import { TileInfo } from './types/map';
 import { formatMoney } from './types/wallet';
+import type {
+  StockCapacityKey,
+  StockCapacityUpgradeQuote,
+} from './types/stockCapacity';
 import { allocateWorkers, getDailyWorkPoints } from './types/employment';
 import { PRODUCTS } from './types/product';
 import type { PerformanceLogRecord } from './types/performanceLog';
@@ -198,6 +202,18 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Você só pode demolir residências que construiu.';
         } else if (body.error === 'residence_not_found') {
           error = 'Essa residência não existe mais.';
+        } else if (body.error === 'stock_upgrade_price_unavailable') {
+          error = 'Não há preços de Madeira, Pedra, Ferro ou Aço nos armazéns para calcular o custo do upgrade.';
+        } else if (body.error === 'stock_upgrade_level_limit') {
+          error = 'O estoque só pode variar entre os níveis 1 e 4.';
+        } else if (body.error === 'stock_downgrade_requires_emptying') {
+          error = 'Reduza o estoque armazenado até caber na capacidade do nível inferior.';
+        } else if (body.error === 'insufficient_funds') {
+          error = 'Saldo insuficiente para realizar o upgrade do estoque.';
+        } else if (body.error === 'building_not_completed') {
+          error = 'Só é possível alterar o nível de estoque de uma construção concluída.';
+        } else if (body.error === 'stock_upgrade_unavailable') {
+          error = 'Não foi possível consultar ou atualizar o nível do estoque.';
         } else if (body.error === 'outside_urban_zone') {
           error = 'Cada tile da construção precisa estar coberto por uma ou mais áreas urbanas.';
         } else if (body.error === 'outside_rural_zone') {
@@ -374,6 +390,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const selectedResidenceIdRef = useRef(selectedResidenceId);
   selectedResidenceIdRef.current = selectedResidenceId;
   const [isResidenceOwner, setIsResidenceOwner] = useState(false);
+  const [stockUpgradeQuotes, setStockUpgradeQuotes] = useState<StockCapacityUpgradeQuote[]>([]);
   const [isSavingWorkSettings, setIsSavingWorkSettings] = useState(false);
   const [workSettingsError, setWorkSettingsError] = useState('');
   const [isWarehouseOpen, setIsWarehouseOpen] = useState(false);
@@ -650,6 +667,32 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       cancelled = true;
     };
   }, [selectedResidenceKey]);
+
+  useEffect(() => {
+    setStockUpgradeQuotes([]);
+    if (
+      !selectedResidenceKey ||
+      !isResidenceOwner ||
+      selectedResidence?.status !== 'completed'
+    ) return;
+    let cancelled = false;
+    cityRequest<{ quotes: StockCapacityUpgradeQuote[] }>(
+      `/api/residential-buildings/${selectedResidenceKey}/stock-upgrades`,
+    )
+      .then(({ quotes }) => {
+        if (!cancelled) setStockUpgradeQuotes(quotes);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setWorkSettingsError(
+            error instanceof Error ? error.message : 'Não foi possível consultar os upgrades de estoque.',
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedResidenceKey, selectedResidence?.status, isResidenceOwner]);
 
   useEffect(() => {
     setIsWarehouseOpen(false);
@@ -1297,6 +1340,53 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setIsSavingWorkSettings(false);
     }
   };
+  const changeStockLevel = async (
+    buildingId: string,
+    stockKey: StockCapacityKey,
+    direction: 'upgrade' | 'downgrade',
+  ) => {
+    setIsSavingWorkSettings(true);
+    setWorkSettingsError('');
+    try {
+      const result = await cityRequest<{
+        building: ResidentialBuilding;
+        walletBalance: number | null;
+      }>(`/api/residential-buildings/${buildingId}/stock-upgrades`, {
+        method: 'PATCH',
+        body: JSON.stringify({ stockKey, direction }),
+      });
+      setResidentialBuildings((current) =>
+        current.map((item) =>
+          item.id === result.building.id
+            ? {
+                ...result.building,
+                ownerName: result.building.ownerName ?? item.ownerName,
+                isOwnedByCurrentUser: item.isOwnedByCurrentUser,
+              }
+            : item,
+        ),
+      );
+      if (result.walletBalance !== null) setBalance(result.walletBalance);
+      try {
+        const quoteResult = await cityRequest<{ quotes: StockCapacityUpgradeQuote[] }>(
+          `/api/residential-buildings/${buildingId}/stock-upgrades`,
+        );
+        setStockUpgradeQuotes(quoteResult.quotes);
+      } catch (error) {
+        setStockUpgradeQuotes([]);
+        console.error('O nível do estoque foi atualizado, mas não foi possível renovar os preços:', error);
+        setWorkSettingsError(
+          'O nível foi atualizado, mas não foi possível carregar os próximos custos de upgrade.',
+        );
+      }
+    } catch (error) {
+      setWorkSettingsError(
+        error instanceof Error ? error.message : 'Não foi possível alterar o nível do estoque.',
+      );
+    } finally {
+      setIsSavingWorkSettings(false);
+    }
+  };
   const cameraKeys = useRef(new Set<string>());
   useEffect(() => {
     const arrows = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
@@ -1535,6 +1625,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       workPointsDone: 0,
       price: DEFAULT_SHOP_PRICE,
       stock: 0,
+      stockLevels: {},
       warehouseIds: [],
       toolStock: 0,
       woodStock: 0,
@@ -2086,6 +2177,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onPlant={() => void plantCrop(selectedResidence.id)}
             onSaveFarmAutomation={(settings) =>
               void saveFarmAutomation(selectedResidence.id, settings)
+            }
+            stockUpgradeQuotes={stockUpgradeQuotes}
+            onChangeStockLevel={(stockKey, direction) =>
+              void changeStockLevel(selectedResidence.id, stockKey, direction)
             }
             showInfluence={showInfluence}
             onToggleInfluence={() => setShowInfluence((current) => !current)}

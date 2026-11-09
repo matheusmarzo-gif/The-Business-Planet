@@ -5,6 +5,7 @@ import {
   RESIDENCES,
   type ResidenceType,
 } from './residence.js';
+import { getStockCapacity, type StockLevels } from './stockCapacity.js';
 import { GAME_RULES } from '../generated/gameConfig.js';
 
 export const TRANSPORT_WORK_POINTS_PER_M3 = GAME_RULES.transport.workPointsPerCubicMeter;
@@ -31,6 +32,7 @@ export interface LogisticsLink {
   charcoalStock?: number;
   sugarcaneStock?: number;
   inputStocks?: Readonly<Record<string, number>>;
+  stockLevels?: StockLevels;
   selectedInputProductId?: string | null;
 }
 
@@ -287,22 +289,17 @@ export function planTransfersDetailed(
               : input === 'sugarcane'
                 ? link.sugarcaneStock
                 : undefined;
-    const inputCapacity =
-      input === 'tools'
-        ? definition.toolCapacity
-        : input === 'wood'
-          ? definition.woodCapacity
-          : input === 'iron'
-            ? definition.ironCapacity
-            : input === 'charcoal'
-              ? definition.charcoalCapacity
-              : input === 'sugarcane'
-                ? definition.sugarcaneCapacity
-                : undefined;
     const current = input ? currentInputStock ?? link.inputStocks?.[input] ?? 0 : link.stock;
-    const capacity = input
-      ? inputCapacity ?? definition.inputCapacities?.[input] ?? 0
-      : (definition.stockCapacity ?? 0);
+    const capacityKey = input === 'tools' ||
+      input === 'wood' ||
+      input === 'iron' ||
+      input === 'charcoal' ||
+      input === 'sugarcane'
+      ? input
+      : input
+        ? `input:${input}` as const
+        : 'stock';
+    const capacity = getStockCapacity(definition, capacityKey, link.stockLevels);
     const inWarehouse = stock.get(product.id) ?? 0;
     const unitDemand = getTransportDemand(product.id, 1);
     const affordable = Math.floor(points / unitDemand + 1e-9);
@@ -363,19 +360,29 @@ export function planTransfersDetailed(
   for (const link of sorted) {
     const definition = getResidenceDefinition(link.type);
     if (definition?.kind === 'shop' && definition.stockProductId) {
-      addDemand(link, definition.stockProductId, (definition.stockCapacity ?? 0) - link.stock);
+      addDemand(
+        link,
+        definition.stockProductId,
+        getStockCapacity(definition, 'stock', link.stockLevels) - link.stock,
+      );
     }
-    if (definition?.toolCapacity) addDemand(link, 'tools', definition.toolCapacity - (link.toolStock ?? 0));
-    if (definition?.woodCapacity) addDemand(link, 'wood', definition.woodCapacity - (link.woodStock ?? 0));
-    if (definition?.ironCapacity) addDemand(link, 'iron', definition.ironCapacity - (link.ironStock ?? 0));
+    if (definition?.toolCapacity) {
+      addDemand(link, 'tools', getStockCapacity(definition, 'tools', link.stockLevels) - (link.toolStock ?? 0));
+    }
+    if (definition?.woodCapacity) {
+      addDemand(link, 'wood', getStockCapacity(definition, 'wood', link.stockLevels) - (link.woodStock ?? 0));
+    }
+    if (definition?.ironCapacity) {
+      addDemand(link, 'iron', getStockCapacity(definition, 'iron', link.stockLevels) - (link.ironStock ?? 0));
+    }
     if (definition?.charcoalCapacity) {
-      addDemand(link, 'charcoal', definition.charcoalCapacity - (link.charcoalStock ?? 0));
+      addDemand(link, 'charcoal', getStockCapacity(definition, 'charcoal', link.stockLevels) - (link.charcoalStock ?? 0));
     }
     if (definition?.sugarcaneCapacity) {
       addDemand(
         link,
         'sugarcane',
-        definition.sugarcaneCapacity - (link.sugarcaneStock ?? 0),
+        getStockCapacity(definition, 'sugarcane', link.stockLevels) - (link.sugarcaneStock ?? 0),
       );
     }
     if (definition) {
@@ -383,7 +390,8 @@ export function planTransfersDetailed(
         addDemand(
           link,
           productId,
-          (definition.inputCapacities?.[productId] ?? 0) - (link.inputStocks?.[productId] ?? 0),
+          getStockCapacity(definition, `input:${productId}`, link.stockLevels) -
+            (link.inputStocks?.[productId] ?? 0),
         );
       }
     }

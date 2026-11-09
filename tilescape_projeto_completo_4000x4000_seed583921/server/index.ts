@@ -47,6 +47,16 @@ import {
   type ResidenceType,
   type ResidencePlacementError,
 } from '../src/types/residence.js';
+import {
+  getExpectedConstructionCost,
+  getStockCapacity,
+  getStockCapacitySlots,
+  getStockLevel,
+  getStockUpgradeCost,
+  type StockCapacityKey,
+  type StockCapacityUpgradeQuote,
+  type StockLevels,
+} from '../src/types/stockCapacity.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
 import { roundCurrency } from '../src/types/currency.js';
 import {
@@ -406,6 +416,7 @@ type ResidentialBuildingRow = {
   work_points_done: number;
   price: number;
   stock: number;
+  stock_levels: StockLevels;
   warehouse_ids: string[];
   tool_stock: number;
   wood_stock: number;
@@ -431,7 +442,7 @@ type ResidentialBuildingRow = {
   created_by?: string;
 };
 
-const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, wellbeing, desired_workers, work_points_done, price, stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
+const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, wellbeing, desired_workers, work_points_done, price, stock, stock_levels, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
   COALESCE((SELECT array_agg(link.warehouse_id::text ORDER BY link.warehouse_id)
             FROM building_warehouse_links link
             WHERE link.building_id = all_buildings.id), ARRAY[]::text[]) AS warehouse_ids,
@@ -482,6 +493,7 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     workPointsDone: row.work_points_done,
     price: row.price,
     stock: row.stock,
+    stockLevels: row.stock_levels,
     warehouseIds: row.warehouse_ids,
     toolStock: row.tool_stock,
     woodStock: row.wood_stock,
@@ -508,6 +520,88 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
   };
 }
 
+function getStockQuantityForKey(
+  building: ResidentialBuildingRow,
+  key: StockCapacityKey,
+): number {
+  if (key === 'stock') return building.stock;
+  if (key === 'tools') return building.tool_stock;
+  if (key === 'wood') return building.wood_stock;
+  if (key === 'iron') return building.iron_stock;
+  if (key === 'charcoal') return building.charcoal_stock;
+  if (key === 'sugarcane') return building.sugarcane_stock;
+  return building.input_stocks[key.slice('input:'.length)] ?? 0;
+}
+
+async function getStockCapacityUpgradeQuotes(
+  client: PoolClient,
+  building: ResidentialBuildingRow,
+): Promise<StockCapacityUpgradeQuote[]> {
+  const definition = getResidenceDefinition(building.building_type);
+  if (!definition) throw new Error(`Tipo de construção inválido: ${building.building_type}`);
+  const { rows: priceRows } = await client.query<{
+    product_id: string;
+    average_price: number;
+  }>(
+    `SELECT settings.product_id, AVG(settings.price)::float8 AS average_price
+     FROM warehouse_product_settings settings
+     JOIN all_buildings warehouse ON warehouse.id = settings.building_id
+     WHERE warehouse.building_type IN ('warehouse', 'silo')
+       AND warehouse.status = 'completed'
+       AND settings.mode = 'sell'
+       AND settings.price > 0
+       AND settings.product_id = ANY($1::text[])
+     GROUP BY settings.product_id`,
+    [['wood', 'stone', 'iron', 'steel']],
+  );
+  const warehousePrices = new Map(
+    priceRows.map((row) => [row.product_id, row.average_price]),
+  );
+  const { rows: salaryRows } = await client.query<{ average_salary: number }>(
+    `SELECT COALESCE(
+              (SELECT SUM(assignment.count * workplace.wage)
+                        / NULLIF(SUM(assignment.count), 0)
+               FROM job_assignments assignment
+               JOIN all_buildings workplace ON workplace.id = assignment.workplace_id
+               WHERE workplace.city_id = city.id),
+              city.minimum_wage
+            )::float8 AS average_salary
+     FROM city_assemblies city
+     WHERE city.id = $1`,
+    [building.city_id],
+  );
+  if (!salaryRows[0]) throw new Error(`A cidade ${building.city_id} não foi encontrada.`);
+  const expectedConstructionCost = getExpectedConstructionCost(
+    definition,
+    warehousePrices,
+    salaryRows[0].average_salary,
+  );
+  return getStockCapacitySlots(definition, building.selected_input_product_id).map(({ key }) => {
+    const level = getStockLevel(building.stock_levels, key);
+    const capacity = getStockCapacity(definition, key, building.stock_levels);
+    const nextLevel = level < 4 ? level + 1 : null;
+    const previousCapacity = level > 1
+      ? getStockCapacity(definition, key, { ...building.stock_levels, [key]: level - 1 })
+      : null;
+    const currentStock = getStockQuantityForKey(building, key);
+    return {
+      key,
+      level,
+      capacity,
+      currentStock,
+      nextLevel,
+      nextCapacity: nextLevel === null
+        ? null
+        : getStockCapacity(definition, key, { ...building.stock_levels, [key]: nextLevel }),
+      upgradeCost: nextLevel === null || expectedConstructionCost === null
+        ? null
+        : getStockUpgradeCost(expectedConstructionCost, nextLevel),
+      previousCapacity,
+      canDowngrade: previousCapacity !== null && currentStock <= previousCapacity,
+    };
+  });
+}
+
 async function applyDailySpoilage(client: PoolClient): Promise<boolean> {
   const perishableProducts = PRODUCTS.filter(
     (product): product is ProductDefinition & { shelfLifeDays: number } => product.shelfLifeDays !== null,
@@ -527,6 +621,7 @@ async function applyDailySpoilage(client: PoolClient): Promise<boolean> {
     id: string;
     building_type: ResidenceType;
     stock: number;
+    stock_levels: StockLevels;
   }>(
     `SELECT id, building_type, stock
      FROM all_buildings
@@ -1307,6 +1402,7 @@ async function getManualWarehouseTransferQuote(
     tile_y: number;
     work_hours_per_day: number;
     stock: number;
+    stock_levels: StockLevels;
     tool_stock: number;
     wood_stock: number;
     iron_stock: number;
@@ -1315,7 +1411,7 @@ async function getManualWarehouseTransferQuote(
     selected_input_product_id: string | null;
   }>(
     `SELECT id, building_type, created_by, status, tile_x, tile_y, work_hours_per_day,
-            stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock,
+            stock, stock_levels, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock,
             selected_input_product_id
      FROM all_buildings
      WHERE id = ANY($1::uuid[])
@@ -1417,27 +1513,27 @@ async function getManualWarehouseTransferQuote(
     if (!definition) return { error: 'transfer_product_not_storable' };
     if (definition.stockProductId === productId && (definition.stockCapacity ?? 0) > 0) {
       destinationStock = destination.stock;
-      destinationCapacity = definition.stockCapacity ?? 0;
+      destinationCapacity = getStockCapacity(definition, 'stock', destination.stock_levels);
       destinationColumn = 'stock';
     } else if (productId === 'tools' && (definition.toolCapacity ?? 0) > 0) {
       destinationStock = destination.tool_stock;
-      destinationCapacity = definition.toolCapacity ?? 0;
+      destinationCapacity = getStockCapacity(definition, 'tools', destination.stock_levels);
       destinationColumn = 'tool_stock';
     } else if (productId === 'wood' && (definition.woodCapacity ?? 0) > 0) {
       destinationStock = destination.wood_stock;
-      destinationCapacity = definition.woodCapacity ?? 0;
+      destinationCapacity = getStockCapacity(definition, 'wood', destination.stock_levels);
       destinationColumn = 'wood_stock';
     } else if (productId === 'iron' && (definition.ironCapacity ?? 0) > 0) {
       destinationStock = destination.iron_stock;
-      destinationCapacity = definition.ironCapacity ?? 0;
+      destinationCapacity = getStockCapacity(definition, 'iron', destination.stock_levels);
       destinationColumn = 'iron_stock';
     } else if (productId === 'charcoal' && (definition.charcoalCapacity ?? 0) > 0) {
       destinationStock = destination.charcoal_stock;
-      destinationCapacity = definition.charcoalCapacity ?? 0;
+      destinationCapacity = getStockCapacity(definition, 'charcoal', destination.stock_levels);
       destinationColumn = 'charcoal_stock';
     } else if (productId === 'sugarcane' && (definition.sugarcaneCapacity ?? 0) > 0) {
       destinationStock = destination.sugarcane_stock;
-      destinationCapacity = definition.sugarcaneCapacity ?? 0;
+      destinationCapacity = getStockCapacity(definition, 'sugarcane', destination.stock_levels);
       destinationColumn = 'sugarcane_stock';
     } else if (
       definition.inputCapacities?.[productId] !== undefined &&
@@ -1450,7 +1546,11 @@ async function getManualWarehouseTransferQuote(
         [destinationId, productId],
       );
       destinationStock = inputStocks[0]?.quantity ?? 0;
-      destinationCapacity = definition.inputCapacities[productId];
+      destinationCapacity = getStockCapacity(
+        definition,
+        `input:${productId}`,
+        destination.stock_levels,
+      );
       destinationColumn = 'input_stock';
     } else {
       return { error: 'transfer_product_not_storable' };
@@ -2317,7 +2417,8 @@ async function runDailyEmployment(): Promise<boolean> {
         ? await client.query<{
             id: string;
             stock: number;
-            tool_stock: number;
+          stock_levels: StockLevels;
+          tool_stock: number;
             wood_stock: number;
             iron_stock: number;
             charcoal_stock: number;
@@ -2326,7 +2427,7 @@ async function runDailyEmployment(): Promise<boolean> {
             efficiency_penalty: number;
             production_progress: number;
           }>(
-            `SELECT id, stock, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock,
+            `SELECT id, stock, stock_levels, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock,
                     selected_input_product_id,
                     efficiency_penalty, production_progress
              FROM all_buildings
@@ -2390,7 +2491,7 @@ async function runDailyEmployment(): Promise<boolean> {
           progress: current.production_progress,
           workPoints: generatedPoints * seasonalEfficiency,
           penalty,
-          freeSpace: (definition.stockCapacity ?? 0) - current.stock,
+          freeSpace: getStockCapacity(definition, 'stock', current.stock_levels) - current.stock,
           wood: current.wood_stock,
           iron: current.iron_stock,
           charcoal: current.charcoal_stock,
@@ -2492,6 +2593,7 @@ async function runDailyEmployment(): Promise<boolean> {
         building_type: FarmCropType;
         work_hours_per_day: number;
         stock: number;
+        stock_levels: StockLevels;
         crop_phase: Crop['phase'];
         crop_planted_day: string;
         crop_ratio_sum: number;
@@ -2499,7 +2601,7 @@ async function runDailyEmployment(): Promise<boolean> {
         crop_yield: number;
         crop_harvested: number;
       }>(
-        `SELECT id, building_type, work_hours_per_day, stock, crop_phase,
+        `SELECT id, building_type, work_hours_per_day, stock, stock_levels, crop_phase,
                 to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day,
                 crop_ratio_sum, crop_days, crop_yield, crop_harvested
          FROM all_buildings
@@ -2547,7 +2649,11 @@ async function runDailyEmployment(): Promise<boolean> {
             harvested: next.harvested,
           });
         } else {
-          const capacity = RESIDENCES[farm.building_type].stockCapacity ?? 0;
+          const capacity = getStockCapacity(
+            RESIDENCES[farm.building_type],
+            'stock',
+            farm.stock_levels,
+          );
           const { units, done } = planHarvest(
             crop,
             farmPoints,
@@ -2623,6 +2729,7 @@ async function runDailyEmployment(): Promise<boolean> {
         warehouse_id: string;
         building_type: ResidenceType;
         stock: number;
+        stock_levels: StockLevels;
         tool_stock: number;
         wood_stock: number;
         iron_stock: number;
@@ -2643,6 +2750,7 @@ async function runDailyEmployment(): Promise<boolean> {
       const { rows: linked } = warehouseIds.length > 0
         ? await client.query<LinkedBuildingRow>(
             `SELECT building.id, link.warehouse_id, building.building_type, building.stock,
+                    building.stock_levels,
                     building.tool_stock, building.wood_stock, building.iron_stock,
                     building.charcoal_stock, building.sugarcane_stock,
                     building.selected_input_product_id
@@ -2691,6 +2799,7 @@ async function runDailyEmployment(): Promise<boolean> {
         sugarcaneStock: number;
         inputStocks: Record<string, number>;
         selectedInputProductId: string | null;
+        stockLevels: StockLevels;
       };
       const linkedStateById = new Map<string, LinkedBuildingState>();
       for (const building of linked) {
@@ -2706,6 +2815,7 @@ async function runDailyEmployment(): Promise<boolean> {
             sugarcaneStock: building.sugarcane_stock,
             inputStocks: {},
             selectedInputProductId: building.selected_input_product_id,
+            stockLevels: building.stock_levels,
             input_stocks: {},
           });
         }
@@ -2831,6 +2941,7 @@ async function runDailyEmployment(): Promise<boolean> {
               selectedInputProductId:
                 linkedStateById.get(building.id)?.selectedInputProductId ??
                 building.selected_input_product_id,
+              stockLevels: linkedStateById.get(building.id)?.stockLevels ?? building.stock_levels,
             })),
           );
           const types = new Map(
@@ -5762,6 +5873,178 @@ async function start() {
         response.status(503).json({ error: 'residence_unavailable' });
       });
   });
+  app.get('/api/residential-buildings/:id/stock-upgrades', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        const { rows } = await client.query<ResidentialBuildingRow & { created_by: string }>(
+          `SELECT ${ALL_BUILDING_COLUMNS}, created_by
+           FROM all_buildings WHERE id = $1`,
+          [request.params.id],
+        );
+        const building = rows[0];
+        if (!building) {
+          response.status(404).json({ error: 'residence_not_found' });
+          return;
+        }
+        if (building.created_by !== userId) {
+          response.status(403).json({ error: 'residence_not_owned' });
+          return;
+        }
+        if (building.status !== 'completed') {
+          response.status(409).json({ error: 'building_not_completed' });
+          return;
+        }
+        response.json({
+          quotes: await getStockCapacityUpgradeQuotes(client, building),
+        });
+      } finally {
+        client.release();
+      }
+    })().catch((error: unknown) => {
+      console.error('Não foi possível calcular os upgrades de estoque:', error);
+      response.status(503).json({ error: 'stock_upgrade_unavailable' });
+    });
+  });
+  app.patch('/api/residential-buildings/:id/stock-upgrades', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const body = request.body as Record<string, unknown> | null;
+    const stockKey = body?.stockKey;
+    const direction = body?.direction;
+    if (
+      !residenceIdPattern.test(request.params.id) ||
+      typeof stockKey !== 'string' ||
+      (direction !== 'upgrade' && direction !== 'downgrade')
+    ) {
+      response.status(400).json({ error: 'invalid_stock_upgrade' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    void (async () => {
+      const client = await pool.connect();
+      let walletBalance: number | null = null;
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const { rows } = await client.query<ResidentialBuildingRow & { created_by: string }>(
+          `SELECT ${ALL_BUILDING_COLUMNS}, created_by
+           FROM all_buildings WHERE id = $1 FOR UPDATE`,
+          [request.params.id],
+        );
+        const building = rows[0];
+        if (!building) {
+          await client.query('ROLLBACK');
+          response.status(404).json({ error: 'residence_not_found' });
+          return;
+        }
+        if (building.created_by !== userId) {
+          await client.query('ROLLBACK');
+          response.status(403).json({ error: 'residence_not_owned' });
+          return;
+        }
+        if (building.status !== 'completed') {
+          await client.query('ROLLBACK');
+          response.status(409).json({ error: 'building_not_completed' });
+          return;
+        }
+        const definition = getResidenceDefinition(building.building_type);
+        const slot = definition &&
+          getStockCapacitySlots(definition, building.selected_input_product_id)
+            .find((candidate) => candidate.key === stockKey);
+        if (!definition || !slot) {
+          await client.query('ROLLBACK');
+          response.status(400).json({ error: 'invalid_stock_upgrade' });
+          return;
+        }
+        const currentLevel = getStockLevel(building.stock_levels, slot.key);
+        const targetLevel = currentLevel + (direction === 'upgrade' ? 1 : -1);
+        if (targetLevel < 1 || targetLevel > 4) {
+          await client.query('ROLLBACK');
+          response.status(409).json({ error: 'stock_upgrade_level_limit' });
+          return;
+        }
+        const targetCapacity = getStockCapacity(
+          definition,
+          slot.key,
+          { ...building.stock_levels, [slot.key]: targetLevel },
+        );
+        if (
+          direction === 'downgrade' &&
+          getStockQuantityForKey(building, slot.key) > targetCapacity
+        ) {
+          await client.query('ROLLBACK');
+          response.status(409).json({ error: 'stock_downgrade_requires_emptying' });
+          return;
+        }
+        if (direction === 'upgrade') {
+          const quotes = await getStockCapacityUpgradeQuotes(client, building);
+          const quote = quotes.find((item) => item.key === slot.key);
+          if (!quote || quote.upgradeCost === null) {
+            await client.query('ROLLBACK');
+            response.status(409).json({ error: 'stock_upgrade_price_unavailable' });
+            return;
+          }
+          const { rows: walletRows } = await client.query<{ balance: number }>(
+            `UPDATE player_wallets
+             SET balance = balance - $2::numeric
+             WHERE user_id = $1 AND balance >= $2::numeric
+             RETURNING balance::float8`,
+            [userId, quote.upgradeCost],
+          );
+          if (!walletRows[0]) {
+            await client.query('ROLLBACK');
+            response.status(409).json({ error: 'insufficient_funds' });
+            return;
+          }
+          walletBalance = walletRows[0].balance;
+        }
+        const { rows: updated } = await client.query<ResidentialBuildingRow>(
+          `UPDATE all_buildings
+           SET stock_levels = jsonb_set(
+             COALESCE(stock_levels, '{}'::jsonb),
+             ARRAY[$2::text],
+             to_jsonb($3::integer),
+             true
+           )
+           WHERE id = $1
+           RETURNING ${ALL_BUILDING_COLUMNS}`,
+          [building.id, slot.key, targetLevel],
+        );
+        if (!updated[0]) throw new Error(`O estoque da construção ${building.id} não foi atualizado.`);
+        await client.query('COMMIT');
+        response.json({
+          building: mapResidentialBuilding(updated[0]),
+          walletBalance,
+        });
+        void publishCities().catch((error: unknown) => {
+          console.error('O estoque foi atualizado, mas a atualização do mundo falhou:', error);
+        });
+      } catch (error) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter o upgrade de estoque:', rollbackError);
+        });
+        throw error;
+      } finally {
+        client.release();
+      }
+    })().catch((error: unknown) => {
+      console.error('Não foi possível atualizar o nível do estoque:', error);
+      response.status(503).json({ error: 'stock_upgrade_unavailable' });
+    });
+  });
+
   app.patch('/api/residential-buildings/:id/work-settings', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);
     const settings = parseWorkSettings(request.body);

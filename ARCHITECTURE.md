@@ -63,6 +63,19 @@ apreços da construção e da região. A média diária de cada produto usa a
 quantidade dividida pelo total de dias-consumidor empregados no período e o tooltip também lista a contribuição de
 cada produto para o `Cb`; o cliente exibe os valores abaixo de “Salvar aluguel”.
 
+Cada compartimento de estoque de uma construção pode ter nível 1–4, persistido
+em `all_buildings.stock_levels`. O nível 1 é o padrão; cada nível multiplica a
+capacidade original por esse número, e os limites são aplicados à produção,
+transporte automático e transferência manual. O dono pode alterar os níveis no
+painel de uma construção concluída. Upgrade para os níveis 2, 3 e 4 custa,
+respectivamente, 10%, 40% e 100% do custo esperado da construção: materiais
+precificados pela média das ofertas de venda ativas em armazéns/silos concluídos
+mais Work Points convertidos à razão de 100 por salário médio municipal. Se não
+houver preço de algum material requerido, o servidor não autoriza o upgrade.
+Downgrade não custa, mas o servidor impede reduzir a capacidade abaixo do estoque
+atual. A alteração e o débito da carteira são atômicos; a API valida novamente
+propriedade, nível, capacidade e saldo, e publica o novo estado no mundo.
+
 ## Estrutura do repositório
 
 O aplicativo de produção está em
@@ -881,6 +894,8 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo), estoque e preço médio local ponderado por oferta acima do mínimo; espaço ocupado é calculado no cliente. |
 | `GET /api/residential-buildings/:id/warehouse-transfer-quote?destinationId=&productId=` | Dono do armazém | Calcula o limite atual da transferência considerando estoque mínimo de origem, capacidade/estoque desejável do destino, distância e Work Points restantes do dia. |
 | `POST /api/residential-buildings/:id/warehouse-transfer` | Dono do armazém | Transfere `{ destinationId, productId, quantity }` para construção concluída do mesmo dono em até 60 tiles; recalcula e valida todos os limites no servidor, grava o histórico e publica os estoques atualizados. Erros técnicos retornam `{ error, failureStage, reason, failureReference }`; a referência pode ser localizada nos logs do servidor. |
+| `GET /api/residential-buildings/:id/stock-upgrades` | Dono da construção concluída | Retorna os níveis, capacidades e custos de upgrade por compartimento; os custos usam a média de ofertas de venda ativas de materiais em armazéns/silos e o salário médio municipal. |
+| `PATCH /api/residential-buildings/:id/stock-upgrades` | Dono da construção concluída | Recebe `{ stockKey, direction: "upgrade" \| "downgrade" }`; valida os limites e a propriedade no servidor, cobra o upgrade atomicamente ou impede downgrade que descarte estoque, e publica a capacidade atualizada. |
 | `POST /api/residential-buildings/:id/warehouse/suppliers` | Dono do armazém | Executa compras imediatas do armazém especificado pelo mesmo planejador das rodadas automáticas. |
 | `GET /api/residential-buildings/:id/production-history` | Autenticado | Retorna `{ days: [{ day, workPoints, produced, transported, efficiency }] }` dos últimos 30 dias (tabela `production_history`, gravada às 00:00 pelas etapas de produção, fazendas e transporte; `transported` conta só envios ao armazém). |
 | `GET /api/residential-buildings/:id/commerce-history` | Dono do comércio | Retorna os últimos 30 dias de dados financeiros de `commerce_history`; o painel combina a resposta com diagnósticos presentes no armazenamento local do navegador. |

@@ -207,6 +207,9 @@ ALTER TABLE all_buildings
 ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0);
 ALTER TABLE all_buildings
+  ADD COLUMN IF NOT EXISTS stock_levels JSONB NOT NULL DEFAULT '{}'::jsonb
+    CHECK (jsonb_typeof(stock_levels) = 'object');
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS warehouse_id UUID REFERENCES all_buildings (id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS building_warehouse_links (

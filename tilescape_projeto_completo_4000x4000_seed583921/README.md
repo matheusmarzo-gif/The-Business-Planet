@@ -212,6 +212,18 @@ estoques; o novo local precisa
 respeitar terreno, zona municipal, estradas e ocupação, e não pode deixar
 armazéns ligados fora do raio permitido.
 
+Cada compartimento de estoque exibido no painel mostra sua capacidade e nível.
+O nível inicial é 1; cada nível aumenta a capacidade em mais 100% da capacidade
+original, até o nível 4. O dono pode usar ↑ para fazer upgrade ou ↓ para
+reduzir o nível. O upgrade para os níveis 2, 3 e 4 custa, respectivamente, 10%,
+40% e 100% do custo esperado da construção. Esse custo soma os materiais pelo
+preço médio das ofertas de venda ativas em armazéns/silos concluídos e a mão de
+obra, calculada como 100 Work Points por salário médio municipal. O botão mostra
+o custo ao passar o mouse; se faltar preço de algum material, o upgrade fica
+indisponível. O downgrade é gratuito, mas só pode ser feito quando o estoque
+couber na capacidade reduzida. Os níveis e as capacidades são validados e
+persistidos pelo servidor; armazéns e silos mantêm seus limites próprios em m³.
+
 ### Configuração editável do jogo
 
 Os dados das 58 construções ficam em arquivos individuais

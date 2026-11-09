@@ -155,6 +155,31 @@ test('multiple linked warehouses do not overfill a shop in the same transport ru
   assert.equal(shop.stock, 120);
 });
 
+test('upgraded stock capacity is used when automatically replenishing a linked shop', () => {
+  const transfers = planTransfersDetailed(
+    {
+      stock: new Map([['milk', 300]]),
+      minimumStock: new Map(),
+      maximumStock: new Map(),
+      capacityM3: 50,
+      workPoints: 10000,
+    },
+    [{
+      buildingId: 'milk-shop',
+      type: 'shop_milk',
+      stock: 0,
+      stockLevels: { stock: 2 },
+    }],
+  ).transfers;
+
+  assert.deepEqual(transfers, [{
+    buildingId: 'milk-shop',
+    productId: 'milk',
+    quantity: 240,
+    direction: 'in',
+  }]);
+});
+
 test('plans negative warehouse stock deltas as updates, never inserts', () => {
   const writes = planWarehouseStockWrites(
     [

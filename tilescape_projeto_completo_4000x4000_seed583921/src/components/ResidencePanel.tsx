@@ -31,6 +31,13 @@ import { getDairyFarmEfficiency } from '../types/dairy';
 import { GAME_RULES } from '../generated/gameConfig';
 import type { ResidenceBenefitCalculation } from '../types/residence-relocation';
 import { getWorkerTechnique } from '../types/wellbeing';
+import {
+  getStockCapacity,
+  getStockCapacitySlots,
+  getStockLevel,
+  type StockCapacityKey,
+  type StockCapacityUpgradeQuote,
+} from '../types/stockCapacity';
 
 interface ResidencePanelProps {
   building: ResidentialBuilding;
@@ -67,6 +74,8 @@ interface ResidencePanelProps {
   onUnlink: (warehouseId: string | null) => void;
   onPlant: () => void;
   onSaveFarmAutomation: (settings: FarmAutomationSettings) => void;
+  stockUpgradeQuotes: readonly StockCapacityUpgradeQuote[];
+  onChangeStockLevel: (key: StockCapacityKey, direction: 'upgrade' | 'downgrade') => void;
   showInfluence: boolean;
   onToggleInfluence: () => void;
   onClose: () => void;
@@ -76,6 +85,7 @@ const number = new Intl.NumberFormat('pt-BR');
 const benefitNumber = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 6 });
 const wellbeingNumber = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
+const detailRow = (label: string, value: string): [string, string] => [label, value];
 const monthNames = [
   'Janeiro',
   'Fevereiro',
@@ -90,6 +100,18 @@ const monthNames = [
   'Novembro',
   'Dezembro',
 ];
+
+type PanelDetailRow =
+  | [string, string]
+  | {
+      type: 'stock';
+      key: StockCapacityKey;
+      label: string;
+      quantity: number;
+      capacity: number;
+      level: number;
+      quote: StockCapacityUpgradeQuote | undefined;
+    };
 
 function getProductionDescription(
   type: ResidenceType,
@@ -182,6 +204,8 @@ export default function ResidencePanel({
   onUnlink,
   onPlant,
   onSaveFarmAutomation,
+  stockUpgradeQuotes,
+  onChangeStockLevel,
   showInfluence,
   onToggleInfluence,
   onClose,
@@ -278,71 +302,95 @@ export default function ResidencePanel({
     (total, product) => total + (warehouseStock.get(product.id) ?? 0) * product.volumeM3,
     0,
   );
-  const detailRows: [string, string][] =
+  const stockRows: PanelDetailRow[] = getStockCapacitySlots(
+    definition,
+    building.selectedInputProductId,
+  ).map(({ key }) => {
+    const level = getStockLevel(building.stockLevels, key);
+    const productId = key.startsWith('input:') ? key.slice('input:'.length) : null;
+    const product = productId ? PRODUCTS.find((entry) => entry.id === productId) : null;
+    const label = key === 'stock'
+      ? `Estoque de ${definition.stockProduct ?? 'produto'}`
+      : key === 'tools'
+        ? 'Estoque de Ferramentas'
+        : key === 'wood'
+          ? 'Estoque de Madeira'
+          : key === 'iron'
+            ? 'Estoque de Ferro'
+            : key === 'charcoal'
+              ? 'Estoque de Carvão'
+              : key === 'sugarcane'
+                ? 'Estoque de Cana'
+                : `Estoque de ${product?.name ?? productId ?? key}`;
+    const quantity = key === 'stock'
+      ? building.stock
+      : key === 'tools'
+        ? building.toolStock
+        : key === 'wood'
+          ? building.woodStock
+          : key === 'iron'
+            ? building.ironStock
+            : key === 'charcoal'
+              ? building.charcoalStock
+              : key === 'sugarcane'
+                ? building.sugarcaneStock
+                : building.inputStocks[productId ?? ''] ?? 0;
+    return {
+      type: 'stock',
+      key,
+      label: `${label}${product?.unit === 'liter' ? ' (litros)' : ''}`,
+      quantity,
+      capacity: getStockCapacity(definition, key, building.stockLevels),
+      level,
+      quote: stockUpgradeQuotes.find((quote) => quote.key === key),
+    };
+  });
+  const detailRows: PanelDetailRow[] =
     building.status === 'under_construction'
       ? [
-          ['Work Points completados', number.format(Math.floor(building.workPointsDone))],
-          ['Work Points necessários', number.format(definition.workPoints)],
+          detailRow('Work Points completados', number.format(Math.floor(building.workPointsDone))),
+          detailRow('Work Points necessários', number.format(definition.workPoints)),
           ...jobRows,
         ]
       : isFarm
         ? [
             ...jobRows,
-            definition.kind === 'warehouse'
-              ? [
+            ...(definition.kind === 'warehouse'
+              ? [detailRow(
                   'Espaço ocupado',
                   warehouseStockLoaded
                     ? `${number.format(Math.round(warehouseUsedM3 * 1000) / 1000)} / ${number.format(definition.storageCapacityM3 ?? 0)} m³`
                     : 'Consulte em Produtos e estoque',
+                )]
+              : []),
+            ...stockRows,
+            ...(definition.toolDemandPerWorker
+              ? [
+                  detailRow(
+                    'Demanda de Ferramentas por dia',
+                    `${(building.employed * definition.toolDemandPerWorker).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}`,
+                  ),
+                  detailRow('Penalidade de eficiência', `${building.efficiencyPenalty}%`),
                 ]
-              : [`Estoque de ${definition.stockProduct}`, `${number.format(building.stock)} / ${number.format(definition.stockCapacity ?? 0)}`],
-            ...(definition.toolCapacity
-              ? ([
-                  ['Estoque de Ferramentas', `${number.format(building.toolStock)} / ${number.format(definition.toolCapacity)}`],
-                  ...(definition.toolDemandPerWorker
-                    ? [
-                        ['Demanda de Ferramentas por dia', `${(building.employed * definition.toolDemandPerWorker).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}`],
-                        ['Penalidade de eficiência', `${building.efficiencyPenalty}%`],
-                      ]
-                    : []),
-                ] as [string, string][])
               : []),
-            ...(definition.woodCapacity
-              ? ([['Estoque de Madeira', `${number.format(building.woodStock)} / ${number.format(definition.woodCapacity)}`]] as [string, string][])
-              : []),
-            ...(definition.ironCapacity
-              ? ([['Estoque de Ferro', `${number.format(building.ironStock)} / ${number.format(definition.ironCapacity)}`]] as [string, string][])
-              : []),
-            ...(definition.charcoalCapacity
-              ? ([['Estoque de Carvão', `${number.format(building.charcoalStock)} / ${number.format(definition.charcoalCapacity)}`]] as [string, string][])
-              : []),
-            ...(definition.sugarcaneCapacity
-              ? ([['Estoque de Cana', `${number.format(building.sugarcaneStock)} / ${number.format(definition.sugarcaneCapacity)}`]] as [string, string][])
-              : []),
-            ...Object.entries(definition.inputCapacities ?? {}).map(([productId, capacity]) => {
-              const product = PRODUCTS.find((entry) => entry.id === productId);
-              const activeCapacity =
-                !definition.selectableInputProductIds ||
-                building.selectedInputProductId === productId
-                  ? capacity
-                  : 0;
-              return [
-                `Estoque de ${product?.name ?? productId}${product?.unit === 'liter' ? ' (litros)' : ''}`,
-                `${number.format(building.inputStocks[productId] ?? 0)} / ${number.format(activeCapacity)}`,
-              ] as [string, string];
-            }),
           ]
         : [
-            ['Ocupantes atuais', number.format(building.occupants)],
-            ['Máximo de ocupantes', number.format(definition.capacity)],
-            ['Técnica média dos trabalhadores', wellbeingNumber.format(getWorkerTechnique(building.wellbeing))],
-            ['Saúde dos trabalhadores', String(RESIDENCE_STATS.health)],
-            ['Bem-estar dos trabalhadores', wellbeingNumber.format(building.wellbeing)],
-            ['Pessoas empregadas', number.format(building.employed)],
-            ['Renda média dos trabalhadores', `C$ ${building.averageIncome.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}`],
+            detailRow('Ocupantes atuais', number.format(building.occupants)),
+            detailRow('Máximo de ocupantes', number.format(definition.capacity)),
+            detailRow(
+              'Técnica média dos trabalhadores',
+              wellbeingNumber.format(getWorkerTechnique(building.wellbeing)),
+            ),
+            detailRow('Saúde dos trabalhadores', String(RESIDENCE_STATS.health)),
+            detailRow('Bem-estar dos trabalhadores', wellbeingNumber.format(building.wellbeing)),
+            detailRow('Pessoas empregadas', number.format(building.employed)),
+            detailRow(
+              'Renda média dos trabalhadores',
+              `C$ ${building.averageIncome.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}`,
+            ),
           ];
-  const rows: [string, string][] = [
-    ['Proprietário', building.ownerName || 'Jogador'],
+  const rows: PanelDetailRow[] = [
+    detailRow('Proprietário', building.ownerName || 'Jogador'),
     ...detailRows,
   ];
 
@@ -374,12 +422,69 @@ export default function ResidencePanel({
       {productionDescription && <p className="production-description">{productionDescription}</p>}
       <div className="panel-divider" />
       <dl className="detail-list">
-        {rows.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
+        {rows.map((row) => {
+          if (Array.isArray(row)) {
+            const [label, value] = row;
+            return (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            );
+          }
+          if (row.type === 'stock') {
+            const upgradeTitle = row.quote?.upgradeCost === null
+              ? 'Realizar upgrade: preço indisponível até haver preços de materiais nos armazéns.'
+              : row.quote?.upgradeCost !== undefined
+                ? `Realizar upgrade irá custar ${formatMoney(row.quote.upgradeCost)}.`
+                : 'Consultando o custo do upgrade…';
+            const downgradeTitle = row.quote?.canDowngrade === false
+              ? 'Deseja reduzir o estoque? Esvazie o estoque até caber na capacidade do nível inferior.'
+              : 'Deseja reduzir o estoque?';
+            return (
+              <div className="stock-capacity-row" key={row.key}>
+                <dt>{row.label}</dt>
+                <dd className="stock-capacity-value">
+                  <span>{number.format(row.quantity)} / {number.format(row.capacity)}</span>
+                  <span className="stock-capacity-level">Nível {row.level}</span>
+                  {isOwner && (
+                    <span className="stock-level-controls">
+                      <button
+                        type="button"
+                        aria-label={`Aumentar nível de ${row.label}`}
+                        title={upgradeTitle}
+                        disabled={
+                          isSaving ||
+                          !row.quote ||
+                          row.quote.nextLevel === null ||
+                          row.quote.upgradeCost === null
+                        }
+                        onClick={() => onChangeStockLevel(row.key, 'upgrade')}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Reduzir nível de ${row.label}`}
+                        title={downgradeTitle}
+                        disabled={
+                          isSaving ||
+                          !row.quote ||
+                          row.quote.previousCapacity === null ||
+                          !row.quote.canDowngrade
+                        }
+                        onClick={() => onChangeStockLevel(row.key, 'downgrade')}
+                      >
+                        ↓
+                      </button>
+                    </span>
+                  )}
+                </dd>
+              </div>
+            );
+          }
+          return null;
+        })}
       </dl>
       <div className="crop-panel">
         <button type="button" aria-pressed={showInfluence} onClick={onToggleInfluence}>

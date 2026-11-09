@@ -79,6 +79,12 @@ button { color: inherit; }
 .detail-list>div { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; color: #a6a897; }
 .detail-list dt { margin: 0; }
 .detail-list dd { margin: 0; color: #eee7d6; font: 600 12px 'Manrope', sans-serif; }
+.detail-list .stock-capacity-row { align-items: center; }
+.stock-capacity-value { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.stock-capacity-level { color: #cbb98b; font-size: 10px; }
+.stock-level-controls { display: inline-flex; gap: 3px; }
+.stock-level-controls button { width: 22px; height: 22px; padding: 0; border: 1px solid rgba(207,178,116,.4); border-radius: 5px; background: rgba(193,162,100,.15); color: #e6dfce; cursor: pointer; }
+.stock-level-controls button:disabled { opacity: .45; cursor: default; }
 .work-settings { margin-top: 22px; display: grid; gap: 12px; }
 .work-settings label { display: grid; gap: 5px; color: #a6a897; font-size: 10px; }
 .work-settings input, .work-settings select { padding: 7px 9px; border: 1px solid rgba(219,201,158,.2); border-radius: 7px; background: #19241e; color: #eee7d6; font: 500 12px 'DM Sans', sans-serif; }

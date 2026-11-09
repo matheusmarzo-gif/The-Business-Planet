@@ -8,6 +8,7 @@ import { ASSEMBLY_SIZE, isFootprintInCityZone, MUNICIPAL_AREA_RADIUS } from './c
 import type { RoadTile } from './road.js';
 import { isCurrencyAmount, roundCurrency } from './currency.js';
 import { BUILDING_CONFIGS, GAME_RULES } from '../generated/gameConfig.js';
+import type { StockLevels } from './stockCapacity.js';
 
 export type ResidenceType = keyof typeof BUILDING_CONFIGS;
 
@@ -328,6 +329,7 @@ export interface ResidentialBuilding {
   workPointsDone: number;
   price: number;
   stock: number;
+  stockLevels: StockLevels;
   warehouseIds: string[];
   // Ferramentas em estoque e penalidade de eficiência (0–90, em %) para construções que as usam.
   toolStock: number;

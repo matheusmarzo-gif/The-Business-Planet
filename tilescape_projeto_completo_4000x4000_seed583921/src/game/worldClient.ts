@@ -92,6 +92,12 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
     Number.isFinite(building.workPointsDone) &&
     isCurrencyAmount(building.price) &&
     Number.isInteger(building.stock) &&
+    typeof building.stockLevels === 'object' &&
+    building.stockLevels !== null &&
+    !Array.isArray(building.stockLevels) &&
+    Object.values(building.stockLevels).every(
+      (level) => Number.isInteger(level) && level >= 1 && level <= 4,
+    ) &&
     Array.isArray(building.warehouseIds) &&
     building.warehouseIds.every((warehouseId) => typeof warehouseId === 'string') &&
     (building.selectedInputProductId === null || typeof building.selectedInputProductId === 'string') &&

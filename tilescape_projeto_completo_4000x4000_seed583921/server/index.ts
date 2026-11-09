@@ -73,6 +73,7 @@ import {
 import {
   advanceConstruction,
   allocateWorkers,
+  getAverageWorkerTechnique,
   getAverageIncomes,
   getDailyWorkPoints,
   getEmploymentSummary,
@@ -1463,6 +1464,7 @@ async function getManualWarehouseTransferQuote(
      FROM world_state WHERE id = 1`,
   );
   if (!world) return { error: 'world_unavailable' };
+  const averageTechniques = await loadAverageWorkerTechniques(client, [sourceId]);
   const { rows: [workforce] } = await client.query<{ workers: number; demand: number }>(
     `SELECT
        COALESCE((SELECT SUM(count) FROM job_assignments WHERE workplace_id = $1), 0)::int AS workers,
@@ -1472,7 +1474,11 @@ async function getManualWarehouseTransferQuote(
   const availableWorkPoints = Math.max(
     0,
     (workforce?.workers ?? 0) *
-      getDailyWorkPoints(source.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness) -
+      getDailyWorkPoints(
+        source.work_hours_per_day,
+        RESIDENCE_STATS.health,
+        averageTechniques.get(sourceId) ?? 10,
+      ) -
       (workforce?.demand ?? 0),
   );
 
@@ -1605,6 +1611,43 @@ interface WarehouseTradeBuildingRow {
   workers: number;
 }
 
+function mapAverageWorkerTechniques(
+  rows: readonly { workplace_id: string; count: number; residence_wellbeing: number }[],
+): Map<string, number> {
+  const workersByWorkplace = new Map<string, { technique: number; count: number }[]>();
+  for (const row of rows) {
+    const workers = workersByWorkplace.get(row.workplace_id) ?? [];
+    workers.push({ technique: getWorkerTechnique(row.residence_wellbeing), count: row.count });
+    workersByWorkplace.set(row.workplace_id, workers);
+  }
+  return new Map(
+    [...workersByWorkplace].flatMap(([workplaceId, workers]) => {
+      const technique = getAverageWorkerTechnique(workers);
+      return technique === null ? [] : [[workplaceId, technique] as const];
+    }),
+  );
+}
+
+async function loadAverageWorkerTechniques(
+  client: PoolClient,
+  workplaceIds: readonly string[],
+): Promise<Map<string, number>> {
+  if (workplaceIds.length === 0) return new Map();
+  const { rows } = await client.query<{
+    workplace_id: string;
+    count: number;
+    residence_wellbeing: number;
+  }>(
+    `SELECT assignments.workplace_id, assignments.count,
+            COALESCE(residence.wellbeing, 0)::float8 AS residence_wellbeing
+     FROM job_assignments assignments
+     JOIN all_buildings residence ON residence.id = assignments.residence_id
+     WHERE assignments.workplace_id = ANY($1::uuid[])`,
+    [workplaceIds],
+  );
+  return mapAverageWorkerTechniques(rows);
+}
+
 interface WarehouseTradeStockRow {
   building_id: string;
   product_id: string;
@@ -1624,6 +1667,7 @@ function mapWarehouseTradeWarehouses(
   buildings: WarehouseTradeBuildingRow[],
   stockRows: WarehouseTradeStockRow[],
   settingRows: WarehouseTradeSettingRow[],
+  averageTechniques: ReadonlyMap<string, number>,
 ): TradeWarehouse[] {
   const stockByBuilding = new Map<string, Map<string, number>>();
   const settingsByBuilding = new Map<
@@ -1667,7 +1711,7 @@ function mapWarehouseTradeWarehouses(
           getDailyWorkPoints(
             building.work_hours_per_day,
             RESIDENCE_STATS.health,
-            RESIDENCE_STATS.happiness,
+            averageTechniques.get(building.id) ?? 10,
           )) /
         2,
       stock,
@@ -1868,7 +1912,7 @@ async function runDailyEmployment(): Promise<boolean> {
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
     } else if (state.last_payroll < state.day) {
       const payrollCounts = emptyPerformanceCounts();
-      const { workplaces, workers, assignmentRows } = await measurePerformanceStage(
+      const { workplaces, workers, assignmentRows, averageTechniques } = await measurePerformanceStage(
         'folha e aluguel',
         '00:00',
         state.day,
@@ -1901,7 +1945,15 @@ async function runDailyEmployment(): Promise<boolean> {
         workplace_id: string;
         residence_id: string;
         count: number;
-      }>('SELECT workplace_id, residence_id, count FROM job_assignments ORDER BY workplace_id, residence_id');
+        residence_wellbeing: number;
+      }>(
+        `SELECT assignments.workplace_id, assignments.residence_id, assignments.count,
+                COALESCE(residence.wellbeing, 0)::float8 AS residence_wellbeing
+         FROM job_assignments assignments
+         JOIN all_buildings residence ON residence.id = assignments.residence_id
+         ORDER BY assignments.workplace_id, assignments.residence_id`,
+      );
+      const averageTechniques = mapAverageWorkerTechniques(assignmentRows);
       const owed = getPayroll(
         workplaces.map((row) => ({ id: row.id, ownerId: row.created_by, wage: row.wage })),
         assignmentRows.map((row) => ({
@@ -2018,7 +2070,7 @@ async function runDailyEmployment(): Promise<boolean> {
           count,
           site.work_hours_per_day,
           RESIDENCE_STATS.health,
-          RESIDENCE_STATS.happiness,
+          averageTechniques.get(site.id) ?? 10,
         );
         constructionUpdates.push({
           id: site.id,
@@ -2107,7 +2159,7 @@ async function runDailyEmployment(): Promise<boolean> {
           );
         }
       }
-      return { workplaces, workers, assignmentRows };
+      return { workplaces, workers, assignmentRows, averageTechniques };
         },
         lockWaitMs,
         false,
@@ -2176,7 +2228,11 @@ async function runDailyEmployment(): Promise<boolean> {
           capacity: getShopSalesCapacity(
             row.building_type,
             (workers.get(row.id) ?? 0) *
-              getDailyWorkPoints(row.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness),
+              getDailyWorkPoints(
+                row.work_hours_per_day,
+                RESIDENCE_STATS.health,
+                averageTechniques.get(row.id) ?? 10,
+              ),
             workers.get(row.id) ?? 0,
           ),
         };
@@ -2494,7 +2550,12 @@ async function runDailyEmployment(): Promise<boolean> {
           ? nextEfficiencyPenalty(current.efficiency_penalty, demandMet)
           : current.efficiency_penalty;
         const generatedPoints =
-          count * getDailyWorkPoints(site.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness);
+          count *
+          getDailyWorkPoints(
+            site.work_hours_per_day,
+            RESIDENCE_STATS.health,
+            averageTechniques.get(site.id) ?? 10,
+          );
         const month = Number(state.day.slice(5, 7));
         const seasonalEfficiency =
           site.building_type === 'farm_dairy' ? getDairyFarmEfficiency(month) : 1;
@@ -2643,7 +2704,11 @@ async function runDailyEmployment(): Promise<boolean> {
         }
         const farmPoints =
           (workers.get(farm.id) ?? 0) *
-          getDailyWorkPoints(farm.work_hours_per_day, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness);
+          getDailyWorkPoints(
+            farm.work_hours_per_day,
+            RESIDENCE_STATS.health,
+            averageTechniques.get(farm.id) ?? 10,
+          );
         const crop: Crop = {
           phase: farm.crop_phase,
           plantedDay: farm.crop_planted_day,
@@ -2911,7 +2976,7 @@ async function runDailyEmployment(): Promise<boolean> {
             getDailyWorkPoints(
               warehouseSite?.work_hours_per_day ?? 8,
               RESIDENCE_STATS.health,
-              RESIDENCE_STATS.happiness,
+              averageTechniques.get(warehouse.id) ?? 10,
             ),
         });
       }
@@ -2927,7 +2992,7 @@ async function runDailyEmployment(): Promise<boolean> {
           getDailyWorkPoints(
             warehouseSite?.work_hours_per_day ?? 8,
             RESIDENCE_STATS.health,
-            RESIDENCE_STATS.happiness,
+            averageTechniques.get(warehouse.id) ?? 10,
           );
         const inventory = inventoryByWarehouse.get(warehouse.id);
         if (!inventory) {
@@ -3415,13 +3480,22 @@ async function runDailyEmployment(): Promise<boolean> {
          FROM all_buildings b
          WHERE b.building_type IN ('warehouse', 'silo') AND b.status = 'completed'`,
       );
+      const averageTechniques = await loadAverageWorkerTechniques(
+        client,
+        warehouseRows.map((row) => row.id),
+      );
       const { rows: stockRows } = await client.query<WarehouseTradeStockRow>(
         'SELECT building_id, product_id, quantity FROM warehouse_stock',
       );
       const { rows: settingRows } = await client.query<WarehouseTradeSettingRow>(
         'SELECT building_id, product_id, minimum_stock, maximum_stock, price, mode FROM warehouse_product_settings',
       );
-      const tradeWarehouses = mapWarehouseTradeWarehouses(warehouseRows, stockRows, settingRows);
+      const tradeWarehouses = mapWarehouseTradeWarehouses(
+        warehouseRows,
+        stockRows,
+        settingRows,
+        averageTechniques,
+      );
       const ownerOf = new Map(warehouseRows.map((row) => [row.id, row.created_by]));
       const trades = planWarehouseTrades(tradeWarehouses);
       await applyWarehouseTrades(client, trades, ownerOf, state.day);
@@ -5794,6 +5868,7 @@ async function start() {
           [target.id, target.tile_x, target.tile_y, LINK_RADIUS],
         );
         const warehouseIds = warehouseRows.map((row) => row.id);
+        const averageTechniques = await loadAverageWorkerTechniques(client, warehouseIds);
         const { rows: stockRows } = await client.query<WarehouseTradeStockRow>(
           'SELECT building_id, product_id, quantity FROM warehouse_stock WHERE building_id = ANY($1::uuid[])',
           [warehouseIds],
@@ -5802,7 +5877,12 @@ async function start() {
           'SELECT building_id, product_id, minimum_stock, maximum_stock, price, mode FROM warehouse_product_settings WHERE building_id = ANY($1::uuid[])',
           [warehouseIds],
         );
-        const tradeWarehouses = mapWarehouseTradeWarehouses(warehouseRows, stockRows, settingRows);
+        const tradeWarehouses = mapWarehouseTradeWarehouses(
+          warehouseRows,
+          stockRows,
+          settingRows,
+          averageTechniques,
+        );
         const trades = planWarehouseTrades(tradeWarehouses, target.id);
         const ownerOf = new Map(warehouseRows.map((row) => [row.id, row.created_by]));
         const day =

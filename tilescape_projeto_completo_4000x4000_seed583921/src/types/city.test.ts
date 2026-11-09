@@ -38,6 +38,7 @@ import { getRoadPlacementError } from './road';
 import {
   allocateWorkers,
   getDailyWorkPoints,
+  getAverageWorkerTechnique,
   getHoursFactor,
   getPayroll,
   getRestFactor,
@@ -1721,9 +1722,16 @@ describe('work settings', () => {
     assert.equal(getRestFactor(4), 1.2);
     assert.equal(getRestFactor(8), 1);
     assert.ok(Math.abs(getRestFactor(14) - 0.8) < 1e-9);
-    assert.equal(getDailyWorkPoints(8, 100, 100), 100);
-    assert.equal(getDailyWorkPoints(8, 50, 100), 50);
-    assert.ok(Math.abs(getDailyWorkPoints(4, 100, 100) - 60) < 1e-9);
+    assert.equal(getDailyWorkPoints(8, 100, 10), 100);
+    assert.equal(getDailyWorkPoints(8, 50, 10), 50);
+    assert.ok(Math.abs(getDailyWorkPoints(4, 100, 10) - 60) < 1e-9);
+    assert.ok(Math.abs(getDailyWorkPoints(8, 100, 11.81) - 118.1) < 1e-9);
+    assert.ok(Math.abs(10 * getDailyWorkPoints(8, 100, 11.81) - 1181) < 1e-9);
+    const averageTechnique = getAverageWorkerTechnique([
+        { technique: 10, count: 5 },
+        { technique: 13.62, count: 5 },
+    ]);
+    assert.ok(averageTechnique !== null && Math.abs(averageTechnique - 11.81) < 1e-9);
   });
 
   it('only assigns workers whose residence technique meets each workplace minimum', () => {
@@ -2979,17 +2987,17 @@ describe('renda média', () => {
 
 describe('obras', () => {
   it('accumulates Work Points and completes at the required amount', () => {
-    const day = getDailyWorkPoints(8, 100, 100);
-    const partial = advanceConstruction(0, 6000, 2, 8, 100, 100);
+    const day = getDailyWorkPoints(8, 100, 10);
+    const partial = advanceConstruction(0, 6000, 2, 8, 100, 10);
     assert.equal(partial.done, 2 * day);
     assert.equal(partial.completed, false);
-    const finished = advanceConstruction(5900, 6000, 1, 8, 100, 100);
+    const finished = advanceConstruction(5900, 6000, 1, 8, 100, 10);
     assert.deepEqual(finished, { done: 6000, completed: true });
   });
 
   it('can complete every building type from its own requirement', () => {
     for (const definition of Object.values(RESIDENCES)) {
-      const result = advanceConstruction(definition.workPoints - 1, definition.workPoints, 1, 8, 100, 100);
+      const result = advanceConstruction(definition.workPoints - 1, definition.workPoints, 1, 8, 100, 10);
       assert.equal(result.completed, true, definition.type);
     }
   });

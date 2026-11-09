@@ -713,12 +713,13 @@ pelos moradores e a média regional de residências concluídas em até 10 tiles
 inclusive residências desocupadas. A prévia de contratação usa a mesma ordem.
 Às 00:00 o dono paga o
 salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). Também
-às 00:00 cada funcionário de uma obra gera
-`12,5 × horas × saúde/100 × felicidade/100 × fator de descanso` Work Points (fator
-1,2 com 4 h, 1 com 8 h, 0,8 com 14 h); a obra termina sozinha ao atingir o total
-necessário. Saúde e o fator legado de felicidade usado nessa fórmula continuam
-fixos em 100. O bem-estar residencial é convertido em técnica média dos
-trabalhadores no painel, mas ainda não altera os Work Points.
+às 00:00 cada funcionário gera
+`12,5 × horas × saúde/100 × técnica média/10 × fator de descanso` Work Points
+(fator 1,2 com 4 h, 1 com 8 h, 0,8 com 14 h). A técnica média da construção é
+ponderada pela quantidade de trabalhadores de cada residência; técnica 10
+preserva o rendimento-base. Com 8 horas, saúde 100 e técnica 11,81, cada
+funcionário gera 118,1 WP (10 funcionários geram 1.181 WP). Saúde permanece
+fixa em 100. A fórmula é usada por obras, vendas, produção, fazendas e transporte.
 
 Nas lojas de arroz, batata, milho, cevada, trigo, peixe, leite, açúcar, vegetais,
 sal, especiarias e no Açougue, o dono define o preço (a partir de C$ 0,01, com

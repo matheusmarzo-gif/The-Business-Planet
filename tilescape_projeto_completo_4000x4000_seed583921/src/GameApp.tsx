@@ -2074,7 +2074,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                 const workPoints = workers * getDailyWorkPoints(
                   settings.workHoursPerDay,
                   RESIDENCE_STATS.health,
-                  RESIDENCE_STATS.happiness,
+                  selectedResidence.averageWorkerTechnique ?? 10,
                 );
                 return simulateShopSales(transactions, {
                   price: settings.price,

@@ -3,6 +3,8 @@ import {
   DEFAULT_MIN_WORKER_TECHNIQUE,
   getResidenceDefinition,
   isWithinWorkerSearchRadius,
+  MAX_WORKER_TECHNIQUE,
+  MIN_WORKER_TECHNIQUE,
   MAX_CONSTRUCTION_WORKERS,
 } from './residence.js';
 import { roundCurrency } from './currency.js';
@@ -76,16 +78,37 @@ export function getRestFactor(hours: number): number {
 
 export const WORK_POINTS_RATE = GAME_RULES.work.workPointsPerHour;
 
-// Work Points diários de um funcionário (saúde e felicidade em 0–100).
-export function getDailyWorkPoints(hours: number, health: number, happiness: number): number {
-  const { health: healthScale, happiness: happinessScale } = GAME_RULES.work.residentStats;
+// Work Points diários por funcionário; técnica 10 preserva o rendimento-base.
+export function getDailyWorkPoints(hours: number, health: number, technique = 10): number {
+  const { health: healthScale } = GAME_RULES.work.residentStats;
   return (
     WORK_POINTS_RATE *
     hours *
     (health / healthScale) *
-    (happiness / happinessScale) *
+    (technique / 10) *
     getRestFactor(hours)
   );
+}
+
+export function getAverageWorkerTechnique(
+  workers: readonly { technique: number; count: number }[],
+): number | null {
+  let totalWorkers = 0;
+  let weightedTechnique = 0;
+  for (const worker of workers) {
+    if (
+      !Number.isFinite(worker.technique) ||
+      worker.technique < MIN_WORKER_TECHNIQUE ||
+      worker.technique > MAX_WORKER_TECHNIQUE ||
+      !Number.isInteger(worker.count) ||
+      worker.count < 0
+    ) {
+      throw new RangeError('A técnica ou a quantidade de trabalhadores é inválida.');
+    }
+    totalWorkers += worker.count;
+    weightedTechnique += worker.technique * worker.count;
+  }
+  return totalWorkers > 0 ? weightedTechnique / totalWorkers : null;
 }
 
 export function getWorkBenefit(
@@ -304,8 +327,8 @@ export function advanceConstruction(
   workers: number,
   hours: number,
   health: number,
-  happiness: number,
+  technique = 10,
 ): { done: number; completed: boolean } {
-  const total = done + workers * getDailyWorkPoints(hours, health, happiness);
+  const total = done + workers * getDailyWorkPoints(hours, health, technique);
   return { done: Math.min(total, needed), completed: total >= needed };
 }

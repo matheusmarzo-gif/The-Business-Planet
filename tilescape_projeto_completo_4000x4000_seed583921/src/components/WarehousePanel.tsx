@@ -72,7 +72,11 @@ export default function WarehousePanel({
   );
   const forecast =
     building.employed *
-    getDailyWorkPoints(building.workHoursPerDay, RESIDENCE_STATS.health, RESIDENCE_STATS.happiness);
+    getDailyWorkPoints(
+      building.workHoursPerDay,
+      RESIDENCE_STATS.health,
+      building.averageWorkerTechnique ?? 10,
+    );
   const wp = (value: number) => number.format(Math.round(value * 10) / 10);
 
   useEffect(() => {

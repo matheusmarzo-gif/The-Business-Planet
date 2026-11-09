@@ -531,10 +531,12 @@ mapeamento e verificar todas as curvas.
   crédito, o histórico e a folha são transacionais e idempotentes, protegidos
   pelo lock `583921303` e `world_state.last_payroll_day`.
   No mesmo job das 00:00, cada obra soma `work_points_done += empregados ×
-  getDailyWorkPoints` (`12,5 · H · saúde/100 · felicidade/100 · fator_descanso`;
-  fator 1,2 em 4 h, 1 em 8 h, 0,8 em 14 h, linear entre eles; saúde e felicidade
-  fixas em 100 por enquanto) e é concluída automaticamente ao atingir os Work
-  Points necessários.
+  getDailyWorkPoints` (`12,5 · H · saúde/100 · técnica_média/10 ·
+  fator_descanso`; fator 1,2 em 4 h, 1 em 8 h, 0,8 em 14 h, linear entre eles;
+  saúde fixa em 100). A técnica é a média ponderada pelo número de trabalhadores
+  das técnicas das residências empregadas; técnica 10 preserva o rendimento-base.
+  A mesma fórmula alimenta obras, vendas, produção, fazendas e transporte. A obra
+  é concluída automaticamente ao atingir os Work Points necessários.
 - Vendas das cestas básica, intermediária, avançada e básica de bens (`src/types/commerce.ts`): lojas cujo catálogo tem
   `kind: 'shop'` e `stockProductId` participam das vendas; incluem arroz,
   batata, milho, cevada, trigo, peixe, carne vermelha, leite, açúcar, vegetais,

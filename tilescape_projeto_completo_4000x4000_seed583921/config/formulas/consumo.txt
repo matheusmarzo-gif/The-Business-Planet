@@ -39,5 +39,15 @@
     "idealBasketDivisor": 180,
     "idealExponent": 2
   },
+  "goods": {
+    "discountBase": 0.8,
+    "wExponent": 3,
+    "errorExponent": 3,
+    "incomeBasketThresholdDivisor": 2,
+    "idealBasketIncomeOffsetDivisor": 6,
+    "idealConstantOffset": 0.0625,
+    "idealExponent": 3,
+    "associatedBenefitExponent": 6
+  },
   "associatedBenefitExponent": 4
 }

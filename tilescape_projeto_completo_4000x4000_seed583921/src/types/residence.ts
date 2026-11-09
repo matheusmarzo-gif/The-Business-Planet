@@ -28,6 +28,10 @@ export const SHOP_TYPES = [
   'shop_cheese',
   'shop_chocolate',
   'shop_fruit',
+  'shop_clothing',
+  'shop_furniture',
+  'shop_utilities',
+  'shop_glass',
 ] as const satisfies readonly ResidenceType[];
 export type BuildingKind =
   | 'residence'
@@ -73,17 +77,18 @@ export interface ResidenceCost {
   wood: number;
   stone: number;
   iron?: number;
+  steel?: number;
 }
 
 export interface ConstructionMaterialStock {
   buildingId: string;
-  productId: 'wood' | 'stone' | 'iron';
+  productId: 'wood' | 'stone' | 'iron' | 'steel';
   quantity: number;
 }
 
 export interface ConstructionMaterialWithdrawal {
   buildingId: string;
-  productId: 'wood' | 'stone' | 'iron';
+  productId: 'wood' | 'stone' | 'iron' | 'steel';
   quantity: number;
 }
 
@@ -150,7 +155,7 @@ export function planConstructionMaterialWithdrawals(
   cost: ResidenceCost,
 ): ConstructionMaterialWithdrawal[] | null {
   const withdrawals: ConstructionMaterialWithdrawal[] = [];
-  for (const productId of ['wood', 'stone', 'iron'] as const) {
+  for (const productId of ['wood', 'stone', 'iron', 'steel'] as const) {
     let remaining = cost[productId] ?? 0;
     if (!Number.isInteger(remaining) || remaining < 0) return null;
     for (const stock of stocks) {
@@ -243,6 +248,10 @@ const CONSTRUCTION_MENU_ORDER: Partial<Record<ConstructionCategory, readonly Res
     'shop_cheese',
     'shop_fruit',
     'shop_chocolate',
+    'shop_clothing',
+    'shop_furniture',
+    'shop_utilities',
+    'shop_glass',
   ],
   fazendas: [
     'farm_rice',
@@ -257,12 +266,20 @@ const CONSTRUCTION_MENU_ORDER: Partial<Record<ConstructionCategory, readonly Res
     'farm_spices',
     'farm_cocoa',
     'farm_fruit',
+    'farm_sheep',
+    'farm_cotton',
   ],
   industrias: [
     'warehouse',
     'silo',
     'flour_mill',
     'chocolate_factory',
+    'steelworks',
+    'thread_factory',
+    'textile_factory',
+    'furniture_factory',
+    'utilities_factory',
+    'glass_factory',
   ],
 };
 

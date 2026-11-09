@@ -1,4 +1,4 @@
-# Consumo diário desejável por morador para as cestas básica e intermediária.
+# Consumo diário desejável por morador para as cestas de produtos.
 # Edite os valores e reinicie o app ou publique um novo build para aplicar.
 demanda_basica.rice=0.03
 demanda_basica.wheat=0.03
@@ -16,3 +16,7 @@ demanda_avancada.bread=1
 demanda_avancada.cheese=0.1
 demanda_avancada.fruit=0.02
 demanda_avancada.chocolate=0.025
+demanda_bens.clothing=0.01
+demanda_bens.furniture=0.01
+demanda_bens.utilities=0.01
+demanda_bens.glass=0.01

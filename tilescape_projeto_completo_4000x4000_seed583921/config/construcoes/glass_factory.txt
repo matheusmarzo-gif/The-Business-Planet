@@ -1,0 +1,27 @@
+{
+  "type": "glass_factory",
+  "kind": "industry",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fábrica de Vidros",
+  "asset": "/buildings/industrial/fabrica_vidros.png",
+  "width": 5,
+  "height": 5,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 2000, "stone": 1200, "iron": 800, "steel": 300 },
+  "workPoints": 10000000,
+  "maxWorkers": 40,
+  "stockProduct": "Vidro",
+  "stockProductId": "glass",
+  "stockCapacity": 320,
+  "toolCapacity": 80,
+  "toolDemandPerWorker": 2,
+  "inputCapacities": { "sand": 400, "charcoal": 800 },
+  "production": {
+    "mode": "batch",
+    "workPointsPerUnit": 400,
+    "batchSize": 8,
+    "batchInputs": { "sand": 10, "charcoal": 20 }
+  }
+}

@@ -208,7 +208,7 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'invalid_residence') {
           error = 'A construção ou o local escolhido é inválido.';
         } else if (body.error === 'insufficient_materials') {
-          error = `Estoque próximo insuficiente de Madeira e/ou Pedra. Os materiais devem estar em armazéns concluídos a até ${LINK_RADIUS} tiles da construção.`;
+          error = `Estoque próximo insuficiente de Madeira, Pedra, Ferro e/ou Aço. Os materiais devem estar em armazéns concluídos a até ${LINK_RADIUS} tiles da construção.`;
         } else if (body.error === 'invalid_work_settings') {
           error = `Informe funcionários desejados (até o máximo da construção), salário (C$ 0 a C$ ${MAX_WAGE.toLocaleString('pt-BR')}, com até 2 casas decimais) e carga horária de ${MIN_WORK_HOURS} a ${MAX_WORK_HOURS} horas.`;
         } else if (body.error === 'harvest_in_progress') {
@@ -2301,7 +2301,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                     <small>
                       {residence.type === 'warehouse'
                         ? `Primeiro armazém gratuito e instantâneo · seguintes: ${residence.cost.wood} madeira, ${residence.cost.stone} pedra`
-                        : `Custo: ${residence.cost.wood} madeira · ${residence.cost.stone} pedra${residence.cost.iron ? ` · ${residence.cost.iron} ferro` : ''}`}
+                        : `Custo: ${residence.cost.wood} madeira · ${residence.cost.stone} pedra${residence.cost.iron ? ` · ${residence.cost.iron} ferro` : ''}${residence.cost.steel ? ` · ${residence.cost.steel} aço` : ''}`}
                     </small>
                     <small>
                       {residence.type === 'warehouse'

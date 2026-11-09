@@ -2,6 +2,7 @@ const DEMAND_PREFIXES = [
   'demanda_basica.',
   'demanda_intermediaria.',
   'demanda_avancada.',
+  'demanda_bens.',
 ] as const;
 export const BASIC_BASKET_PRODUCT_IDS = [
   'rice',
@@ -20,10 +21,12 @@ export const INTERMEDIATE_BASKET_PRODUCT_IDS = [
   'spices',
 ] as const;
 export const ADVANCED_BASKET_PRODUCT_IDS = ['bread', 'cheese', 'fruit', 'chocolate'] as const;
+export const GOODS_BASKET_PRODUCT_IDS = ['clothing', 'furniture', 'utilities', 'glass'] as const;
 export const CONSUMPTION_PRODUCT_IDS = [
   ...BASIC_BASKET_PRODUCT_IDS,
   ...INTERMEDIATE_BASKET_PRODUCT_IDS,
   ...ADVANCED_BASKET_PRODUCT_IDS,
+  ...GOODS_BASKET_PRODUCT_IDS,
 ] as const;
 
 export function parseBasicDemandConfig(contents: string): Map<string, number> {
@@ -66,13 +69,16 @@ export function parseBasicDemandConfig(contents: string): Map<string, number> {
     const isBasic = (BASIC_BASKET_PRODUCT_IDS as readonly string[]).includes(productId);
     const isIntermediate = (INTERMEDIATE_BASKET_PRODUCT_IDS as readonly string[]).includes(productId);
     const isAdvanced = (ADVANCED_BASKET_PRODUCT_IDS as readonly string[]).includes(productId);
+    const isGoods = (GOODS_BASKET_PRODUCT_IDS as readonly string[]).includes(productId);
     const expectedPrefix = isAdvanced
       ? DEMAND_PREFIXES[2]
-      : isIntermediate
+      : isGoods
+        ? DEMAND_PREFIXES[3]
+        : isIntermediate
         ? DEMAND_PREFIXES[1]
         : DEMAND_PREFIXES[0];
     const actualPrefix = prefixByProduct.get(productId);
-    if ((!isBasic && !isIntermediate && !isAdvanced) || actualPrefix !== expectedPrefix) {
+    if ((!isBasic && !isIntermediate && !isAdvanced && !isGoods) || actualPrefix !== expectedPrefix) {
       throw new Error(`O produto ${productId} está na categoria de demanda incorreta.`);
     }
   }

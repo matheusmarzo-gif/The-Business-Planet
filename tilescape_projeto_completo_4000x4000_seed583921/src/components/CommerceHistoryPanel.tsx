@@ -127,8 +127,9 @@ export default function CommerceHistoryPanel({
                         <summary>Composição das cestas (soma diária por morador)</summary>
                         <p>
                           Cada contribuição é consumo diário configurado × preço médio municipal.
-                          Produtos básicos compõem RR, intermediários RR2 e avançados RR3. Os
-                          subtotais são somados sem arredondamento intermediário.
+                          Produtos básicos compõem RR, intermediários RR2 e avançados RR3; a cesta
+                          de bens usa a soma RR + RR2 + RR3. Os subtotais são somados sem
+                          arredondamento intermediário.
                         </p>
                         {transaction.basketBreakdown.map((item) => {
                           const product = PRODUCTS.find(({ id }) => id === item.productId);
@@ -150,7 +151,9 @@ export default function CommerceHistoryPanel({
                               {item.basketContribution === null
                                 ? 'não entra na cesta'
                                 : formatPreciseMoney(item.basketContribution)}{' '}
-                              · {item.basketType === 'advanced'
+                              · {item.basketType === 'goods'
+                                ? 'cesta de bens'
+                                : item.basketType === 'advanced'
                                 ? 'RR3'
                                 : item.basketType === 'intermediate'
                                   ? 'RR2'
@@ -192,7 +195,21 @@ export default function CommerceHistoryPanel({
                     ) : (
                       <p>Composição detalhada das cestas não foi registrada neste diagnóstico.</p>
                     )}
-                    {transaction.basketType === 'advanced' ? (
+                    {transaction.basketType === 'goods' ? (
+                      <p>
+                        Cesta básica de bens: RR_total = RR + RR2 + RR3; w = (1 − Pf / RR_total)
+                        <sup>{consumptionRules.goods.wExponent}</sup>; q = (
+                        {preciseDecimal.format(consumptionRules.goods.discountBase)}<sup>w</sup> − 1) × Rf;
+                        benefício de erro = 0 se Rf ≤ RR_total /
+                        {preciseDecimal.format(consumptionRules.goods.incomeBasketThresholdDivisor)}; caso contrário,
+                        Dᵢ × ((Rf − Pf − q) / RR_total)
+                        <sup>{consumptionRules.goods.errorExponent}</sup>. Benefício ideal = (Rf / RR_total −
+                        1 / ({preciseDecimal.format(consumptionRules.goods.idealBasketIncomeOffsetDivisor)} × RR_total) +
+                        {preciseDecimal.format(consumptionRules.goods.idealConstantOffset)})
+                        <sup>{consumptionRules.goods.idealExponent}</sup>; associado = (erro / ideal)
+                        <sup>{consumptionRules.goods.associatedBenefitExponent}</sup>.
+                      </p>
+                    ) : transaction.basketType === 'advanced' ? (
                       <p>
                         Cesta avançada: w = (1 − Pf / (RR + RR2 + RR3))
                         <sup>{consumptionRules.advanced.wExponent}</sup>; q = (

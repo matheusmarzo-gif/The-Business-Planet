@@ -39,6 +39,10 @@ test('orders construction menus and applies the requested costs', () => {
       'shop_cheese',
       'shop_fruit',
       'shop_chocolate',
+      'shop_clothing',
+      'shop_furniture',
+      'shop_utilities',
+      'shop_glass',
     ],
   );
   assert.deepEqual(
@@ -56,6 +60,8 @@ test('orders construction menus and applies the requested costs', () => {
       'farm_spices',
       'farm_cocoa',
       'farm_fruit',
+      'farm_sheep',
+      'farm_cotton',
     ],
   );
   assert.deepEqual(
@@ -64,7 +70,18 @@ test('orders construction menus and applies the requested costs', () => {
   );
   assert.deepEqual(
     getConstructionMenuDefinitions('industrias').map(({ type }) => type),
-    ['warehouse', 'silo', 'flour_mill', 'chocolate_factory'],
+    [
+      'warehouse',
+      'silo',
+      'flour_mill',
+      'chocolate_factory',
+      'steelworks',
+      'thread_factory',
+      'textile_factory',
+      'furniture_factory',
+      'utilities_factory',
+      'glass_factory',
+    ],
   );
   assert.equal(RESIDENCES.silo.width, 4);
   assert.equal(RESIDENCES.silo.height, 4);
@@ -82,9 +99,11 @@ test('orders construction menus and applies the requested costs', () => {
     'olive',
     'grape',
     'tobacco_leaf',
+    'cotton',
+    'wool',
   ]);
 
-  const costs: Partial<Record<keyof typeof RESIDENCES, { wood: number; stone: number; iron?: number; workPoints: number }>> = {
+  const costs: Partial<Record<keyof typeof RESIDENCES, { wood: number; stone: number; iron?: number; steel?: number; workPoints: number }>> = {
     silo: { wood: 300, stone: 60, workPoints: 20000 },
     farm_rice: { wood: 100, stone: 40, workPoints: 30000 },
     farm_wheat: { wood: 100, stone: 40, workPoints: 30000 },
@@ -110,6 +129,15 @@ test('orders construction menus and applies the requested costs', () => {
     chocolate_factory: { wood: 180, stone: 120, iron: 60, workPoints: 480000 },
     cheese_factory: { wood: 360, stone: 240, iron: 120, workPoints: 960000 },
     farm_fruit: { wood: 360, stone: 240, iron: 120, workPoints: 960000 },
+    sand_pit: { wood: 60, stone: 30, workPoints: 240000 },
+    steelworks: { wood: 1000, stone: 600, iron: 400, workPoints: 20000000 },
+    farm_sheep: { wood: 60, stone: 20, workPoints: 130000 },
+    farm_cotton: { wood: 60, stone: 20, workPoints: 130000 },
+    thread_factory: { wood: 800, stone: 500, iron: 300, steel: 100, workPoints: 7000000 },
+    textile_factory: { wood: 1000, stone: 600, iron: 400, steel: 100, workPoints: 10000000 },
+    furniture_factory: { wood: 1000, stone: 600, iron: 400, steel: 100, workPoints: 10000000 },
+    utilities_factory: { wood: 2000, stone: 1200, iron: 800, steel: 300, workPoints: 10000000 },
+    glass_factory: { wood: 2000, stone: 1200, iron: 800, steel: 300, workPoints: 10000000 },
   };
   for (const [type, expected] of Object.entries(costs)) {
     const definition = RESIDENCES[type as keyof typeof RESIDENCES];
@@ -148,7 +176,7 @@ test('plans construction costs across nearby warehouses without allowing partial
   );
 });
 
-test('requires iron as well as wood and stone for construction costs that specify it', () => {
+test('requires iron and steel as well as wood and stone for construction costs that specify them', () => {
   const cost = RESIDENCES.shop_bread.cost;
   assert.deepEqual(
     planConstructionMaterialWithdrawals(
@@ -172,6 +200,35 @@ test('requires iron as well as wood and stone for construction costs that specif
         { buildingId: 'warehouse', productId: 'stone', quantity: 120 },
       ],
       cost,
+    ),
+    null,
+  );
+  const steelCost = RESIDENCES.thread_factory.cost;
+  assert.deepEqual(
+    planConstructionMaterialWithdrawals(
+      [
+        { buildingId: 'warehouse', productId: 'wood', quantity: 800 },
+        { buildingId: 'warehouse', productId: 'stone', quantity: 500 },
+        { buildingId: 'warehouse', productId: 'iron', quantity: 300 },
+        { buildingId: 'warehouse', productId: 'steel', quantity: 100 },
+      ],
+      steelCost,
+    ),
+    [
+      { buildingId: 'warehouse', productId: 'wood', quantity: 800 },
+      { buildingId: 'warehouse', productId: 'stone', quantity: 500 },
+      { buildingId: 'warehouse', productId: 'iron', quantity: 300 },
+      { buildingId: 'warehouse', productId: 'steel', quantity: 100 },
+    ],
+  );
+  assert.equal(
+    planConstructionMaterialWithdrawals(
+      [
+        { buildingId: 'warehouse', productId: 'wood', quantity: 800 },
+        { buildingId: 'warehouse', productId: 'stone', quantity: 500 },
+        { buildingId: 'warehouse', productId: 'iron', quantity: 300 },
+      ],
+      steelCost,
     ),
     null,
   );

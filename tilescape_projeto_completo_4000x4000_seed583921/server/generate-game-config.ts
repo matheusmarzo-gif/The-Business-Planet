@@ -13,6 +13,10 @@ const expectedBuildingIds = [
   'bread_factory',
   'cheese_factory',
   'chocolate_factory',
+  'farm_cotton',
+  'farm_sheep',
+  'furniture_factory',
+  'glass_factory',
   'farm_barley',
   'farm_cane',
   'farm_cattle',
@@ -34,14 +38,18 @@ const expectedBuildingIds = [
   'lumber_mill',
   'quarry',
   'salt_gatherer',
+  'sand_pit',
   'shop_barley',
   'shop_bread',
   'shop_butcher',
   'shop_cheese',
   'shop_chocolate',
+  'shop_clothing',
   'shop_corn',
   'shop_fish',
   'shop_fruit',
+  'shop_furniture',
+  'shop_glass',
   'shop_milk',
   'shop_potato',
   'shop_rice',
@@ -49,9 +57,14 @@ const expectedBuildingIds = [
   'shop_spices',
   'shop_sugar',
   'shop_vegetables',
+  'shop_utilities',
   'shop_wheat',
+  'steelworks',
   'sugar_mill',
+  'textile_factory',
+  'thread_factory',
   'toolmaker',
+  'utilities_factory',
   'warehouse',
   'silo',
 ] as const;
@@ -201,8 +214,8 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
   for (const field of ['capacity', 'localAppeal', 'maxWorkers']) {
     if (readNumber(value, field) < 0) fail(path, `"${field}" não pode ser negativo.`);
   }
-  validateKeys(value.cost, `${path}:cost`, ['wood', 'stone'], ['iron']);
-  for (const material of ['wood', 'stone', 'iron']) {
+  validateKeys(value.cost, `${path}:cost`, ['wood', 'stone'], ['iron', 'steel']);
+  for (const material of ['wood', 'stone', 'iron', 'steel']) {
     const amount = value.cost[material] ?? 0;
     if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
       fail(path, `custo de "${material}" inválido.`);
@@ -465,6 +478,7 @@ async function generateGameConfig(): Promise<void> {
       'basic',
       'intermediate',
       'advanced',
+      'goods',
       'associatedBenefitExponent',
     ],
   );
@@ -519,6 +533,20 @@ async function generateGameConfig(): Promise<void> {
       'idealIncomeOffset',
       'idealBasketDivisor',
       'idealExponent',
+    ],
+  );
+  validateKeys(
+    readRecord(formulas.consumption, 'goods'),
+    'config/formulas/consumo.txt:goods',
+    [
+      'discountBase',
+      'wExponent',
+      'errorExponent',
+      'incomeBasketThresholdDivisor',
+      'idealBasketIncomeOffsetDivisor',
+      'idealConstantOffset',
+      'idealExponent',
+      'associatedBenefitExponent',
     ],
   );
   validateKeys(
@@ -671,6 +699,12 @@ async function generateGameConfig(): Promise<void> {
     'consumption.advanced.wExponent',
     'consumption.advanced.errorExponent',
     'consumption.advanced.idealExponent',
+    'consumption.goods.wExponent',
+    'consumption.goods.errorExponent',
+    'consumption.goods.incomeBasketThresholdDivisor',
+    'consumption.goods.idealBasketIncomeOffsetDivisor',
+    'consumption.goods.idealExponent',
+    'consumption.goods.associatedBenefitExponent',
     'consumption.associatedBenefitExponent',
     'work.hoursFactor.benefitExponent',
     'work.hours.minimum',
@@ -684,6 +718,18 @@ async function generateGameConfig(): Promise<void> {
   }
   if (readNumber(formulas, 'consumption.associatedBenefitExponent') % 2 !== 0) {
     throw new Error('consumption.associatedBenefitExponent precisa ser par.');
+  }
+  if (readNumber(formulas, 'consumption.goods.associatedBenefitExponent') % 2 !== 0) {
+    throw new Error('consumption.goods.associatedBenefitExponent precisa ser par.');
+  }
+  for (const path of [
+    'consumption.goods.wExponent',
+    'consumption.goods.errorExponent',
+    'consumption.goods.idealExponent',
+  ]) {
+    if (readNumber(formulas, path) % 2 !== 1) {
+      throw new Error(`${path} precisa ser ímpar para manter a fórmula da cesta de bens.`);
+    }
   }
   for (const path of ['consumption.basic.errorExponent', 'consumption.basic.idealExponent']) {
     if (readNumber(formulas, path) % 2 !== 0) {
@@ -707,6 +753,7 @@ async function generateGameConfig(): Promise<void> {
     'consumption.basic.discountBase',
     'consumption.intermediate.discountBase',
     'consumption.advanced.discountBase',
+    'consumption.goods.discountBase',
   ]) {
     const discountBase = readNumber(formulas, path);
     if (discountBase >= 1) throw new Error(`${path} precisa ser menor que 1.`);
@@ -715,6 +762,7 @@ async function generateGameConfig(): Promise<void> {
     'consumption.basic.idealIncomeOffset',
     'consumption.intermediate.idealIncomeOffset',
     'consumption.advanced.idealIncomeOffset',
+    'consumption.goods.idealConstantOffset',
     'work.hoursFactor.penalty',
     'work.wage.default',
     'work.rent.default',

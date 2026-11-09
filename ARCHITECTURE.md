@@ -79,7 +79,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `server/index.ts` | API Express, autenticação de tokens, banco, Redis, relógio e WebSocket. |
 | `database/schema.sql` | DDL aplicado pelo servidor durante a inicialização. |
 | `config/demanda_basica.txt` | Multiplicadores de demanda residencial por produto, carregados na inicialização do servidor. |
-| `config/construcoes/*.txt` | Dados editáveis das 45 construções, um JSON por arquivo. |
+| `config/construcoes/*.txt` | Dados editáveis das 58 construções, um JSON por arquivo. |
 | `config/formulas/*.txt` | Parâmetros editáveis de consumo, trabalho e transporte. |
 | `server/generate-game-config.ts` | Valida os TXT e gera o módulo de configuração compartilhado. |
 | `src/generated/gameConfig.ts` | Saída ignorada pelo Git, regenerada pelos comandos npm antes de uso. |
@@ -384,6 +384,19 @@ mapeamento e verificar todas as curvas.
   limites de venda: 3, 26, 54 e 160 WP/unidade, respectivamente.
   Seus produtos participam da cesta avançada e recebem estoque do armazém ligado.
   Sprites em `public/buildings/commerce/`.
+- `shop_clothing`, `shop_furniture`, `shop_utilities` e `shop_glass` são lojas
+  urbanas 2 × 2, com 12 funcionários, estoque de 5 e venda a cada 300 WP. Os
+  produtos recebem estoque do armazém ligado e participam da cesta de bens.
+- `farm_sheep` e `farm_cotton` usam a mesma automação e ciclo genérico das
+  demais fazendas. Cada regra de colheita está no catálogo gerado; algodão e lã
+  também são aceitos pelo Silo.
+- `sand_pit`, `steelworks`, `thread_factory`, `textile_factory`,
+  `furniture_factory`, `utilities_factory` e `glass_factory` usam as regras de
+  produção genéricas (`accumulate`/`batch`) e insumos em
+  `building_input_stock`. Os custos de construção aceitam também aço e são
+  debitados atomicamente dos armazéns concluídos próximos. As fábricas de
+  fiação, têxtil, móveis, utilitários e vidro recebem Ferramentas e compartilham
+  a penalidade diária configurada por falta.
 - O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
   área ocupada deve ficar dentro da cidade e da zona exigida pela construção
   (urbana ou rural), em terra, sem
@@ -396,8 +409,9 @@ mapeamento e verificar todas as curvas.
   existentes. O servidor aplica essa regra dentro do lock transacional. Todos
   os jogadores autenticados podem iniciar qualquer construção do catálogo; a
   conta master mantém a permissão de iniciar sem materiais.
-  Exceto o primeiro armazém, a construção exige a Madeira e a Pedra definidas
-  em `ResidenceDefinition.cost`, debitadas atomicamente dos armazéns concluídos
+  Exceto o primeiro armazém, a construção exige os materiais definidos
+  em `ResidenceDefinition.cost` (Madeira, Pedra, Ferro e, quando aplicável, Aço),
+  debitados atomicamente dos armazéns concluídos
   do jogador a até 60 tiles do centro do local escolhido; estoques de vários
   armazéns próximos podem ser combinados. Para jogadores comuns, estoque
   insuficiente rejeita a obra sem débito parcial. Obras regulares são
@@ -478,20 +492,22 @@ mapeamento e verificar todas as curvas.
   fator 1,2 em 4 h, 1 em 8 h, 0,8 em 14 h, linear entre eles; saúde e felicidade
   fixas em 100 por enquanto) e é concluída automaticamente ao atingir os Work
   Points necessários.
-- Vendas das cestas básica, intermediária e avançada (`src/types/commerce.ts`): lojas cujo catálogo tem
+- Vendas das cestas básica, intermediária, avançada e básica de bens (`src/types/commerce.ts`): lojas cujo catálogo tem
   `kind: 'shop'` e `stockProductId` participam das vendas; incluem arroz,
   batata, milho, cevada, trigo, peixe, carne vermelha, leite, açúcar, vegetais,
-  sal, especiarias, pão, queijo, frutas e chocolate. Todas têm `price` (padrão
+  sal, especiarias, pão, queijo, frutas, chocolate, roupas, móveis, utilitários
+  e vidros. Todas têm `price` (padrão
   C$ 10, editável pelo dono em centavos via
   `PATCH /api/residential-buildings/:id/price`) e estoque abastecido pelo
   armazém ligado do mesmo dono. No job das 00:00, lojas de produtos por unidade
-  têm capacidade `floor(WP do dia / 20)` unidades e leite
-  `floor(WP do dia / 1)` litros (WP = empregados × `getDailyWorkPoints`).
+  têm capacidade definida pelo `salesWorkPointsPerUnit` do tipo de construção
+  (WP = empregados × `getDailyWorkPoints`).
   `config/demanda_basica.txt` define as necessidades diárias por pessoa: na
   cesta básica, arroz, trigo, cevada, milho, batata, peixe e carne vermelha
   começam em `0.03`, leite em `1`; na cesta intermediária, açúcar `0.01`,
   vegetais `0.05`, sal `0.04` e especiarias `0.01`; na cesta avançada, pão
-  `1`, queijo `0.1`, frutas `0.02` e chocolate `0.025`.
+  `1`, queijo `0.1`, frutas `0.02` e chocolate `0.025`; roupas, móveis,
+  utilitários e vidros começam em `0.01` cada na cesta de bens.
   `commerce_history` fornece os preços e unidades vendidas nos últimos 30 dias.
   `getCityProductAveragePrices` calcula a média ponderada por unidades vendidas,
   por produto e cidade; se ainda não houve venda do produto, usa a média dos
@@ -514,9 +530,15 @@ mapeamento e verificar todas as curvas.
   `w = (1 − Pf / (RR + RR2 + RR3))^2`; `q` mantém a mesma fórmula. O benefício
   de erro é `Dᵢ × ((Rf − Pf − q) / (RR + RR2 + RR3))^2` se
   `Rf > Pf + 4` e `Rf > RR/6 + RR2/3 + RR3/4`, caso contrário zero; o ideal é
-  `((Rf − 1/6) / (RR + RR2 + RR3) − 1/180)^2`. Em todas as cestas,
-  `benefício_associado = (benefício_erro /
-  benefício_ideal)^4`; se o benefício ideal for zero, o associado também é zero.
+  `((Rf − 1/6) / (RR + RR2 + RR3) − 1/180)^2`. Nas cestas básica,
+  intermediária e avançada, `benefício_associado = (benefício_erro /
+  benefício_ideal)^4`; se o ideal for zero, o associado também é zero. Na cesta
+  de bens, `RR_total = RR + RR2 + RR3`, `w = (1 − Pf/RR_total)^3` e
+  `q = (0,8^w − 1) × Rf`. O benefício de erro é zero se
+  `Rf ≤ RR_total/2`; caso contrário, é
+  `Dᵢ × ((Rf − Pf − q)/RR_total)^3`. O ideal é
+  `(Rf/RR_total − 1/(6 × RR_total) + 1/16)^3` e o associado é
+  `(benefício_erro / benefício_ideal)^6`.
   Os moradores são repartidos entre as lojas do produto em 60 tiles na
   proporção do benefício associado. O método dos maiores restos garante
   alocações inteiras cuja soma é a população da residência quando há benefício
@@ -533,7 +555,8 @@ mapeamento e verificar todas as curvas.
   `RESIDENTIAL_COLUMNS` (empregados da construção ou moradores empregados).
   A capacidade de venda converte Work Points diários pelos limites
   `salesWorkPointsPerUnit` definidos por construção; `bread`, `cheese`, `fruit`
-  e `chocolate` participam da cesta avançada.
+  e `chocolate` participam da cesta avançada; `clothing`, `furniture`,
+  `utilities` e `glass` participam da cesta de bens.
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
   preço unitário de venda. Os detalhes do diagnóstico (renda, moradores,
@@ -550,7 +573,7 @@ mapeamento e verificar todas as curvas.
 
   ## Configuração editável das regras
 
-  Os 44 arquivos `config/construcoes/<tipo>.txt` são a fonte dos dados do catálogo:
+  Os 58 arquivos `config/construcoes/<tipo>.txt` são a fonte dos dados do catálogo:
   nome, imagem pública, categoria funcional, zona e requisitos de posicionamento,
   dimensões, custos, Work Points de obra, capacidade de trabalhadores, estoques
   de produtos/insumos, receitas, regras de produção e safras sazonais. Os arquivos

@@ -27,6 +27,8 @@
     "sugarcane",
     "olive",
     "grape",
-    "tobacco_leaf"
+    "tobacco_leaf",
+    "cotton",
+    "wool"
   ]
 }

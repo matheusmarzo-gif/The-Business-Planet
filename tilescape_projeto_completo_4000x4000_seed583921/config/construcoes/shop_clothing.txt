@@ -1,0 +1,19 @@
+{
+  "type": "shop_clothing",
+  "kind": "shop",
+  "requiredZone": "urban",
+  "requiresRoad": true,
+  "name": "Loja de Roupas",
+  "asset": "/buildings/commerce/loja_roupas.png",
+  "width": 2,
+  "height": 2,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 40, "stone": 20 },
+  "workPoints": 15000,
+  "maxWorkers": 12,
+  "stockProduct": "Roupa",
+  "stockProductId": "clothing",
+  "stockCapacity": 5,
+  "salesWorkPointsPerUnit": 300
+}

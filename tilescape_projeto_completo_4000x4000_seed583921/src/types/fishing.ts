@@ -119,9 +119,10 @@ export function planProduction(
   }
   if (rule.batchInputs || rule.batchInputRates) {
     const total = input.progress + effective;
+    const batchSize = rule.batchSize ?? 1;
     const requestedCycles = Math.min(
       total / rule.workPointsPerUnit,
-      free,
+      free / batchSize,
     );
     const requiredInputs = rule.batchInputs ?? {};
     const cycles = Object.entries(requiredInputs).reduce((availableCycles, [productId, amount]) => {
@@ -159,11 +160,13 @@ export function planProduction(
         expectedUse,
       );
     }
-    const units = Math.min(free, roundExpected(cycles));
+    const units = Math.min(free, roundExpected(cycles * batchSize));
     const blockedByCapacityOrInputs = cycles + 1e-9 < total / rule.workPointsPerUnit;
     return {
       units,
-      progress: blockedByCapacityOrInputs ? 0 : Math.max(0, total - units * rule.workPointsPerUnit),
+      progress: blockedByCapacityOrInputs
+        ? 0
+        : Math.max(0, total - cycles * rule.workPointsPerUnit),
       woodUsed: inputStocksUsed.wood ?? 0,
       ironUsed: inputStocksUsed.iron ?? 0,
       charcoalUsed: inputStocksUsed.charcoal ?? 0,

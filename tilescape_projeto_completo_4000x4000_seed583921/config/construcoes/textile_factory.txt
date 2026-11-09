@@ -1,0 +1,27 @@
+{
+  "type": "textile_factory",
+  "kind": "industry",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fábrica Têxtil",
+  "asset": "/buildings/industrial/fabrica_roupas.png",
+  "width": 5,
+  "height": 5,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 1000, "stone": 600, "iron": 400, "steel": 100 },
+  "workPoints": 10000000,
+  "maxWorkers": 40,
+  "stockProduct": "Roupa",
+  "stockProductId": "clothing",
+  "stockCapacity": 80,
+  "toolCapacity": 80,
+  "toolDemandPerWorker": 2,
+  "inputCapacities": { "thread": 40, "charcoal": 80 },
+  "production": {
+    "mode": "batch",
+    "workPointsPerUnit": 400,
+    "batchSize": 2,
+    "batchInputs": { "thread": 1, "charcoal": 2 }
+  }
+}

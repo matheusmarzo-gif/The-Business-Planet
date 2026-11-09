@@ -1,0 +1,25 @@
+{
+  "type": "farm_cotton",
+  "kind": "farm",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fazenda de Algodão",
+  "asset": "/buildings/farms/fazenda_algodao.png",
+  "width": 4,
+  "height": 4,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 60, "stone": 20 },
+  "workPoints": 130000,
+  "maxWorkers": 10,
+  "stockProduct": "Algodão",
+  "stockProductId": "cotton",
+  "stockCapacity": 300,
+  "cropRule": {
+    "growthMonths": 12,
+    "dailyWorkPoints": 1000,
+    "harvestWorkPointsPerUnit": 100,
+    "baseYield": 300,
+    "plantingEfficiencyByQuarter": [0.4, 0.8, 1, 0.6]
+  }
+}

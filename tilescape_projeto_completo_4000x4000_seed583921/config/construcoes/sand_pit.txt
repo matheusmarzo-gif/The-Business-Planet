@@ -1,0 +1,22 @@
+{
+  "type": "sand_pit",
+  "kind": "resource",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Cava de Areia",
+  "asset": "/buildings/resources/cava_areia.png",
+  "width": 4,
+  "height": 4,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 60, "stone": 30 },
+  "workPoints": 240000,
+  "maxWorkers": 30,
+  "stockProduct": "Areia",
+  "stockProductId": "sand",
+  "stockCapacity": 10,
+  "production": {
+    "mode": "accumulate",
+    "workPointsPerUnit": 600
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "type": "thread_factory",
+  "kind": "industry",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fábrica de Fiação",
+  "asset": "/buildings/industrial/fabrica_fiacao.png",
+  "width": 5,
+  "height": 5,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 800, "stone": 500, "iron": 300, "steel": 100 },
+  "workPoints": 7000000,
+  "maxWorkers": 40,
+  "stockProduct": "Linha",
+  "stockProductId": "thread",
+  "stockCapacity": 80,
+  "toolCapacity": 80,
+  "toolDemandPerWorker": 2,
+  "inputCapacities": { "cotton": 40, "wool": 40, "charcoal": 160 },
+  "production": {
+    "mode": "batch",
+    "workPointsPerUnit": 300,
+    "batchSize": 2,
+    "batchInputs": { "cotton": 1, "wool": 1, "charcoal": 4 }
+  }
+}

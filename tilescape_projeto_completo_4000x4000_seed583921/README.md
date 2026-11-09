@@ -190,11 +190,15 @@ e Vidro (300 kg, 0,1 m³); todos têm validade infinita.
 A ordem dos cartões é definida por categoria: Comerciais lista primeiro as
 lojas de arroz, trigo, cevada, batata e milho, depois Peixaria, Leitaria e
 Açougue; em seguida lojas de açúcar, especiarias, vegetais e sal, Padaria,
-Queijaria, Frutaria e Chocolateria. Fazendas lista arroz, trigo, cevada,
+Queijaria, Frutaria, Chocolateria, lojas de roupas e móveis, loja de utilitários
+e Vidraçaria. Fazendas lista arroz, trigo, cevada,
 batata, milho, leiteira, bovina, cana, vegetais, especiarias, cacau e frutas.
+Fazenda de Ovelha e Fazenda de Algodão também aparecem em Fazendas.
 Construções Artesanais lista Pesqueiro, Ferramentaria, Carvoaria, Casa de
-Engenho, Fábrica de Pães e Fábrica de Queijo; Indústrias lista Armazém, Silo,
-Moinho e Fábrica de Chocolate.
+Engenho, Fábrica de Pães e Fábrica de Queijo; Recursos inclui a Cava de Areia.
+Indústrias lista Armazém, Silo,
+Moinho, Fábrica de Chocolate, Usina de Aço, Fábrica de Fiação, Fábrica Têxtil,
+Fábrica de Móveis, Fábrica de Utilitários e Fábrica de Vidros.
 
 A conta Master pode arrastar qualquer construção para reposicioná-la. A
 construção mantém seu estado, funcionários e estoques; o novo local precisa
@@ -203,10 +207,10 @@ armazéns ligados fora do raio permitido.
 
 ### Configuração editável do jogo
 
-Os dados das 45 construções ficam em arquivos individuais
+Os dados das 58 construções ficam em arquivos individuais
 [`config/construcoes/`](./config/construcoes/), um JSON válido por arquivo
 `.txt` nomeado pelo tipo interno (por exemplo, `farm_rice.txt`). É possível
-ajustar dimensões, zona, estrada/água exigida, custo de Madeira/Pedra/Ferro, Work
+ajustar dimensões, zona, estrada/água exigida, custo de Madeira/Pedra/Ferro/Aço, Work
 Points de construção, funcionários, capacidade e estoques de produtos e
 insumos, receitas, regras de produção e safras sazonais. Os parâmetros das
 fórmulas residem em [`config/formulas/consumo.txt`](./config/formulas/consumo.txt),
@@ -215,7 +219,8 @@ fórmulas residem em [`config/formulas/consumo.txt`](./config/formulas/consumo.t
 continuam em [`config/demanda_basica.txt`](./config/demanda_basica.txt).
 
 Edite somente valores, mantendo a sintaxe JSON, os nomes dos campos e os tipos
-de construção existentes. A estrutura das fórmulas e o comportamento especial
+de construção existentes. Custos de obra podem incluir Madeira, Pedra, Ferro e
+Aço. A estrutura das fórmulas e o comportamento especial
 de cada tipo continuam no código; coeficientes, limites e dados podem ser
 alterados nos arquivos. Para adicionar um tipo de construção ou uma nova regra
 de comportamento, ainda é necessário alterar o código. O gerador valida as
@@ -367,7 +372,7 @@ pesada; cada compra é limitada aos Work Points disponíveis naquela rodada.
 O **Silo** também fica em Indústrias. Tem 4 × 4 tiles, até 100 funcionários,
 capacidade de 400 m³ e custa 300 madeiras, 60 pedras e 20.000 Work Points.
 Só pode armazenar Trigo, Cevada, Batata, Milho, Arroz, Especiarias, Cacau, Cana,
-Azeitona, Uva e Fumo; transferências e compras/vendas respeitam essa lista.
+Azeitona, Uva, Fumo, Algodão e Lã; transferências e compras/vendas respeitam essa lista.
 Assim como o Armazém, ao clicar nele é possível abrir **Produtos e estoque** e
 configurar os produtos permitidos.
 
@@ -404,6 +409,36 @@ há 10% de chance proporcional de consumir 1 cacau, 20% de consumir 1 açúcar e
 60% de consumir 1 leite extra por unidade. Frações de produção e consumo são
 arredondadas como probabilidades.
 
+As **Fazendas de Ovelha e de Algodão** ocupam 4 × 4, empregam até 10 pessoas,
+custam 60 madeiras/20 pedras e exigem 130.000 Work Points. A primeira guarda
+100 lãs; a segunda, 300 algodões. Ambas completam um ciclo em 12 meses e
+oferecem as mesmas opções de automatização de plantio e colheita das outras
+fazendas. A fazenda de ovelha produz até 100 lãs, com 500 Work Points diários e
+50 por unidade colhida; a eficiência de plantio é 20%, 100%, 80% e 100% por
+trimestre. A de algodão produz até 300 unidades, com 1.000 Work Points diários
+e 100 por unidade colhida; sua eficiência trimestral é 40%, 80%, 100% e 60%.
+
+A **Cava de Areia** (4 × 4, 30 funcionários) é um recurso rural que custa
+60 madeiras/30 pedras, exige 240.000 Work Points, guarda 10 areias e produz
+1 unidade a cada 600 Work Points. A **Usina de Aço** (5 × 5, 40 funcionários)
+custa 1.000 madeiras, 600 pedras e 400 ferros, exige 20.000.000 Work Points,
+guarda 30 aços e recebe até 60 ferros e 300 carvões. Cada 400 Work Points,
+2 ferros e 10 carvões produzem 1 aço.
+
+As novas indústrias ocupam 5 × 5, empregam até 40 pessoas e exigem Ferramentas
+(estoque máximo 80; demanda de 2 por funcionário/dia, com penalidade por falta).
+A **Fábrica de Fiação** custa 800 madeiras, 500 pedras, 300 ferros e 100 aços,
+exige 7.000.000 Work Points e, a cada 300 Work Points, 1 algodão, 1 lã e 4
+carvões produzem 2 linhas. A **Fábrica Têxtil** custa 1.000 madeiras, 600
+pedras, 400 ferros e 100 aços, exige 10.000.000 Work Points e transforma 1
+linha e 2 carvões em 2 roupas a cada 400 Work Points. A **Fábrica de Móveis**
+tem o mesmo custo e Work Points da Têxtil; cada 400 Work Points e 1 madeira
+produzem 1 móvel. A **Fábrica de Utilitários** custa 2.000 madeiras, 1.200
+pedras, 800 ferros e 300 aços; cada 400 Work Points, 1 aço e 5 carvões
+produzem 8 utilitários. A **Fábrica de Vidros** tem o mesmo custo e Work Points;
+cada 400 Work Points, 10 areias e 20 carvões produzem 8 vidros. As fábricas
+recebem insumos e ferramentas do armazém ligado e enviam a produção para ele.
+
 ### Comércio
 
 Na categoria **Comerciais**, a **Loja de Arroz** (2 × 2 tiles, até 1 funcionário,
@@ -436,6 +471,12 @@ chocolates) custam 180 madeiras, 120 pedras e 60 ferros e exigem 480.000 Work
 Points cada. A capacidade de venda considera os Work Points gerados por seus
 funcionários: respectivamente 3, 26, 160 e 54 Work Points por unidade.
 Todas recebem estoque do armazém ligado e permitem definir o preço.
+
+As novas **Lojas de Roupas, Móveis e Utilitários** e a **Vidraçaria** ocupam
+2 × 2, empregam até 12 pessoas, guardam 5 unidades do produto vendido e custam
+40 madeiras/20 pedras e 15.000 Work Points. Cada venda usa 300 Work Points.
+Seus estoques são abastecidos pelo armazém ligado, e esses quatro produtos
+participam da cesta básica de bens.
 
 Ao terminar a construção de um comércio, o preço inicial deixa de ser sempre
 C$ 10: primeiro é usada a média dos preços atuais de comércios concluídos do
@@ -487,14 +528,15 @@ As **Lojas de Açúcar, Vegetais, Sal e Especiarias** ocupam 2 × 2 tiles e segu
 os limites e custos definidos na seção Comércio. Cada loja recebe seu produto
 do armazém ligado e vende por preço definido pelo dono.
 
-O consumo diário desejável por morador das **cestas básica, intermediária e
-avançada**
+O consumo diário desejável por morador das **cestas básica, intermediária,
+avançada e básica de bens**
 pode ser ajustado em [`config/demanda_basica.txt`](./config/demanda_basica.txt).
 Na cesta básica: 0,03 de arroz, trigo, cevada, milho, batata, peixe e carne
 vermelha; e 1 litro de leite. Na cesta intermediária: 0,01 de açúcar, 0,05 de
 vegetais, 0,04 de sal e 0,01 de especiarias. Na cesta avançada: 1 pão, 0,1 queijo,
-0,02 frutas e 0,025 chocolate por pessoa/dia. O servidor lê o arquivo ao iniciar;
-reinicie o serviço depois de alterá-lo.
+0,02 frutas e 0,025 chocolate. Na cesta básica de bens, roupas, móveis,
+utilitários e vidros têm demanda de 0,01 cada por pessoa/dia. O servidor lê o
+arquivo ao iniciar; reinicie o serviço depois de alterá-lo.
 
 O preço médio de cada produto é ponderado pelas vendas do período definido em
 `config/formulas/consumo.txt` (30 dias por padrão) ou,
@@ -517,7 +559,13 @@ usa-se `w = (1 − Pf/(RR + RR2 + RR3))^2` e o mesmo `q`; o benefício de erro �
 `((Rf − 1/6)/(RR + RR2 + RR3) − 1/180)^2`. O benefício associado permanece
 `(benefício de erro / benefício ideal)^4`. `Rf` é a renda média
 por morador e `Dᵢ = √(60/(60 + distância))`. A demanda efetiva ainda depende da
-distribuição de moradores entre lojas, estoque e capacidade de venda.
+distribuição de moradores entre lojas, estoque e capacidade de venda. A cesta
+básica de bens usa `RR_total = RR + RR2 + RR3`,
+`w = (1 − Pf/RR_total)^3` e `q = (0,8^w − 1) × Rf`. Seu benefício de erro é
+zero quando `Rf ≤ RR_total/2`; acima disso, é
+`Dᵢ × ((Rf − Pf − q)/RR_total)^3`. O benefício ideal é
+`(Rf/RR_total − 1/(6 × RR_total) + 1/16)^3` e o associado é
+`(benefício de erro / benefício ideal)^6`.
 As necessidades e os parâmetros dessas fórmulas, inclusive as eficiências
 usadas no benefício do trabalho e os Work Points por distância, estão nos
 arquivos de configuração indicados acima. O transporte usa

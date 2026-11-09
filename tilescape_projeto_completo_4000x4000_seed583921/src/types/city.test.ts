@@ -84,7 +84,7 @@ import {
 import { parseWarehouseSetting } from './warehouse';
 import { planDailySpoilage, PRODUCTS } from './product';
 import { getDairyFarmEfficiency } from './dairy';
-import { parseBasicDemandConfig } from './commerceDemand';
+import { GOODS_BASKET_PRODUCT_IDS, parseBasicDemandConfig } from './commerceDemand';
 
 const city = { centerX: 1000, centerY: 1000 };
 
@@ -327,6 +327,8 @@ describe('other crop farms', () => {
       farm_cane: [0.9, 0.8, 1, 0.9],
       farm_spices: [1, 0.6, 0.6, 0.6],
       farm_vegetables: [0.2, 0.4, 1, 0.8],
+      farm_sheep: [0.2, 1, 0.8, 1],
+      farm_cotton: [0.4, 0.8, 1, 0.6],
     } as const;
     for (const [farmType, efficiencies] of Object.entries(seasonalEfficiencies)) {
       assert.deepEqual(
@@ -349,6 +351,8 @@ describe('other crop farms', () => {
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_vegetables.growthMonths), '2026-03-31');
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_cattle.growthMonths), '2028-01-31');
     assert.equal(grow('2026-04-10', 'farm_cattle', 500).yieldUnits, 4000);
+    assert.equal(grow('2026-01-10', 'farm_sheep', 500).yieldUnits, 20);
+    assert.equal(grow('2026-07-10', 'farm_cotton', 1000).yieldUnits, 300);
   });
 
   it('matches the rice farm construction and storage limits', () => {
@@ -394,8 +398,14 @@ describe('other crop farms', () => {
         FARM_CROP_RULES.farm_vegetables.dailyWorkPoints,
         FARM_CROP_RULES.farm_vegetables.harvestWorkPointsPerUnit,
         FARM_CROP_RULES.farm_vegetables.baseYield,
+        FARM_CROP_RULES.farm_sheep.dailyWorkPoints,
+        FARM_CROP_RULES.farm_sheep.harvestWorkPointsPerUnit,
+        FARM_CROP_RULES.farm_sheep.baseYield,
+        FARM_CROP_RULES.farm_cotton.dailyWorkPoints,
+        FARM_CROP_RULES.farm_cotton.harvestWorkPointsPerUnit,
+        FARM_CROP_RULES.farm_cotton.baseYield,
       ],
-      [100, 25, 2000, 5000, 10, 600, 5000, 10, 1000],
+        [100, 25, 2000, 5000, 10, 600, 5000, 10, 1000, 500, 50, 100, 1000, 100, 300],
     );
     assert.deepEqual(
       planHarvest(
@@ -433,6 +443,8 @@ describe('warehouse logistics', () => {
     assert.equal(isStorageBuilding('silo'), true);
     assert.equal(isStorageBuilding('farm_rice'), false);
     assert.equal(canStoreProduct('silo', 'wheat'), true);
+    assert.equal(canStoreProduct('silo', 'cotton'), true);
+    assert.equal(canStoreProduct('silo', 'wool'), true);
     assert.equal(canStoreProduct('silo', 'milk'), false);
     assert.equal(
       isWithinLinkRadius(
@@ -597,6 +609,10 @@ describe('shop sales', () => {
     ['cheese', 0.1],
     ['fruit', 0.02],
     ['chocolate', 0.025],
+    ['clothing', 0.01],
+    ['furniture', 0.01],
+    ['utilities', 0.01],
+    ['glass', 0.01],
   ]);
   const cityPrices = (productId: string, price: number) =>
     new Map([[getCityProductKey('city-a', productId), price]]);
@@ -846,9 +862,13 @@ describe('shop sales', () => {
       basketShops,
       history,
     );
-    assert.equal(allBasketItems.length, 16);
+    assert.equal(allBasketItems.length, 20);
     assert.equal(
       getAdvancedBasketBreakdown('city-a', demandByProduct, prices, basketShops, history).length,
+      4,
+    );
+    assert.equal(
+      allBasketItems.filter((item) => item.basketType === 'goods').length,
       4,
     );
     assert.deepEqual(
@@ -962,6 +982,51 @@ describe('shop sales', () => {
     assert.equal(transaction.candidate.calculationBasketCost, 1.32);
   });
 
+  it('uses the goods-basket formula with RR plus RR2 plus RR3', () => {
+    const income = 6;
+    const price = 60;
+    const need = 0.01;
+    const rr = 2;
+    const rr2 = 1;
+    const rr3 = 0.5;
+    const distance = 15;
+    const total = rr + rr2 + rr3;
+    const pf = price * need;
+    const w = (1 - pf / total) ** 3;
+    const q = (0.8 ** w - 1) * income;
+    const distanceFactor = Math.sqrt(60 / (60 + distance));
+    const error = distanceFactor * ((income - pf - q) / total) ** 3;
+    const ideal = (income / total - 1 / (6 * total) + 1 / 16) ** 3;
+    const calculation = getPurchaseBenefitCalculation(
+      income,
+      price,
+      need,
+      rr,
+      distance,
+      {
+        basketType: 'goods',
+        intermediateBasketCost: rr2,
+        advancedBasketCost: rr3,
+      },
+    );
+    assert.equal(calculation.pf, pf);
+    assert.equal(calculation.w, w);
+    assert.ok(Math.abs(calculation.q - q) < 1e-12);
+    assert.ok(Math.abs(calculation.errorBenefit - error) < 1e-12);
+    assert.ok(Math.abs(calculation.idealBenefit - ideal) < 1e-12);
+    assert.ok(
+      Math.abs(calculation.associatedBenefit - (error / ideal) ** 6) < 1e-10,
+    );
+    assert.equal(
+      getPurchaseBenefitCalculation(total / 2, price, need, rr, 0, {
+        basketType: 'goods',
+        intermediateBasketCost: rr2,
+        advancedBasketCost: rr3,
+      }).errorBenefit,
+      0,
+    );
+  });
+
   it('uses the advanced-basket formula, RR3, and its three income thresholds', () => {
     const income = 6;
     const price = 20;
@@ -1004,6 +1069,37 @@ describe('shop sales', () => {
         advancedBasketCost: rr3,
       }).errorBenefit,
       0,
+    );
+  });
+
+  it('sells new goods through the shared residence-demand planner', () => {
+    const goodsShops = [
+      { ...shop('clothing', 0, 10, 10, 10), productId: 'clothing', type: 'shop_clothing' as const },
+      { ...shop('furniture', 0, 10, 10, 10), productId: 'furniture', type: 'shop_furniture' as const },
+      { ...shop('utilities', 0, 10, 10, 10), productId: 'utilities', type: 'shop_utilities' as const },
+      { ...shop('glass', 0, 10, 10, 10), productId: 'glass', type: 'shop_glass' as const },
+    ];
+    const prices = new Map(
+      [...demandByProduct.keys()].map((productId) => [
+        getCityProductKey('city-a', productId),
+        1,
+      ]),
+    );
+    const plan = planShopSalesDetailed(
+      [home('goods-home', 0, 32, 10)],
+      goodsShops,
+      demandByProduct,
+      prices,
+      () => 0,
+    );
+    assert.deepEqual(
+      plan.purchases.map((purchase) => purchase.productId).sort(),
+      [...GOODS_BASKET_PRODUCT_IDS].sort(),
+    );
+    assert.ok(
+      [...plan.transactionsByShop.values()]
+        .flat()
+        .every((transaction) => transaction.basketType === 'goods'),
     );
   });
 
@@ -1212,6 +1308,10 @@ describe('fazenda leiteira e demanda configurável', () => {
       'demanda_avancada.cheese=0.1',
       'demanda_avancada.fruit=0.02',
       'demanda_avancada.chocolate=0.025',
+      'demanda_bens.clothing=0.01',
+      'demanda_bens.furniture=0.01',
+      'demanda_bens.utilities=0.01',
+      'demanda_bens.glass=0.01',
     ].join('\n'));
     assert.equal(multipliers.get('rice'), 0.03);
     assert.equal(multipliers.get('wheat'), 0.03);
@@ -1227,6 +1327,10 @@ describe('fazenda leiteira e demanda configurável', () => {
     assert.equal(multipliers.get('cheese'), 0.1);
     assert.equal(multipliers.get('fruit'), 0.02);
     assert.equal(multipliers.get('chocolate'), 0.025);
+    assert.equal(multipliers.get('clothing'), 0.01);
+    assert.equal(multipliers.get('furniture'), 0.01);
+    assert.equal(multipliers.get('utilities'), 0.01);
+    assert.equal(multipliers.get('glass'), 0.01);
     assert.equal(multipliers.get('red_meat'), 0.03);
     assert.equal(multipliers.get('milk'), 1);
     assert.throws(() => parseBasicDemandConfig('demanda_basica.milk=-1'), /linha 1/);
@@ -1253,6 +1357,10 @@ describe('fazenda leiteira e demanda configurável', () => {
           'demanda_avancada.cheese=0.1',
           'demanda_avancada.fruit=0.02',
           'demanda_avancada.chocolate=0.025',
+          'demanda_bens.clothing=0.01',
+          'demanda_bens.furniture=0.01',
+          'demanda_bens.utilities=0.01',
+          'demanda_bens.glass=0.01',
         ].join('\n'),
       ),
       /categoria de demanda incorreta/,
@@ -1287,6 +1395,10 @@ describe('fazenda leiteira e demanda configurável', () => {
         ['cheese', 0.1],
         ['fruit', 0.02],
         ['chocolate', 0.025],
+        ['clothing', 0.01],
+        ['furniture', 0.01],
+        ['utilities', 0.01],
+        ['glass', 0.01],
       ],
     );
     assert.equal(
@@ -1404,6 +1516,31 @@ describe('fazenda leiteira e demanda configurável', () => {
         ),
         [{ buildingId: 'warehouse-shop', productId, quantity: stockCapacity, direction: 'in' }],
       );
+    }
+  });
+
+  it('defines and connects the new goods shops', () => {
+    const expectedShops = [
+      ['shop_clothing', 'clothing', 'Loja de Roupas', '/buildings/commerce/loja_roupas.png'],
+      ['shop_furniture', 'furniture', 'Loja de Móveis', '/buildings/commerce/loja_moveis.png'],
+      ['shop_utilities', 'utilities', 'Loja de Utilitários', '/buildings/commerce/loja_utilitarios.png'],
+      ['shop_glass', 'glass', 'Vidraçaria', '/buildings/commerce/loja_vidros.png'],
+    ] as const;
+    for (const [type, productId, name, asset] of expectedShops) {
+      const shop = RESIDENCES[type];
+      assert.equal(shop.kind, 'shop');
+      assert.deepEqual(
+        [shop.width, shop.height, shop.maxWorkers, shop.stockCapacity, shop.workPoints],
+        [2, 2, 12, 5, 15000],
+      );
+      assert.deepEqual(shop.cost, { wood: 40, stone: 20 });
+      assert.equal(shop.stockProductId, productId);
+      assert.equal(shop.name, name);
+      assert.equal(shop.asset, asset);
+      assert.equal(shop.salesWorkPointsPerUnit, 300);
+      assert.equal(getShopSalesCapacity(type, 300), 1);
+      assert.equal(SHOP_TYPES.includes(type), true);
+      assert.equal(canLinkToWarehouse(type), true);
     }
   });
 
@@ -2488,6 +2625,46 @@ describe('recursos e ferramentaria', () => {
       }).units,
       0,
     );
+  });
+
+  it('produces the requested steel, thread, textiles, furniture, utilities, and glass batches', () => {
+    const recipes: readonly [
+      keyof typeof RESIDENCES,
+      number,
+      Readonly<Record<string, number>>,
+      number,
+    ][] = [
+      ['steelworks', 400, { iron: 2, charcoal: 10 }, 1],
+      ['thread_factory', 300, { cotton: 1, wool: 1, charcoal: 4 }, 2],
+      ['textile_factory', 400, { thread: 1, charcoal: 2 }, 2],
+      ['furniture_factory', 400, { wood: 1 }, 1],
+      ['utilities_factory', 400, { steel: 1, charcoal: 5 }, 8],
+      ['glass_factory', 400, { sand: 10, charcoal: 20 }, 8],
+    ];
+    for (const [type, workPoints, recipeInputs, expectedUnits] of recipes) {
+      const definition = RESIDENCES[type];
+      const stockCapacity = definition.stockCapacity;
+      assert.ok(stockCapacity !== undefined, type);
+      let charcoal = 0;
+      const inputStocks: Record<string, number> = {};
+      for (const [productId, amount] of Object.entries(recipeInputs)) {
+        if (productId === 'charcoal') charcoal = amount;
+        else inputStocks[productId] = amount;
+      }
+      const result = planProduction(definition.production!, {
+        progress: 0,
+        workPoints,
+        penalty: 0,
+        freeSpace: stockCapacity,
+        charcoal,
+        inputStocks,
+      });
+      assert.equal(result.units, expectedUnits, type);
+      assert.deepEqual(result.inputStocksUsed, recipeInputs, type);
+      assert.equal(definition.maxWorkers, 40, type);
+      assert.equal(definition.toolCapacity, type === 'steelworks' ? undefined : 80, type);
+      if (type !== 'steelworks') assert.equal(definition.toolDemandPerWorker, 2, type);
+    }
   });
 
   it('makes sugar using canes, charcoal, Work Points, and available stock space', () => {

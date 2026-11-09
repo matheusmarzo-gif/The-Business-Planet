@@ -1,0 +1,25 @@
+{
+  "type": "steelworks",
+  "kind": "industry",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Usina de Aço",
+  "asset": "/buildings/industrial/usina_de_aco.png",
+  "width": 5,
+  "height": 5,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 1000, "stone": 600, "iron": 400 },
+  "workPoints": 20000000,
+  "maxWorkers": 40,
+  "stockProduct": "Aço",
+  "stockProductId": "steel",
+  "stockCapacity": 30,
+  "inputCapacities": { "iron": 60, "charcoal": 300 },
+  "production": {
+    "mode": "batch",
+    "workPointsPerUnit": 400,
+    "batchSize": 1,
+    "batchInputs": { "iron": 2, "charcoal": 10 }
+  }
+}

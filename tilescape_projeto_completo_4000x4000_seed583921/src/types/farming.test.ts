@@ -61,4 +61,6 @@ test('starts automated crops only when idle and in a selected month', () => {
   assert.equal(shouldStartAutomatedCrop({ ...settings, enabled: false }, null, 3), false);
   assert.equal(isAutomatableFarmType('farm_rice'), true);
   assert.equal(isAutomatableFarmType('farm_cattle'), true);
+  assert.equal(isAutomatableFarmType('farm_sheep'), true);
+  assert.equal(isAutomatableFarmType('farm_cotton'), true);
 });

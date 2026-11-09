@@ -1,0 +1,27 @@
+{
+  "type": "utilities_factory",
+  "kind": "industry",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fábrica de Utilitários",
+  "asset": "/buildings/industrial/fabrica_utilitarios.png",
+  "width": 5,
+  "height": 5,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 2000, "stone": 1200, "iron": 800, "steel": 300 },
+  "workPoints": 10000000,
+  "maxWorkers": 40,
+  "stockProduct": "Utilitários",
+  "stockProductId": "utilities",
+  "stockCapacity": 320,
+  "toolCapacity": 80,
+  "toolDemandPerWorker": 2,
+  "inputCapacities": { "steel": 40, "charcoal": 200 },
+  "production": {
+    "mode": "batch",
+    "workPointsPerUnit": 400,
+    "batchSize": 8,
+    "batchInputs": { "steel": 1, "charcoal": 5 }
+  }
+}

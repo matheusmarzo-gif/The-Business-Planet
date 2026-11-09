@@ -5,6 +5,7 @@ import {
   BASIC_BASKET_PRODUCT_IDS,
   CONSUMPTION_PRODUCT_IDS,
   ADVANCED_BASKET_PRODUCT_IDS,
+  GOODS_BASKET_PRODUCT_IDS,
   INTERMEDIATE_BASKET_PRODUCT_IDS,
 } from '../types/commerceDemand';
 
@@ -73,6 +74,9 @@ export default function ConsumptionPanel({
               )}
               {productId === ADVANCED_BASKET_PRODUCT_IDS[0] && (
                 <div className="consumption-basket-group">Cesta avançada</div>
+              )}
+              {productId === GOODS_BASKET_PRODUCT_IDS[0] && (
+                <div className="consumption-basket-group">Cesta básica de bens</div>
               )}
               <div className="consumption-row">
                 <span className="warehouse-product">

@@ -3766,7 +3766,7 @@ async function createResidentialBuilding(
       const constructionCenterY = position.y + definition.height / 2;
       const { rows: materialRows } = await client.query<{
         building_id: string;
-        product_id: 'wood' | 'stone' | 'iron';
+        product_id: 'wood' | 'stone' | 'iron' | 'steel';
         quantity: number;
       }>(
         `SELECT warehouse.id AS building_id, stock.product_id, stock.quantity
@@ -3775,7 +3775,7 @@ async function createResidentialBuilding(
          WHERE warehouse.building_type = 'warehouse'
            AND warehouse.status = 'completed'
            AND warehouse.created_by = $1
-           AND stock.product_id IN ('wood', 'stone', 'iron')
+           AND stock.product_id IN ('wood', 'stone', 'iron', 'steel')
            AND POWER(warehouse.tile_x + $4 - $2, 2)
              + POWER(warehouse.tile_y + $4 - $3, 2) <= $5
          ORDER BY POWER(warehouse.tile_x + $4 - $2, 2)
@@ -4332,7 +4332,8 @@ async function start() {
           return total +
             cost.wood * (marketPrices.get('wood') ?? 0) +
             cost.stone * (marketPrices.get('stone') ?? 0) +
-            (cost.iron ?? 0) * (marketPrices.get('iron') ?? 0);
+            (cost.iron ?? 0) * (marketPrices.get('iron') ?? 0) +
+            (cost.steel ?? 0) * (marketPrices.get('steel') ?? 0);
         }, 0),
       );
       const inventoryValue = roundCurrency(

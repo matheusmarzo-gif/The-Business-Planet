@@ -69,7 +69,10 @@ import { formatMoney } from './types/wallet';
 import { allocateWorkers, getDailyWorkPoints } from './types/employment';
 import { PRODUCTS } from './types/product';
 import type { PerformanceLogRecord } from './types/performanceLog';
-import type { ResidenceBenefitCalculation } from './types/residence-relocation';
+import {
+  calculateResidenceAppealsFromIncome,
+  type ResidenceBenefitCalculation,
+} from './types/residence-relocation';
 import { loadCommerceDiagnostics, saveCommerceDiagnostics } from './utils/commerceDiagnosticsStorage';
 import { createMapGenerator } from './utils/mapGenerator';
 import { DEFAULT_TILE_LIST } from './utils/tileAssets';
@@ -1995,18 +1998,39 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
               }
             }}
             onSimulateHiring={(settings) => {
-              const residences = residentialBuildings
-                .filter((building) =>
-                  RESIDENCES[building.type].kind === 'residence' &&
-                  building.status === 'completed',
-                )
-                .map((building) => ({
+              const completedResidences = residentialBuildings.filter((building) =>
+                RESIDENCES[building.type].kind === 'residence' &&
+                building.status === 'completed',
+              );
+              const residenceAppeals = calculateResidenceAppealsFromIncome(
+                completedResidences.map((building) => ({
                   id: building.id,
-                  type: building.type,
-                  x: building.x,
-                  y: building.y,
+                  cityId: building.cityId,
+                  x: building.x + RESIDENCES[building.type].width / 2,
+                  y: building.y + RESIDENCES[building.type].height / 2,
+                  salaryAverage: building.averageIncome,
                   occupants: building.occupants,
-                }));
+                  constructionAppeal: RESIDENCES[building.type].localAppeal,
+                })),
+              );
+              const residences = completedResidences
+                .filter((building) => building.occupants > 0)
+                .map((building) => {
+                  const appeal = residenceAppeals.get(building.id);
+                  if (!appeal) {
+                    throw new Error(
+                      `Não foi possível calcular o apreço interno da residência ${building.id}.`,
+                    );
+                  }
+                  return {
+                    id: building.id,
+                    type: building.type,
+                    x: building.x,
+                    y: building.y,
+                    occupants: building.occupants,
+                    internalAppeal: appeal.internalAppeal,
+                  };
+                });
               const workplaces = residentialBuildings
                 .filter((building) => RESIDENCES[building.type].kind !== 'residence')
                 .map((building) => ({

@@ -684,7 +684,13 @@ repartidos entre os postos proporcionalmente a esses benefícios. O arredondamen
 inteiro pelo método dos maiores restos mantém a soma igual ao número de moradores
 que podem ser contratados; se uma oferta atingir suas vagas, o excedente é
 redistribuído entre as demais. As vagas restantes são atualizadas antes de
-processar a próxima residência. Às 00:00 o dono paga o
+processar a próxima residência. A ordem das residências é pelo apreço interno,
+do maior para o menor; em caso de empate, usa-se o ID para manter o resultado
+determinístico. O apreço interno segue a regra dos apreços residenciais e é
+recalculado antes da alocação, considerando a média salarial da cidade ponderada
+pelos moradores e a média regional de residências concluídas em até 10 tiles,
+inclusive residências desocupadas. A prévia de contratação usa a mesma ordem.
+Às 00:00 o dono paga o
 salário de cada funcionário (o dinheiro some e o caixa pode ficar negativo). Também
 às 00:00 cada funcionário de uma obra gera
 `12,5 × horas × saúde/100 × felicidade/100 × fator de descanso` Work Points (fator

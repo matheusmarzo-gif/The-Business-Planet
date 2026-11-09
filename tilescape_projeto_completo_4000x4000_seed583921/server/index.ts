@@ -122,6 +122,7 @@ import {
   IMMIGRATION_POPULATION_LIMIT,
 } from '../src/types/immigration.js';
 import {
+  calculateResidenceAppealsFromIncome,
   calculateResidenceAppeals,
   calculateResidenceBenefit,
   planResidenceRelocations,
@@ -3134,12 +3135,41 @@ async function runDailyEmployment(): Promise<boolean> {
       );
       Object.assign(allocationCounts, getPerformanceEntityCounts(rows));
       const buildings = rows.map(mapResidentialBuilding);
-      const residences = buildings.filter(
+      const completedResidences = buildings.filter(
         (building) =>
           building.status === 'completed' &&
-          getResidenceDefinition(building.type)?.kind === 'residence' &&
-          building.occupants > 0,
+          getResidenceDefinition(building.type)?.kind === 'residence',
       );
+      const residenceAppeals = calculateResidenceAppealsFromIncome(
+        completedResidences.map((building) => {
+          const definition = RESIDENCES[building.type];
+          return {
+            id: building.id,
+            cityId: building.cityId,
+            x: building.x + definition.width / 2,
+            y: building.y + definition.height / 2,
+            salaryAverage: building.averageIncome,
+            occupants: building.occupants,
+            constructionAppeal: definition.localAppeal,
+          };
+        }),
+      );
+      const residences = completedResidences
+        .filter((building) => building.occupants > 0)
+        .map((building) => {
+          const appeal = residenceAppeals.get(building.id);
+          if (!appeal) {
+            throw new Error(`Não foi possível calcular o apreço interno da residência ${building.id}.`);
+          }
+          return {
+            id: building.id,
+            type: building.type,
+            x: building.x,
+            y: building.y,
+            occupants: building.occupants,
+            internalAppeal: appeal.internalAppeal,
+          };
+        });
       const workplaces = buildings.filter(
         (building) =>
           building.desiredWorkers > 0 &&

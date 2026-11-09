@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  calculateResidenceAppealsFromIncome,
   calculateResidenceAppeals,
   calculateResidenceBenefit,
   planResidenceRelocations,
@@ -81,6 +82,42 @@ test('keeps internal appeal at least 10', () => {
     },
   ]).values();
   assert.equal(appeal.internalAppeal, 10);
+});
+
+test('calculates city-wide weighted income and includes vacant homes in regional appeal', () => {
+  const appeals = calculateResidenceAppealsFromIncome([
+    {
+      id: 'home-a',
+      cityId: 'city',
+      x: 0,
+      y: 0,
+      salaryAverage: 10,
+      occupants: 2,
+      constructionAppeal: 10,
+    },
+    {
+      id: 'home-b',
+      cityId: 'city',
+      x: 1,
+      y: 0,
+      salaryAverage: 30,
+      occupants: 1,
+      constructionAppeal: 10,
+    },
+    {
+      id: 'vacant-home',
+      cityId: 'city',
+      x: 2,
+      y: 0,
+      salaryAverage: 100,
+      occupants: 0,
+      constructionAppeal: 10,
+    },
+  ]);
+
+  assert.ok(Math.abs((appeals.get('home-a')?.employabilityAppeal ?? 0) - 0.6) < 1e-12);
+  assert.ok(Math.abs((appeals.get('home-a')?.regionalAppeal ?? 0) - 2.8) < 1e-12);
+  assert.ok(Math.abs((appeals.get('vacant-home')?.regionalAppeal ?? 0) - 2.8) < 1e-12);
 });
 
 test('moves the calculated percentage and respects destination capacity', () => {

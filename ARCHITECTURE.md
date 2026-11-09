@@ -30,6 +30,12 @@ própria; o jogo já processa rotinas diárias de imigração, emprego, consumo,
 produção, vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor também
 processa mudanças de moradores entre residências concluídas da mesma cidade,
 persistindo cada transferência em `residence_relocation_log`.
+Na alocação diária de empregos, as residências concluídas com moradores são
+processadas por apreço interno decrescente; empates são resolvidos pelo ID.
+O apreço é calculado com as rendas médias residenciais e a média salarial
+municipal ponderada pelos moradores, incluindo todas as residências concluídas
+da cidade e considerando as residências desocupadas na média regional de 10
+tiles. A simulação de contratação no cliente usa a mesma regra compartilhada.
 O relatório contábil de produção inclui toda construção com regra de produção,
 inclusive indústrias, e ordena os edifícios alfabeticamente por nome. Clique
 simples em qualquer construção abre seu painel; a conta Master pode arrastar

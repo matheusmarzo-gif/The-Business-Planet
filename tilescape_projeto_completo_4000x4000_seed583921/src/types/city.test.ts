@@ -1584,7 +1584,14 @@ describe('work settings', () => {
     assert.equal(getMaxDesiredWorkers('shop_milk', 'under_construction'), 100);
     assert.equal(getMaxDesiredWorkers('shop_milk', 'completed'), 1);
 
-    const homes = [{ id: 'home', type: 'house_poor2' as const, x: 0, y: 0, occupants: 100 }];
+    const homes = [{
+      id: 'home',
+      type: 'house_poor2' as const,
+      x: 0,
+      y: 0,
+      occupants: 100,
+      internalAppeal: 10,
+    }];
     const workplace = {
       id: 'dairy-shop',
       type: 'shop_milk' as const,
@@ -1660,7 +1667,14 @@ describe('work settings', () => {
   });
 
   it('distributes each home proportionally and rounds allocations to its population', () => {
-    const home = { id: 'home', type: 'house_poor1' as const, x: 100, y: 100, occupants: 32 };
+    const home = {
+      id: 'home',
+      type: 'house_poor1' as const,
+      x: 100,
+      y: 100,
+      occupants: 32,
+      internalAppeal: 10,
+    };
     const near = workplace('near', 99, 10, 32);
     near.y = 99;
     const far = workplace('far', 159, 10, 32);
@@ -1677,7 +1691,14 @@ describe('work settings', () => {
   });
 
   it('caps proportional shares at vacancies and redistributes overflow', () => {
-    const home = { id: 'home', type: 'house_poor1' as const, x: 100, y: 100, occupants: 10 };
+    const home = {
+      id: 'home',
+      type: 'house_poor1' as const,
+      x: 100,
+      y: 100,
+      occupants: 10,
+      internalAppeal: 10,
+    };
     const scarce = workplace('scarce', 99, 1000, 2);
     scarce.y = 99;
     const available = workplace('available', 99, 10, 10);
@@ -1690,8 +1711,22 @@ describe('work settings', () => {
 
   it('updates vacancy-based benefits for each subsequent residence', () => {
     const homes = [
-      { id: 'a', type: 'house_poor1' as const, x: 10, y: 10, occupants: 4 },
-      { id: 'b', type: 'house_poor1' as const, x: 12, y: 10, occupants: 4 },
+      {
+        id: 'a',
+        type: 'house_poor1' as const,
+        x: 10,
+        y: 10,
+        occupants: 4,
+        internalAppeal: 10,
+      },
+      {
+        id: 'b',
+        type: 'house_poor1' as const,
+        x: 12,
+        y: 10,
+        occupants: 4,
+        internalAppeal: 10,
+      },
     ];
     const rich = workplace('rich', 9, 100, 5);
     rich.y = 9;
@@ -1719,6 +1754,41 @@ describe('work settings', () => {
         { workplaceId: 'cent-wage', residenceId: 'home', count: 3 },
       ])],
       [['u2', 0.69]],
+    );
+  });
+
+  it('allocates scarce vacancies by internal appeal, breaking ties by residence id', () => {
+    const homes = [
+      {
+        id: 'z-high-appeal',
+        type: 'house_poor1' as const,
+        x: 10,
+        y: 10,
+        occupants: 4,
+        internalAppeal: 100,
+      },
+      {
+        id: 'a-low-appeal',
+        type: 'house_poor1' as const,
+        x: 10,
+        y: 10,
+        occupants: 4,
+        internalAppeal: 20,
+      },
+    ];
+    assert.deepEqual(
+      allocateWorkers(homes, [workplace('limited', 9, 10, 4)]),
+      [{ workplaceId: 'limited', residenceId: 'z-high-appeal', count: 4 }],
+    );
+    assert.deepEqual(
+      allocateWorkers(
+        [
+          { ...homes[1], id: 'z-tied-appeal' },
+          { ...homes[1], id: 'a-tied-appeal' },
+        ],
+        [workplace('tied-limited', 9, 10, 4)],
+      ),
+      [{ workplaceId: 'tied-limited', residenceId: 'a-tied-appeal', count: 4 }],
     );
   });
 

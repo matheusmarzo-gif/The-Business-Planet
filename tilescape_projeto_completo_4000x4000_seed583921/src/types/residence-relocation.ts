@@ -12,11 +12,40 @@ export interface ResidenceAppealCandidate {
   constructionAppeal: number;
 }
 
+export interface ResidenceIncomeAppealCandidate
+  extends Omit<ResidenceAppealCandidate, 'cityAverageSalary'> {
+  occupants: number;
+}
+
 export interface ResidenceAppealValues {
   employabilityAppeal: number;
   regionalAppeal: number;
   constructionAppeal: number;
   internalAppeal: number;
+}
+
+export function calculateResidenceAppealsFromIncome(
+  residences: ResidenceIncomeAppealCandidate[],
+): Map<string, ResidenceAppealValues> {
+  const cityTotals = new Map<string, { payroll: number; occupants: number }>();
+  for (const residence of residences) {
+    const totals = cityTotals.get(residence.cityId) ?? { payroll: 0, occupants: 0 };
+    const occupants = Math.max(0, residence.occupants);
+    totals.payroll += Math.max(0, residence.salaryAverage) * occupants;
+    totals.occupants += occupants;
+    cityTotals.set(residence.cityId, totals);
+  }
+  return calculateResidenceAppeals(
+    residences.map((residence) => {
+      const totals = cityTotals.get(residence.cityId);
+      return {
+        ...residence,
+        cityAverageSalary: totals && totals.occupants > 0
+          ? totals.payroll / totals.occupants
+          : 0,
+      };
+    }),
+  );
 }
 
 export function calculateResidenceAppeals(

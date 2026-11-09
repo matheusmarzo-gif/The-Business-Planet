@@ -30,6 +30,11 @@ própria; o jogo já processa rotinas diárias de imigração, emprego, consumo,
 produção, vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor também
 processa mudanças de moradores entre residências concluídas da mesma cidade,
 persistindo cada transferência em `residence_relocation_log`.
+O relatório contábil de produção inclui toda construção com regra de produção,
+inclusive indústrias, e ordena os edifícios alfabeticamente por nome. A conta
+Master pode arrastar construções para movê-las; o endpoint valida novamente a
+posição, mantém o estado da construção e rejeita movimentos que invalidem
+vínculos com armazéns.
 Ao abrir uma residência concluída, o cliente consulta
 `GET /api/residential-buildings/:id/residence-benefit`. A rota calcula sob
 demanda o custo mensal (`Cb`), `benefício erro`, `benefício ideal` e o
@@ -62,7 +67,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/types/product.ts` | Catálogo estático dos produtos, unidades, peso, volume e validade padrão. |
 | `src/components/ProductCatalog.tsx` | Interface pesquisável para consultar as fichas de produtos. |
 | `src/components/CommerceHistoryPanel.tsx` | Histórico diário de despesas, vendas e resultado dos comércios. |
-| `src/components/AccountingPanel.tsx` | Relatórios agregados de lojas comerciais e operações de armazéns do jogador autenticado. |
+| `src/components/AccountingPanel.tsx` | Relatórios agregados de lojas comerciais, armazéns, residências e produção do jogador autenticado. |
 | `src/types/accounting.ts` | Tipos da resposta da API contábil. |
 | `src/components/PerformanceLogPanel.tsx` | Exibição das medições recentes das etapas do processamento diário. |
 | `src/types/performanceLog.ts` | Tipos dos registros de desempenho retornados pela API. |

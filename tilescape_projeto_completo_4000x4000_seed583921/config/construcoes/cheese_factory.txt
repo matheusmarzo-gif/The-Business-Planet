@@ -1,6 +1,6 @@
 {
   "type": "cheese_factory",
-  "kind": "industry",
+  "kind": "workshop",
   "requiredZone": "rural",
   "requiresRoad": true,
   "name": "Fábrica de Queijo",
@@ -15,12 +15,12 @@
   "stockProduct": "Queijo",
   "stockProductId": "cheese",
   "stockCapacity": 100,
-  "inputCapacities": { "milk": 2000 },
+  "toolCapacity": 200,
+  "toolDemandPerWorker": 0.25,
+  "inputCapacities": { "milk": 2000, "salt": 133 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 200,
-    "batchSize": 1,
-    "batchStockProductId": "milk",
-    "batchStockAmount": 20
+    "batchInputs": { "milk": 15, "salt": 1 }
   }
 }

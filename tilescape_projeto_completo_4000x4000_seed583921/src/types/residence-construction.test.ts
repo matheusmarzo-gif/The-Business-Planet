@@ -60,11 +60,11 @@ test('orders construction menus and applies the requested costs', () => {
   );
   assert.deepEqual(
     getConstructionMenuDefinitions('artesanais').map(({ type }) => type),
-    ['fishery', 'toolmaker', 'charcoal_works', 'sugar_mill'],
+    ['fishery', 'toolmaker', 'charcoal_works', 'sugar_mill', 'bread_factory', 'cheese_factory'],
   );
   assert.deepEqual(
     getConstructionMenuDefinitions('industrias').map(({ type }) => type),
-    ['warehouse', 'silo', 'flour_mill', 'bread_factory', 'cheese_factory', 'chocolate_factory'],
+    ['warehouse', 'silo', 'flour_mill', 'chocolate_factory'],
   );
   assert.equal(RESIDENCES.silo.width, 4);
   assert.equal(RESIDENCES.silo.height, 4);

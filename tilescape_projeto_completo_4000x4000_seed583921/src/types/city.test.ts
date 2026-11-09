@@ -23,6 +23,7 @@ import {
   parseRent,
   getResidencePlacementError,
   getResidentialBuildingName,
+  getConstructionMenuDefinitions,
   canStoreProduct,
   isStorageBuilding,
   isWithinWorkerSearchRadius,
@@ -2171,7 +2172,7 @@ describe('fishery', () => {
           RESIDENCES.salt_gatherer.maxWorkers,
           RESIDENCES.salt_gatherer.workPoints,
         ],
-        [2, 2, 10, 10000],
+        [2, 2, 40, 10000],
       );
     });
   });
@@ -2284,7 +2285,7 @@ describe('recursos e ferramentaria', () => {
     assert.deepEqual(RESIDENCES.farm_spices.cost, { wood: 200, stone: 80, iron: 80 });
     assert.deepEqual(RESIDENCES.salt_gatherer.cost, { wood: 100, stone: 40, iron: 40 });
     assert.deepEqual(RESIDENCES.sugar_mill.cost, { wood: 100, stone: 40, iron: 40 });
-    assert.equal(RESIDENCES.salt_gatherer.maxWorkers, 10);
+    assert.equal(RESIDENCES.salt_gatherer.maxWorkers, 40);
     assert.equal(RESIDENCES.salt_gatherer.toolDemandPerWorker, 0.05);
     assert.equal(RESIDENCES.toolmaker.woodCapacity, undefined);
     assert.equal(RESIDENCES.toolmaker.charcoalCapacity, 30);
@@ -2301,10 +2302,10 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.charcoal_works.woodCapacity,
         RESIDENCES.charcoal_works.workPoints,
       ],
-      [3, 3, 20, 100, 10, 30, 120000],
+      [3, 3, 20, 100, 40, 30, 120000],
     );
     assert.deepEqual(RESIDENCES.charcoal_works.cost, { wood: 60, stone: 20 });
-    assert.equal(RESIDENCES.charcoal_works.toolDemandPerWorker, 0.05);
+    assert.equal(RESIDENCES.charcoal_works.toolDemandPerWorker, 0.5);
   });
 
   it('uses chance production for salt below and above 400 effective Work Points', () => {
@@ -2335,6 +2336,7 @@ describe('recursos e ferramentaria', () => {
           ['barley', 20],
           ['flour', 30],
           ['milk', 2000],
+          ['salt', 133],
         ]),
         minimumStock: new Map(),
         maximumStock: new Map(),
@@ -2350,12 +2352,13 @@ describe('recursos e ferramentaria', () => {
           inputStocks: {},
         },
         { buildingId: 'bread-factory', type: 'bread_factory', stock: 0, inputStocks: { flour: 29 } },
-        { buildingId: 'cheese-factory', type: 'cheese_factory', stock: 0, inputStocks: { milk: 1990 } },
+        { buildingId: 'cheese-factory', type: 'cheese_factory', stock: 0, inputStocks: { milk: 1990, salt: 130 } },
       ],
     );
     assert.deepEqual(transfers, [
       { buildingId: 'bread-factory', productId: 'flour', quantity: 1, direction: 'in' },
       { buildingId: 'cheese-factory', productId: 'milk', quantity: 10, direction: 'in' },
+      { buildingId: 'cheese-factory', productId: 'salt', quantity: 3, direction: 'in' },
       { buildingId: 'mill', productId: 'barley', quantity: 20, direction: 'in' },
     ]);
   });
@@ -2387,13 +2390,28 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.bread_factory.maxWorkers,
         RESIDENCES.bread_factory.workPoints,
         RESIDENCES.bread_factory.inputCapacities?.flour,
+        RESIDENCES.bread_factory.toolCapacity,
+        RESIDENCES.bread_factory.toolDemandPerWorker,
         RESIDENCES.cheese_factory.stockCapacity,
         RESIDENCES.cheese_factory.maxWorkers,
         RESIDENCES.cheese_factory.workPoints,
         RESIDENCES.cheese_factory.inputCapacities?.milk,
+        RESIDENCES.cheese_factory.inputCapacities?.salt,
+        RESIDENCES.cheese_factory.toolCapacity,
+        RESIDENCES.cheese_factory.toolDemandPerWorker,
       ],
-      [300, 60, 480000, 30, 100, 200, 960000, 2000],
+      [300, 60, 480000, 30, 60, 0.25, 100, 200, 960000, 2000, 133, 200, 0.25],
     );
+    assert.equal(RESIDENCES.bread_factory.kind, 'workshop');
+    assert.equal(RESIDENCES.cheese_factory.kind, 'workshop');
+    assert.deepEqual(
+      getConstructionMenuDefinitions('artesanais')
+        .filter(({ type }) => ['bread_factory', 'cheese_factory'].includes(type))
+        .map(({ type }) => type),
+      ['bread_factory', 'cheese_factory'],
+    );
+    assert.equal(getConstructionMenuDefinitions('industrias').some(({ type }) =>
+      type === 'bread_factory' || type === 'cheese_factory'), false);
     assert.deepEqual(
       [
         RESIDENCES.shop_bread.stockCapacity,
@@ -2440,7 +2458,6 @@ describe('recursos e ferramentaria', () => {
     const recipes = [
       ['flour_mill', 300, 1, 100, 5, 1],
       ['bread_factory', 200, 1, 300, 10, 1],
-      ['cheese_factory', 200, 20, 100, 1, 20],
     ] as const;
     for (const [type, workPoints, input, capacity, output, consumed] of recipes) {
       const rule = RESIDENCES[type].production!;
@@ -2453,13 +2470,21 @@ describe('recursos e ferramentaria', () => {
       });
       assert.deepEqual([result.units, result.batchStockUsed], [output, consumed]);
     }
+    const cheese = planProduction(RESIDENCES.cheese_factory.production!, {
+        progress: 0,
+        workPoints: 200,
+        penalty: 0,
+        freeSpace: 100,
+        inputStocks: { milk: 15, salt: 1 },
+      });
+    assert.deepEqual([cheese.units, cheese.inputStocksUsed], [1, { milk: 15, salt: 1 }]);
     assert.equal(
       planProduction(RESIDENCES.cheese_factory.production!, {
         progress: 0,
         workPoints: 200,
         penalty: 0,
         freeSpace: 100,
-        batchStock: 19,
+        inputStocks: { milk: 15 },
       }).units,
       0,
     );
@@ -2560,6 +2585,25 @@ describe('recursos e ferramentaria', () => {
     assert.deepEqual(
       transfers.map(({ productId, quantity, direction }) => [productId, quantity, direction]),
       [['tools', 10, 'in'], ['wood', 30, 'in']],
+    );
+  });
+
+  it('defines the requested weights, volumes, and infinite shelf life for new products', () => {
+    const newProducts = ['sand', 'steel', 'clothing', 'furniture', 'utilities', 'glass'];
+    assert.deepEqual(
+      newProducts.map((id) => {
+        const definition = PRODUCTS.find((product) => product.id === id);
+        assert.ok(definition);
+        return [definition.weightKg, definition.volumeM3, definition.shelfLifeDays];
+      }),
+      [
+        [150, 0.1, null],
+        [800, 0.1, null],
+        [25, 0.1, null],
+        [50, 0.1, null],
+        [5, 0.01, null],
+        [300, 0.1, null],
+      ],
     );
   });
 });

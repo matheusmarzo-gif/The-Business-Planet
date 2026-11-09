@@ -31,6 +31,7 @@ import {
   UNDER_CONSTRUCTION_ASSET,
   WORKER_SEARCH_RADIUS,
 } from '../types/residence';
+import { isWithinLinkRadius } from '../types/logistics';
 
 const BASE_TILE_SIZE = 24;
 const MAX_CAMERA_ZOOM = 6;
@@ -50,6 +51,24 @@ function getCachedTexture(asset: string): PIXI.Texture {
   const texture = PIXI.Texture.from(asset);
   textureCache.set(asset, texture);
   return texture;
+}
+
+function areBuildingLinksInRange(
+  building: ResidentialBuilding,
+  position: RoadPosition,
+  buildings: ResidentialBuilding[],
+): boolean {
+  const linkedBuildings = buildings.filter(
+    (candidate) =>
+      candidate.id !== building.id &&
+      (building.warehouseIds.includes(candidate.id) || candidate.warehouseIds.includes(building.id)),
+  );
+  return linkedBuildings.every((linkedBuilding) =>
+    isWithinLinkRadius(
+      { type: building.type, ...position },
+      { type: linkedBuilding.type, x: linkedBuilding.x, y: linkedBuilding.y },
+    ),
+  );
 }
 
 function createCityLabel(name: string, x: number, y: number): PIXI.Container {
@@ -153,6 +172,7 @@ interface GameMapProps {
   onInvalidResidencePlacement: (reason: ResidencePlacementError) => void;
   onResidenceComplete: (buildingId: string) => void;
   onResidenceSelect: (building: ResidentialBuilding) => void;
+  onResidenceMove: (buildingId: string, position: RoadPosition) => void;
 }
 
 export function GameMap({
@@ -187,6 +207,7 @@ export function GameMap({
   onInvalidResidencePlacement,
   onResidenceComplete,
   onResidenceSelect,
+  onResidenceMove,
 }: GameMapProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<PIXI.Application | null>(null);
@@ -201,6 +222,7 @@ export function GameMap({
   const cameraRef = useRef(camera);
   const dragRef = useRef<{ x: number; y: number; cameraX: number; cameraY: number } | null>(null);
   const draggedRef = useRef(false);
+  const movingBuildingRef = useRef<{ buildingId: string; offsetX: number; offsetY: number } | null>(null);
   const roadDrawingRef = useRef(false);
   const zoneDrawingRef = useRef(false);
   const zoneStartRef = useRef<RoadPosition | null>(null);
@@ -208,6 +230,10 @@ export function GameMap({
   const roadDemolitionPathRef = useRef<RoadPosition[]>([]);
   const [roadPath, setRoadPath] = useState<RoadPosition[]>([]);
   const [placementPreview, setPlacementPreview] = useState<{ x: number; y: number } | null>(null);
+  const [movePreview, setMovePreview] = useState<{
+    buildingId: string;
+    position: RoadPosition;
+  } | null>(null);
   const [zonePreview, setZonePreview] = useState<CityZoneBounds | null>(null);
   const landTileIds = useMemo(
     () => new Set(generator.tiles.filter((tile) => tile.category === 'land').map((tile) => tile.id)),
@@ -627,6 +653,42 @@ export function GameMap({
         );
       }
     }
+
+    if (movePreview) {
+      const movingBuilding = residentialBuildings.find((building) => building.id === movePreview.buildingId);
+      if (movingBuilding) {
+        const definition = RESIDENCES[movingBuilding.type];
+        const otherBuildings = residentialBuildings.filter((building) => building.id !== movingBuilding.id);
+        const valid = getResidencePlacementError(
+          movingBuilding.type,
+          movePreview.position,
+          cities,
+          otherBuildings,
+          roads,
+          (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+          generator.config,
+        ) === null && areBuildingLinksInRange(movingBuilding, movePreview.position, residentialBuildings);
+        const tint = valid ? 0x55ff88 : 0xff4b55;
+        const footprint = new PIXI.Graphics();
+        footprint.lineStyle(0.12, tint, 1);
+        footprint.beginFill(tint, 0.28);
+        footprint.drawRect(
+          movePreview.position.x,
+          movePreview.position.y,
+          definition.width,
+          definition.height,
+        );
+        footprint.endFill();
+        previewLayer.addChild(footprint);
+        const preview = new PIXI.Sprite(getCachedTexture(definition.asset));
+        preview.position.set(movePreview.position.x, movePreview.position.y);
+        preview.width = definition.width;
+        preview.height = definition.height;
+        preview.tint = tint;
+        preview.alpha = 0.72;
+        previewLayer.addChild(preview);
+      }
+    }
   }, [
     camera,
     cities,
@@ -636,6 +698,7 @@ export function GameMap({
     placementMode,
     placementName,
     placementPreview,
+    movePreview,
     residencePlacementType,
     residentialBuildings,
     zoneEditorCityId,
@@ -754,6 +817,25 @@ export function GameMap({
       event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
+    const tile = getTile(event);
+    const movingBuilding = isMaster &&
+      !placementMode &&
+      !residencePlacementType &&
+      !roadMode &&
+      !demolitionMode &&
+      !zoneDrawingType &&
+      tile
+      ? residentialBuildings.find((building) =>
+          !building.id.startsWith('pending-') && isTileInResidenceFootprint(building, tile),
+        )
+      : undefined;
+    movingBuildingRef.current = movingBuilding && tile
+      ? {
+          buildingId: movingBuilding.id,
+          offsetX: tile.x - movingBuilding.x,
+          offsetY: tile.y - movingBuilding.y,
+        }
+      : null;
     const currentCamera = cameraRef.current;
     dragRef.current = {
       x: event.clientX,
@@ -799,6 +881,19 @@ export function GameMap({
           ].slice(0, MAX_ROAD_PATH_TILES);
         }
       }
+    } else if (drag && movingBuildingRef.current) {
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3) draggedRef.current = true;
+      if (draggedRef.current && tile) {
+        setMovePreview({
+          buildingId: movingBuildingRef.current.buildingId,
+          position: {
+            x: tile.x - movingBuildingRef.current.offsetX,
+            y: tile.y - movingBuildingRef.current.offsetY,
+          },
+        });
+      }
     } else if (drag && !roadMode && !residencePlacementType) {
       const dx = event.clientX - drag.x;
       const dy = event.clientY - drag.y;
@@ -818,6 +913,35 @@ export function GameMap({
   };
 
   const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (movingBuildingRef.current) {
+      const moving = movingBuildingRef.current;
+      const tile = getTile(event);
+      const movingBuilding = residentialBuildings.find((building) => building.id === moving.buildingId);
+      movingBuildingRef.current = null;
+      dragRef.current = null;
+      if (draggedRef.current && tile && movingBuilding) {
+        const position = {
+          x: tile.x - moving.offsetX,
+          y: tile.y - moving.offsetY,
+        };
+        const reason = getResidencePlacementError(
+          movingBuilding.type,
+          position,
+          cities,
+          residentialBuildings.filter((building) => building.id !== movingBuilding.id),
+          roads,
+          (x, y) => landTileIds.has(generator.getTileAt(x, y).tileId),
+          generator.config,
+        );
+        setMovePreview(null);
+        if (reason) onInvalidResidencePlacement(reason);
+        else if (!areBuildingLinksInRange(movingBuilding, position, residentialBuildings)) {
+          onInvalidResidencePlacement('warehouse_out_of_range');
+        } else onResidenceMove(movingBuilding.id, position);
+        return;
+      }
+      setMovePreview(null);
+    }
     if (zoneDrawingRef.current) {
       const tile = getTile(event);
       const start = zoneStartRef.current;

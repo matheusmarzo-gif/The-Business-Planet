@@ -18,8 +18,8 @@
     "stockProduct":  "Carvão",
     "stockProductId":  "charcoal",
     "stockCapacity":  100,
-    "toolCapacity":  10,
-    "toolDemandPerWorker":  0.05,
+    "toolCapacity":  40,
+    "toolDemandPerWorker":  0.5,
     "woodCapacity":  30,
     "production":  {
                        "mode":  "batch",

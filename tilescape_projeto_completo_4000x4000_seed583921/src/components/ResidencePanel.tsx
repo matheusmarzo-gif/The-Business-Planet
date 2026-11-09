@@ -131,6 +131,13 @@ function getProductionDescription(
       : rule.batchStockProductId;
     const batchProduct = PRODUCTS.find(({ id }) => id === batchProductId);
     const inputs = [
+      ...Object.entries(rule.batchInputs ?? {}).map(([productId, amount]) => {
+        const input = PRODUCTS.find((item) => item.id === productId);
+        const quantity = number.format(amount);
+        return input?.unit === 'liter'
+          ? `${quantity} litros de ${input.name.toLocaleLowerCase('pt-BR')}`
+          : `${quantity} ${input?.name.toLocaleLowerCase('pt-BR') ?? productId}`;
+      }),
       batchProductId
         ? `${number.format(rule.batchStockAmount ?? 0)}${batchProduct?.unit === 'liter' ? ' litros de ' : ' '}${batchProduct?.name.toLocaleLowerCase('pt-BR') ?? batchProductId}`
         : '',
@@ -457,11 +464,15 @@ export default function ResidencePanel({
                     Automatizar os ciclos desta fazenda
                   </label>
                   <p>
-                    Quando a fazenda estiver sem ciclo, o plantio começará no primeiro processamento
-                    diário de um mês selecionado. Ciclos em andamento não serão interrompidos.
+                    Quando a fazenda estiver sem ciclo, o plantio ou a criação começará no primeiro
+                    processamento diário de um mês selecionado. Ciclos em andamento não serão interrompidos.
                   </p>
                   <fieldset>
-                    <legend>Meses permitidos para replantar</legend>
+                    <legend>
+                      {building.type === 'farm_cattle'
+                        ? 'Meses permitidos para iniciar criação'
+                        : 'Meses permitidos para replantar'}
+                    </legend>
                     <div className="farm-automation-months">
                       {monthNames.map((monthName, index) => {
                         const month = index + 1;
@@ -480,7 +491,7 @@ export default function ResidencePanel({
                     </div>
                   </fieldset>
                   <label>
-                    Funcionários durante o plantio e crescimento (0 a {definition.maxWorkers})
+                    Funcionários durante {building.type === 'farm_cattle' ? 'a criação' : 'o plantio e crescimento'} (0 a {definition.maxWorkers})
                     <input
                       type="number"
                       min={0}
@@ -497,7 +508,7 @@ export default function ResidencePanel({
                     />
                   </label>
                   <label>
-                    Funcionários durante a colheita (0 a {definition.maxWorkers})
+                    Funcionários durante {building.type === 'farm_cattle' ? 'o abate' : 'a colheita'} (0 a {definition.maxWorkers})
                     <input
                       type="number"
                       min={0}

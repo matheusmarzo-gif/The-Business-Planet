@@ -68,6 +68,12 @@ export const PRODUCTS: ProductDefinition[] = [
   product('alcohol', 'Álcool', 'alcool', 'processed', 'liter', 8, 0.01, null),
   product('tobacco', 'Tabaco', 'tabaco', 'processed', 'unit', 2, 0.01, 1825),
   product('wine', 'Vinho', 'vinho', 'processed', 'liter', 10, 0.01, 3650),
+  product('sand', 'Areia', 'areia', 'raw_material', 'unit', 150, 0.1, null),
+  product('steel', 'Aço', 'aco', 'processed', 'unit', 800, 0.1, null),
+  product('clothing', 'Roupa', 'roupa', 'processed', 'unit', 25, 0.1, null),
+  product('furniture', 'Móveis', 'moveis', 'processed', 'unit', 50, 0.1, null),
+  product('utilities', 'Utilitários', 'utilitarios', 'processed', 'unit', 5, 0.01, null),
+  product('glass', 'Vidro', 'vidro', 'processed', 'unit', 300, 0.1, null),
 ];
 
 export function formatShelfLife(days: number | null): string {

@@ -218,7 +218,14 @@ export function parseRent(value: unknown): number | null {
 export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = BUILDING_CONFIGS;
 
 const CONSTRUCTION_MENU_ORDER: Partial<Record<ConstructionCategory, readonly ResidenceType[]>> = {
-  artesanais: ['fishery', 'toolmaker', 'charcoal_works', 'sugar_mill'],
+  artesanais: [
+    'fishery',
+    'toolmaker',
+    'charcoal_works',
+    'sugar_mill',
+    'bread_factory',
+    'cheese_factory',
+  ],
   comerciais: [
     'shop_rice',
     'shop_wheat',
@@ -255,8 +262,6 @@ const CONSTRUCTION_MENU_ORDER: Partial<Record<ConstructionCategory, readonly Res
     'warehouse',
     'silo',
     'flour_mill',
-    'bread_factory',
-    'cheese_factory',
     'chocolate_factory',
   ],
 };
@@ -367,6 +372,7 @@ export type ResidencePlacementError =
   | 'water'
   | 'not_on_water'
   | 'not_adjacent_to_water'
+  | 'warehouse_out_of_range'
   | 'building_overlap'
   | 'road_overlap'
   | 'not_adjacent_to_road';

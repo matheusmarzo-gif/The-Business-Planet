@@ -1144,6 +1144,32 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setSelectedResidenceId(building.id);
   };
 
+  const moveResidentialBuilding = async (buildingId: string, position: RoadPosition) => {
+    setConstructionMessage('');
+    try {
+      const building = await cityRequest<ResidentialBuilding>(
+        `/api/residential-buildings/${buildingId}/position`,
+        { method: 'PATCH', body: JSON.stringify(position) },
+      );
+      setResidentialBuildings((current) =>
+        current.map((item) =>
+          item.id === building.id
+            ? {
+                ...building,
+                ownerName: building.ownerName ?? item.ownerName,
+                isOwnedByCurrentUser: item.isOwnedByCurrentUser,
+              }
+            : item,
+        ),
+      );
+      setConstructionMessage('Construção reposicionada pela conta Master.');
+    } catch (error) {
+      setConstructionMessage(
+        error instanceof Error ? error.message : 'Não foi possível reposicionar a construção.',
+      );
+    }
+  };
+
   const saveWorkSettings = async (
     buildingId: string,
     settings: { wage: number; workHoursPerDay: number; desiredWorkers: number },
@@ -1460,11 +1486,13 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       water: 'A residência só pode ser construída em terra.',
       not_on_water: 'O Pesqueiro precisa ter pelo menos um tile sobre a água.',
       not_adjacent_to_water: 'A Coleta de Sal precisa ficar ao lado de um tile de água.',
+      warehouse_out_of_range: `O armazém precisa estar a até ${LINK_RADIUS} tiles da construção.`,
       building_overlap: 'A residência não pode ocupar o espaço de outra construção.',
       road_overlap: 'A residência não pode ocupar o espaço de uma estrada.',
       not_adjacent_to_road: 'A residência precisa ficar ao lado de uma estrada.',
     };
     setResidencePlacementMessage(messages[reason]);
+    if (!residencePlacementType) setConstructionMessage(messages[reason]);
   };
 
   const handleResidencePlace = async (type: ResidenceType, position: RoadPosition) => {
@@ -1881,6 +1909,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           onInvalidResidencePlacement={handleInvalidResidencePlacement}
           onResidenceComplete={(buildingId) => void completeResidence(buildingId)}
           onResidenceSelect={handleResidenceSelect}
+          onResidenceMove={(buildingId, position) => void moveResidentialBuilding(buildingId, position)}
         />
         <div className="map-vignette" />
 
@@ -2148,7 +2177,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           <span className="coordinate-cross">⌖</span>
           {mapPosition ? `X ${mapPosition.x.toLocaleString('pt-BR')}  /  Y ${mapPosition.y.toLocaleString('pt-BR')}` : '4000 × 4000 TILES'}
         </div>
-        <div className="map-hint"><span className="mouse-icon">⤢</span> ARRASTE PARA EXPLORAR <i /> SCROLL PARA ZOOM</div>
+        <div className="map-hint">
+          <span className="mouse-icon">⤢</span> ARRASTE PARA EXPLORAR
+          {user.isMaster && <> <i /> ARRASTE CONSTRUÇÕES PARA MOVÊ-LAS</>}
+          <i /> SCROLL PARA ZOOM
+        </div>
         <div className="map-credit">UM REINO · UM MUNDO · UMA HISTÓRIA</div>
         {isPlacingCity && (
           <div className="placement-banner" role="status">

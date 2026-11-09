@@ -149,7 +149,7 @@ const RESIDENCE_BUILDING_TYPES = Object.values(RESIDENCES)
   .filter((definition) => definition.kind === 'residence')
   .map((definition) => definition.type);
 const PRODUCTION_BUILDING_TYPES = Object.values(RESIDENCES)
-  .filter((definition) => ['farm', 'fishery', 'resource', 'workshop'].includes(definition.kind))
+  .filter((definition) => Boolean(definition.production))
   .map((definition) => definition.type);
 const CLOCK_LEADER_KEY = 'valdora:clock:leader';
 const PRESENCE_KEY = 'valdora:presence';
@@ -1077,7 +1077,7 @@ async function runMonthlyResidenceRelocation(): Promise<boolean> {
         }>(
           `WITH product_costs AS (
              SELECT building_id, product_id,
-                    SUM(quantity / NULLIF(occupants, 0)) AS per_person_quantity,
+                    SUM(quantity / NULLIF(30 * occupants, 0)) AS per_person_quantity,
                     SUM(spent) / NULLIF(SUM(quantity), 0) AS average_price
              FROM residence_consumption
              WHERE day >= $1::date - 30 AND day < $1::date
@@ -4395,7 +4395,10 @@ async function start() {
           employeeExpense: Number(row.employee_expense),
           produced: Number(row.produced),
           stockProductId: getResidenceDefinition(row.building_type)?.stockProductId ?? null,
-        })),
+        })).sort((first, second) =>
+          RESIDENCES[first.type].name.localeCompare(RESIDENCES[second.type].name, 'pt-BR') ||
+          first.buildingNumber - second.buildingNumber,
+        ),
         warehouse: {
           employeeExpense: Number(payrollResult.rows[0]?.employee_expense ?? 0),
           buildings: warehouseBuildingsResult.rows.map((row) => ({
@@ -4600,6 +4603,174 @@ async function start() {
     })().catch((error: unknown) => {
       console.error('Não foi possível calcular o benefício da residência:', error);
       response.status(503).json({ error: 'residence_benefit_unavailable' });
+    });
+  });
+  app.patch('/api/residential-buildings/:id/position', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const { x, y } = request.body ?? {};
+    if (
+      !residenceIdPattern.test(request.params.id) ||
+      typeof x !== 'number' ||
+      !Number.isInteger(x) ||
+      typeof y !== 'number' ||
+      !Number.isInteger(y)
+    ) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void (async () => {
+      if (!(await isMasterUser(userId))) {
+        response.status(403).json({ error: 'master_required' });
+        return;
+      }
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const { rows: selectedRows } = await client.query<{
+          id: string;
+          building_type: ResidenceType;
+          city_id: string;
+        }>(
+          `SELECT id, building_type, city_id
+           FROM residential_buildings
+           WHERE id = $1
+           FOR UPDATE`,
+          [request.params.id],
+        );
+        const selected = selectedRows[0];
+        if (!selected) {
+          await client.query('ROLLBACK');
+          response.status(404).json({ error: 'residence_not_found' });
+          return;
+        }
+
+        const { rows: cityRows } = await client.query<{
+          id: string;
+          name: string;
+          center_x: number;
+          center_y: number;
+          minimum_wage: number;
+          population: number;
+          wellbeing: number;
+          economy: number;
+          zones: CityZone[];
+        }>(
+          `SELECT city.id, city.name, city.center_x, city.center_y, city.minimum_wage,
+                  city.population, city.wellbeing, city.economy,
+                  COALESCE(
+                    json_agg(json_build_object(
+                      'id', zone.id, 'cityId', zone.city_id, 'type', zone.zone_type,
+                      'minX', zone.min_x, 'minY', zone.min_y, 'maxX', zone.max_x, 'maxY', zone.max_y
+                    ) ORDER BY zone.min_y, zone.min_x) FILTER (WHERE zone.id IS NOT NULL),
+                    '[]'::json
+                  ) AS zones
+           FROM city_assemblies city
+           LEFT JOIN city_zones zone ON zone.city_id = city.id
+           GROUP BY city.id`,
+        );
+        const cities: CityAssembly[] = cityRows.map((city) => ({
+          id: city.id,
+          name: city.name,
+          centerX: city.center_x,
+          centerY: city.center_y,
+          minimumWage: city.minimum_wage,
+          population: city.population,
+          wellbeing: city.wellbeing,
+          economy: city.economy,
+          zones: city.zones,
+        }));
+        const { rows: buildingRows } = await client.query<ResidentialBuildingRow>(
+          `SELECT ${RESIDENTIAL_COLUMNS} FROM residential_buildings`,
+        );
+        const buildings = buildingRows.map(mapResidentialBuilding);
+        const movingBuilding = buildings.find((building) => building.id === selected.id);
+        if (!movingBuilding) throw new Error(`A construção ${selected.id} não pôde ser carregada.`);
+        const definition = RESIDENCES[selected.building_type];
+        const position = { x, y };
+        const { rows: roadRows } = await client.query<{ tile_x: number; tile_y: number }>(
+          'SELECT tile_x, tile_y FROM road_tiles',
+        );
+        const roads = roadRows.map((road) => ({ x: road.tile_x, y: road.tile_y }));
+        const placementError = getResidencePlacementError(
+          selected.building_type,
+          position,
+          cities,
+          buildings.filter((building) => building.id !== selected.id),
+          roads,
+          (tileX, tileY) => landTileIds.has(mapGenerator.getTileAt(tileX, tileY).tileId),
+          WORLD_CONFIG,
+        );
+        if (placementError) {
+          await client.query('ROLLBACK');
+          response.status(400).json({ error: placementError });
+          return;
+        }
+
+        const destinationCity = cities.find(
+          (city) =>
+            x >= city.centerX - MUNICIPAL_AREA_RADIUS &&
+            y >= city.centerY - MUNICIPAL_AREA_RADIUS &&
+            x + definition.width - 1 <= city.centerX + MUNICIPAL_AREA_RADIUS &&
+            y + definition.height - 1 <= city.centerY + MUNICIPAL_AREA_RADIUS,
+        );
+        if (!destinationCity) {
+          await client.query('ROLLBACK');
+          response.status(400).json({ error: 'outside_municipality' });
+          return;
+        }
+        const { rows: links } = await client.query<{
+          building_type: ResidenceType;
+          tile_x: number;
+          tile_y: number;
+        }>(
+          `SELECT other.building_type, other.tile_x, other.tile_y
+           FROM building_warehouse_links link
+           JOIN residential_buildings other
+             ON other.id = CASE WHEN link.building_id = $1 THEN link.warehouse_id ELSE link.building_id END
+           WHERE link.building_id = $1 OR link.warehouse_id = $1`,
+          [selected.id],
+        );
+        if (links.some((linked) =>
+          !isWithinLinkRadius(
+            { type: selected.building_type, ...position },
+            { type: linked.building_type, x: linked.tile_x, y: linked.tile_y },
+          ),
+        )) {
+          await client.query('ROLLBACK');
+          response.status(400).json({ error: 'warehouse_out_of_range' });
+          return;
+        }
+
+        const { rows: updatedRows } = await client.query<ResidentialBuildingRow>(
+          `UPDATE residential_buildings
+           SET tile_x = $2, tile_y = $3, city_id = $4
+           WHERE id = $1
+           RETURNING ${RESIDENTIAL_COLUMNS}`,
+          [selected.id, x, y, destinationCity.id],
+        );
+        await client.query('COMMIT');
+        response.json(mapResidentialBuilding(updatedRows[0]));
+        void publishCities().catch((error: unknown) => {
+          console.error('A construção foi movida, mas a atualização do mundo falhou:', error);
+        });
+      } catch (error: unknown) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter a movimentação da construção:', rollbackError);
+        });
+        console.error('Não foi possível movimentar a construção:', error);
+        response.status(503).json({ error: 'residence_move_unavailable' });
+      } finally {
+        client.release();
+      }
+    })().catch((error: unknown) => {
+      console.error('Não foi possível autorizar a movimentação da construção:', error);
+      response.status(503).json({ error: 'residence_move_unavailable' });
     });
   });
   app.post('/api/residential-buildings', requireAuth, (request, response) => {

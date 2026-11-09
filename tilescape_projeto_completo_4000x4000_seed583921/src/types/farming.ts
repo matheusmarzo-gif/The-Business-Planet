@@ -12,9 +12,7 @@ export const FARM_CROP_RULES = GENERATED_FARM_CROP_RULES satisfies Record<string
 
 export type FarmCropType = keyof typeof FARM_CROP_RULES;
 export const FARM_CROP_TYPES = Object.keys(FARM_CROP_RULES) as FarmCropType[];
-export const AUTOMATABLE_FARM_TYPES = FARM_CROP_TYPES.filter(
-  (type) => type !== 'farm_cattle',
-);
+export const AUTOMATABLE_FARM_TYPES = FARM_CROP_TYPES;
 const automatableFarmTypeSet: ReadonlySet<string> = new Set(AUTOMATABLE_FARM_TYPES);
 
 export const FARM_DAILY_WORK_POINTS = FARM_CROP_RULES.farm_rice.dailyWorkPoints;

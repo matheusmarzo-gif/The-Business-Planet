@@ -170,7 +170,9 @@ a Prefeitura aparece somente para a conta Neon Auth configurada em
 `MASTER_EMAIL`. Cadastre o mesmo e-mail nas variáveis locais e no Render; crie
 essa conta pelo formulário do jogo para ativar a permissão. O botão **Contábil**
 abre os relatórios das lojas comerciais, dos armazéns, das residências e da
-produção do jogador conectado. Ao selecionar uma categoria de construção na
+produção do jogador conectado, incluindo todas as construções industriais e
+artesanais produtivas. A lista de produção é ordenada alfabeticamente pelo nome
+da construção. Ao selecionar uma categoria de construção na
 barra inferior, o catálogo abre em um painel lateral à direita; escolha um
 edifício no painel e clique no mapa para posicioná-lo.
 
@@ -181,15 +183,23 @@ O servidor também impede que uma construção ofereça salário abaixo do míni
 vigente na cidade. Em **Produtos e estoque** do armazém, passe o mouse sobre o
 ícone de um produto para ver o peso unitário e total e o volume unitário e
 ocupado pelo estoque.
+O catálogo também inclui Areia (150 kg, 0,1 m³), Aço (800 kg, 0,1 m³),
+Roupa (25 kg, 0,1 m³), Móveis (50 kg, 0,1 m³), Utilitários (5 kg, 0,01 m³)
+e Vidro (300 kg, 0,1 m³); todos têm validade infinita.
 
 A ordem dos cartões é definida por categoria: Comerciais lista primeiro as
 lojas de arroz, trigo, cevada, batata e milho, depois Peixaria, Leitaria e
 Açougue; em seguida lojas de açúcar, especiarias, vegetais e sal, Padaria,
 Queijaria, Frutaria e Chocolateria. Fazendas lista arroz, trigo, cevada,
 batata, milho, leiteira, bovina, cana, vegetais, especiarias, cacau e frutas.
-Construções Artesanais lista Pesqueiro, Ferramentaria, Carvoaria e Casa de
-Engenho; Indústrias lista Armazém, Moinho, Fábrica de Pães, Fábrica de Queijo
-e Fábrica de Chocolate.
+Construções Artesanais lista Pesqueiro, Ferramentaria, Carvoaria, Casa de
+Engenho, Fábrica de Pães e Fábrica de Queijo; Indústrias lista Armazém, Silo,
+Moinho e Fábrica de Chocolate.
+
+A conta Master pode arrastar qualquer construção para reposicioná-la. A
+construção mantém seu estado, funcionários e estoques; o novo local precisa
+respeitar terreno, zona municipal, estradas e ocupação, e não pode deixar
+armazéns ligados fora do raio permitido.
 
 ### Configuração editável do jogo
 
@@ -369,8 +379,8 @@ mapa, ou remover individualmente um vínculo com **Desligar**. A rotina diária
 considera o estoque já movimentado entre depósitos, evitando enviar ou abastecer
 mais que o necessário.
 
-O **Moinho**, a **Fábrica de Pães** e a **Fábrica de Queijo** também ficam na
-categoria Indústrias. O Moinho (3 × 3, 60 funcionários) custa 100 madeiras,
+O **Moinho** fica na categoria Indústrias; a **Fábrica de Pães** e a
+**Fábrica de Queijo** ficam em Construções Artesanais. O Moinho (3 × 3, 60 funcionários) custa 100 madeiras,
 40 pedras e 40 ferros, exige 110.000 Work Points e guarda até 100 farinhas. Seu dono escolhe no
 painel lateral da construção concluída se o insumo será trigo, cevada ou milho;
 somente a matéria-prima escolhida é recebida do armazém ligado, até 20 unidades.
@@ -378,10 +388,14 @@ Trocar a seleção descarta o
 estoque restante da matéria-prima anterior. Cada unidade de grão e 300 Work
 Points produz 5 farinhas. A Fábrica de Pães (3 × 3, 60 funcionários) custa 180
 madeiras, 120 pedras e 60 ferros, exige 480.000 Work Points e guarda 30 farinhas e 300 pães;
-cada farinha e 200 Work Points produz 10 pães. A Fábrica de Queijo (3 × 3, 200
+cada farinha e 200 Work Points produz 10 pães. Ela guarda até 60 Ferramentas e a
+demanda é 0,25 Ferramenta por funcionário/dia, com a penalidade por falta.
+A Fábrica de Queijo (3 × 3, 200
 funcionários) custa 360 madeiras, 240 pedras e 120 ferros, exige 960.000 Work Points e guarda
-2.000 litros de leite e 100 queijos; cada 20 litros e 200 Work Points produz 1
-queijo. Os três edifícios recebem seus insumos pelo armazém ligado e enviam a
+2.000 litros de leite, 133 unidades de sal e 100 queijos; 15 litros de leite,
+1 unidade de sal e 200 Work Points produzem 1 queijo. Ela guarda até 200
+Ferramentas e demanda 0,25 Ferramenta por funcionário/dia, com a penalidade
+por falta. Os três edifícios recebem seus insumos pelo armazém ligado e enviam a
 produção ao armazém. A **Fábrica de Chocolate** (4 × 4, 40 funcionários) custa
 180 madeiras, 120 pedras e 60 ferros, exige 480.000 Work Points e guarda 50 chocolates, 5
 cacaus, 130 litros de leite, 10 açúcares, 100 carvões e 200 Ferramentas. A cada
@@ -543,10 +557,10 @@ Pesqueiro. Cana, carvão e Ferramentas são recebidos pelo armazém ligado; a ca
 armazenada na construção também está sujeita à validade de 3 dias.
 
 A **Carvoaria** (3 × 3, até 20 funcionários) custa 60 madeiras e 20 pedras e
-exige 120.000 Work Points. Armazena até 100 carvões, 10 Ferramentas e 30 madeiras
+exige 120.000 Work Points. Armazena até 100 carvões, 40 Ferramentas e 30 madeiras
 (limite de madeira adotado como nas outras oficinas). Cada 200 Work Points
 efetivos e 1 madeira produzem 5 carvões. Ferramentas e madeira são recebidas
-pelo armazém ligado; a demanda de Ferramentas é 0,05 por funcionário/dia e
+pelo armazém ligado; a demanda de Ferramentas é 0,5 por funcionário/dia e
 segue a penalidade do Pesqueiro. O carvão pesa 5 kg, ocupa 0,015 m³ e tem
 validade infinita.
 
@@ -589,11 +603,13 @@ e empregam até 10 e 50 funcionários, respectivamente. Cana custa 100 madeiras,
 especiarias; o excedente da colheita aguarda no campo até haver espaço livre.
 A Fazenda de Vegetais também ocupa 3 × 3, emprega até 50 funcionários, custa
 100 madeiras, 40 pedras e 40 ferros, exige 110.000 Work Points e guarda até 100 vegetais.
-Nas fazendas agrícolas com ciclo de cultivo, **Configurações avançadas** permite
+Nas fazendas com ciclo de cultivo ou criação, **Configurações avançadas** permite
 automatizar o replantio: selecione os meses permitidos e quantos funcionários
 deseja durante o crescimento e durante a colheita. A automação não interrompe um
 ciclo ativo; quando a fazenda ficar livre, ela aguarda um dos meses selecionados
-para iniciar outro. É possível desativá-la no mesmo painel. Sem automação, o
+para iniciar outro. Na Fazenda Bovina, os meses selecionados controlam o início
+de um novo ciclo de criação, com trabalhadores configurados separadamente para
+criação e abate. É possível desativá-la no mesmo painel. Sem automação, o
 proprietário continua iniciando os ciclos manualmente.
 
 ### Empregos e salários

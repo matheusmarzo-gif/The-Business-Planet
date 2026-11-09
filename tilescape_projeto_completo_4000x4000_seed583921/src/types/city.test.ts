@@ -1592,6 +1592,7 @@ describe('work settings', () => {
     wage,
     workHoursPerDay: 8,
     desiredWorkers,
+    minimumWorkerTechnique: 10,
   });
 
   it('allows up to 100 workers during construction and applies the building limit on completion', () => {
@@ -1605,6 +1606,7 @@ describe('work settings', () => {
       y: 0,
       occupants: 100,
       internalAppeal: 10,
+      technique: 10,
     }];
     const workplace = {
       id: 'dairy-shop',
@@ -1614,6 +1616,7 @@ describe('work settings', () => {
       wage: 10,
       workHoursPerDay: 8,
       desiredWorkers: 100,
+      minimumWorkerTechnique: 10,
     };
 
     assert.deepEqual(
@@ -1649,7 +1652,49 @@ describe('work settings', () => {
       wage: 15,
       workHoursPerDay: 8,
       desiredWorkers: 3,
+      minimumWorkerTechnique: 10,
     });
+    assert.equal(
+      parseWorkSettings({
+        wage: 10,
+        workHoursPerDay: 8,
+        desiredWorkers: 0,
+        minimumWorkerTechnique: 9,
+      }),
+      null,
+    );
+    assert.deepEqual(
+      parseWorkSettings({
+        wage: 10,
+        workHoursPerDay: 8,
+        desiredWorkers: 0,
+        minimumWorkerTechnique: 40,
+      }),
+      {
+        wage: 10,
+        workHoursPerDay: 8,
+        desiredWorkers: 0,
+        minimumWorkerTechnique: 40,
+      },
+    );
+    assert.equal(
+      parseWorkSettings({
+        wage: 10,
+        workHoursPerDay: 8,
+        desiredWorkers: 0,
+        minimumWorkerTechnique: 20.5,
+      }),
+      null,
+    );
+    assert.equal(
+      parseWorkSettings({
+        wage: 10,
+        workHoursPerDay: 8,
+        desiredWorkers: 0,
+        minimumWorkerTechnique: 41,
+      }),
+      null,
+    );
     assert.equal(parseWorkSettings({ wage: 15, workHoursPerDay: 8 }), null);
     assert.equal(parseWorkSettings({ wage: 15, workHoursPerDay: 8, desiredWorkers: -1 }), null);
     assert.equal(parseWorkSettings({ wage: -1, workHoursPerDay: 8, desiredWorkers: 0 }), null);
@@ -1661,6 +1706,7 @@ describe('work settings', () => {
       wage: 1.5,
       workHoursPerDay: 8,
       desiredWorkers: 0,
+      minimumWorkerTechnique: 10,
     });
     assert.equal(parseWorkSettings({ wage: 1.234, workHoursPerDay: 8, desiredWorkers: 0 }), null);
     assert.equal(parseWorkSettings(null), null);
@@ -1680,6 +1726,28 @@ describe('work settings', () => {
     assert.ok(Math.abs(getDailyWorkPoints(4, 100, 100) - 60) < 1e-9);
   });
 
+  it('only assigns workers whose residence technique meets each workplace minimum', () => {
+    const home = {
+      id: 'home',
+      type: 'house_poor1' as const,
+      x: 100,
+      y: 100,
+      occupants: 10,
+      internalAppeal: 10,
+      technique: 25,
+    };
+    const eligible = workplace('eligible', 99, 10, 10);
+    eligible.y = 99;
+    eligible.minimumWorkerTechnique = 25;
+    const ineligible = workplace('ineligible', 99, 100, 10);
+    ineligible.y = 99;
+    ineligible.minimumWorkerTechnique = 26;
+
+    assert.deepEqual(allocateWorkers([home], [eligible, ineligible]), [
+      { workplaceId: 'eligible', residenceId: 'home', count: 10 },
+    ]);
+  });
+
   it('distributes each home proportionally and rounds allocations to its population', () => {
     const home = {
       id: 'home',
@@ -1688,6 +1756,7 @@ describe('work settings', () => {
       y: 100,
       occupants: 32,
       internalAppeal: 10,
+      technique: 10,
     };
     const near = workplace('near', 99, 10, 32);
     near.y = 99;
@@ -1712,6 +1781,7 @@ describe('work settings', () => {
       y: 100,
       occupants: 10,
       internalAppeal: 10,
+      technique: 10,
     };
     const scarce = workplace('scarce', 99, 1000, 2);
     scarce.y = 99;
@@ -1732,6 +1802,7 @@ describe('work settings', () => {
         y: 10,
         occupants: 4,
         internalAppeal: 10,
+        technique: 10,
       },
       {
         id: 'b',
@@ -1740,6 +1811,7 @@ describe('work settings', () => {
         y: 10,
         occupants: 4,
         internalAppeal: 10,
+        technique: 10,
       },
     ];
     const rich = workplace('rich', 9, 100, 5);
@@ -1780,6 +1852,7 @@ describe('work settings', () => {
         y: 10,
         occupants: 4,
         internalAppeal: 100,
+        technique: 10,
       },
       {
         id: 'a-low-appeal',
@@ -1788,6 +1861,7 @@ describe('work settings', () => {
         y: 10,
         occupants: 4,
         internalAppeal: 20,
+        technique: 10,
       },
     ];
     assert.deepEqual(
@@ -2019,10 +2093,12 @@ describe('municipal zones', () => {
         completedAt: null,
         wage: 10,
         workHoursPerDay: 8,
+        minimumWorkerTechnique: 10,
         rent: 10,
         occupants: 0,
         wellbeing: 0,
         desiredWorkers: 0,
+        averageWorkerTechnique: null,
         workPointsDone: 0,
         price: 10,
         stock: 0,
@@ -2079,10 +2155,12 @@ describe('municipal zones', () => {
         completedAt: null,
         wage: 10,
         workHoursPerDay: 8,
+        minimumWorkerTechnique: 10,
         rent: 10,
         occupants: 0,
         wellbeing: 0,
         desiredWorkers: 0,
+        averageWorkerTechnique: null,
         workPointsDone: 0,
         price: 10,
         stock: 0,

@@ -7,8 +7,10 @@ import {
   MAX_RENT,
   MAX_WAGE,
   MAX_WORK_HOURS,
+  MAX_WORKER_TECHNIQUE,
   MIN_RENT,
   MIN_WORK_HOURS,
+  MIN_WORKER_TECHNIQUE,
   RESIDENCE_STATS,
   WORKER_SEARCH_RADIUS,
   RESIDENCES,
@@ -45,7 +47,12 @@ interface ResidencePanelProps {
   isOwner: boolean;
   isSaving: boolean;
   error: string;
-  onSave: (settings: { wage: number; workHoursPerDay: number; desiredWorkers: number }) => void;
+  onSave: (settings: {
+    wage: number;
+    workHoursPerDay: number;
+    desiredWorkers: number;
+    minimumWorkerTechnique: number;
+  }) => void;
   onSaveRent: (rent: number) => void;
   residenceBenefit: ResidenceBenefitCalculation | null;
   onSavePrice: (price: number) => void;
@@ -58,6 +65,7 @@ interface ResidencePanelProps {
     wage: number;
     workHoursPerDay: number;
     desiredWorkers: number;
+    minimumWorkerTechnique: number;
   }) => number;
   onSaveInputProduct: (productId: string) => void;
   onOpenWarehouse: () => void;
@@ -215,6 +223,9 @@ export default function ResidencePanel({
   const [hours, setHours] = useState(String(building.workHoursPerDay));
   const [rent, setRent] = useState(String(building.rent));
   const [desired, setDesired] = useState(String(building.desiredWorkers));
+  const [minimumWorkerTechnique, setMinimumWorkerTechnique] = useState(
+    String(building.minimumWorkerTechnique),
+  );
   const [price, setPrice] = useState(String(building.price));
   const [saleSimulationMessage, setSaleSimulationMessage] = useState('');
   const [hiringSimulationMessage, setHiringSimulationMessage] = useState('');
@@ -237,9 +248,17 @@ export default function ResidencePanel({
     setHours(String(building.workHoursPerDay));
     setRent(String(building.rent));
     setDesired(String(building.desiredWorkers));
+    setMinimumWorkerTechnique(String(building.minimumWorkerTechnique));
     setSaleSimulationMessage('');
     setHiringSimulationMessage('');
-  }, [building.id, building.wage, building.workHoursPerDay, building.rent, building.desiredWorkers]);
+  }, [
+    building.id,
+    building.wage,
+    building.workHoursPerDay,
+    building.rent,
+    building.desiredWorkers,
+    building.minimumWorkerTechnique,
+  ]);
 
   useEffect(() => {
     setFarmAutomation({
@@ -260,6 +279,7 @@ export default function ResidencePanel({
       wage: Number(wage),
       workHoursPerDay: Number(hours),
       desiredWorkers: Number(desired),
+      minimumWorkerTechnique: Number(minimumWorkerTechnique),
     });
   };
   const submitRent = (event: FormEvent) => {
@@ -297,6 +317,12 @@ export default function ResidencePanel({
     ['Vagas ofertadas', number.format(openJobs)],
     ['Máximo de funcionários', number.format(maxDesiredWorkers)],
     ['Raio de busca de trabalhadores', `${WORKER_SEARCH_RADIUS} tiles`],
+    [
+      'Técnica média dos trabalhadores',
+      building.averageWorkerTechnique === null
+        ? '—'
+        : wellbeingNumber.format(building.averageWorkerTechnique),
+    ],
   ];
   const warehouseUsedM3 = PRODUCTS.reduce(
     (total, product) => total + (warehouseStock.get(product.id) ?? 0) * product.volumeM3,
@@ -732,6 +758,18 @@ export default function ResidencePanel({
             />
           </label>
           <small>Salário mínimo da cidade: {formatMoney(cityMinimumWage)} por dia.</small>
+          <label>
+            Técnica mínima necessária
+            <input
+              type="number"
+              min={MIN_WORKER_TECHNIQUE}
+              max={MAX_WORKER_TECHNIQUE}
+              step={1}
+              value={minimumWorkerTechnique}
+              disabled={!isOwner || isSaving}
+              onChange={(event) => setMinimumWorkerTechnique(event.target.value)}
+            />
+          </label>
           {isOwner && (
             <>
               <button
@@ -742,6 +780,7 @@ export default function ResidencePanel({
                     wage: Number(wage),
                     workHoursPerDay: Number(hours),
                     desiredWorkers: Number(desired),
+                    minimumWorkerTechnique: Number(minimumWorkerTechnique),
                   });
                   setHiringSimulationMessage(`Estimativa: ${number.format(hired)} pessoa(s) empregada(s).`);
                 }}

@@ -10,6 +10,10 @@ import { isCurrencyAmount, roundCurrency } from './currency.js';
 import { BUILDING_CONFIGS, GAME_RULES } from '../generated/gameConfig.js';
 import type { StockLevels } from './stockCapacity.js';
 
+export const MIN_WORKER_TECHNIQUE = 10;
+export const MAX_WORKER_TECHNIQUE = 40;
+export const DEFAULT_MIN_WORKER_TECHNIQUE = MIN_WORKER_TECHNIQUE;
+
 export type ResidenceType = keyof typeof BUILDING_CONFIGS;
 
 export const SHOP_TYPES = [
@@ -190,9 +194,18 @@ export function isWithinWorkerSearchRadius(
 
 export function parseWorkSettings(
   value: unknown,
-): { wage: number; workHoursPerDay: number; desiredWorkers: number } | null {
+): {
+  wage: number;
+  workHoursPerDay: number;
+  desiredWorkers: number;
+  minimumWorkerTechnique: number;
+} | null {
   if (typeof value !== 'object' || value === null) return null;
-  const { wage, workHoursPerDay, desiredWorkers } = value as Record<string, unknown>;
+  const settings = value as Record<string, unknown>;
+  const { wage, workHoursPerDay, desiredWorkers } = settings;
+  const minimumWorkerTechnique = settings.minimumWorkerTechnique === undefined
+    ? DEFAULT_MIN_WORKER_TECHNIQUE
+    : settings.minimumWorkerTechnique;
   if (
     typeof desiredWorkers !== 'number' ||
     !Number.isInteger(desiredWorkers) ||
@@ -205,11 +218,20 @@ export function parseWorkSettings(
     typeof workHoursPerDay !== 'number' ||
     !Number.isInteger(workHoursPerDay) ||
     workHoursPerDay < MIN_WORK_HOURS ||
-    workHoursPerDay > MAX_WORK_HOURS
+    workHoursPerDay > MAX_WORK_HOURS ||
+    typeof minimumWorkerTechnique !== 'number' ||
+    !Number.isInteger(minimumWorkerTechnique) ||
+    minimumWorkerTechnique < MIN_WORKER_TECHNIQUE ||
+    minimumWorkerTechnique > MAX_WORKER_TECHNIQUE
   ) {
     return null;
   }
-  return { wage: roundCurrency(wage), workHoursPerDay, desiredWorkers };
+  return {
+    wage: roundCurrency(wage),
+    workHoursPerDay,
+    desiredWorkers,
+    minimumWorkerTechnique,
+  };
 }
 
 export function parseRent(value: unknown): number | null {
@@ -322,6 +344,7 @@ export interface ResidentialBuilding {
   completedAt: string | null;
   wage: number;
   workHoursPerDay: number;
+  minimumWorkerTechnique: number;
   rent: number;
   occupants: number;
   wellbeing: number;
@@ -346,6 +369,7 @@ export interface ResidentialBuilding {
   // Funcionários empregados na construção ou, em residências, moradores empregados.
   employed: number;
   averageIncome: number;
+  averageWorkerTechnique: number | null;
 }
 
 const ROMAN_NUMERALS: readonly [number, string][] = [

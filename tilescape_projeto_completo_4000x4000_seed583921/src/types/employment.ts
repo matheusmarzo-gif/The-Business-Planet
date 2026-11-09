@@ -1,5 +1,6 @@
 import type { ResidenceType, ResidentialBuildingStatus } from './residence.js';
 import {
+  DEFAULT_MIN_WORKER_TECHNIQUE,
   getResidenceDefinition,
   isWithinWorkerSearchRadius,
   MAX_CONSTRUCTION_WORKERS,
@@ -14,6 +15,7 @@ export interface EmploymentResidence {
   y: number;
   occupants: number;
   internalAppeal: number;
+  technique: number;
 }
 
 export interface EmploymentWorkplace {
@@ -24,6 +26,7 @@ export interface EmploymentWorkplace {
   wage: number;
   workHoursPerDay: number;
   desiredWorkers: number;
+  minimumWorkerTechnique?: number;
   status?: ResidentialBuildingStatus;
 }
 
@@ -173,6 +176,10 @@ export function allocateWorkers(
     const offers = workplaces.flatMap((workplace) => {
       const vacancies = openJobs.get(workplace.id) ?? 0;
       if (vacancies <= 0 || !isWithinWorkerSearchRadius(workplace, residence)) return [];
+      if (
+        residence.technique <
+        (workplace.minimumWorkerTechnique ?? DEFAULT_MIN_WORKER_TECHNIQUE)
+      ) return [];
       const workplaceDefinition = getResidenceDefinition(workplace.type);
       const residenceDefinition = getResidenceDefinition(residence.type);
       if (!workplaceDefinition || !residenceDefinition) return [];

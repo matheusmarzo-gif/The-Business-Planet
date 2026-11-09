@@ -82,6 +82,15 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
     (building.completedAt === null || typeof building.completedAt === 'string') &&
     isCurrencyAmount(building.wage) &&
     Number.isInteger(building.workHoursPerDay) &&
+    typeof building.minimumWorkerTechnique === 'number' &&
+    Number.isInteger(building.minimumWorkerTechnique) &&
+    building.minimumWorkerTechnique >= 10 &&
+    building.minimumWorkerTechnique <= 40 &&
+    (building.averageWorkerTechnique === null ||
+      (typeof building.averageWorkerTechnique === 'number' &&
+        Number.isFinite(building.averageWorkerTechnique) &&
+        building.averageWorkerTechnique >= 10 &&
+        building.averageWorkerTechnique <= 40)) &&
     isCurrencyAmount(building.rent) &&
     Number.isInteger(building.occupants) &&
     typeof building.wellbeing === 'number' &&

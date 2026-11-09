@@ -511,6 +511,14 @@ avisa que ainda é cedo para simular. **Simular contratação**, abaixo do salá
 calcula localmente a estimativa de empregados usando as construções e moradores
 recebidos no mapa e os valores digitados no formulário.
 
+Nas construções artesanais, comerciais, fazendas, recursos, indústrias e obras
+em andamento, o dono também pode definir a **Técnica mínima necessária** para
+contratar, de 10 a 40 (padrão 10). Na distribuição diária de empregos, uma
+residência só concorre às vagas se a técnica de seus moradores, calculada a
+partir do bem-estar, alcançar esse mínimo. A simulação de contratação respeita
+o mesmo limite. O painel informa a técnica média dos trabalhadores atualmente
+alocados à construção; sem trabalhadores, exibe “—”.
+
 ### Pesqueiro e Peixaria
 
 Na categoria **Construções Artesanais**, o **Pesqueiro** (2 × 2 tiles, até 40

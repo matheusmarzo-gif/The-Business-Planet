@@ -98,6 +98,7 @@ import { getDairyFarmEfficiency } from '../src/types/dairy.js';
 import { parseBasicDemandConfig } from '../src/types/commerceDemand.js';
 import {
   calculateResidenceWellbeing,
+  getWorkerTechnique,
   type ResidenceProductConsumption,
 } from '../src/types/wellbeing.js';
 import {
@@ -413,6 +414,7 @@ type ResidentialBuildingRow = {
   occupants: number;
   wellbeing: number;
   desired_workers: number;
+  minimum_worker_technique: number;
   work_points_done: number;
   price: number;
   stock: number;
@@ -438,11 +440,12 @@ type ResidentialBuildingRow = {
   farm_harvest_workers: number;
   employed: number;
   average_income: number;
+  average_worker_technique: number | null;
   owner_name?: string | null;
   created_by?: string;
 };
 
-const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, rent, occupants, wellbeing, desired_workers, work_points_done, price, stock, stock_levels, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
+const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, minimum_worker_technique, rent, occupants, wellbeing, desired_workers, work_points_done, price, stock, stock_levels, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
   COALESCE((SELECT array_agg(link.warehouse_id::text ORDER BY link.warehouse_id)
             FROM building_warehouse_links link
             WHERE link.building_id = all_buildings.id), ARRAY[]::text[]) AS warehouse_ids,
@@ -455,6 +458,18 @@ const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y
   crop_yield, crop_harvested,
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
    WHERE j.workplace_id = all_buildings.id OR j.residence_id = all_buildings.id) AS employed,
+  (SELECT SUM(j.count * CASE
+             WHEN LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) <= 100
+               THEN 10 * (1 + LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) / 200)
+             WHEN LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) <= 125
+               THEN 10 * (1.5 + (LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) - 100) / 50)
+             WHEN LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) <= 150
+               THEN 10 * (2 + (LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) - 125) / 25)
+             ELSE 10 * (3 + (LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) - 150) / 12)
+           END) / NULLIF(SUM(j.count), 0)
+   FROM job_assignments j
+   JOIN all_buildings home ON home.id = j.residence_id
+   WHERE j.workplace_id = all_buildings.id) AS average_worker_technique,
   COALESCE((SELECT SUM(j.count * w.wage) FROM job_assignments j
             JOIN all_buildings w ON w.id = j.workplace_id
             WHERE j.residence_id = all_buildings.id), 0)::float8
@@ -480,6 +495,7 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     completedAt: row.completed_at?.toISOString() ?? null,
     wage: row.wage,
     workHoursPerDay: row.work_hours_per_day,
+    minimumWorkerTechnique: row.minimum_worker_technique,
     rent: row.rent,
     occupants: row.occupants,
     wellbeing: row.wellbeing,
@@ -517,6 +533,7 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
         : null,
     employed: row.employed,
     averageIncome: row.average_income,
+    averageWorkerTechnique: row.average_worker_technique,
   };
 }
 
@@ -3356,6 +3373,7 @@ async function runDailyEmployment(): Promise<boolean> {
             y: building.y,
             occupants: building.occupants,
             internalAppeal: appeal.internalAppeal,
+            technique: getWorkerTechnique(building.wellbeing),
           };
         });
       const workplaces = buildings.filter(
@@ -6111,9 +6129,10 @@ async function start() {
         }
         const { rows } = await client.query<ResidentialBuildingRow>(
           `UPDATE all_buildings
-           SET wage = $3, work_hours_per_day = $4, desired_workers = $5
-           WHERE id = $1 AND created_by = $2
-             AND (status = 'under_construction' OR building_type <> ALL($6::text[]))
+             SET wage = $3, work_hours_per_day = $4, desired_workers = $5,
+                 minimum_worker_technique = $6
+             WHERE id = $1 AND created_by = $2
+               AND (status = 'under_construction' OR building_type <> ALL($7::text[]))
            RETURNING ${ALL_BUILDING_COLUMNS}`,
           [
             request.params.id,
@@ -6121,6 +6140,7 @@ async function start() {
             settings.wage,
             settings.workHoursPerDay,
             building.farm_auto_planting_enabled ? building.desired_workers : settings.desiredWorkers,
+            settings.minimumWorkerTechnique,
             RESIDENCE_BUILDING_TYPES,
           ],
         );

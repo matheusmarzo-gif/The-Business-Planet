@@ -194,6 +194,10 @@ ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS desired_workers INTEGER NOT NULL DEFAULT 0 CHECK (desired_workers >= 0);
 
 ALTER TABLE all_buildings
+  ADD COLUMN IF NOT EXISTS minimum_worker_technique SMALLINT NOT NULL DEFAULT 10
+    CHECK (minimum_worker_technique BETWEEN 10 AND 40);
+
+ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS work_points_done DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (work_points_done >= 0);
 
 ALTER TABLE all_buildings

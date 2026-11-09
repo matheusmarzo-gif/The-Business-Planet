@@ -36,7 +36,12 @@ processadas por apreço interno decrescente; empates são resolvidos pelo ID.
 O apreço é calculado com as rendas médias residenciais e a média salarial
 municipal ponderada pelos moradores, incluindo todas as residências concluídas
 da cidade e considerando as residências desocupadas na média regional de 10
-tiles. A simulação de contratação no cliente usa a mesma regra compartilhada.
+tiles. Cada construção com trabalhadores (inclusive uma obra) persiste o nível
+mínimo de técnica exigido (10–40; padrão 10). Na alocação diária, cada residência
+só pode oferecer trabalhadores quando sua técnica, derivada do bem-estar, atinge
+o mínimo configurado pela construção. A prévia de contratação no cliente aplica
+a mesma regra compartilhada. O painel mostra a técnica média dos trabalhadores
+atualmente alocados a cada construção.
 O relatório contábil de produção inclui toda construção com regra de produção,
 inclusive indústrias, e ordena os edifícios alfabeticamente por nome. Clique
 simples em qualquer construção abre seu painel; a conta Master pode arrastar
@@ -913,7 +918,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |
-| `PATCH /api/residential-buildings/:id/work-settings` | Criador; obras e construções não residenciais concluídas | Valida funcionários desejados (0–100 em obras ou 0–máximo após concluídas), salário diário (até duas casas decimais) e carga horária (4–14 h); reduz empregados excedentes. |
+| `PATCH /api/residential-buildings/:id/work-settings` | Criador; obras e construções não residenciais concluídas | Valida funcionários desejados (0–100 em obras ou 0–máximo após concluídas), salário diário (até duas casas decimais), carga horária (4–14 h) e técnica mínima necessária (10–40); reduz empregados excedentes. |
 | `PATCH /api/residential-buildings/:id/rent` | Criador | Valida e grava o aluguel por pessoa (≥ C$ 0,01, até duas casas decimais). |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |
 

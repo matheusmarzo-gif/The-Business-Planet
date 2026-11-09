@@ -72,6 +72,7 @@ import type {
 } from './types/stockCapacity';
 import { allocateWorkers, getDailyWorkPoints } from './types/employment';
 import { PRODUCTS } from './types/product';
+import { getWorkerTechnique } from './types/wellbeing';
 import type { PerformanceLogRecord } from './types/performanceLog';
 import {
   calculateResidenceAppealsFromIncome,
@@ -1228,7 +1229,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
 
   const saveWorkSettings = async (
     buildingId: string,
-    settings: { wage: number; workHoursPerDay: number; desiredWorkers: number },
+    settings: {
+      wage: number;
+      workHoursPerDay: number;
+      desiredWorkers: number;
+      minimumWorkerTechnique: number;
+    },
   ) => {
     setIsSavingWorkSettings(true);
     setWorkSettingsError('');
@@ -1618,6 +1624,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       completedAt: null,
       wage: DEFAULT_WAGE,
       workHoursPerDay: DEFAULT_WORK_HOURS,
+      minimumWorkerTechnique: 10,
       rent: DEFAULT_RENT,
       occupants: 0,
       wellbeing: 0,
@@ -1635,6 +1642,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       inputStocks: {},
       selectedInputProductId: RESIDENCES[type].defaultInputProductId ?? null,
       averageIncome: 0,
+      averageWorkerTechnique: null,
       efficiencyPenalty: 0,
       farmAutomation: {
         enabled: false,
@@ -2121,10 +2129,14 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                     y: building.y,
                     occupants: building.occupants,
                     internalAppeal: appeal.internalAppeal,
+                    technique: getWorkerTechnique(building.wellbeing),
                   };
                 });
               const workplaces = residentialBuildings
-                .filter((building) => RESIDENCES[building.type].kind !== 'residence')
+                .filter((building) =>
+                  RESIDENCES[building.type].kind !== 'residence' ||
+                  building.status === 'under_construction',
+                )
                 .map((building) => ({
                   id: building.id,
                   type: building.type,
@@ -2139,6 +2151,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                     building.id === selectedResidence.id
                       ? settings.desiredWorkers
                       : building.desiredWorkers,
+                  minimumWorkerTechnique:
+                    building.id === selectedResidence.id
+                      ? settings.minimumWorkerTechnique
+                      : building.minimumWorkerTechnique,
                   status: building.status,
                 }));
               return allocateWorkers(residences, workplaces)

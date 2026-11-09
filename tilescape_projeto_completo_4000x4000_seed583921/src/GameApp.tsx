@@ -69,6 +69,7 @@ import { formatMoney } from './types/wallet';
 import { allocateWorkers, getDailyWorkPoints } from './types/employment';
 import { PRODUCTS } from './types/product';
 import type { PerformanceLogRecord } from './types/performanceLog';
+import type { ResidenceBenefitCalculation } from './types/residence-relocation';
 import { loadCommerceDiagnostics, saveCommerceDiagnostics } from './utils/commerceDiagnosticsStorage';
 import { createMapGenerator } from './utils/mapGenerator';
 import { DEFAULT_TILE_LIST } from './utils/tileAssets';
@@ -366,6 +367,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [hoveredTile, setHoveredTile] = useState<TileInfo | null>(null);
   const [selectedTile, setSelectedTile] = useState<TileInfo | null>(null);
   const [selectedResidenceId, setSelectedResidenceId] = useState<string | null>(null);
+  const [residenceBenefit, setResidenceBenefit] = useState<ResidenceBenefitCalculation | null>(null);
   const selectedResidenceIdRef = useRef(selectedResidenceId);
   selectedResidenceIdRef.current = selectedResidenceId;
   const [isResidenceOwner, setIsResidenceOwner] = useState(false);
@@ -599,6 +601,25 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const selectedResidenceKey = selectedResidence && !selectedResidence.id.startsWith('pending-')
     ? selectedResidence.id
     : null;
+
+  useEffect(() => {
+    setResidenceBenefit(null);
+    if (!selectedResidenceKey || selectedResidence?.status !== 'completed' ||
+        RESIDENCES[selectedResidence.type].kind !== 'residence') return;
+    let cancelled = false;
+    cityRequest<ResidenceBenefitCalculation>(
+      `/api/residential-buildings/${selectedResidenceKey}/residence-benefit`,
+    )
+      .then((calculation) => {
+        if (!cancelled) setResidenceBenefit(calculation);
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível consultar o benefício da residência:', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedResidence?.status, selectedResidence?.type, selectedResidenceKey]);
 
   useEffect(() => {
     setIsResidenceOwner(false);
@@ -1887,6 +1908,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             error={workSettingsError}
             onSave={(settings) => void saveWorkSettings(selectedResidence.id, settings)}
             onSaveRent={(rent) => void saveRent(selectedResidence.id, rent)}
+            residenceBenefit={residenceBenefit}
             onSavePrice={(price) => void savePrice(selectedResidence.id, price)}
             onSimulateSale={(settings) => {
               try {

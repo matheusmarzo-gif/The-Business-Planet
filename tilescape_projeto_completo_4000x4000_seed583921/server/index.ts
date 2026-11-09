@@ -121,7 +121,10 @@ import {
   getCityPopulation,
   IMMIGRATION_POPULATION_LIMIT,
 } from '../src/types/immigration.js';
-import { planResidenceRelocations } from '../src/types/residence-relocation.js';
+import {
+  calculateResidenceBenefit,
+  planResidenceRelocations,
+} from '../src/types/residence-relocation.js';
 import { DEFAULT_TILE_LIST } from '../src/utils/tileAssets.js';
 import { createMapGenerator } from '../src/utils/mapGenerator.js';
 import { WORLD_CONFIG } from '../src/utils/worldConfig.js';
@@ -4530,6 +4533,62 @@ async function start() {
     })().catch((error: unknown) => {
       console.error('Não foi possível consultar o consumo da cidade:', error);
       response.status(503).json({ error: 'city_unavailable' });
+    });
+  });
+  app.get('/api/residential-buildings/:id/residence-benefit', requireAuth, (request, response) => {
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+    void (async () => {
+      const { rows } = await pool.query<{
+        building_type: ResidenceType;
+        rent: number;
+        occupants: number;
+        daily_income: number;
+        monthly_products_cost: number;
+      }>(
+        `WITH selected AS (
+           SELECT building.id, building.building_type, building.rent, building.occupants,
+                  COALESCE(SUM(assignments.count * workplace.wage), 0)::float8
+                    / GREATEST(building.occupants, 1) AS daily_income,
+                  (SELECT COALESCE(SUM(per_product.per_person_quantity * per_product.average_price), 0)::float8
+                   FROM (
+                     SELECT product_id,
+                            SUM(quantity / NULLIF(consumption.occupants, 0)) AS per_person_quantity,
+                            SUM(spent) / NULLIF(SUM(quantity), 0) AS average_price
+                     FROM residence_consumption consumption
+                     WHERE consumption.building_id = building.id
+                       AND consumption.day >= (SELECT world_time::date FROM world_state WHERE id = 1) - 30
+                       AND consumption.day < (SELECT world_time::date FROM world_state WHERE id = 1)
+                     GROUP BY product_id
+                   ) per_product) AS monthly_products_cost
+           FROM residential_buildings building
+           LEFT JOIN job_assignments assignments ON assignments.residence_id = building.id
+           LEFT JOIN residential_buildings workplace ON workplace.id = assignments.workplace_id
+           WHERE building.id = $1
+           GROUP BY building.id
+         )
+         SELECT selected.building_type, selected.rent, selected.occupants,
+                selected.daily_income, selected.monthly_products_cost
+         FROM selected`,
+        [request.params.id],
+      );
+      const row = rows[0];
+      if (!row || getResidenceDefinition(row.building_type)?.kind !== 'residence') {
+        response.status(row ? 400 : 404).json({ error: row ? 'not_a_residence' : 'residence_not_found' });
+        return;
+      }
+      const calculation = calculateResidenceBenefit({
+        rent: row.rent,
+        monthlyCost: row.rent + row.monthly_products_cost,
+        dailyIncome: row.daily_income,
+        localAppeal: getResidenceDefinition(row.building_type)?.localAppeal ?? 0,
+      });
+      response.json(calculation);
+    })().catch((error: unknown) => {
+      console.error('Não foi possível calcular o benefício da residência:', error);
+      response.status(503).json({ error: 'residence_benefit_unavailable' });
     });
   });
   app.post('/api/residential-buildings', requireAuth, (request, response) => {

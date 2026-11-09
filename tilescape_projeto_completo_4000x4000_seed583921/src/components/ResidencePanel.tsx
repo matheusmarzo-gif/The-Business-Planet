@@ -29,6 +29,7 @@ import {
 } from '../types/farming';
 import { getDairyFarmEfficiency } from '../types/dairy';
 import { GAME_RULES } from '../generated/gameConfig';
+import type { ResidenceBenefitCalculation } from '../types/residence-relocation';
 
 interface ResidencePanelProps {
   building: ResidentialBuilding;
@@ -38,6 +39,7 @@ interface ResidencePanelProps {
   error: string;
   onSave: (settings: { wage: number; workHoursPerDay: number; desiredWorkers: number }) => void;
   onSaveRent: (rent: number) => void;
+  residenceBenefit: ResidenceBenefitCalculation | null;
   onSavePrice: (price: number) => void;
   onSimulateSale: (settings: { price: number; wage: number; workHoursPerDay: number }) => {
     unitsSold: number;
@@ -151,6 +153,7 @@ export default function ResidencePanel({
   error,
   onSave,
   onSaveRent,
+  residenceBenefit,
   onSavePrice,
   onSimulateSale,
   onSimulateHiring,
@@ -781,6 +784,16 @@ export default function ResidencePanel({
           </button>
         ) : (
           <small>Somente o dono da residência pode editar.</small>
+        )}
+        {isResidence && building.status === 'completed' && residenceBenefit && (
+          <div
+            className="residence-benefit"
+            title={`Cb: ${formatMoney(residenceBenefit.monthlyCost)}\nBenefício erro: ${residenceBenefit.errorBenefit.toLocaleString('pt-BR', { maximumFractionDigits: 6 })}\nBenefício ideal: ${residenceBenefit.idealBenefit.toLocaleString('pt-BR', { maximumFractionDigits: 6 })}`}
+          >
+            <span>Benefício associado</span>
+            <strong>{residenceBenefit.associatedBenefit.toLocaleString('pt-BR', { maximumFractionDigits: 6 })}</strong>
+            <small>Passe o mouse para ver Cb, benefício erro e benefício ideal.</small>
+          </div>
         )}
         {building.status === 'completed' && error && <p role="alert">{error}</p>}
       </form>

@@ -19,14 +19,23 @@ export interface ResidenceRelocation {
   associatedDestination: number;
 }
 
-export function getAssociatedResidenceBenefit(input: {
+export interface ResidenceBenefitCalculation {
+  monthlyCost: number;
+  errorBenefit: number;
+  idealBenefit: number;
+  associatedBenefit: number;
+}
+
+export function calculateResidenceBenefit(input: {
   rent: number;
   monthlyCost: number;
   dailyIncome: number;
   localAppeal: number;
-}): number {
+}): ResidenceBenefitCalculation {
   const { rent, monthlyCost, dailyIncome, localAppeal } = input;
-  if (!Number.isFinite(monthlyCost) || monthlyCost <= 0 || !Number.isFinite(dailyIncome)) return 0;
+  if (!Number.isFinite(monthlyCost) || monthlyCost <= 0 || !Number.isFinite(dailyIncome)) {
+    return { monthlyCost, errorBenefit: 0, idealBenefit: 0, associatedBenefit: 0 };
+  }
 
   const weight = (1 - rent / monthlyCost) ** 4;
   const adjustment = (0.8 ** weight - 1) * Math.max(0, dailyIncome);
@@ -34,8 +43,18 @@ export function getAssociatedResidenceBenefit(input: {
   const idealBase = Math.max(0, (dailyIncome - 0.5) / monthlyCost);
   const errorBenefit = Math.max(0, localAppeal / 50) * errorBase ** 1.25;
   const idealBenefit = idealBase ** 1.25;
-  if (idealBenefit <= 0 || errorBenefit <= 0) return 0;
-  return (errorBenefit / idealBenefit) ** 1.2;
+  const associatedBenefit =
+    idealBenefit <= 0 || errorBenefit <= 0 ? 0 : (errorBenefit / idealBenefit) ** 1.2;
+  return { monthlyCost, errorBenefit, idealBenefit, associatedBenefit };
+}
+
+export function getAssociatedResidenceBenefit(input: {
+  rent: number;
+  monthlyCost: number;
+  dailyIncome: number;
+  localAppeal: number;
+}): number {
+  return calculateResidenceBenefit(input).associatedBenefit;
 }
 
 export function planResidenceRelocations(

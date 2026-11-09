@@ -89,6 +89,15 @@ O servidor cria a tabela necessária (`world_state`) automaticamente ao iniciar.
 
 5. Publique o serviço. O Render fornecerá um endereço público; abra-o para
    acessar o jogo.
+
+### Benefício associado das residências
+
+Ao selecionar uma residência concluída, o painel mostra, logo abaixo de
+**Salvar aluguel**, o benefício associado calculado com o aluguel, a média de
+gastos dos últimos 30 dias e a renda diária média dos moradores. Passe o mouse
+sobre o valor para consultar `Cb` (média de gastos), `benefício erro` e
+`benefício ideal`. Os dados são calculados no servidor a partir do histórico
+persistido da residência.
 6. Adicione o domínio público do app à lista de domínios confiáveis do Neon Auth:
 
    ```powershell

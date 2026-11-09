@@ -30,6 +30,11 @@ própria; o jogo já processa rotinas diárias de imigração, emprego, consumo,
 produção, vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor também
 processa mudanças de moradores entre residências concluídas da mesma cidade,
 persistindo cada transferência em `residence_relocation_log`.
+Ao abrir uma residência concluída, o cliente consulta
+`GET /api/residential-buildings/:id/residence-benefit`. A rota calcula sob
+demanda o custo mensal (`Cb`), `benefício erro`, `benefício ideal` e o
+benefício associado usando consumo dos últimos 30 dias, aluguel e renda dos
+moradores; o cliente exibe o resultado abaixo de “Salvar aluguel” com tooltip.
 
 ## Estrutura do repositório
 

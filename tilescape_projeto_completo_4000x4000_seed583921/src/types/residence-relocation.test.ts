@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { planResidenceRelocations } from './residence-relocation.js';
+import { calculateResidenceBenefit, planResidenceRelocations } from './residence-relocation.js';
 
 const residence = (overrides: Partial<Parameters<typeof planResidenceRelocations>[0][number]>) => ({
   id: 'source',
@@ -33,4 +33,17 @@ test('does not move residents between cities or when the destination is not bett
     ]),
     [],
   );
+});
+
+test('returns the associated benefit and its tooltip components', () => {
+  const calculation = calculateResidenceBenefit({
+    rent: 10,
+    monthlyCost: 100,
+    dailyIncome: 20,
+    localAppeal: 50,
+  });
+  assert.equal(calculation.monthlyCost, 100);
+  assert.ok(calculation.errorBenefit > 0);
+  assert.ok(calculation.idealBenefit > 0);
+  assert.ok(calculation.associatedBenefit > 0);
 });

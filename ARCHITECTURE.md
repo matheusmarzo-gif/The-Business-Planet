@@ -485,6 +485,8 @@ mapeamento e verificar todas as curvas.
   `job_assignments.count × wage` ÷ empregados atribuídos à residência; sem empregados,
   o valor é 0). O bem-estar da prefeitura é a média do bem-estar das residências
   concluídas ponderada pelo número de moradores; sem moradores, o valor é 0.
+  Essa média pode ser fracionária e a validação das mensagens do mundo aceita
+  valores decimais nesse campo.
   O planejador de vendas usa os
   moradores empregados como consumidores e calcula a renda média por trabalhador
   para a demanda. Em construção: Work Points

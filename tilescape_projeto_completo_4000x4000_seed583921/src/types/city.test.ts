@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import {
   getCityZonePlacementError,
   getRequiredCityZone,
+  isValidCityWellbeing,
   isFootprintInCityZone,
   MAX_CITY_MINIMUM_WAGE,
   MIN_CITY_MINIMUM_WAGE,
@@ -90,6 +91,14 @@ import { GOODS_BASKET_PRODUCT_IDS, parseBasicDemandConfig } from './commerceDema
 const city = { centerX: 1000, centerY: 1000 };
 
 describe('city minimum wage', () => {
+  it('accepts fractional population-weighted wellbeing scores', () => {
+    assert.equal(isValidCityWellbeing(62.5), true);
+    assert.equal(isValidCityWellbeing(0), true);
+    assert.equal(isValidCityWellbeing(162), true);
+    assert.equal(isValidCityWellbeing(Number.NaN), false);
+    assert.equal(isValidCityWellbeing(162.01), false);
+  });
+
   it('accepts currency values from the default minimum through the maximum', () => {
     assert.equal(parseCityMinimumWage(MIN_CITY_MINIMUM_WAGE), 1);
     assert.equal(parseCityMinimumWage(12.34), 12.34);

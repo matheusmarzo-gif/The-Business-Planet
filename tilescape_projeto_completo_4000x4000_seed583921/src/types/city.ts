@@ -6,6 +6,7 @@ export const ASSEMBLY_SIZE = 3;
 export const MAX_CITY_ZONES = 100;
 export const MIN_CITY_MINIMUM_WAGE = 1;
 export const MAX_CITY_MINIMUM_WAGE = 100000;
+export const MAX_CITY_WELLBEING = 162;
 
 export type CityPlacementError =
   | 'map_bounds'
@@ -52,6 +53,15 @@ export interface CityAssembly {
   jobOffers?: number;
   averageWage?: number;
   zones: CityZone[];
+}
+
+export function isValidCityWellbeing(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= MAX_CITY_WELLBEING
+  );
 }
 
 export function parseCityMinimumWage(value: unknown): number | null {

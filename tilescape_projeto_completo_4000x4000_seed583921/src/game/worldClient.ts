@@ -1,6 +1,6 @@
 import { getAccessToken } from '../auth/authClient';
 import { isCommerceDiagnosticsUpdate, type CommerceDiagnosticsUpdate } from '../types/commerce';
-import type { CityAssembly } from '../types/city';
+import { isValidCityWellbeing, type CityAssembly } from '../types/city';
 import type { CityZone } from '../types/city';
 import type { RoadTile } from '../types/road';
 import { getResidenceDefinition, type ResidentialBuilding } from '../types/residence';
@@ -31,7 +31,7 @@ function isCityAssembly(value: unknown): value is CityAssembly {
     city.minimumWage >= 1 &&
     city.minimumWage <= 100000 &&
     Number.isInteger(city.population) &&
-    Number.isInteger(city.wellbeing) &&
+    isValidCityWellbeing(city.wellbeing) &&
     Number.isInteger(city.economy) &&
     (city.employed === undefined || Number.isInteger(city.employed)) &&
     (city.jobOffers === undefined || Number.isInteger(city.jobOffers)) &&

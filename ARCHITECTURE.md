@@ -436,7 +436,11 @@ mapeamento e verificar todas as curvas.
   `building_input_stock`. Os custos de construção aceitam também aço e são
   debitados atomicamente dos armazéns concluídos próximos. As fábricas de
   fiação, têxtil, móveis, utilitários e vidro recebem Ferramentas e compartilham
-  a penalidade diária configurada por falta.
+  a penalidade diária configurada por falta. Os insumos genéricos são tratados
+  como `input:<produto>` mesmo quando o ID coincide com compartimentos legados
+  (`wood_stock`, `iron_stock` ou `charcoal_stock`); assim, a Fábrica de Móveis
+  recebe madeira em `building_input_stock`, separada do estoque de madeira de
+  oficinas como a Carvoaria.
 - O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
   área ocupada deve ficar dentro da cidade e da zona exigida pela construção
   (urbana ou rural), em terra, sem

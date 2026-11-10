@@ -277,8 +277,10 @@ export function planTransfersDetailed(
       !product ||
       (warehouse.allowedProductIds && !warehouse.allowedProductIds.includes(product.id))
     ) return;
-    const currentInputStock =
-      input === 'tools'
+    const isGenericInput = input !== undefined && definition.inputCapacities?.[input] !== undefined;
+    const currentInputStock = isGenericInput
+      ? link.inputStocks?.[input]
+      : input === 'tools'
         ? link.toolStock
         : input === 'wood'
           ? link.woodStock
@@ -290,7 +292,9 @@ export function planTransfersDetailed(
                 ? link.sugarcaneStock
                 : undefined;
     const current = input ? currentInputStock ?? link.inputStocks?.[input] ?? 0 : link.stock;
-    const capacityKey = input === 'tools' ||
+    const capacityKey = isGenericInput
+      ? `input:${input}` as const
+      : input === 'tools' ||
       input === 'wood' ||
       input === 'iron' ||
       input === 'charcoal' ||

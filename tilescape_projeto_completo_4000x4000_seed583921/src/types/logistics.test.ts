@@ -180,6 +180,43 @@ test('upgraded stock capacity is used when automatically replenishing a linked s
   }]);
 });
 
+test('furniture factory receives wood through its generic input stock', () => {
+  const factory = {
+    buildingId: 'furniture-factory',
+    type: 'furniture_factory' as const,
+    stock: 0,
+    toolStock: 0,
+    woodStock: 5,
+    inputStocks: { wood: 0 },
+  };
+  const result = planTransfersDetailed(
+    {
+      stock: new Map([
+        ['tools', 10],
+        ['wood', 10],
+      ]),
+      minimumStock: new Map(),
+      maximumStock: new Map(),
+      capacityM3: 50,
+      workPoints: 10000,
+    },
+    [factory],
+  );
+
+  assert.deepEqual(result.transfers, [
+    { buildingId: 'furniture-factory', productId: 'tools', quantity: 10, direction: 'in' },
+    { buildingId: 'furniture-factory', productId: 'wood', quantity: 10, direction: 'in' },
+  ]);
+  assert.ok(result.attempts.some(
+    (attempt) => attempt.productId === 'wood' && attempt.wanted === 40 && attempt.moved === 10,
+  ));
+  const woodTransfer = result.transfers.find((transfer) => transfer.productId === 'wood');
+  assert.ok(woodTransfer);
+  applyTransferToLinkedBuilding(factory, woodTransfer);
+  assert.equal(factory.inputStocks.wood, 10);
+  assert.equal(factory.woodStock, 5);
+});
+
 test('plans negative warehouse stock deltas as updates, never inserts', () => {
   const writes = planWarehouseStockWrites(
     [

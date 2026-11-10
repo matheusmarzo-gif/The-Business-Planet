@@ -177,8 +177,9 @@ export default function AccountingPanel({
       ) : activeTab === 'shops' ? (
         <>
           <p className="accounting-history-note">
-            Receita líquida estimada = receita − (unidades vendidas + perdidas) × custo médio atual do
-            produto anunciado nos armazéns próximos. Salários não são descontados.
+            Receita líquida estimada = receita − custo médio do produto nos armazéns da cidade no dia
+            registrado × (unidades vendidas + perdidas) − salários. O custo é salvo no histórico diário e
+            não muda com os preços atuais; períodos anteriores sem esse registro aparecem como indisponíveis.
           </p>
           <div className="warehouse-list accounting-list">
             <div className="accounting-row accounting-shop-row warehouse-head">

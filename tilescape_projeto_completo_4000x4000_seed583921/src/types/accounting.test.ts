@@ -23,16 +23,17 @@ test('rejects invalid rent inputs', () => {
   assert.throws(() => calculateDailyRentRevenue(1, Number.NaN), RangeError);
 });
 
-test('estimates shop net revenue from sold and spoiled quantities at average warehouse cost', () => {
-  assert.equal(calculateEstimatedShopNetRevenue(100, 10, 2, 3), 64);
-  assert.equal(calculateEstimatedShopNetRevenue(1, 0, 0, 0.5), 1);
-  assert.equal(calculateEstimatedShopNetRevenue(100, 10, 2, null), null);
+test('estimates shop net revenue from daily average warehouse cost and payroll', () => {
+  assert.equal(calculateEstimatedShopNetRevenue(100, 10, 2, 3, 10), 54);
+  assert.equal(calculateEstimatedShopNetRevenue(1, 0, 0, null, 0.5), 0.5);
+  assert.equal(calculateEstimatedShopNetRevenue(100, 10, 2, null, 10), null);
 });
 
 test('rejects invalid inputs for estimated shop net revenue', () => {
-  assert.throws(() => calculateEstimatedShopNetRevenue(-1, 0, 0, 1), RangeError);
-  assert.throws(() => calculateEstimatedShopNetRevenue(1, -1, 0, 1), RangeError);
-  assert.throws(() => calculateEstimatedShopNetRevenue(1, 0, 0, Number.NaN), RangeError);
+  assert.throws(() => calculateEstimatedShopNetRevenue(-1, 0, 0, 1, 0), RangeError);
+  assert.throws(() => calculateEstimatedShopNetRevenue(1, -1, 0, 1, 0), RangeError);
+  assert.throws(() => calculateEstimatedShopNetRevenue(1, 0, 0, Number.NaN, 0), RangeError);
+  assert.throws(() => calculateEstimatedShopNetRevenue(1, 0, 0, 1, -1), RangeError);
 });
 
 test('parses only supported accounting periods', () => {

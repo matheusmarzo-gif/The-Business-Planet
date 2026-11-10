@@ -127,7 +127,9 @@ export function calculateEstimatedShopNetRevenue(
   unitsSold: number,
   unitsLost: number,
   averageUnitCost: number | null,
+  employeeExpense: number,
 ): number | null {
+  const totalUnits = unitsSold + unitsLost;
   if (
     !Number.isFinite(revenue) ||
     revenue < 0 ||
@@ -135,10 +137,12 @@ export function calculateEstimatedShopNetRevenue(
     unitsSold < 0 ||
     !Number.isInteger(unitsLost) ||
     unitsLost < 0 ||
+    !Number.isFinite(employeeExpense) ||
+    employeeExpense < 0 ||
     (averageUnitCost !== null && (!Number.isFinite(averageUnitCost) || averageUnitCost < 0))
   ) {
     throw new RangeError('Os valores da receita líquida estimada são inválidos.');
   }
-  if (averageUnitCost === null) return null;
-  return roundCurrency(revenue - (unitsSold + unitsLost) * averageUnitCost);
+  if (totalUnits > 0 && averageUnitCost === null) return null;
+  return roundCurrency(revenue - totalUnits * (averageUnitCost ?? 0) - employeeExpense);
 }

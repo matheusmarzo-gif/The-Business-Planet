@@ -623,8 +623,12 @@ mapeamento e verificar todas as curvas.
   média exibida no painel segue a fórmula por faixas de Bn definida pelo domínio.
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
-  preço unitário de venda. A rotina de validade soma a `units_lost` da mesma
-  tabela as unidades perdidas pelo estoque da loja a cada dia. Os detalhes do diagnóstico (renda, moradores,
+  preço unitário de venda e custo médio ponderado do produto nos armazéns da
+  cidade naquele dia. Esse custo fica persistido em `average_unit_cost`, sem ser
+  recalculado para períodos passados. A rotina de validade soma a `units_lost`
+  da mesma tabela as unidades perdidas pelo estoque da loja a cada dia. A receita
+  líquida estimada subtrai da receita o custo salvo multiplicado pelas unidades
+  vendidas e perdidas e os salários. Os detalhes do diagnóstico (renda, moradores,
   produto, `RR`, `Pf`, `w`, `q`, benefícios de erro/ideal/associado,
   participação e moradores alocados, quantidade, estoque/capacidade, resultado
   e decomposição de `RR`, `RR2` e `RR3` por produto (cesta, necessidade diária, preço
@@ -663,9 +667,12 @@ mapeamento e verificar todas as curvas.
   `ALL_BUILDING_COLUMNS` (empregados da construção ou moradores empregados).
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
-  preço unitário de venda. A deterioração soma `units_lost` ao histórico diário
-  comercial; dias anteriores à migração não podem ser reconstruídos. Os detalhes
-  do cálculo da demanda (renda, moradores,
+  preço unitário de venda e custo médio ponderado do produto nos armazéns da
+  cidade no dia, persistido em `average_unit_cost`. A deterioração soma
+  `units_lost` ao histórico diário comercial; dias anteriores à migração não
+  podem ser reconstruídos. A receita líquida estimada subtrai o custo salvo
+  multiplicado pelas unidades vendidas e perdidas e os salários. Os detalhes do
+  cálculo da demanda (renda, moradores,
   média efetiva da área, demanda esperada e arredondada; preço, distância,
   benefício, posição no ranking, estoque/capacidade disponíveis, demanda
   antes/depois, quantidade comprada e resultado da tentativa por loja candidata)
@@ -903,7 +910,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo médio por cidadão da cidade e preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira sem saldo prévio com C$ 25.000 (idempotente), preserva saldos existentes e retorna `{ balance }`. |
-| `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. A aba comercial agrega unidades vendidas/perdidas e estima a receita líquida deduzindo o preço médio atual dos armazéns próximos para todas as unidades vendidas e perdidas. |
+| `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. A aba comercial agrega unidades vendidas/perdidas e calcula receita líquida estimada com custos médios persistidos no histórico diário, incluindo salários. |
 | `PUT /api/residential-buildings/:id/farm-automation` | Dono da fazenda agrícola concluída | Valida e salva meses de replantio e limites de trabalhadores por fase; desativar mantém as preferências e o ciclo atual, mas interrompe novos plantios automáticos. |
 | `PATCH /api/residential-buildings/:id/input-product` | Dono do Moinho concluído | Seleciona trigo, cevada ou milho; descarta o estoque de outro insumo na mesma transação e publica a seleção/estoques. |
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |

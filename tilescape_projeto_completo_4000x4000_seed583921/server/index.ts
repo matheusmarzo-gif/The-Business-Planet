@@ -2503,8 +2503,45 @@ async function runDailyEmployment(): Promise<boolean> {
         changed = true;
       }
       const shopRevenueByOwner = new Map<string, number>();
+      const { rows: warehouseAveragePriceRows } = shops.length > 0
+        ? await client.query<{
+            city_id: string;
+            product_id: string;
+            average_unit_cost: number;
+          }>(
+            `SELECT seller.city_id, setting.product_id,
+                    SUM(setting.price::numeric * available.quantity)
+                      / NULLIF(SUM(available.quantity), 0) AS average_unit_cost
+             FROM all_buildings seller
+             JOIN warehouse_product_settings setting
+               ON setting.building_id = seller.id
+             JOIN warehouse_stock stock
+               ON stock.building_id = seller.id
+              AND stock.product_id = setting.product_id
+             CROSS JOIN LATERAL (
+               SELECT GREATEST(stock.quantity - setting.minimum_stock, 0)::numeric AS quantity
+             ) available
+             WHERE seller.city_id = ANY($1::uuid[])
+               AND seller.building_type IN ('warehouse', 'silo')
+               AND seller.status = 'completed'
+               AND setting.mode = 'sell'
+               AND available.quantity > 0
+             GROUP BY seller.city_id, setting.product_id`,
+            [[...new Set(shops.map((shop) => shop.cityId))]],
+          )
+        : { rows: [] };
+      const warehouseAveragePrices = new Map(
+        warehouseAveragePriceRows.map((row) => [
+          `${row.city_id}\u0000${row.product_id}`,
+          Number(row.average_unit_cost),
+        ]),
+      );
       const commerceHistoryEntries = shops.map((shop) => {
         const quantity = sold.get(shop.id) ?? 0;
+        const productId = getResidenceDefinition(shop.type)?.stockProductId;
+        if (!productId) {
+          throw new Error(`O comércio ${shop.id} não tem produto de estoque configurado.`);
+        }
         if (quantity > 0 && shop.ownerId) {
           const revenue = roundCurrency(quantity * shop.price);
           shopRevenueByOwner.set(
@@ -2514,6 +2551,7 @@ async function runDailyEmployment(): Promise<boolean> {
         }
         return {
           id: shop.id,
+          averageUnitCost: warehouseAveragePrices.get(`${shop.cityId}\u0000${productId}`) ?? null,
           ...getShopDailyFinancials(shop.wage, shop.workers, quantity, shop.price),
         };
       });
@@ -2521,18 +2559,24 @@ async function runDailyEmployment(): Promise<boolean> {
       if (commerceHistoryEntries.length > 0) {
         await client.query(
           `INSERT INTO commerce_history
-             (building_id, day, employee_expense, product_expense, units_sold, sale_price)
+             (building_id, day, employee_expense, product_expense, units_sold,
+              average_unit_cost, sale_price)
            SELECT batch.building_id, $1::date, batch.employee_expense,
-                  batch.product_expense, batch.units_sold, batch.sale_price
+                  batch.product_expense, batch.units_sold,
+                  batch.average_unit_cost, batch.sale_price
            FROM UNNEST(
              $2::uuid[], $3::numeric[], $4::numeric[],
-             $5::integer[], $6::numeric[]
-           ) AS batch(building_id, employee_expense, product_expense, units_sold, sale_price)
+             $5::integer[], $6::numeric[], $7::numeric[]
+           ) AS batch(
+             building_id, employee_expense, product_expense, units_sold,
+             average_unit_cost, sale_price
+           )
            WHERE TRUE
            ON CONFLICT (building_id, day) DO UPDATE
            SET employee_expense = EXCLUDED.employee_expense,
                product_expense = EXCLUDED.product_expense,
                units_sold = EXCLUDED.units_sold,
+               average_unit_cost = EXCLUDED.average_unit_cost,
                sale_price = EXCLUDED.sale_price`,
           [
             state.day,
@@ -2540,6 +2584,7 @@ async function runDailyEmployment(): Promise<boolean> {
             commerceHistoryEntries.map((entry) => entry.employeeExpense),
             commerceHistoryEntries.map((entry) => entry.productExpense),
             commerceHistoryEntries.map((entry) => entry.unitsSold),
+            commerceHistoryEntries.map((entry) => entry.averageUnitCost),
             commerceHistoryEntries.map((entry) => entry.salePrice),
           ],
         );
@@ -4542,60 +4587,33 @@ async function start() {
           units_sold: string;
           units_lost: string;
           average_unit_cost: string | null;
+          has_unpriced_units: boolean;
         }>(
-          `WITH shop_products AS (
-             SELECT * FROM UNNEST($3::text[], $5::text[])
-               AS product(building_type, product_id)
-           )
-           SELECT building.id, building.building_type, building.building_number,
+          `SELECT building.id, building.building_type, building.building_number,
                   building.tile_x, building.tile_y,
                   COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense,
                   COALESCE(SUM(history.units_sold::bigint * history.sale_price), 0)::text AS revenue,
                   COALESCE(SUM(history.units_sold), 0)::text AS units_sold,
                   COALESCE(SUM(history.units_lost), 0)::text AS units_lost,
-                  warehouse.average_unit_cost::text AS average_unit_cost
+                  (
+                    SUM(history.average_unit_cost * (history.units_sold + history.units_lost))
+                    / NULLIF(SUM(history.units_sold + history.units_lost)
+                        FILTER (WHERE history.average_unit_cost IS NOT NULL), 0)
+                  )::text AS average_unit_cost,
+                  COALESCE(BOOL_OR(
+                    (history.units_sold + history.units_lost > 0)
+                    AND history.average_unit_cost IS NULL
+                  ), FALSE) AS has_unpriced_units
            FROM all_buildings building
-           JOIN shop_products ON shop_products.building_type = building.building_type
            LEFT JOIN commerce_history history
              ON history.building_id = building.id
             AND history.day BETWEEN $2::date - ($4::integer - 1) AND $2::date
-           LEFT JOIN LATERAL (
-             SELECT SUM(setting.price::numeric * available.quantity)
-                      / NULLIF(SUM(available.quantity), 0) AS average_unit_cost
-             FROM all_buildings seller
-             JOIN warehouse_product_settings setting
-               ON setting.building_id = seller.id
-             LEFT JOIN warehouse_stock stock
-               ON stock.building_id = seller.id AND stock.product_id = setting.product_id
-             CROSS JOIN LATERAL (
-               SELECT GREATEST(COALESCE(stock.quantity, 0) - setting.minimum_stock, 0)::numeric AS quantity
-             ) available
-             WHERE seller.building_type IN ('warehouse', 'silo')
-               AND seller.status = 'completed'
-               AND setting.mode = 'sell'
-               AND setting.product_id = shop_products.product_id
-               AND POWER(seller.tile_x - building.tile_x, 2)
-                 + POWER(seller.tile_y - building.tile_y, 2) <= 3600
-               AND available.quantity > 0
-           ) warehouse ON TRUE
            WHERE building.created_by = $1
              AND building.building_type = ANY($3::text[])
            GROUP BY building.id, building.building_type, building.building_number,
-                    building.tile_x, building.tile_y, warehouse.average_unit_cost
+                    building.tile_x, building.tile_y
            ORDER BY building.building_type, building.building_number`,
-          [
-            userId,
-            day,
-            SHOP_TYPES,
-            periodDays,
-            SHOP_TYPES.map((type) => {
-              const productId = getResidenceDefinition(type)?.stockProductId;
-              if (!productId) {
-                throw new Error(`O comércio ${type} não tem produto de estoque configurado.`);
-              }
-              return productId;
-            }),
-          ],
+          [userId, day, SHOP_TYPES, periodDays],
         ),
         pool.query<{ employee_expense: string }>(
           `SELECT COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense
@@ -4855,7 +4873,12 @@ async function start() {
             Number(row.revenue),
             Number(row.units_sold),
             Number(row.units_lost),
-            row.average_unit_cost === null ? null : Number(row.average_unit_cost),
+            row.has_unpriced_units
+              ? null
+              : row.average_unit_cost === null
+                ? null
+                : Number(row.average_unit_cost),
+            Number(row.employee_expense),
           ),
         })),
         residences: residenceResult.rows.map((row) => ({

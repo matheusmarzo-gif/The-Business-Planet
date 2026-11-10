@@ -61,6 +61,7 @@ import { STARTING_BALANCE } from '../src/types/wallet.js';
 import { roundCurrency } from '../src/types/currency.js';
 import {
   calculateDailyRentRevenue,
+  calculateEstimatedShopNetRevenue,
   getAccountingWeekRange,
   parseAccountingPeriodDays,
   parseAccountingWeekOffset,
@@ -657,7 +658,7 @@ async function getStockCapacityUpgradeQuotes(
   });
 }
 
-async function applyDailySpoilage(client: PoolClient): Promise<boolean> {
+async function applyDailySpoilage(client: PoolClient, day: string): Promise<boolean> {
   const perishableProducts = PRODUCTS.filter(
     (product): product is ProductDefinition & { shelfLifeDays: number } => product.shelfLifeDays !== null,
   );
@@ -671,6 +672,8 @@ async function applyDailySpoilage(client: PoolClient): Promise<boolean> {
     })
     .map(([type]) => type);
   let changed = false;
+  const shopTypes = new Set<string>(SHOP_TYPES);
+  const spoiledShopStocks: { id: string; quantity: number }[] = [];
 
   const { rows: buildingStocks } = await client.query<{
     id: string;
@@ -694,7 +697,25 @@ async function applyDailySpoilage(client: PoolClient): Promise<boolean> {
       building.id,
       quantity,
     ]);
+    if (shopTypes.has(building.building_type)) {
+      spoiledShopStocks.push({ id: building.id, quantity });
+    }
     changed = true;
+  }
+  if (spoiledShopStocks.length > 0) {
+    await client.query(
+      `INSERT INTO commerce_history (building_id, day, units_lost, sale_price)
+       SELECT spoiled.id, $3::date, spoiled.quantity, building.price
+       FROM UNNEST($1::uuid[], $2::integer[]) AS spoiled(id, quantity)
+       JOIN all_buildings building ON building.id = spoiled.id
+       ON CONFLICT (building_id, day) DO UPDATE
+       SET units_lost = commerce_history.units_lost + EXCLUDED.units_lost`,
+      [
+        spoiledShopStocks.map(({ id }) => id),
+        spoiledShopStocks.map(({ quantity }) => quantity),
+        day,
+      ],
+    );
   }
 
   const { rows: warehouseStocks } = await client.query<{
@@ -3396,7 +3417,7 @@ async function runDailyEmployment(): Promise<boolean> {
     if (state.hour >= 18 && (state.last_spoilage === null || state.last_spoilage < state.day)) {
       await client.query('SAVEPOINT inventory_spoilage');
       try {
-        const spoiled = await applyDailySpoilage(client);
+        const spoiled = await applyDailySpoilage(client, state.day);
         await client.query('UPDATE world_state SET last_spoilage_day = $1::date WHERE id = 1', [state.day]);
         await client.query('RELEASE SAVEPOINT inventory_spoilage');
         if (spoiled) changed = true;
@@ -4518,20 +4539,63 @@ async function start() {
           tile_y: number;
           employee_expense: string;
           revenue: string;
+          units_sold: string;
+          units_lost: string;
+          average_unit_cost: string | null;
         }>(
-          `SELECT building.id, building.building_type, building.building_number,
+          `WITH shop_products AS (
+             SELECT * FROM UNNEST($3::text[], $5::text[])
+               AS product(building_type, product_id)
+           )
+           SELECT building.id, building.building_type, building.building_number,
                   building.tile_x, building.tile_y,
                   COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense,
-                  COALESCE(SUM(history.units_sold::bigint * history.sale_price), 0)::text AS revenue
+                  COALESCE(SUM(history.units_sold::bigint * history.sale_price), 0)::text AS revenue,
+                  COALESCE(SUM(history.units_sold), 0)::text AS units_sold,
+                  COALESCE(SUM(history.units_lost), 0)::text AS units_lost,
+                  warehouse.average_unit_cost::text AS average_unit_cost
            FROM all_buildings building
+           JOIN shop_products ON shop_products.building_type = building.building_type
            LEFT JOIN commerce_history history
              ON history.building_id = building.id
             AND history.day BETWEEN $2::date - ($4::integer - 1) AND $2::date
+           LEFT JOIN LATERAL (
+             SELECT SUM(setting.price::numeric * available.quantity)
+                      / NULLIF(SUM(available.quantity), 0) AS average_unit_cost
+             FROM all_buildings seller
+             JOIN warehouse_product_settings setting
+               ON setting.building_id = seller.id
+             LEFT JOIN warehouse_stock stock
+               ON stock.building_id = seller.id AND stock.product_id = setting.product_id
+             CROSS JOIN LATERAL (
+               SELECT GREATEST(COALESCE(stock.quantity, 0) - setting.minimum_stock, 0)::numeric AS quantity
+             ) available
+             WHERE seller.building_type IN ('warehouse', 'silo')
+               AND seller.status = 'completed'
+               AND setting.mode = 'sell'
+               AND setting.product_id = shop_products.product_id
+               AND POWER(seller.tile_x - building.tile_x, 2)
+                 + POWER(seller.tile_y - building.tile_y, 2) <= 3600
+               AND available.quantity > 0
+           ) warehouse ON TRUE
            WHERE building.created_by = $1
              AND building.building_type = ANY($3::text[])
-           GROUP BY building.id, building.building_type, building.building_number, building.tile_x, building.tile_y
+           GROUP BY building.id, building.building_type, building.building_number,
+                    building.tile_x, building.tile_y, warehouse.average_unit_cost
            ORDER BY building.building_type, building.building_number`,
-          [userId, day, SHOP_TYPES, periodDays],
+          [
+            userId,
+            day,
+            SHOP_TYPES,
+            periodDays,
+            SHOP_TYPES.map((type) => {
+              const productId = getResidenceDefinition(type)?.stockProductId;
+              if (!productId) {
+                throw new Error(`O comércio ${type} não tem produto de estoque configurado.`);
+              }
+              return productId;
+            }),
+          ],
         ),
         pool.query<{ employee_expense: string }>(
           `SELECT COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense
@@ -4785,6 +4849,14 @@ async function start() {
           y: row.tile_y,
           employeeExpense: Number(row.employee_expense),
           revenue: Number(row.revenue),
+          unitsSold: Number(row.units_sold),
+          unitsLost: Number(row.units_lost),
+          estimatedNetRevenue: calculateEstimatedShopNetRevenue(
+            Number(row.revenue),
+            Number(row.units_sold),
+            Number(row.units_lost),
+            row.average_unit_cost === null ? null : Number(row.average_unit_cost),
+          ),
         })),
         residences: residenceResult.rows.map((row) => ({
           id: row.id,
@@ -5478,10 +5550,11 @@ async function start() {
         employee_expense: number;
         product_expense: number;
         units_sold: number;
+        units_lost: number;
         sale_price: number;
       }>(
         `SELECT to_char(day, 'YYYY-MM-DD') AS day,
-                employee_expense, product_expense, units_sold, sale_price
+                employee_expense, product_expense, units_sold, units_lost, sale_price
          FROM commerce_history
          WHERE building_id = $1
          ORDER BY day DESC
@@ -5501,6 +5574,7 @@ async function start() {
             employeeExpense: row.employee_expense,
             productExpense: row.product_expense,
             unitsSold: row.units_sold,
+            unitsLost: row.units_lost,
             salePrice: row.sale_price,
             revenue,
             profitLoss,

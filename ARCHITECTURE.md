@@ -623,7 +623,8 @@ mapeamento e verificar todas as curvas.
   média exibida no painel segue a fórmula por faixas de Bn definida pelo domínio.
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
-  preço unitário de venda. Os detalhes do diagnóstico (renda, moradores,
+  preço unitário de venda. A rotina de validade soma a `units_lost` da mesma
+  tabela as unidades perdidas pelo estoque da loja a cada dia. Os detalhes do diagnóstico (renda, moradores,
   produto, `RR`, `Pf`, `w`, `q`, benefícios de erro/ideal/associado,
   participação e moradores alocados, quantidade, estoque/capacidade, resultado
   e decomposição de `RR`, `RR2` e `RR3` por produto (cesta, necessidade diária, preço
@@ -662,7 +663,9 @@ mapeamento e verificar todas as curvas.
   `ALL_BUILDING_COLUMNS` (empregados da construção ou moradores empregados).
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
-  preço unitário de venda. Os detalhes do cálculo da demanda (renda, moradores,
+  preço unitário de venda. A deterioração soma `units_lost` ao histórico diário
+  comercial; dias anteriores à migração não podem ser reconstruídos. Os detalhes
+  do cálculo da demanda (renda, moradores,
   média efetiva da área, demanda esperada e arredondada; preço, distância,
   benefício, posição no ranking, estoque/capacidade disponíveis, demanda
   antes/depois, quantidade comprada e resultado da tentativa por loja candidata)
@@ -900,7 +903,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo médio por cidadão da cidade e preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira sem saldo prévio com C$ 25.000 (idempotente), preserva saldos existentes e retorna `{ balance }`. |
-| `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. |
+| `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. A aba comercial agrega unidades vendidas/perdidas e estima a receita líquida deduzindo o preço médio atual dos armazéns próximos para todas as unidades vendidas e perdidas. |
 | `PUT /api/residential-buildings/:id/farm-automation` | Dono da fazenda agrícola concluída | Valida e salva meses de replantio e limites de trabalhadores por fase; desativar mantém as preferências e o ciclo atual, mas interrompe novos plantios automáticos. |
 | `PATCH /api/residential-buildings/:id/input-product` | Dono do Moinho concluído | Seleciona trigo, cevada ou milho; descarta o estoque de outro insumo na mesma transação e publica a seleção/estoques. |
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
@@ -912,7 +915,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `PATCH /api/residential-buildings/:id/stock-upgrades` | Dono da construção concluída | Recebe `{ stockKey, direction: "upgrade" \| "downgrade" }`; valida os limites e a propriedade no servidor, cobra o upgrade atomicamente ou impede downgrade que descarte estoque, e publica a capacidade atualizada. |
 | `POST /api/residential-buildings/:id/warehouse/suppliers` | Dono do armazém | Executa compras imediatas do armazém especificado pelo mesmo planejador das rodadas automáticas. |
 | `GET /api/residential-buildings/:id/production-history` | Autenticado | Retorna `{ days: [{ day, workPoints, produced, transported, efficiency }] }` dos últimos 30 dias (tabela `production_history`, gravada às 00:00 pelas etapas de produção, fazendas e transporte; `transported` conta só envios ao armazém). |
-| `GET /api/residential-buildings/:id/commerce-history` | Dono do comércio | Retorna os últimos 30 dias de dados financeiros de `commerce_history`; o painel combina a resposta com diagnósticos presentes no armazenamento local do navegador. |
+| `GET /api/residential-buildings/:id/commerce-history` | Dono do comércio | Retorna os últimos 30 dias de dados financeiros e unidades perdidas por validade de `commerce_history`; o painel combina a resposta com diagnósticos presentes no armazenamento local do navegador. |
 | `GET /api/master/online-players` | Master | Lista `{ players: [{ id, name, email, connections }] }` a partir da presença no Redis (`userId|uuid`) e de `neon_auth."user"`. |
 | `POST /api/master/time-scale` | Master | `{ timeScale }` validado por `isValidTimeScale` (`src/types/worldClock.ts`: 15, 30, 60, 240); avança o relógio com a velocidade antiga, grava `world_state.time_scale` e republica o snapshot. |
 | `POST /api/master/grant-money` | Master | `{ amount }` (C$ 0,01 a C$ 1.000.000.000, com até duas casas decimais, `parseMasterGrant`) creditado na carteira do próprio Master; retorna `{ balance }`. |

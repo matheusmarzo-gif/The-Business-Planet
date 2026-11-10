@@ -49,6 +49,9 @@ export interface AccountingShop {
   y: number;
   employeeExpense: number;
   revenue: number;
+  unitsSold: number;
+  unitsLost: number;
+  estimatedNetRevenue: number | null;
 }
 
 export interface AccountingWarehouse {
@@ -117,4 +120,25 @@ export function calculateDailyRentRevenue(occupants: number, rentPerPerson: numb
     throw new RangeError('O aluguel diário exige moradores e aluguel válidos.');
   }
   return roundCurrency(occupants * rentPerPerson);
+}
+
+export function calculateEstimatedShopNetRevenue(
+  revenue: number,
+  unitsSold: number,
+  unitsLost: number,
+  averageUnitCost: number | null,
+): number | null {
+  if (
+    !Number.isFinite(revenue) ||
+    revenue < 0 ||
+    !Number.isInteger(unitsSold) ||
+    unitsSold < 0 ||
+    !Number.isInteger(unitsLost) ||
+    unitsLost < 0 ||
+    (averageUnitCost !== null && (!Number.isFinite(averageUnitCost) || averageUnitCost < 0))
+  ) {
+    throw new RangeError('Os valores da receita líquida estimada são inválidos.');
+  }
+  if (averageUnitCost === null) return null;
+  return roundCurrency(revenue - (unitsSold + unitsLost) * averageUnitCost);
 }

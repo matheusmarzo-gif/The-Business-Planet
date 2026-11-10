@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   calculateDailyRentRevenue,
+  calculateEstimatedShopNetRevenue,
   getAccountingWeekRange,
   getAccountingPeriodLabel,
   parseAccountingPeriodDays,
@@ -20,6 +21,18 @@ test('rejects invalid rent inputs', () => {
   assert.throws(() => calculateDailyRentRevenue(-1, 10), RangeError);
   assert.throws(() => calculateDailyRentRevenue(1.5, 10), RangeError);
   assert.throws(() => calculateDailyRentRevenue(1, Number.NaN), RangeError);
+});
+
+test('estimates shop net revenue from sold and spoiled quantities at average warehouse cost', () => {
+  assert.equal(calculateEstimatedShopNetRevenue(100, 10, 2, 3), 64);
+  assert.equal(calculateEstimatedShopNetRevenue(1, 0, 0, 0.5), 1);
+  assert.equal(calculateEstimatedShopNetRevenue(100, 10, 2, null), null);
+});
+
+test('rejects invalid inputs for estimated shop net revenue', () => {
+  assert.throws(() => calculateEstimatedShopNetRevenue(-1, 0, 0, 1), RangeError);
+  assert.throws(() => calculateEstimatedShopNetRevenue(1, -1, 0, 1), RangeError);
+  assert.throws(() => calculateEstimatedShopNetRevenue(1, 0, 0, Number.NaN), RangeError);
 });
 
 test('parses only supported accounting periods', () => {

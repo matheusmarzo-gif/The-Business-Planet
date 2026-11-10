@@ -904,9 +904,11 @@ Fazendas, recursos e construções artesanais concluídas têm o botão **Histó
 O dono de qualquer loja de alimentos concluída — arroz, batata, milho, cevada,
 trigo, peixe, leite ou Açougue — pode abrir **Histórico do comércio** para
 consultar os últimos 30 dias por dia: gasto com funcionários, gasto com produtos
-efetivamente pagos, unidades vendidas, preço unitário de venda, receita e
-lucro/prejuízo. O abastecimento pelo armazém ligado do mesmo dono é uma
-transferência interna sem cobrança e aparece com gasto de produto C$ 0.
+efetivamente pagos, unidades vendidas e perdidas por validade, preço unitário de
+venda, receita e lucro/prejuízo. O abastecimento pelo armazém ligado do mesmo
+dono é uma transferência interna sem cobrança e aparece com gasto de produto C$ 0.
+As perdas por validade são registradas a partir desta atualização; dias anteriores
+não podem ser reconstruídos.
 
 ## Contábil
 
@@ -920,9 +922,12 @@ construção aos preços médios atuais de venda configurados nos armazéns; o e
 usa os mesmos preços e inclui armazéns, produtos principais e insumos das
 construções. Produtos sem preço anunciado ficam fora do valor estimado.
 **Lojas comerciais**
-lista todas as lojas do jogador e soma salários pagos e receita de vendas no
-período selecionado (último dia ou últimos 7 ou 30 dias); **Visualizar** centraliza a loja no mapa e abre seus
-detalhes. **Armazéns** mostra os armazéns do jogador (também com **Visualizar**),
+lista todas as lojas do jogador e soma salários pagos, receita e unidades vendidas
+e perdidas no período selecionado (último dia ou últimos 7 ou 30 dias). A receita
+líquida estimada subtrai da receita o custo médio atual do produto anunciado nos
+armazéns próximos, multiplicado pelas unidades vendidas e perdidas; se não houver
+preço médio disponível, a estimativa aparece como indisponível. **Visualizar**
+centraliza a loja no mapa e abre seus detalhes. **Armazéns** mostra os armazéns do jogador (também com **Visualizar**),
 salários pagos e, por produto,
 quantidades e valores comprados/vendidos, além do resultado bruto (receita de
 vendas menos custo de compras). O resultado por produto não desconta salários.

@@ -8,6 +8,7 @@ export interface CommerceDay {
   employeeExpense: number;
   productExpense: number;
   unitsSold: number;
+  unitsLost: number;
   salePrice: number;
   revenue: number;
   profitLoss: number;
@@ -75,6 +76,7 @@ export default function CommerceHistoryPanel({
           <span>Funcionários</span>
           <span>Produtos</span>
           <span>Unidades</span>
+          <span>Unidades perdidas por validade</span>
           <span>Preço/un.</span>
           <span>Receita</span>
           <span>Lucro/prejuízo</span>
@@ -89,6 +91,7 @@ export default function CommerceHistoryPanel({
             <span>{formatMoney(item.employeeExpense)}</span>
             <span>{formatMoney(item.productExpense)}</span>
             <span>{integer.format(item.unitsSold)}</span>
+            <span>{integer.format(item.unitsLost)}</span>
             <span>{formatMoney(item.salePrice)}</span>
             <span>{formatMoney(item.revenue)}</span>
             <span className={item.profitLoss < 0 ? 'commerce-loss' : 'commerce-profit'}>

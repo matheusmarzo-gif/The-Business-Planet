@@ -175,27 +175,41 @@ export default function AccountingPanel({
           )}
         </>
       ) : activeTab === 'shops' ? (
-        <div className="warehouse-list accounting-list">
-          <div className="accounting-row warehouse-head">
-            <span>Loja</span>
-            <span>Gasto com salários</span>
-            <span>Receita</span>
-            <span />
-          </div>
-          {!isLoading && !error && (summary?.shops.length ?? 0) === 0 && (
-            <p className="warehouse-summary">Você ainda não possui lojas comerciais.</p>
-          )}
-          {summary?.shops.map((shop) => (
-            <div className="accounting-row" key={shop.id}>
-              <span>{getResidentialBuildingName(shop.type, shop.buildingNumber)}</span>
-              <span>{formatMoney(shop.employeeExpense)}</span>
-              <span>{formatMoney(shop.revenue)}</span>
-              <button type="button" className="accounting-view-button" onClick={() => onViewBuilding(shop)}>
-                Visualizar
-              </button>
+        <>
+          <p className="accounting-history-note">
+            Receita líquida estimada = receita − (unidades vendidas + perdidas) × custo médio atual do
+            produto anunciado nos armazéns próximos. Salários não são descontados.
+          </p>
+          <div className="warehouse-list accounting-list">
+            <div className="accounting-row accounting-shop-row warehouse-head">
+              <span>Loja</span>
+              <span>Gasto com salários</span>
+              <span>Receita</span>
+              <span>Unidades vendidas</span>
+              <span>Unidades perdidas</span>
+              <span>Receita líquida estimada</span>
+              <span />
             </div>
-          ))}
-        </div>
+            {!isLoading && !error && (summary?.shops.length ?? 0) === 0 && (
+              <p className="warehouse-summary">Você ainda não possui lojas comerciais.</p>
+            )}
+            {summary?.shops.map((shop) => (
+              <div className="accounting-row accounting-shop-row" key={shop.id}>
+                <span>{getResidentialBuildingName(shop.type, shop.buildingNumber)}</span>
+                <span>{formatMoney(shop.employeeExpense)}</span>
+                <span>{formatMoney(shop.revenue)}</span>
+                <span>{integer.format(shop.unitsSold)}</span>
+                <span>{integer.format(shop.unitsLost)}</span>
+                <span>
+                  {shop.estimatedNetRevenue === null ? 'Indisponível' : formatMoney(shop.estimatedNetRevenue)}
+                </span>
+                <button type="button" className="accounting-view-button" onClick={() => onViewBuilding(shop)}>
+                  Visualizar
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
       ) : activeTab === 'warehouses' ? (
         <>
           <p className="accounting-payroll">

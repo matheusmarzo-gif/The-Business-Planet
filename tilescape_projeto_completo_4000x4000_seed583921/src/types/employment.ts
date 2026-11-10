@@ -305,18 +305,23 @@ export function getPayroll(
   return owed;
 }
 
-// Renda média por morador de cada residência, calculada após a alocação dos empregos.
+// Salário médio dos empregados de cada residência, calculado após a alocação.
 export function getAverageIncomes(
-  residences: { id: string; occupants: number }[],
+  residences: { id: string }[],
   wages: Map<string, number>,
   assignments: JobAssignment[],
 ): Map<string, number> {
   const totals = new Map<string, number>();
+  const employees = new Map<string, number>();
   for (const { workplaceId, residenceId, count } of assignments) {
     totals.set(residenceId, (totals.get(residenceId) ?? 0) + count * (wages.get(workplaceId) ?? 0));
+    employees.set(residenceId, (employees.get(residenceId) ?? 0) + count);
   }
   return new Map(
-    residences.map((home) => [home.id, home.occupants > 0 ? (totals.get(home.id) ?? 0) / home.occupants : 0]),
+    residences.map((home) => {
+      const count = employees.get(home.id) ?? 0;
+      return [home.id, count > 0 ? (totals.get(home.id) ?? 0) / count : 0];
+    }),
   );
 }
 

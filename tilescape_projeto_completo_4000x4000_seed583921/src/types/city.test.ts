@@ -2971,16 +2971,16 @@ describe('carvão', () => {
 });
 
 describe('renda média', () => {
-  it('averages wages over occupants after allocation', () => {
+  it('averages wages only over employed residents after allocation', () => {
     const incomes = getAverageIncomes(
-      [{ id: 'h', occupants: 4 }, { id: 'e', occupants: 0 }],
+      [{ id: 'h' }, { id: 'e' }],
       new Map([['a', 100], ['b', 50]]),
       [
         { workplaceId: 'a', residenceId: 'h', count: 2 },
         { workplaceId: 'b', residenceId: 'h', count: 1 },
       ],
     );
-    assert.equal(incomes.get('h'), 62.5);
+    assert.ok(Math.abs((incomes.get('h') ?? 0) - 250 / 3) < 1e-12);
     assert.equal(incomes.get('e'), 0);
   });
 });

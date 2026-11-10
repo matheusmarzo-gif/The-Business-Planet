@@ -94,9 +94,10 @@ O servidor cria a tabela necessária (`world_state`) automaticamente ao iniciar.
 
 Ao selecionar uma residência concluída, o painel mostra, logo abaixo de
 **Salvar aluguel**, o benefício associado calculado com o aluguel, a média de
-gastos dos últimos 30 dias e a renda média por morador. O painel também mostra
-o apreço da empregabilidade (renda média por morador dividida pela média da
-cidade), o apreço da região (média da empregabilidade das residências
+gastos dos últimos 30 dias e o salário médio dos empregados da residência.
+O painel também mostra o apreço da empregabilidade (salário médio dos empregados
+dividido pelo salário médio dos empregados da cidade), o apreço da região
+(média da empregabilidade das residências
 concluídas da mesma cidade num raio de 10 tiles, incluindo a própria casa), o
 apreço da construção e o apreço interno. O apreço interno é o maior valor
 entre 10 e o produto do apreço da construção pelo apreço da região. Passe o
@@ -344,14 +345,16 @@ Não há confirmação; somente o jogador que iniciou a construção pode remov�
 A barra lateral com dados do mundo foi removida. Clique em uma residência (fora
 dos modos de construção e demolição) para abrir o painel lateral: residências
 concluídas mostram ocupantes, capacidade, técnica, saúde, bem-estar, empregados
-e renda média por morador (calculada a partir dos empregos já alocados: soma dos
-salários dos empregos dos moradores ÷ ocupantes); obras mostram Work Points, empregados
+e salário médio dos empregados (calculado a partir dos empregos já alocados:
+soma dos salários ÷ número de empregados; sem empregados, o valor é zero);
+obras mostram Work Points, empregados
 e permitem ao dono editar o salário ofertado (C$ por dia de trabalho) e a carga
 horária por dia (4 a 14 h). O dono também define o aluguel por pessoa (mínimo
 C$ 0,01, com até duas casas decimais) da residência. Todo dia às 00:00 do reino,
 cidades com menos de 1.000 habitantes recebem 40 imigrantes, que ocupam as
 residências concluídas mais baratas com vaga (empate: maior apreço). A população
-da cidade é a soma dos ocupantes das suas residências. Todo dia às 00:00 do
+da cidade é a soma dos ocupantes das suas residências, e o bem-estar municipal é
+a média do bem-estar das residências ponderada pelo número de moradores. Todo dia às 00:00 do
 relógio do jogo, o aluguel por pessoa é multiplicado pelos moradores e creditado
 ao dono da residência. No dia 7 de cada mês, às 03:00, moradores também podem
 mudar entre residências concluídas da mesma cidade. A comparação usa o custo

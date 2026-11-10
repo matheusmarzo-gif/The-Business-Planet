@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  getAverageWellbeing,
   calculateResidenceWellbeing,
   getWorkerTechnique,
   MAX_RESIDENCE_WELLBEING,
 } from './wellbeing.js';
+
+test('calculates city wellbeing weighted by residential population', () => {
+  assert.equal(
+    getAverageWellbeing([
+      { occupants: 2, wellbeing: 100 },
+      { occupants: 6, wellbeing: 50 },
+    ]),
+    62.5,
+  );
+  assert.equal(getAverageWellbeing([{ occupants: 0, wellbeing: 100 }]), 0);
+});
 
 const dailyNeeds = new Map([
   ['rice', 0.03],

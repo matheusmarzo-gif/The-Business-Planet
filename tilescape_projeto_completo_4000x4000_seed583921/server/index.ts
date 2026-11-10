@@ -99,6 +99,7 @@ import { getDairyFarmEfficiency } from '../src/types/dairy.js';
 import { parseBasicDemandConfig } from '../src/types/commerceDemand.js';
 import {
   calculateResidenceWellbeing,
+  getAverageWellbeing,
   getWorkerTechnique,
   type ResidenceProductConsumption,
 } from '../src/types/wellbeing.js';
@@ -446,6 +447,40 @@ type ResidentialBuildingRow = {
   created_by?: string;
 };
 
+const CITY_RESIDENCE_TYPES = Object.values(RESIDENCES)
+  .filter((definition) => definition.kind === 'residence')
+  .map((definition) => definition.type);
+
+function getCityWellbeingById(
+  residences: readonly {
+    city_id: string;
+    building_type: ResidenceType;
+    status: ResidentialBuilding['status'];
+    occupants: number;
+    wellbeing: number;
+  }[],
+): Map<string, number> {
+  const residencesByCity = new Map<string, { occupants: number; wellbeing: number }[]>();
+  for (const residence of residences) {
+    if (
+      residence.status !== 'completed' ||
+      getResidenceDefinition(residence.building_type)?.kind !== 'residence'
+    ) continue;
+    const cityResidences = residencesByCity.get(residence.city_id) ?? [];
+    cityResidences.push({
+      occupants: residence.occupants,
+      wellbeing: residence.wellbeing,
+    });
+    residencesByCity.set(residence.city_id, cityResidences);
+  }
+  return new Map(
+    [...residencesByCity].map(([cityId, cityResidences]) => [
+      cityId,
+      getAverageWellbeing(cityResidences),
+    ]),
+  );
+}
+
 const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, minimum_worker_technique, rent, occupants, wellbeing, desired_workers, work_points_done, price, stock, stock_levels, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
   COALESCE((SELECT array_agg(link.warehouse_id::text ORDER BY link.warehouse_id)
             FROM building_warehouse_links link
@@ -473,8 +508,10 @@ const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y
    WHERE j.workplace_id = all_buildings.id) AS average_worker_technique,
   COALESCE((SELECT SUM(j.count * w.wage) FROM job_assignments j
             JOIN all_buildings w ON w.id = j.workplace_id
-            WHERE j.residence_id = all_buildings.id), 0)::float8
-    / GREATEST(occupants, 1) AS average_income`;
+            WHERE j.residence_id = all_buildings.id)
+       / NULLIF((SELECT SUM(j.count) FROM job_assignments j
+                 WHERE j.residence_id = all_buildings.id), 0),
+           0)::float8 AS average_income`;
 
 function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuilding {
   const farmAutomation = {
@@ -934,7 +971,7 @@ async function publishDailyFullWorldStateIfDue(): Promise<void> {
 }
 
 async function getCities(): Promise<CityAssembly[]> {
-  const [{ rows }, { rows: workplaceRows }] = await Promise.all([
+  const [{ rows }, { rows: workplaceRows }, { rows: residenceRows }] = await Promise.all([
     pool.query<{
       id: string;
       name: string;
@@ -942,7 +979,6 @@ async function getCities(): Promise<CityAssembly[]> {
       center_y: number;
       minimum_wage: number;
       population: number;
-      wellbeing: number;
       economy: number;
       zones: CityZone[];
     }>(
@@ -952,7 +988,7 @@ async function getCities(): Promise<CityAssembly[]> {
               FROM all_buildings AS home
               WHERE home.city_id = city.id
             ), 0) AS population,
-            city.wellbeing, city.economy,
+            city.economy,
             COALESCE(
               json_agg(json_build_object(
                 'id', zone.id,
@@ -985,7 +1021,20 @@ async function getCities(): Promise<CityAssembly[]> {
        LEFT JOIN job_assignments j ON j.workplace_id = b.id
        GROUP BY b.id`,
     ),
+    pool.query<{
+      city_id: string;
+      building_type: ResidenceType;
+      status: ResidentialBuilding['status'];
+      occupants: number;
+      wellbeing: number;
+    }>(
+      `SELECT city_id, building_type, status, occupants, wellbeing
+       FROM all_buildings
+       WHERE building_type = ANY($1::text[]) AND status = 'completed'`,
+      [CITY_RESIDENCE_TYPES],
+    ),
   ]);
+  const wellbeingByCity = getCityWellbeingById(residenceRows);
   const workplacesByCity = new Map<string, EmploymentSummaryWorkplace[]>();
   for (const row of workplaceRows) {
     const workplaces = workplacesByCity.get(row.city_id) ?? [];
@@ -1006,7 +1055,7 @@ async function getCities(): Promise<CityAssembly[]> {
     centerY: row.center_y,
     minimumWage: row.minimum_wage,
     population: row.population,
-    wellbeing: row.wellbeing,
+    wellbeing: wellbeingByCity.get(row.id) ?? 0,
     economy: row.economy,
     zones: row.zones,
   }));
@@ -1185,29 +1234,38 @@ async function runMonthlyResidenceRelocation(): Promise<boolean> {
           residence_id: string;
           count: number;
         }>('SELECT workplace_id, residence_id, count FROM job_assignments');
+        const assignmentsForIncome = assignments.map((row) => ({
+          workplaceId: row.workplace_id,
+          residenceId: row.residence_id,
+          count: row.count,
+        }));
         const averageIncomes = getAverageIncomes(
-          residences.map((row) => ({ id: row.id, occupants: row.occupants })),
+          residences.map((row) => ({ id: row.id })),
           new Map(workplaces.map((row) => [row.id, row.wage])),
-          assignments.map((row) => ({
-            workplaceId: row.workplace_id,
-            residenceId: row.residence_id,
-            count: row.count,
-          })),
+          assignmentsForIncome,
         );
         const residentialRows = residences.filter(
           (row) => getResidenceDefinition(row.building_type)?.kind === 'residence',
         );
-        const cityIncomeTotals = new Map<string, { income: number; occupants: number }>();
+        const employedByResidence = new Map<string, number>();
+        for (const assignment of assignmentsForIncome) {
+          employedByResidence.set(
+            assignment.residenceId,
+            (employedByResidence.get(assignment.residenceId) ?? 0) + assignment.count,
+          );
+        }
+        const cityIncomeTotals = new Map<string, { income: number; employees: number }>();
         for (const residence of residentialRows) {
-          const current = cityIncomeTotals.get(residence.city_id) ?? { income: 0, occupants: 0 };
-          current.income += (averageIncomes.get(residence.id) ?? 0) * residence.occupants;
-          current.occupants += residence.occupants;
+          const employed = employedByResidence.get(residence.id) ?? 0;
+          const current = cityIncomeTotals.get(residence.city_id) ?? { income: 0, employees: 0 };
+          current.income += (averageIncomes.get(residence.id) ?? 0) * employed;
+          current.employees += employed;
           cityIncomeTotals.set(residence.city_id, current);
         }
         const cityAverageSalaries = new Map(
           [...cityIncomeTotals].map(([cityId, totals]) => [
             cityId,
-            totals.occupants > 0 ? totals.income / totals.occupants : 0,
+            totals.employees > 0 ? totals.income / totals.employees : 0,
           ]),
         );
         const appealValues = calculateResidenceAppeals(
@@ -2194,7 +2252,7 @@ async function runDailyEmployment(): Promise<boolean> {
         );
       }
       const incomeByEmployedResident = getAverageIncomes(
-        [...employedResidents].map(([id, occupants]) => ({ id, occupants })),
+        [...employedResidents.keys()].map((id) => ({ id })),
         wageOf,
         assignmentRows.map((row) => ({
           workplaceId: row.workplace_id,
@@ -3934,7 +3992,6 @@ async function replaceCityZones(
       center_y: number;
       minimum_wage: number;
       population: number;
-      wellbeing: number;
       economy: number;
     }>(
       `SELECT id, name, center_x, center_y,
@@ -3943,7 +4000,7 @@ async function replaceCityZones(
                 FROM all_buildings AS home
                 WHERE home.city_id = city_assemblies.id
               ), 0) AS population,
-              wellbeing, economy, minimum_wage
+              economy, minimum_wage
        FROM city_assemblies WHERE id = $1 FOR UPDATE`,
       [cityId],
     );
@@ -3952,6 +4009,15 @@ async function replaceCityZones(
       await client.query('ROLLBACK');
       return { city: null, error: 'city_not_found' };
     }
+    const { rows: residenceRows } = await client.query<{
+      occupants: number;
+      wellbeing: number;
+    }>(
+      `SELECT occupants, wellbeing FROM all_buildings
+       WHERE city_id = $1 AND building_type = ANY($2::text[]) AND status = 'completed'`,
+      [cityId, CITY_RESIDENCE_TYPES],
+    );
+    const cityWellbeing = getAverageWellbeing(residenceRows);
 
     const normalizedZones: CityZone[] = [];
     for (const zone of zones) {
@@ -3985,7 +4051,7 @@ async function replaceCityZones(
         centerY: cityRow.center_y,
         minimumWage: cityRow.minimum_wage,
         population: cityRow.population,
-        wellbeing: cityRow.wellbeing,
+        wellbeing: cityWellbeing,
         economy: cityRow.economy,
         zones: normalizedZones,
       },
@@ -4034,12 +4100,11 @@ async function createResidentialBuilding(
       center_y: number;
       minimum_wage: number;
       population: number;
-      wellbeing: number;
       economy: number;
       zones: CityZone[];
     }>(
       `SELECT city.id, city.name, city.center_x, city.center_y, city.minimum_wage,
-              city.population, city.wellbeing, city.economy,
+              city.population, city.economy,
               COALESCE(
                 json_agg(json_build_object(
                   'id', zone.id,
@@ -4057,6 +4122,12 @@ async function createResidentialBuilding(
        LEFT JOIN city_zones AS zone ON zone.city_id = city.id
        GROUP BY city.id`,
     );
+    const { rows: buildingRows } = await client.query<ResidentialBuildingRow>(
+      `SELECT ${ALL_BUILDING_COLUMNS}
+       FROM all_buildings`,
+    );
+    const buildings = buildingRows.map(mapResidentialBuilding);
+    const wellbeingByCity = getCityWellbeingById(buildingRows);
     const cities: CityAssembly[] = cityRows.map((city) => ({
       id: city.id,
       name: city.name,
@@ -4064,15 +4135,10 @@ async function createResidentialBuilding(
       centerY: city.center_y,
       minimumWage: city.minimum_wage,
       population: city.population,
-      wellbeing: city.wellbeing,
+      wellbeing: wellbeingByCity.get(city.id) ?? 0,
       economy: city.economy,
       zones: city.zones,
     }));
-    const { rows: buildingRows } = await client.query<ResidentialBuildingRow>(
-      `SELECT ${ALL_BUILDING_COLUMNS}
-       FROM all_buildings`,
-    );
-    const buildings = buildingRows.map(mapResidentialBuilding);
     const { rows: roadRows } = await client.query<{ tile_x: number; tile_y: number }>(
       'SELECT tile_x, tile_y FROM road_tiles',
     );
@@ -5062,12 +5128,11 @@ async function start() {
           center_y: number;
           minimum_wage: number;
           population: number;
-          wellbeing: number;
           economy: number;
           zones: CityZone[];
         }>(
           `SELECT city.id, city.name, city.center_x, city.center_y, city.minimum_wage,
-                  city.population, city.wellbeing, city.economy,
+                  city.population, city.economy,
                   COALESCE(
                     json_agg(json_build_object(
                       'id', zone.id, 'cityId', zone.city_id, 'type', zone.zone_type,
@@ -5079,6 +5144,11 @@ async function start() {
            LEFT JOIN city_zones zone ON zone.city_id = city.id
            GROUP BY city.id`,
         );
+        const { rows: buildingRows } = await client.query<ResidentialBuildingRow>(
+          `SELECT ${ALL_BUILDING_COLUMNS} FROM all_buildings`,
+        );
+        const buildings = buildingRows.map(mapResidentialBuilding);
+        const wellbeingByCity = getCityWellbeingById(buildingRows);
         const cities: CityAssembly[] = cityRows.map((city) => ({
           id: city.id,
           name: city.name,
@@ -5086,14 +5156,10 @@ async function start() {
           centerY: city.center_y,
           minimumWage: city.minimum_wage,
           population: city.population,
-          wellbeing: city.wellbeing,
+          wellbeing: wellbeingByCity.get(city.id) ?? 0,
           economy: city.economy,
           zones: city.zones,
         }));
-        const { rows: buildingRows } = await client.query<ResidentialBuildingRow>(
-          `SELECT ${ALL_BUILDING_COLUMNS} FROM all_buildings`,
-        );
-        const buildings = buildingRows.map(mapResidentialBuilding);
         const movingBuilding = buildings.find((building) => building.id === selected.id);
         if (!movingBuilding) throw new Error(`A construção ${selected.id} não pôde ser carregada.`);
         const definition = RESIDENCES[selected.building_type];

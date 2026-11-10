@@ -21,6 +21,25 @@ export interface ResidenceProductConsumption {
   consumerDays: number;
 }
 
+export function getAverageWellbeing(
+  residences: readonly { occupants: number; wellbeing: number }[],
+): number {
+  let totalOccupants = 0;
+  let weightedWellbeing = 0;
+  for (const residence of residences) {
+    if (
+      !Number.isFinite(residence.occupants) ||
+      residence.occupants < 0 ||
+      !Number.isFinite(residence.wellbeing)
+    ) {
+      throw new RangeError('A população ou o bem-estar residencial é inválido.');
+    }
+    totalOccupants += residence.occupants;
+    weightedWellbeing += residence.occupants * residence.wellbeing;
+  }
+  return totalOccupants > 0 ? weightedWellbeing / totalOccupants : 0;
+}
+
 export function calculateResidenceWellbeing(
   consumption: readonly ResidenceProductConsumption[],
   dailyDemandByProduct: ReadonlyMap<string, number>,

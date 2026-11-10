@@ -59,12 +59,13 @@ Ao abrir uma residência concluída, o cliente consulta
 `GET /api/residential-buildings/:id/residence-benefit`. A rota calcula sob
 demanda o custo mensal (`Cb`), os apreços de empregabilidade, região,
 construção e interno, `benefício erro`, `benefício ideal` e o benefício
-associado usando consumo dos últimos 30 dias, aluguel e renda dos moradores.
-O apreço de empregabilidade é a renda média por morador dividida pela média
-da cidade; o apreço da região é a média dos apreços de empregabilidade das
-residências concluídas da mesma cidade num raio de 10 tiles, incluindo a
-própria residência. O apreço interno é o maior entre 10 e o produto dos
-apreços da construção e da região. A média diária de cada produto usa a
+associado usando consumo dos últimos 30 dias, aluguel e salário médio dos
+empregados da residência.
+O apreço de empregabilidade é o salário médio dos empregados da residência
+dividido pelo salário médio dos empregados da cidade; o apreço da região é a
+média dos apreços de empregabilidade das residências concluídas da mesma cidade
+num raio de 10 tiles, incluindo a própria residência. O apreço interno é o maior
+entre 10 e o produto dos apreços da construção e da região. A média diária de cada produto usa a
 quantidade dividida pelo total de dias-consumidor empregados no período e o tooltip também lista a contribuição de
 cada produto para o `Cb`; o cliente exibe os valores abaixo de “Salvar aluguel”.
 
@@ -479,9 +480,12 @@ mapeamento e verificar todas as curvas.
   (`onResidenceSelect` em `GameMap`); clicar em outro tile a fecha. Concluída:
   ocupantes 0/capacidade (reais, vindos de `occupants`), bem-estar persistido em
   `all_buildings.wellbeing`, técnica calculada por `getWorkerTechnique`, saúde 100
-  e felicidade 100 (fixas em `RESIDENCE_STATS`), empregados reais e renda média
+  e felicidade 100 (fixas em `RESIDENCE_STATS`), empregados reais e salário médio
   (`averageIncome`: subquery em `ALL_BUILDING_COLUMNS` somando
-  `job_assignments.count × wage` ÷ ocupantes). O planejador de vendas usa os
+  `job_assignments.count × wage` ÷ empregados atribuídos à residência; sem empregados,
+  o valor é 0). O bem-estar da prefeitura é a média do bem-estar das residências
+  concluídas ponderada pelo número de moradores; sem moradores, o valor é 0.
+  O planejador de vendas usa os
   moradores empregados como consumidores e calcula a renda média por trabalhador
   para a demanda. Em construção: Work Points
   0/necessários, empregados 0/até 100, salário diário (`wage`, C$ por dia

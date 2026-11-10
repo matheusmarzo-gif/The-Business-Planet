@@ -869,9 +869,9 @@ preços médios são ponderados pelas unidades compradas.
 Use **Produtos** na barra inferior para consultar os 35 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.
 Validades informadas em anos são convertidas para dias considerando 365 dias
-por ano; produtos sem deterioração aparecem com validade infinita. Carne vermelha
-tem validade de 30 dias; farinha pesa 5 kg, ocupa 0,01 m³ e dura 1 ano. A validade
-também é usada para calcular a perda diária dos estoques às 18:00, conforme
+por ano; produtos sem deterioração aparecem com validade infinita. Peixe tem validade
+de 3 dias, carne vermelha de 30 dias; farinha pesa 5 kg, ocupa 0,01 m³ e dura
+1 ano. A validade também é usada para calcular a perda diária dos estoques às 18:00, conforme
 descrito em **Validade e espaço de armazenamento**. Produtos cujos atributos
 ainda não foram definidos não aparecem.
 

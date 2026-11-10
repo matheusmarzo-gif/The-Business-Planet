@@ -695,7 +695,8 @@ mapeamento e verificar todas as curvas.
   passa a `harvesting`; a produção é limitada ao espaço livre do estoque; ao
   terminar, o plantio é limpo e um novo pode ser feito. `ResidentialBuilding.crop`
   expõe o estado ao cliente.
-- `red_meat` tem validade padrão de 30 dias em `src/types/product.ts`.
+- `fish` tem validade padrão de 3 dias e `red_meat` de 30 dias em
+  `src/types/product.ts`.
 - Consumo das residências: as compras de todos os produtos disponíveis da
   cesta básica (arroz, trigo, cevada, milho, batata, peixe, carne vermelha e
   leite) e da cesta intermediária (açúcar, vegetais, sal e especiarias) das

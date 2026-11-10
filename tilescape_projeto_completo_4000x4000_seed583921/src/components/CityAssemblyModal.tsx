@@ -97,7 +97,7 @@ export default function CityAssemblyModal({
 
           <dl className="city-stat-list">
             <div><dt>POPULAÇÃO</dt><dd>{city?.population ?? 0}</dd></div>
-            <div><dt>BEM-ESTAR</dt><dd>{city?.wellbeing ?? 0}</dd></div>
+            <div><dt>BEM-ESTAR</dt><dd>{money.format(city?.wellbeing ?? 0)}</dd></div>
             <div><dt>ECONOMIA</dt><dd>{city?.economy ?? 0}</dd></div>
             <div><dt>PESSOAS EMPREGADAS</dt><dd>{city?.employed ?? 0}</dd></div>
             <div><dt>OFERTAS DE EMPREGO</dt><dd>{city?.jobOffers ?? 0}</dd></div>

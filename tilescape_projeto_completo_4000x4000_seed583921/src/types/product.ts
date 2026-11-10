@@ -57,7 +57,7 @@ export const PRODUCTS: ProductDefinition[] = [
   product('stone', 'Pedra', 'pedra', 'raw_material', 'unit', 160, 0.1, null),
   product('iron', 'Ferro', 'ferro', 'raw_material', 'unit', 350, 0.1, null),
   product('salt', 'Sal', 'sal', 'raw_material', 'unit', 12, 0.01, null),
-  product('fish', 'Peixe', 'peixe', 'raw_material', 'unit', 5, 0.01, 2),
+  product('fish', 'Peixe', 'peixe', 'raw_material', 'unit', 5, 0.01, 3),
   product('tools', 'Ferramentas', 'ferramentas', 'processed', 'unit', 5, 0.01, null),
   product('sugar', 'Açúcar', 'acucar', 'processed', 'unit', 9, 0.01, 3650),
   product('flour', 'Farinha', 'farinha', 'processed', 'unit', 5, 0.01, 365),

@@ -3053,6 +3053,10 @@ describe('hist�rico de transporte do armaz�m', () => {
 });
 
 describe('validade dos produtos', () => {
+  it('define a validade do peixe em três dias', () => {
+    assert.equal(PRODUCTS.find((product) => product.id === 'fish')?.shelfLifeDays, 3);
+  });
+
   it('perde a fração diária do estoque e sorteia unidades indivisíveis', () => {
     assert.equal(planDailySpoilage(10, 10, () => 0.99), 1);
     assert.equal(planDailySpoilage(10, 100, () => 0.05), 1);

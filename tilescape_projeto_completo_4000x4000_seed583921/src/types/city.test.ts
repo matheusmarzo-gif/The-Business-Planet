@@ -14,7 +14,13 @@ import {
 } from './city';
 import { STARTING_BALANCE, formatMoney } from './wallet';
 import { isCurrencyAmount, roundCurrency } from './currency';
-import { nextEfficiencyPenalty, planFishing, planProduction, rollToolDemand } from './fishing';
+import {
+  nextEfficiencyPenalty,
+  planFishing,
+  planProduction,
+  rollToolDemand,
+  routeProductionStockUsage,
+} from './fishing';
 import {
   allocateImmigrants,
   getCityPopulation,
@@ -2848,6 +2854,28 @@ describe('recursos e ferramentaria', () => {
       assert.equal(definition.toolCapacity, type === 'steelworks' ? undefined : 80, type);
       if (type !== 'steelworks') assert.equal(definition.toolDemandPerWorker, 2, type);
     }
+  });
+
+  it('routes furniture factory wood consumption to generic input stock only', () => {
+    const definition = RESIDENCES.furniture_factory;
+    const result = planProduction(definition.production!, {
+      progress: 0,
+      workPoints: 400,
+      penalty: 0,
+      freeSpace: definition.stockCapacity!,
+      wood: 0,
+      inputStocks: { wood: 1 },
+    });
+
+    assert.equal(result.units, 1);
+    assert.deepEqual(result.inputStocksUsed, { wood: 1 });
+    assert.equal(result.woodUsed, 1);
+    assert.deepEqual(routeProductionStockUsage(definition, result), {
+      woodUsed: 0,
+      ironUsed: 0,
+      charcoalUsed: 0,
+      inputStocksUsed: { wood: 1 },
+    });
   });
 
   it('makes sugar using canes, charcoal, Work Points, and available stock space', () => {

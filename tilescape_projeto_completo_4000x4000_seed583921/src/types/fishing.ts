@@ -1,4 +1,4 @@
-import type { ProductionRule } from './residence.js';
+import type { ProductionRule, ResidenceDefinition } from './residence.js';
 import { BUILDING_CONFIGS, GAME_RULES } from '../generated/gameConfig.js';
 
 export const FISH_WORK_POINTS = BUILDING_CONFIGS.fishery.production.workPointsPerUnit;
@@ -71,6 +71,31 @@ export interface ProductionResult {
   inputStocksUsed: Record<string, number>;
 }
 
+export interface ProductionStockUsage {
+  woodUsed: number;
+  ironUsed: number;
+  charcoalUsed: number;
+  inputStocksUsed: Record<string, number>;
+}
+
+export function routeProductionStockUsage(
+  definition: Pick<ResidenceDefinition, 'inputCapacities'>,
+  result: ProductionResult,
+): ProductionStockUsage {
+  const inputStocksUsed = Object.fromEntries(
+    Object.entries(result.inputStocksUsed).filter(
+      ([productId]) => definition.inputCapacities?.[productId] !== undefined,
+    ),
+  );
+  return {
+    woodUsed: definition.inputCapacities?.wood === undefined ? result.woodUsed : 0,
+    ironUsed: definition.inputCapacities?.iron === undefined ? result.ironUsed : 0,
+    charcoalUsed:
+      definition.inputCapacities?.charcoal === undefined ? result.charcoalUsed : 0,
+    inputStocksUsed,
+  };
+}
+
 /**
  * Produção diária de uma construção produtiva. Os Work Points são reduzidos pela
  * penalidade de Ferramentas. Veja `ProductionRule` para os três modos.
@@ -128,31 +153,34 @@ export function planProduction(
     const cycles = Object.entries(requiredInputs).reduce((availableCycles, [productId, amount]) => {
       if (amount <= 0) return availableCycles;
       const availableStock =
-        productId === 'charcoal'
+        input.inputStocks?.[productId] ??
+        (productId === 'charcoal'
           ? input.charcoal ?? 0
           : productId === 'tools'
             ? input.tools ?? 0
-            : input.inputStocks?.[productId] ?? 0;
+            : 0);
       return Math.min(availableCycles, availableStock / amount);
     }, requestedCycles);
     const inputStocksUsed: Record<string, number> = {};
     for (const [productId, amount] of Object.entries(requiredInputs)) {
       inputStocksUsed[productId] = Math.min(
-        productId === 'charcoal'
-          ? input.charcoal ?? 0
-          : productId === 'tools'
-            ? input.tools ?? 0
-            : input.inputStocks?.[productId] ?? 0,
+        input.inputStocks?.[productId] ??
+          (productId === 'charcoal'
+            ? input.charcoal ?? 0
+            : productId === 'tools'
+              ? input.tools ?? 0
+              : 0),
         roundExpected(cycles * amount),
       );
     }
     for (const [productId, rate] of Object.entries(rule.batchInputRates ?? {})) {
       const availableStock =
-        productId === 'charcoal'
+        input.inputStocks?.[productId] ??
+        (productId === 'charcoal'
           ? input.charcoal ?? 0
           : productId === 'tools'
             ? input.tools ?? 0
-            : input.inputStocks?.[productId] ?? 0;
+            : 0);
       const expectedUse = roundExpected(cycles * rate);
       const currentUse = inputStocksUsed[productId] ?? 0;
       inputStocksUsed[productId] = currentUse + Math.min(

@@ -440,7 +440,9 @@ mapeamento e verificar todas as curvas.
   como `input:<produto>` mesmo quando o ID coincide com compartimentos legados
   (`wood_stock`, `iron_stock` ou `charcoal_stock`); assim, a Fábrica de Móveis
   recebe madeira em `building_input_stock`, separada do estoque de madeira de
-  oficinas como a Carvoaria.
+  oficinas como a Carvoaria. A produção encaminha o consumo ao mesmo
+  compartimento configurado, evitando descontar os insumos genéricos também dos
+  estoques legados e reverter a etapa diária.
 - O preview usa o sprite correspondente com tonalidade verde/vermelha. Toda a
   área ocupada deve ficar dentro da cidade e da zona exigida pela construção
   (urbana ou rural), em terra, sem

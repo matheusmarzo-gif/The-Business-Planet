@@ -95,7 +95,12 @@ import {
   type CityProductSale,
   type CommerceDiagnosticsUpdate,
 } from '../src/types/commerce.js';
-import { nextEfficiencyPenalty, planProduction, rollToolDemand } from '../src/types/fishing.js';
+import {
+  nextEfficiencyPenalty,
+  planProduction,
+  rollToolDemand,
+  routeProductionStockUsage,
+} from '../src/types/fishing.js';
 import { getDairyFarmEfficiency } from '../src/types/dairy.js';
 import { parseBasicDemandConfig } from '../src/types/commerceDemand.js';
 import {
@@ -2689,6 +2694,10 @@ async function runDailyEmployment(): Promise<boolean> {
         const batchStock = batchProductId === 'sugarcane'
           ? current.sugarcane_stock
           : inputStocksByBuilding.get(site.id)?.get(batchProductId ?? '') ?? 0;
+        const inputStocks = Object.fromEntries(inputStocksByBuilding.get(site.id) ?? []);
+        for (const productId of Object.keys(definition.inputCapacities ?? {})) {
+          inputStocks[productId] ??= 0;
+        }
         const result = planProduction(definition.production, {
           progress: current.production_progress,
           workPoints: generatedPoints * seasonalEfficiency,
@@ -2699,7 +2708,7 @@ async function runDailyEmployment(): Promise<boolean> {
           charcoal: current.charcoal_stock,
           batchStock,
           tools: current.tool_stock,
-          inputStocks: Object.fromEntries(inputStocksByBuilding.get(site.id) ?? []),
+          inputStocks,
         });
         const usesGenericInput = Boolean(batchProductId && definition.inputCapacities?.[batchProductId]);
         const inputStocksUsed = { ...result.inputStocksUsed };
@@ -2707,16 +2716,20 @@ async function runDailyEmployment(): Promise<boolean> {
           inputStocksUsed[batchProductId!] =
             (inputStocksUsed[batchProductId!] ?? 0) + result.batchStockUsed;
         }
+        const stockUsage = routeProductionStockUsage(
+          definition,
+          { ...result, inputStocksUsed },
+        );
         productionUpdates.push({
           id: site.id,
           units: result.units,
           progress: result.progress,
           toolDemand: usesTools && demandMet ? demand + result.toolsUsed : result.toolsUsed,
-          woodUsed: result.woodUsed,
-          ironUsed: result.ironUsed,
-          charcoalUsed: result.charcoalUsed,
+          woodUsed: stockUsage.woodUsed,
+          ironUsed: stockUsage.ironUsed,
+          charcoalUsed: stockUsage.charcoalUsed,
           sugarcaneUsed: batchProductId === 'sugarcane' ? result.batchStockUsed : 0,
-          inputStocksUsed,
+          inputStocksUsed: stockUsage.inputStocksUsed,
           penalty,
         });
         productionHistory.push({
@@ -2760,9 +2773,7 @@ async function runDailyEmployment(): Promise<boolean> {
           (update) => Object.values(update.inputStocksUsed).some((quantity) => quantity > 0),
         ).flatMap((update) =>
           Object.entries(update.inputStocksUsed)
-            .filter(([productId, quantity]) =>
-              quantity > 0 && !['tools', 'charcoal', 'wood', 'iron', 'sugarcane'].includes(productId),
-            )
+            .filter(([, quantity]) => quantity > 0)
             .map(([productId, quantity]) => ({ id: update.id, productId, quantity })),
         );
         if (inputConsumptions.length > 0) {

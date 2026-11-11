@@ -12,7 +12,9 @@ import {
 export interface ProductConsumption {
   productId: string;
   lastDayPerPerson: number;
+  lastDayDesiredPerPerson: number | null;
   monthPerPerson: number;
+  monthDesiredPerPerson: number | null;
   lastDayAveragePrice: number | null;
   monthAveragePrice: number | null;
 }
@@ -30,6 +32,8 @@ interface ConsumptionPanelProps {
 
 const decimal = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 const price = (value: number | null) => (value === null ? '—' : formatMoney(value));
+const quantityWithDesired = (quantity: number, desired: number | null | undefined) =>
+  `${decimal.format(quantity)} (${desired == null ? '—' : decimal.format(desired)})`;
 
 export default function ConsumptionPanel({
   consumption,
@@ -49,7 +53,8 @@ export default function ConsumptionPanel({
         </button>
       </div>
       <p className="warehouse-summary">
-        Consumo médio por pessoa por dia. A média considera os últimos 30 dias de jogo.
+        Quantidade consumida por pessoa (quantidade desejada entre parênteses).
+        A média mensal é diária e considera os últimos 30 dias de jogo.
         {isLoading && ' Carregando…'}
       </p>
       {error && <p role="alert" className="warehouse-error">{error}</p>}
@@ -64,6 +69,8 @@ export default function ConsumptionPanel({
         {CONSUMED_PRODUCT_IDS.map((productId) => {
           const product = PRODUCTS.find((item) => item.id === productId);
           const data = consumption.get(productId);
+          const lastDayDesired = data?.lastDayDesiredPerPerson;
+          const monthDesired = data?.monthDesiredPerPerson;
           return (
             <Fragment key={productId}>
               {productId === BASIC_BASKET_PRODUCT_IDS[0] && (
@@ -83,8 +90,12 @@ export default function ConsumptionPanel({
                   {product && <img src={product.icon} alt="" />}
                   {product?.name ?? productId}
                 </span>
-                <span>{decimal.format(data?.lastDayPerPerson ?? 0)}</span>
-                <span>{decimal.format(data?.monthPerPerson ?? 0)}</span>
+                <span>
+                  {quantityWithDesired(data?.lastDayPerPerson ?? 0, lastDayDesired)}
+                </span>
+                <span>
+                  {quantityWithDesired(data?.monthPerPerson ?? 0, monthDesired)}
+                </span>
                 <span>{price(data?.lastDayAveragePrice ?? null)}</span>
                 <span>{price(data?.monthAveragePrice ?? null)}</span>
               </div>

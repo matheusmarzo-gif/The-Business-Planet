@@ -17,6 +17,7 @@ import {
   type CityZoneBounds,
   type CityZoneType,
   type CityPlacementError,
+  calculateCityEconomy,
   getCityZonePlacementError,
   getCityPlacementError,
   parseCityMinimumWage,
@@ -1259,7 +1260,12 @@ async function publishDailyFullWorldStateIfDue(): Promise<void> {
 }
 
 async function getCities(): Promise<CityAssembly[]> {
-  const [{ rows }, { rows: workplaceRows }, { rows: residenceRows }] = await Promise.all([
+  const [
+    { rows },
+    { rows: workplaceRows },
+    { rows: residenceRows },
+    { rows: consumptionSpendingRows },
+  ] = await Promise.all([
     pool.query<{
       id: string;
       name: string;
@@ -1267,7 +1273,6 @@ async function getCities(): Promise<CityAssembly[]> {
       center_y: number;
       minimum_wage: number;
       population: number;
-      economy: number;
       zones: CityZone[];
     }>(
       `SELECT city.id, city.name, city.center_x, city.center_y, city.minimum_wage,
@@ -1276,7 +1281,6 @@ async function getCities(): Promise<CityAssembly[]> {
               FROM all_buildings AS home
               WHERE home.city_id = city.id
             ), 0) AS population,
-            city.economy,
             COALESCE(
               json_agg(json_build_object(
                 'id', zone.id,
@@ -1321,9 +1325,22 @@ async function getCities(): Promise<CityAssembly[]> {
        WHERE building_type = ANY($1::text[]) AND status = 'completed'`,
       [CITY_RESIDENCE_TYPES],
     ),
+    pool.query<{ city_id: string; monthly_spending: number }>(
+      `SELECT building.city_id, COALESCE(SUM(consumption.spent), 0)::float8 AS monthly_spending
+       FROM residence_consumption consumption
+       JOIN all_buildings building ON building.id = consumption.building_id
+       WHERE consumption.day > (
+         SELECT (world_time AT TIME ZONE 'UTC')::date - 30
+         FROM world_state WHERE id = 1
+       )
+       GROUP BY building.city_id`,
+    ),
   ]);
   const wellbeingByCity = getCityWellbeingById(residenceRows);
   const workplacesByCity = new Map<string, EmploymentSummaryWorkplace[]>();
+  const monthlySpendingByCity = new Map(
+    consumptionSpendingRows.map((row) => [row.city_id, row.monthly_spending]),
+  );
   for (const row of workplaceRows) {
     const workplaces = workplacesByCity.get(row.city_id) ?? [];
     workplaces.push({
@@ -1335,18 +1352,25 @@ async function getCities(): Promise<CityAssembly[]> {
     });
     workplacesByCity.set(row.city_id, workplaces);
   }
-  return rows.map((row) => ({
-    ...getEmploymentSummary(workplacesByCity.get(row.id) ?? []),
-    id: row.id,
-    name: row.name,
-    centerX: row.center_x,
-    centerY: row.center_y,
-    minimumWage: row.minimum_wage,
-    population: row.population,
-    wellbeing: wellbeingByCity.get(row.id) ?? 0,
-    economy: row.economy,
-    zones: row.zones,
-  }));
+  return rows.map((row) => {
+    const employment = getEmploymentSummary(workplacesByCity.get(row.id) ?? []);
+    return {
+      ...employment,
+      id: row.id,
+      name: row.name,
+      centerX: row.center_x,
+      centerY: row.center_y,
+      minimumWage: row.minimum_wage,
+      population: row.population,
+      wellbeing: wellbeingByCity.get(row.id) ?? 0,
+      economy: calculateCityEconomy(
+        monthlySpendingByCity.get(row.id) ?? 0,
+        employment.averageWage,
+        employment.employed,
+      ),
+      zones: row.zones,
+    };
+  });
 }
 
 async function getRoadTiles(): Promise<RoadTile[]> {
@@ -2813,6 +2837,12 @@ async function runDailyEmployment(): Promise<boolean> {
         Math.random,
         monthlySales,
       );
+      const desiredConsumptionByResidence = new Map(
+        salesPlan.desiredConsumption.map((entry) => [
+          `${entry.residenceId}\u0000${entry.productId}`,
+          entry.quantity,
+        ]),
+      );
       for (const purchase of salesPlan.purchases) {
         sold.set(purchase.shopId, (sold.get(purchase.shopId) ?? 0) + purchase.quantity);
         const key = `${purchase.residenceId}\u0000${purchase.productId}`;
@@ -2827,6 +2857,7 @@ async function runDailyEmployment(): Promise<boolean> {
         buildingId: string;
         productId: string;
         quantity: number;
+        desiredQuantity: number;
         spent: number;
         occupants: number;
         consumers: number;
@@ -2841,6 +2872,8 @@ async function runDailyEmployment(): Promise<boolean> {
             buildingId: home.id,
             productId,
             quantity: total.quantity,
+            desiredQuantity:
+              desiredConsumptionByResidence.get(`${home.id}\u0000${productId}`) ?? 0,
             spent: total.spent,
             occupants: populationByResidence.get(home.id) ?? 0,
             consumers: home.consumers,
@@ -2850,16 +2883,21 @@ async function runDailyEmployment(): Promise<boolean> {
       if (consumptionEntries.length > 0) {
         await client.query(
           `INSERT INTO residence_consumption
-             (building_id, product_id, day, quantity, spent, occupants, consumers)
+             (building_id, product_id, day, quantity, desired_quantity, spent, occupants, consumers)
            SELECT batch.building_id, batch.product_id, $1::date,
-                  batch.quantity, batch.spent, batch.occupants, batch.consumers
+                  batch.quantity, batch.desired_quantity, batch.spent,
+                  batch.occupants, batch.consumers
            FROM UNNEST(
              $2::uuid[], $3::text[], $4::double precision[],
-             $5::numeric[], $6::integer[], $7::integer[]
-           ) AS batch(building_id, product_id, quantity, spent, occupants, consumers)
+             $5::double precision[], $6::numeric[], $7::integer[], $8::integer[]
+           ) AS batch(
+             building_id, product_id, quantity, desired_quantity, spent, occupants, consumers
+           )
            WHERE TRUE
            ON CONFLICT (building_id, product_id, day) DO UPDATE
            SET quantity = residence_consumption.quantity + EXCLUDED.quantity,
+               desired_quantity = COALESCE(residence_consumption.desired_quantity, 0)
+                 + EXCLUDED.desired_quantity,
                spent = residence_consumption.spent + EXCLUDED.spent,
                occupants = EXCLUDED.occupants,
                consumers = EXCLUDED.consumers`,
@@ -2868,6 +2906,7 @@ async function runDailyEmployment(): Promise<boolean> {
             consumptionEntries.map((entry) => entry.buildingId),
             consumptionEntries.map((entry) => entry.productId),
             consumptionEntries.map((entry) => entry.quantity),
+            consumptionEntries.map((entry) => entry.desiredQuantity),
             consumptionEntries.map((entry) => entry.spent),
             consumptionEntries.map((entry) => entry.occupants),
             consumptionEntries.map((entry) => entry.consumers),
@@ -5429,10 +5468,16 @@ async function start() {
         product_id: string;
         last_quantity: number;
         last_consumer_quantity: number;
+        last_desired_quantity: number;
+        last_desired_consumers: number;
+        last_desired_records: number;
         last_spent: number;
         last_consumers: number;
         month_quantity: number;
         month_consumer_quantity: number;
+        month_desired_quantity: number;
+        month_desired_consumers: number;
+        month_desired_records: number;
         month_spent: number;
         month_consumers: number;
       }>(
@@ -5446,6 +5491,13 @@ async function start() {
                 COALESCE(SUM(consumption.quantity)
                   FILTER (WHERE consumption.day = (SELECT day FROM today)
                     AND consumption.consumers IS NOT NULL), 0)::float8 AS last_consumer_quantity,
+                COALESCE(SUM(consumption.desired_quantity)
+                  FILTER (WHERE consumption.day = (SELECT day FROM today)), 0)::float8 AS last_desired_quantity,
+                COALESCE(SUM(consumption.consumers)
+                  FILTER (WHERE consumption.day = (SELECT day FROM today)
+                    AND consumption.desired_quantity IS NOT NULL), 0)::float8 AS last_desired_consumers,
+                COUNT(consumption.desired_quantity)
+                  FILTER (WHERE consumption.day = (SELECT day FROM today))::int AS last_desired_records,
                 COALESCE(SUM(consumption.spent)
                   FILTER (WHERE consumption.day = (SELECT day FROM today)), 0)::float8 AS last_spent,
                 COALESCE(SUM(consumption.consumers)
@@ -5453,6 +5505,10 @@ async function start() {
                 COALESCE(SUM(consumption.quantity), 0)::float8 AS month_quantity,
                 COALESCE(SUM(consumption.quantity)
                   FILTER (WHERE consumption.consumers IS NOT NULL), 0)::float8 AS month_consumer_quantity,
+                COALESCE(SUM(consumption.desired_quantity), 0)::float8 AS month_desired_quantity,
+                COALESCE(SUM(consumption.consumers)
+                  FILTER (WHERE consumption.desired_quantity IS NOT NULL), 0)::float8 AS month_desired_consumers,
+                COUNT(consumption.desired_quantity)::int AS month_desired_records,
                 COALESCE(SUM(consumption.spent), 0)::float8 AS month_spent,
                 COALESCE(SUM(consumption.consumers), 0)::float8 AS month_consumers
          FROM residence_consumption consumption
@@ -5468,9 +5524,19 @@ async function start() {
           lastDayPerPerson: row.last_consumers > 0
             ? row.last_consumer_quantity / row.last_consumers
             : 0,
+          lastDayDesiredPerPerson: row.last_desired_records > 0
+            ? row.last_desired_consumers > 0
+              ? row.last_desired_quantity / row.last_desired_consumers
+              : 0
+            : null,
           monthPerPerson: row.month_consumers > 0
             ? row.month_consumer_quantity / row.month_consumers
             : 0,
+          monthDesiredPerPerson: row.month_desired_records > 0
+            ? row.month_desired_consumers > 0
+              ? row.month_desired_quantity / row.month_desired_consumers
+              : 0
+            : null,
           lastDayAveragePrice: row.last_quantity > 0 ? row.last_spent / row.last_quantity : null,
           monthAveragePrice: row.month_quantity > 0 ? row.month_spent / row.month_quantity : null,
         })),
@@ -6048,10 +6114,16 @@ async function start() {
         last_spent: number;
         last_consumer_quantity: number;
         last_consumers: number;
+        last_desired_quantity: number;
+        last_desired_consumers: number;
+        last_desired_records: number;
         month_quantity: number;
         month_consumer_quantity: number;
         month_spent: number;
         month_consumers: number;
+        month_desired_quantity: number;
+        month_desired_consumers: number;
+        month_desired_records: number;
       }>(
         `WITH today AS (SELECT (world_time AT TIME ZONE 'UTC')::date AS day FROM world_state WHERE id = 1)
          SELECT product_id,
@@ -6061,10 +6133,21 @@ async function start() {
                   WHERE day = (SELECT day FROM today) AND consumers IS NOT NULL
                 ), 0) AS last_consumer_quantity,
                 COALESCE(SUM(consumers) FILTER (WHERE day = (SELECT day FROM today)), 0)::float8 AS last_consumers,
+                COALESCE(SUM(desired_quantity)
+                  FILTER (WHERE day = (SELECT day FROM today)), 0)::float8 AS last_desired_quantity,
+                COALESCE(SUM(consumers)
+                  FILTER (WHERE day = (SELECT day FROM today)
+                    AND desired_quantity IS NOT NULL), 0)::float8 AS last_desired_consumers,
+                COUNT(desired_quantity)
+                  FILTER (WHERE day = (SELECT day FROM today))::int AS last_desired_records,
                 COALESCE(SUM(quantity), 0) AS month_quantity,
                 COALESCE(SUM(quantity) FILTER (WHERE consumers IS NOT NULL), 0) AS month_consumer_quantity,
                 COALESCE(SUM(spent), 0) AS month_spent,
-                COALESCE(SUM(consumers), 0)::float8 AS month_consumers
+                COALESCE(SUM(consumers), 0)::float8 AS month_consumers,
+                COALESCE(SUM(desired_quantity), 0)::float8 AS month_desired_quantity,
+                COALESCE(SUM(consumers)
+                  FILTER (WHERE desired_quantity IS NOT NULL), 0)::float8 AS month_desired_consumers,
+                COUNT(desired_quantity)::int AS month_desired_records
          FROM residence_consumption
          WHERE building_id = $1 AND day > (SELECT day FROM today) - 30
          GROUP BY product_id`,
@@ -6077,9 +6160,19 @@ async function start() {
             lastDayPerPerson: row.last_consumers > 0
               ? row.last_consumer_quantity / row.last_consumers
               : 0,
+            lastDayDesiredPerPerson: row.last_desired_records > 0
+              ? row.last_desired_consumers > 0
+                ? row.last_desired_quantity / row.last_desired_consumers
+                : 0
+              : null,
             monthPerPerson: row.month_consumers > 0
               ? row.month_consumer_quantity / row.month_consumers
               : 0,
+            monthDesiredPerPerson: row.month_desired_records > 0
+              ? row.month_desired_consumers > 0
+                ? row.month_desired_quantity / row.month_desired_consumers
+                : 0
+              : null,
             lastDayAveragePrice: row.last_quantity > 0 ? row.last_spent / row.last_quantity : null,
             monthAveragePrice: row.month_quantity > 0 ? row.month_spent / row.month_quantity : null,
           })),

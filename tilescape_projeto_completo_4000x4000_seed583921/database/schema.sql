@@ -490,6 +490,7 @@ CREATE TABLE IF NOT EXISTS residence_consumption (
   product_id TEXT NOT NULL,
   day DATE NOT NULL,
   quantity DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+  desired_quantity DOUBLE PRECISION CHECK (desired_quantity >= 0),
   spent NUMERIC(14, 2) NOT NULL DEFAULT 0 CHECK (spent >= 0),
   occupants INTEGER NOT NULL DEFAULT 0 CHECK (occupants >= 0),
   consumers INTEGER DEFAULT 0 CHECK (consumers >= 0),
@@ -498,6 +499,8 @@ CREATE TABLE IF NOT EXISTS residence_consumption (
 
 ALTER TABLE residence_consumption
   ADD COLUMN IF NOT EXISTS consumers INTEGER;
+ALTER TABLE residence_consumption
+  ADD COLUMN IF NOT EXISTS desired_quantity DOUBLE PRECISION;
 ALTER TABLE residence_consumption
   ALTER COLUMN consumers SET DEFAULT 0;
 DO $$
@@ -512,6 +515,55 @@ BEGIN
       ADD CONSTRAINT residence_consumption_consumers_check CHECK (consumers >= 0);
   END IF;
 END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'public.residence_consumption'::regclass
+      AND conname = 'residence_consumption_desired_quantity_check'
+  ) THEN
+    ALTER TABLE residence_consumption
+      ADD CONSTRAINT residence_consumption_desired_quantity_check
+      CHECK (desired_quantity >= 0);
+  END IF;
+END $$;
+WITH historical_desired_consumption AS (
+  SELECT
+    (transaction_data.value ->> 'residenceId')::uuid AS building_id,
+    transaction_data.value ->> 'productId' AS product_id,
+    shop_history.day,
+    SUM(
+      (transaction_data.value ->> 'expectedDemand')::double precision
+      * (transaction_data.value -> 'candidate' ->> 'resultShare')::double precision
+    ) AS desired_quantity
+  FROM commerce_history shop_history
+  CROSS JOIN LATERAL jsonb_array_elements(
+    CASE
+      WHEN jsonb_typeof(shop_history.diagnostics) = 'array'
+        THEN shop_history.diagnostics
+      ELSE '[]'::jsonb
+    END
+  ) AS transaction_data(value)
+  WHERE shop_history.day > (
+    SELECT (world_time AT TIME ZONE 'UTC')::date - 30
+    FROM world_state WHERE id = 1
+  )
+    AND jsonb_typeof(transaction_data.value -> 'expectedDemand') = 'number'
+    AND jsonb_typeof(transaction_data.value -> 'candidate' -> 'resultShare') = 'number'
+    AND transaction_data.value ->> 'residenceId'
+      ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    AND transaction_data.value ->> 'productId' IS NOT NULL
+  GROUP BY building_id, product_id, shop_history.day
+)
+UPDATE residence_consumption consumption
+SET desired_quantity = historical.desired_quantity
+FROM historical_desired_consumption historical
+WHERE consumption.building_id = historical.building_id
+  AND consumption.product_id = historical.product_id
+  AND consumption.day = historical.day
+  AND consumption.desired_quantity IS NULL;
+
 ALTER TABLE residence_consumption
   ALTER COLUMN spent TYPE NUMERIC(14, 2) USING spent::numeric(14, 2);
 

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
+  calculateCityEconomy,
   getCityZonePlacementError,
   getRequiredCityZone,
   isValidCityWellbeing,
@@ -95,6 +96,22 @@ import { getDairyFarmEfficiency } from './dairy';
 import { GOODS_BASKET_PRODUCT_IDS, parseBasicDemandConfig } from './commerceDemand';
 
 const city = { centerX: 1000, centerY: 1000 };
+
+describe('city economy', () => {
+  it('compares monthly residential spending with the monthly wage mass and floors the result', () => {
+    assert.equal(calculateCityEconomy(301, 10, 2), 50);
+  });
+
+  it('returns zero when there is no monthly wage mass', () => {
+    assert.equal(calculateCityEconomy(301, 0, 2), 0);
+    assert.equal(calculateCityEconomy(0, 10, 0), 0);
+  });
+
+  it('rejects invalid economy inputs', () => {
+    assert.throws(() => calculateCityEconomy(-1, 10, 2), RangeError);
+    assert.throws(() => calculateCityEconomy(100, 10, 2.5), RangeError);
+  });
+});
 
 describe('city minimum wage', () => {
   it('accepts fractional population-weighted wellbeing scores', () => {
@@ -1216,6 +1233,11 @@ describe('shop sales', () => {
       (getPurchaseBenefitCalculation(0.3, 5, 0.03, 0.3, 4).associatedBenefit +
         getPurchaseBenefitCalculation(0.3, 10, 0.03, 0.3, 4).associatedBenefit)
     )) <= 1);
+    const desired = plan.desiredConsumption.find(
+        (entry) => entry.residenceId === home32.id && entry.productId === 'rice',
+    );
+    assert.ok(desired);
+    assert.ok(Math.abs(desired.quantity - 32 * 0.03) < 1e-10);
     assert.ok(plan.purchases.every((purchase) => Number.isInteger(purchase.quantity)));
     assert.ok(
       plan.purchases.every((purchase) => {

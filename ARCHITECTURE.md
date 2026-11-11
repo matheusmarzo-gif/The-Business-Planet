@@ -25,8 +25,10 @@ persistentes e produção para as construções habilitadas; estoques perecívei
 sofrem deterioração diária conforme a validade. Armazéns e silos armazenam e
 transportam produtos; construções produtoras e comerciais podem se ligar a mais
 de um deles.
-População e economia agregadas da cidade ainda não têm dinâmica própria; o
-bem-estar individual das residências é calculado pelas necessidades supridas.
+População e pessoas empregadas são agregadas a partir das residências e dos
+vínculos de trabalho; a economia da cidade compara os gastos residenciais com
+a massa salarial mensal. O bem-estar individual das residências é calculado
+pelas necessidades supridas.
 O jogo também processa rotinas diárias de imigração, emprego, consumo, produção,
 vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor também
 processa mudanças de moradores entre residências concluídas da mesma cidade,
@@ -240,14 +242,19 @@ das cidades legíveis em tamanho fixo na tela.
   aplica o mapeamento de zonas ao posicionar qualquer construção do catálogo.
 - Qualquer jogador autenticado pode consultar cidades. `getCities` calcula a
   população, empregados nos estabelecimentos da cidade, vagas ainda abertas e
-  salário diário médio ponderado por empregados; bem-estar e economia são
-  inicializados em zero. As cidades são republicadas após mudanças diárias de
-  emprego/população.
+  salário diário médio ponderado por empregados, além do bem-estar residencial.
+  A economia é `INTEIRO(100 × gastos residenciais em produtos nos últimos 30
+  dias / (30 × salário médio diário × empregados))`; sem massa salarial, vale
+  zero. As cidades são republicadas após mudanças diárias de emprego/população.
 - O botão **Consumo** da Assembleia abre `GET /api/cities/:id/consumption`.
   A rota agrega as compras das residências da cidade, divide as quantidades pela
-  população total para obter consumo por cidadão e calcula preço médio
-  ponderado por unidades compradas, no último dia e nos últimos 30 dias. O
-  painel reaproveita `ConsumptionPanel`.
+  soma de consumidores para obter médias ponderadas pelo número de consumidores
+  de cada residência, no último dia e nos últimos 30 dias. Mostra quantidade
+  consumida e desejada por pessoa; a quantidade desejada distribui a necessidade
+  diária por loja pela participação de benefício `A_i / ΣA`. Preços são
+  ponderados pelas unidades compradas. Esse total desejado por pessoa é distinto
+  da meta operacional de cada loja, que pode exceder a necessidade. O painel
+  reaproveita `ConsumptionPanel`.
 - Demolir uma Assembleia usa a propriedade `created_by`. Chaves estrangeiras
   removem estradas e residências municipais quando a respectiva cidade é
   apagada.
@@ -720,14 +727,16 @@ mapeamento e verificar todas as curvas.
   cesta básica (arroz, trigo, cevada, milho, batata, peixe, carne vermelha e
   leite) e da cesta intermediária (açúcar, vegetais, sal e especiarias) das
   00:00 são gravadas em
-  `residence_consumption (building_id, product_id, day, quantity, spent,
-  occupants)` (cascata). `GET /api/residential-buildings/:id/consumption`
-  devolve por produto o consumo por pessoa no último dia e a média diária por
-  pessoa nos últimos 30 dias, além do preço médio pago (dia e mês). O painel
-  `ConsumptionPanel` abre pelo botão "Ver consumo da casa" (residências concluídas).
-  A rota da cidade agrega os mesmos registros para todas as casas municipais,
-  divide pelo total atual de moradores para obter a média diária por cidadão e
-  pondera os preços pelas unidades compradas.
+  `residence_consumption (building_id, product_id, day, quantity,
+  desired_quantity, spent, occupants, consumers)` (cascata). A quantidade
+  desejada é gravada separadamente da compra efetiva e pode ser reconstruída
+  para históricos recentes a partir dos diagnósticos comerciais. As rotas
+  `GET /api/residential-buildings/:id/consumption` e
+  `GET /api/cities/:id/consumption` retornam valores realizados e desejados por
+  pessoa no último dia e como média diária nos últimos 30 dias. Residências
+  agregadas na cidade são ponderadas pelo número de consumidores em cada dia;
+  os períodos anteriores à disponibilidade de dados desejados aparecem como
+  indisponíveis. Preços médios continuam ponderados pelas unidades compradas.
 - Pesqueiro e lojas de peixes/leite/açúcar/vegetais/sal/especiarias (`fishery`,
   `shop_fish`, `shop_milk`, `shop_sugar`, `shop_vegetables`, `shop_salt`,
   `shop_spices`):
@@ -917,7 +926,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/me` | Autenticado | Retorna se o usuário é master. |
 | `GET /api/performance-logs` | Autenticado | Retorna até 100 medições recentes de etapas globais, armazenadas no Redis por até sete dias. |
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
-| `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo médio por cidadão da cidade e preço médio ponderado, no último dia e nos últimos 30 dias. |
+| `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo e desejo médios por consumidor da cidade, ponderados pelas residências, além do preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira sem saldo prévio com C$ 25.000 (idempotente), preserva saldos existentes e retorna `{ balance }`. |
 | `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. A aba comercial agrega unidades vendidas/perdidas e calcula receita líquida estimada com custos médios persistidos no histórico diário, incluindo salários. |
 | `PUT /api/residential-buildings/:id/farm-automation` | Dono da fazenda agrícola concluída | Valida e salva meses de replantio e limites de trabalhadores por fase; desativar mantém as preferências e o ciclo atual, mas interrompe novos plantios automáticos. |

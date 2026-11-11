@@ -64,6 +64,35 @@ export function isValidCityWellbeing(value: unknown): value is number {
   );
 }
 
+export function calculateCityEconomy(
+  monthlySpending: number,
+  averageDailyWage: number,
+  employed: number,
+): number {
+  if (
+    !Number.isFinite(monthlySpending) ||
+    monthlySpending < 0 ||
+    !Number.isFinite(averageDailyWage) ||
+    averageDailyWage < 0 ||
+    !Number.isSafeInteger(employed) ||
+    employed < 0
+  ) {
+    throw new RangeError('Os valores usados para calcular a economia da cidade são inválidos.');
+  }
+
+  const monthlyPayroll = 30 * averageDailyWage * employed;
+  if (!Number.isFinite(monthlyPayroll)) {
+    throw new RangeError('A massa salarial mensal da cidade excede o intervalo seguro.');
+  }
+  if (monthlyPayroll === 0) return 0;
+
+  const economy = Math.floor((100 * monthlySpending) / monthlyPayroll);
+  if (!Number.isSafeInteger(economy)) {
+    throw new RangeError('O índice de economia da cidade excede o intervalo seguro.');
+  }
+  return economy;
+}
+
 export function parseCityMinimumWage(value: unknown): number | null {
   if (
     !isCurrencyAmount(value) ||

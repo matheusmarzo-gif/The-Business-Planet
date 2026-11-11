@@ -274,9 +274,11 @@ os limites do mapa, e o servidor valida essas regras antes de salvar.
 Clique na Assembleia para consultar os dados da cidade; a conta master também
 pode editar o nome. O painel mostra população, pessoas empregadas, vagas de
 emprego ainda abertas e salário médio diário dos empregados. O botão **Consumo**
-abre o consumo médio por cidadão no último dia e nos últimos 30 dias, com o
-preço médio pago por produto. O rótulo da cidade mantém tamanho legível mesmo
-ao mudar o zoom. Bem-estar e economia começam em zero.
+abre o consumo médio por pessoa no último dia e nos últimos 30 dias, com as
+quantidades consumidas e desejadas por produto e o preço médio pago. A economia
+é `INTEIRO(100 × gastos residenciais com produtos nos últimos 30 dias /
+(30 × salário médio diário × pessoas empregadas))`; sem massa salarial, vale
+zero. O rótulo da cidade mantém tamanho legível mesmo ao mudar o zoom.
 Na janela da Assembleia, a conta master pode abrir **Configurar áreas urbanas
 e rurais** e arrastar no mapa para desenhar vários retângulos por tipo. Cada
 região precisa ficar dentro dos 303 × 303 tiles municipais. Regiões do mesmo
@@ -869,15 +871,20 @@ e tem eficiência sazonal de 100%, 80%, 60% e 40%. A Fazenda de Cacau exige
 e tem eficiência sazonal de 100%, 90%, 70% e 50%. Ambas armazenam a colheita
 no próprio estoque e transferem o excedente para o armazém ligado.
 
-**Consumo:** em residências concluídas, **Ver consumo da casa** mostra o consumo
-por pessoa de todos os produtos das cestas básica (arroz, trigo, cevada, milho,
+**Consumo:** em residências concluídas, **Ver consumo da casa** mostra por
+pessoa a quantidade consumida e, entre parênteses, a quantidade desejada de
+todos os produtos das cestas básica (arroz, trigo, cevada, milho,
 batata, peixe, carne vermelha e leite), intermediária (açúcar, vegetais, sal e
-especiarias) e avançada (pão, queijo, frutas e chocolate) no
+especiarias), avançada (pão, queijo, frutas e chocolate) e básica de bens
+(roupas, móveis, utilitários e vidro) no
 último dia e a média diária por pessoa nos últimos 30 dias, além do preço médio
 pago no dia e no mês. No painel da cidade, **Consumo**
-mostra esses mesmos dados agregados para todos os cidadãos: as quantidades
-compradas pelas residências da cidade são divididas pela população total, e os
-preços médios são ponderados pelas unidades compradas.
+mostra esses mesmos dados agregados, ponderando as médias pelo número de
+consumidores de cada residência. A quantidade desejada é repartida entre lojas
+que vendem o produto conforme a participação de benefício de cada uma
+(`necessidade básica × A_i / ΣA`); esse total por pessoa é distinto da meta
+operacional de cada loja, que pode exceder a necessidade. Quando os dados
+históricos de desejo ainda não existem, o valor aparece como indisponível.
 
 Use **Produtos** na barra inferior para consultar os 35 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.

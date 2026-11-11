@@ -1832,9 +1832,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         body: JSON.stringify({ zones }),
       });
       setCities((current) =>
-        current.map((item) => (item.id === updated.id ? updated : item)),
+        current.map((item) =>
+          item.id === updated.id ? { ...updated, economy: item.economy } : item,
+        ),
       );
-      setSelectedCity((current) => (current?.id === updated.id ? updated : current));
+      setSelectedCity((current) =>
+        current?.id === updated.id
+          ? { ...updated, economy: current.economy }
+          : current,
+      );
     } catch (error) {
       setZoneEditorError(error instanceof Error ? error.message : 'Não foi possível salvar as regiões.');
     } finally {

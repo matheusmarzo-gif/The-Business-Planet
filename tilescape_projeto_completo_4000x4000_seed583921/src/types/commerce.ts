@@ -355,6 +355,11 @@ export function isCommerceDiagnosticsUpdate(value: unknown): value is CommerceDi
 export interface StoreSalesPlan {
   purchases: StorePurchase[];
   transactionsByShop: Map<string, ShopResidenceTransaction[]>;
+  desiredConsumption: {
+    residenceId: string;
+    productId: string;
+    quantity: number;
+  }[];
 }
 
 export interface ShopDailyFinancials {
@@ -1086,6 +1091,7 @@ export function planShopSalesDetailed(
   const remainingStock = new Map(shops.map((shop) => [shop.id, shop.stock]));
   const remainingCapacity = new Map(shops.map((shop) => [shop.id, shop.capacity]));
   const purchases: StorePurchase[] = [];
+  const desiredConsumption: StoreSalesPlan['desiredConsumption'] = [];
   const transactionsByShop = new Map<string, ShopResidenceTransaction[]>(
     shops.map((shop) => [shop.id, []]),
   );
@@ -1191,6 +1197,14 @@ export function planShopSalesDetailed(
       }
 
       const eligible = candidates.filter((candidate) => candidate.resultShare > 0);
+      desiredConsumption.push({
+        residenceId: residence.id,
+        productId,
+        quantity:
+          residence.consumers *
+          basicNeedPerPerson *
+          candidates.reduce((total, candidate) => total + candidate.resultShare, 0),
+      });
       if (eligible.length > 0) {
         let allocated = 0;
         const fractions = eligible
@@ -1325,5 +1339,5 @@ export function planShopSalesDetailed(
       }
     }
   }
-  return { purchases, transactionsByShop };
+  return { purchases, transactionsByShop, desiredConsumption };
 }

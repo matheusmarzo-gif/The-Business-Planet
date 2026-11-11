@@ -398,6 +398,7 @@ CREATE TABLE IF NOT EXISTS commerce_history (
   units_lost INTEGER NOT NULL DEFAULT 0 CHECK (units_lost >= 0),
   average_unit_cost NUMERIC(14, 6) CHECK (average_unit_cost >= 0),
   sale_price NUMERIC(12, 2) NOT NULL CHECK (sale_price >= 0.01),
+  diagnostics JSONB,
   PRIMARY KEY (building_id, day)
 );
 
@@ -405,6 +406,7 @@ ALTER TABLE commerce_history
   DROP CONSTRAINT IF EXISTS commerce_history_sale_price_check,
   ADD COLUMN IF NOT EXISTS units_lost INTEGER NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS average_unit_cost NUMERIC(14, 6),
+  ADD COLUMN IF NOT EXISTS diagnostics JSONB,
   ALTER COLUMN employee_expense TYPE NUMERIC(14, 2) USING employee_expense::numeric(14, 2),
   ALTER COLUMN product_expense TYPE NUMERIC(14, 2) USING product_expense::numeric(14, 2),
   ALTER COLUMN sale_price TYPE NUMERIC(12, 2) USING sale_price::numeric(12, 2),

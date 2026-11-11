@@ -786,11 +786,10 @@ aparecem fora do custo de referência correspondente. Também mostra preço méd
 do produto, `Pf`, `w`, `q`, benefícios de
 erro/ideal/associado, participação e número de moradores alocados, demanda,
 estoque/capacidade e resultado. Os subtotais da cesta são exibidos com maior
-precisão, sem arredondamento intermediário. O cálculo é enviado ao dono em
-tempo real e salvo somente no
-armazenamento local do navegador por até 30 dias; o navegador precisa estar
-conectado quando as vendas forem processadas. Se estiver offline, o cálculo
-daquele dia não será salvo nesse navegador.
+precisão, sem arredondamento intermediário. Os cálculos são persistidos no
+servidor e carregados ao abrir o histórico; dias anteriores à implantação podem
+estar disponíveis somente no cache local de navegadores que estavam conectados
+quando as vendas foram processadas.
 O painel também mostra funcionários atuais,
 desejados e vagas; nas residências, as pessoas empregadas. Nos painéis de
 construções produtivas, uma descrição antes

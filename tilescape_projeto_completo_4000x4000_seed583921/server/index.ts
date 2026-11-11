@@ -88,7 +88,6 @@ import {
   type JobAssignment,
 } from '../src/types/employment.js';
 import {
-  isCommerceDiagnosticsUpdate,
   getCityProductAveragePrices,
   getInitialShopPrice,
   getShopDailyFinancials,
@@ -97,7 +96,7 @@ import {
   parsePrice,
   planShopSalesDetailed,
   type CityProductSale,
-  type CommerceDiagnosticsUpdate,
+  type ShopResidenceTransaction,
 } from '../src/types/commerce.js';
 import {
   nextEfficiencyPenalty,
@@ -184,7 +183,6 @@ const CLOCK_LEADER_KEY = 'valdora:clock:leader';
 const PRESENCE_KEY = 'valdora:presence';
 const SNAPSHOT_CHANNEL = 'valdora:world:snapshots';
 const CITIES_CHANNEL = 'valdora:world:cities';
-const COMMERCE_DIAGNOSTICS_CHANNEL = 'valdora:world:commerce-diagnostics';
 const PERFORMANCE_LOGS_KEY = 'valdora:world:performance-logs';
 const PERFORMANCE_LOG_LIMIT = 100;
 const PERFORMANCE_LOG_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -585,10 +583,6 @@ async function measurePerformanceStage<T>(
 interface AuthConfig {
   jwks: ReturnType<typeof createRemoteJWKSet>;
   issuer: string;
-}
-
-interface PendingCommerceDiagnostics extends CommerceDiagnosticsUpdate {
-  ownerId: string;
 }
 
 interface CityAssembly {
@@ -1105,35 +1099,6 @@ function deliverCities(message: string) {
       );
       client.send(payload);
       recordWebSocketMessage('worldUpdate', payload);
-    }
-  }
-}
-
-function deliverCommerceDiagnostics(message: string) {
-  let update: unknown;
-  try {
-    update = JSON.parse(message);
-  } catch (error) {
-    console.error('Não foi possível interpretar o cálculo da demanda recebido pelo Redis:', error);
-    return;
-  }
-  if (
-    typeof update !== 'object' ||
-    update === null ||
-    !isCommerceDiagnosticsUpdate(update) ||
-    !('ownerId' in update) ||
-    typeof update.ownerId !== 'string'
-  ) {
-    console.error('O Redis publicou um cálculo da demanda inválido.');
-    return;
-  }
-
-  const { ownerId, ...diagnostics } = update as PendingCommerceDiagnostics;
-  const payload = JSON.stringify(diagnostics);
-  for (const client of clients) {
-    if (client.readyState === WebSocket.OPEN && websocketUsers.get(client) === ownerId) {
-      client.send(payload);
-      recordWebSocketMessage('commerceDiagnostics', payload);
     }
   }
 }
@@ -2168,7 +2133,6 @@ async function logProductionBatch(
 // Às 12:00 distribui os trabalhadores e às 00:00 cobra a folha de pagamento dos donos.
 async function runDailyEmployment(): Promise<boolean> {
   const client = await pool.connect();
-  const pendingCommerceDiagnostics: PendingCommerceDiagnostics[] = [];
   try {
     await client.query('BEGIN');
     const lockStartedAt = performance.now();
@@ -2472,8 +2436,7 @@ async function runDailyEmployment(): Promise<boolean> {
         }
       }, 0, true);
       try {
-      const salesDiagnostics: PendingCommerceDiagnostics[] = [];
-      const salesStageSucceeded = await runStage('vendas', async () => {
+      await runStage('vendas', async () => {
       // Vendas da Cesta Básica: capacidade diária vem dos Work Points das lojas.
       const wageOf = new Map(workplaces.map((row) => [row.id, row.wage]));
       const employedResidents = new Map<string, number>();
@@ -2763,6 +2726,7 @@ async function runDailyEmployment(): Promise<boolean> {
         return {
           id: shop.id,
           averageUnitCost: warehouseAveragePrices.get(`${shop.cityId}\u0000${productId}`) ?? null,
+          diagnostics: salesPlan.transactionsByShop.get(shop.id) ?? [],
           ...getShopDailyFinancials(shop.wage, shop.workers, quantity, shop.price),
         };
       });
@@ -2771,16 +2735,16 @@ async function runDailyEmployment(): Promise<boolean> {
         await client.query(
           `INSERT INTO commerce_history
              (building_id, day, employee_expense, product_expense, units_sold,
-              average_unit_cost, sale_price)
+              average_unit_cost, sale_price, diagnostics)
            SELECT batch.building_id, $1::date, batch.employee_expense,
                   batch.product_expense, batch.units_sold,
-                  batch.average_unit_cost, batch.sale_price
+                  batch.average_unit_cost, batch.sale_price, batch.diagnostics
            FROM UNNEST(
              $2::uuid[], $3::numeric[], $4::numeric[],
-             $5::integer[], $6::numeric[], $7::numeric[]
+             $5::integer[], $6::numeric[], $7::numeric[], $8::jsonb[]
            ) AS batch(
              building_id, employee_expense, product_expense, units_sold,
-             average_unit_cost, sale_price
+             average_unit_cost, sale_price, diagnostics
            )
            WHERE TRUE
            ON CONFLICT (building_id, day) DO UPDATE
@@ -2788,7 +2752,8 @@ async function runDailyEmployment(): Promise<boolean> {
                product_expense = EXCLUDED.product_expense,
                units_sold = EXCLUDED.units_sold,
                average_unit_cost = EXCLUDED.average_unit_cost,
-               sale_price = EXCLUDED.sale_price`,
+               sale_price = EXCLUDED.sale_price,
+               diagnostics = EXCLUDED.diagnostics`,
           [
             state.day,
             commerceHistoryEntries.map((entry) => entry.id),
@@ -2797,24 +2762,15 @@ async function runDailyEmployment(): Promise<boolean> {
             commerceHistoryEntries.map((entry) => entry.unitsSold),
             commerceHistoryEntries.map((entry) => entry.averageUnitCost),
             commerceHistoryEntries.map((entry) => entry.salePrice),
+            commerceHistoryEntries.map((entry) => JSON.stringify(entry.diagnostics)),
           ],
         );
-      }
-      for (const shop of shops) {
-        salesDiagnostics.push({
-          ownerId: shop.ownerId,
-          type: 'commerce_diagnostics',
-          buildingId: shop.id,
-          day: state.day,
-          transactions: salesPlan.transactionsByShop.get(shop.id) ?? [],
-        });
       }
       await client.query(
         'DELETE FROM commerce_history WHERE day < $1::date - $2::integer',
         [state.day, Math.max(34, GAME_RULES.consumption.averagePriceWindowDays)],
       );
       });
-      if (salesStageSucceeded) pendingCommerceDiagnostics.push(...salesDiagnostics);
       await runStage('produção', async () => {
       // Construções produtivas: demanda de Ferramentas, penalidade de eficiência e produção diária.
       const productiveSites = workplaces.filter((site) => {
@@ -3845,19 +3801,6 @@ async function runDailyEmployment(): Promise<boolean> {
     }
 
     await client.query('COMMIT');
-    for (const { ownerId, ...diagnostics } of pendingCommerceDiagnostics) {
-      await redis
-        .publish(
-          COMMERCE_DIAGNOSTICS_CHANNEL,
-          JSON.stringify({ ownerId, ...diagnostics }),
-        )
-        .catch((error: unknown) => {
-          console.error(
-            `Não foi possível enviar o cálculo da demanda da loja ${diagnostics.buildingId} ao navegador:`,
-            error,
-          );
-        });
-    }
     return changed;
   } catch (error) {
     await client.query('ROLLBACK').catch((rollbackError: unknown) => {
@@ -4699,7 +4642,6 @@ async function start() {
   await Promise.all([
     subscriber.subscribe(SNAPSHOT_CHANNEL, (message) => broadcast(message)),
     subscriber.subscribe(CITIES_CHANNEL, deliverCities),
-    subscriber.subscribe(COMMERCE_DIAGNOSTICS_CHANNEL, deliverCommerceDiagnostics),
   ]);
 
   app.use(express.json({ limit: '16kb' }));
@@ -5794,9 +5736,11 @@ async function start() {
         units_sold: number;
         units_lost: number;
         sale_price: number;
+        diagnostics: ShopResidenceTransaction[] | null;
       }>(
         `SELECT to_char(day, 'YYYY-MM-DD') AS day,
-                employee_expense, product_expense, units_sold, units_lost, sale_price
+                employee_expense, product_expense, units_sold, units_lost, sale_price,
+                diagnostics
          FROM commerce_history
          WHERE building_id = $1
          ORDER BY day DESC
@@ -5820,7 +5764,7 @@ async function start() {
             salePrice: row.sale_price,
             revenue,
             profitLoss,
-            transactions: null,
+            transactions: row.diagnostics,
           };
         }),
       });

@@ -639,12 +639,12 @@ mapeamento e verificar todas as curvas.
   participação e moradores alocados, quantidade, estoque/capacidade, resultado
   e decomposição de `RR`, `RR2` e `RR3` por produto (cesta, necessidade diária, preço
   médio, origem do preço, vendas/receita do período e contribuição) são
-  encaminhados via Redis apenas aos WebSockets autenticados do
-  proprietário e ficam somente no `localStorage` do navegador. O navegador
-  precisa estar conectado durante o processamento das vendas para capturar
-  esse diagnóstico; clientes offline não o recebem. A API do histórico retorna
-  somente os dados financeiros, e os diagnósticos locais são combinados no
-  cliente.
+  persistidos em `commerce_history.diagnostics` junto com o resumo financeiro.
+  A rota autenticada `GET /api/residential-buildings/:id/commerce-history`
+  verifica a propriedade da loja e devolve esses dados quando o dono abre o
+  histórico. Diagnósticos anteriores à migração podem ser recuperados do cache
+  local legado, mas não podem ser reconstruídos se não estiverem no banco ou no
+  navegador.
 
   ## Configuração editável das regras
 
@@ -682,17 +682,16 @@ mapeamento e verificar todas as curvas.
   média efetiva da área, demanda esperada e arredondada; preço, distância,
   benefício, posição no ranking, estoque/capacidade disponíveis, demanda
   antes/depois, quantidade comprada e resultado da tentativa por loja candidata)
-  são encaminhados via Redis apenas aos WebSockets autenticados do proprietário
-  e ficam somente no `localStorage` do navegador. O navegador precisa estar conectado
-  durante o processamento das vendas para capturar esse diagnóstico; clientes
-  offline não o recebem. A API do histórico retorna somente os dados financeiros,
-  e os diagnósticos locais são combinados no cliente.
+  ficam em `commerce_history.diagnostics` e são consultados sob demanda pela API
+  autenticada ao abrir o histórico da loja. O cache local, atualizado após essa
+  consulta, permanece como fallback para dias anteriores à migração e alimenta
+  a simulação de venda no navegador.
   Receita e lucro/prejuízo são calculados dos dados financeiros.
   Como o abastecimento pelo armazém do mesmo dono é uma transferência interna
   sem cobrança, esse movimento registra C$ 0 de gasto com produto. O histórico
   financeiro conserva no mínimo 35 dias para os cinco períodos semanais e só o dono consulta pela rota de histórico do
-  comércio. Os diagnósticos locais conservam até 30 dias e alimentam a simulação
-  de venda no navegador; a simulação de contratação também usa o snapshot local,
+  comércio. O cache local legado de diagnósticos conserva até 30 dias e alimenta
+  a simulação de venda no navegador; a simulação de contratação também usa o snapshot local,
   sem novas consultas ao servidor. A coluna
   `transaction_details` de instalações anteriores não é mais lida ou atualizada;
   os registros existentes expiram junto com o histórico financeiro.
@@ -928,7 +927,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `PATCH /api/residential-buildings/:id/stock-upgrades` | Dono da construção concluída | Recebe `{ stockKey, direction: "upgrade" \| "downgrade" }`; valida os limites e a propriedade no servidor, cobra o upgrade atomicamente ou impede downgrade que descarte estoque, e publica a capacidade atualizada. |
 | `POST /api/residential-buildings/:id/warehouse/suppliers` | Dono do armazém | Executa compras imediatas do armazém especificado pelo mesmo planejador das rodadas automáticas. |
 | `GET /api/residential-buildings/:id/production-history` | Autenticado | Retorna `{ days: [{ day, workPoints, produced, transported, efficiency }] }` dos últimos 30 dias (tabela `production_history`, gravada às 00:00 pelas etapas de produção, fazendas e transporte; `transported` conta só envios ao armazém). |
-| `GET /api/residential-buildings/:id/commerce-history` | Dono do comércio | Retorna os últimos 30 dias de dados financeiros e unidades perdidas por validade de `commerce_history`; o painel combina a resposta com diagnósticos presentes no armazenamento local do navegador. |
+| `GET /api/residential-buildings/:id/commerce-history` | Dono do comércio | Retorna os últimos 30 dias de dados financeiros, unidades perdidas por validade e diagnósticos diários persistidos em `commerce_history`; o cliente usa cache local somente como fallback para dias anteriores à migração. |
 | `GET /api/master/online-players` | Master | Lista `{ players: [{ id, name, email, connections }] }` a partir da presença no Redis (`userId|uuid`) e de `neon_auth."user"`. |
 | `POST /api/master/time-scale` | Master | `{ timeScale }` validado por `isValidTimeScale` (`src/types/worldClock.ts`: 15, 30, 60, 240); avança o relógio com a velocidade antiga, grava `world_state.time_scale` e republica o snapshot. |
 | `POST /api/master/grant-money` | Master | `{ amount }` (C$ 0,01 a C$ 1.000.000.000, com até duas casas decimais, `parseMasterGrant`) creditado na carteira do próprio Master; retorna `{ balance }`. |

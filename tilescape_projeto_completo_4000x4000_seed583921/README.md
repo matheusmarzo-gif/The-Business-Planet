@@ -751,7 +751,11 @@ diária por pessoa empregada, e `Rf` é a renda média dos trabalhadores da
 residência. As fórmulas de benefício
 e a distinção entre produtos básicos e intermediários estão descritas acima.
 `Dᵢ = √(60 / (60 + dᵢ))`, onde `dᵢ` é a distância entre a residência e a loja.
-Para cada produto, os moradores empregados são divididos entre as lojas
+Para cada produto, as residências são processadas por bem-estar decrescente;
+em caso de empate, a ordem é por ID crescente. Como estoque e capacidade são
+consumidos durante o processamento, uma residência prioritária pode receber
+estoque que já não estará disponível para as seguintes. Os moradores empregados
+são divididos entre as lojas
 elegíveis em até 60 tiles, proporcionalmente ao benefício associado. O
 arredondamento pelo método dos maiores restos mantém o número de consumidores
 inteiro e igual à população empregada da residência quando existe benefício

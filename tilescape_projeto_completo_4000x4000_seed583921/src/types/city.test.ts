@@ -599,7 +599,13 @@ describe('shop sales', () => {
     stock,
     capacity,
   });
-  const home = (id: string, x: number, consumers: number, averageIncome: number) => ({
+  const home = (
+    id: string,
+    x: number,
+    consumers: number,
+    averageIncome: number,
+    wellbeing = 0,
+  ) => ({
     id,
     cityId: 'city-a',
     type: 'house_poor1' as const,
@@ -607,6 +613,7 @@ describe('shop sales', () => {
     y: 0,
     consumers,
     averageIncome,
+    wellbeing,
   });
   const demandByProduct = new Map([
     ['rice', 0.03],
@@ -645,6 +652,26 @@ describe('shop sales', () => {
     assert.ok(transaction);
     assert.equal(transaction.expectedDemand, 2 * 0.03);
     assert.equal(transaction.occupants, 2);
+  });
+
+  it('prioritizes higher-wellbeing residences, breaking ties by ascending ID', () => {
+    const store = shop('rice-shop', 0, 1, 1, 1);
+    const plan = planShopSalesDetailed(
+      [
+        home('a-lower-wellbeing', 0, 1, 100, 40),
+        home('z-higher-wellbeing', 0, 1, 100, 80),
+        home('b-tied-wellbeing', 0, 1, 100, 80),
+      ],
+      [store],
+      demandByProduct,
+      cityPrices('rice', 1),
+      () => 0,
+    );
+
+    assert.deepEqual(
+      plan.purchases.map(({ residenceId }) => residenceId),
+      ['b-tied-wellbeing'],
+    );
   });
 
   it('calculates daily shop revenue and profit from payroll and paid product costs', () => {

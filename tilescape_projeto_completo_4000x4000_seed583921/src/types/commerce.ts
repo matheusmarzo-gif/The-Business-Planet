@@ -50,6 +50,7 @@ export interface SalesResidence {
   y: number;
   consumers: number;
   averageIncome: number;
+  wellbeing: number;
 }
 
 export interface StorePurchase {
@@ -1088,7 +1089,9 @@ export function planShopSalesDetailed(
   const transactionsByShop = new Map<string, ShopResidenceTransaction[]>(
     shops.map((shop) => [shop.id, []]),
   );
-  const sortedResidences = [...residences].sort((a, b) => a.id.localeCompare(b.id));
+  const sortedResidences = [...residences].sort(
+    (a, b) => b.wellbeing - a.wellbeing || a.id.localeCompare(b.id),
+  );
   const basketBreakdownByCity = new Map<string, BasketProductBreakdown[]>();
   for (const residence of sortedResidences) {
     if (!basketBreakdownByCity.has(residence.cityId)) {

@@ -598,6 +598,10 @@ mapeamento e verificar todas as curvas.
   `Dᵢ × ((Rf − Pf − q)/RR_total)^3`. O ideal é
   `(Rf/RR_total − 1/(6 × RR_total) + 1/16)^3` e o associado é
   `(benefício_erro / benefício_ideal)^6`.
+  Para cada produto, as residências são processadas por bem-estar decrescente;
+  empates seguem ID crescente. Como estoque e capacidade remanescentes são
+  atualizados a cada compra, as residências prioritárias podem consumir esses
+  recursos primeiro.
   Os moradores empregados são repartidos entre as lojas do produto em 60 tiles
   na proporção do benefício associado. O método dos maiores restos garante
   alocações inteiras cuja soma é a população empregada da residência quando há

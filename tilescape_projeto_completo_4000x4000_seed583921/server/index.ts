@@ -2188,10 +2188,11 @@ async function runDailyEmployment(): Promise<boolean> {
         price: number;
         stock: number;
         occupants: number;
+        wellbeing: number;
         rent: number;
       }>(
         `SELECT id, created_by, city_id, desired_workers, wage, status, building_type, work_hours_per_day, work_points_done,
-                tile_x, tile_y, price, stock, occupants, rent
+                tile_x, tile_y, price, stock, occupants, wellbeing, rent
          FROM all_buildings`,
       );
       Object.assign(payrollCounts, getPerformanceEntityCounts(workplaces));
@@ -2535,6 +2536,7 @@ async function runDailyEmployment(): Promise<boolean> {
           y: row.tile_y,
           consumers: employedResidents.get(row.id) ?? 0,
           averageIncome: incomeByEmployedResident.get(row.id) ?? 0,
+          wellbeing: row.wellbeing,
         }));
       const populationByResidence = new Map(
         workplaces.map((building) => [building.id, building.occupants]),

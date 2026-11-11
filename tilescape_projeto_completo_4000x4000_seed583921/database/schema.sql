@@ -528,15 +528,17 @@ BEGIN
       CHECK (desired_quantity >= 0);
   END IF;
 END $$;
-WITH historical_desired_consumption AS (
+WITH expanded_diagnostics AS (
   SELECT
-    (transaction_data.value ->> 'residenceId')::uuid AS building_id,
+    CASE
+      WHEN transaction_data.value ->> 'residenceId'
+        ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      THEN (transaction_data.value ->> 'residenceId')::uuid
+    END AS building_id,
     transaction_data.value ->> 'productId' AS product_id,
     shop_history.day,
-    SUM(
-      (transaction_data.value ->> 'expectedDemand')::double precision
-      * (transaction_data.value -> 'candidate' ->> 'resultShare')::double precision
-    ) AS desired_quantity
+    (transaction_data.value ->> 'expectedDemand')::double precision AS expected_demand,
+    (transaction_data.value -> 'candidate' ->> 'resultShare')::double precision AS result_share
   FROM commerce_history shop_history
   CROSS JOIN LATERAL jsonb_array_elements(
     CASE
@@ -554,7 +556,11 @@ WITH historical_desired_consumption AS (
     AND transaction_data.value ->> 'residenceId'
       ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
     AND transaction_data.value ->> 'productId' IS NOT NULL
-  GROUP BY building_id, product_id, shop_history.day
+), historical_desired_consumption AS (
+  SELECT building_id, product_id, day,
+         SUM(expected_demand * result_share) AS desired_quantity
+  FROM expanded_diagnostics
+  GROUP BY building_id, product_id, day
 )
 UPDATE residence_consumption consumption
 SET desired_quantity = historical.desired_quantity

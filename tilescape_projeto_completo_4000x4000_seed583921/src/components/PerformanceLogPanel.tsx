@@ -18,8 +18,11 @@ const dateTime = new Intl.DateTimeFormat('pt-BR', {
   timeStyle: 'medium',
 });
 const trafficHourTime = new Intl.DateTimeFormat('pt-BR', {
-  dateStyle: 'short',
+  year: '2-digit',
+  month: '2-digit',
+  day: '2-digit',
   hour: '2-digit',
+  minute: '2-digit',
   timeZone: 'UTC',
 });
 

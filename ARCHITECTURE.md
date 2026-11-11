@@ -1020,6 +1020,13 @@ Redis exerce três funções:
    autenticados. Os registros incluem duração, tempo acumulado das consultas
    PostgreSQL, espera por lock, quantidade de consultas, contagens de entidades
    e sucesso/falha; não incluem SQL nem dados pessoais.
+5. Hashes Redis por hora registram mensagens WebSocket entregues por categoria
+   (snapshot, atualização completa do mundo e diagnósticos comerciais), bytes
+   UTF-8 do payload, conexões aceitas, reconexões concluídas, tempo acumulado de
+   socket e pico simultâneo amostrado a cada dez segundos. Expiram após oito dias; o endpoint
+   autenticado `/api/performance-logs` retorna as últimas 24 horas junto dos
+   logs existentes. As métricas contam payloads de aplicação, não overhead de
+   WebSocket/TLS ou bytes medidos pelo provedor.
 
 O servidor mede as etapas de alocação de empregos, folha e aluguel, vendas,
 produção, fazendas, transporte, imigração e publicação. O tempo de consulta é
@@ -1031,7 +1038,12 @@ estado atual de cidades, estradas e residências. Atualizações compartilham um
 envelope `{ type: "cities", cities, roads, buildings }`; snapshots contêm hora
 do jogo, hora do servidor, velocidade, mapa e jogadores online.
 `src/game/worldClient.ts` reconecta com atraso exponencial limitado e valida o
-formato básico das mensagens antes de atualizar o React.
+formato básico das mensagens antes de atualizar o React. A URL marca conexões
+aceitas após a primeira como reconexões para a telemetria, sem registrar tokens
+ou IDs de jogadores. O painel **Log** mostra contagens e bytes estimados por
+tipo, conexões simultâneas e horas-socket por hora UTC. Cada aba é uma conexão;
+reconexões registradas são as que completaram a autenticação e o handshake.
+Conexões e tráfego são agregados no Redis entre instâncias.
 Depois das 00:30 UTC do relógio do jogo, o líder publica uma sincronização
 completa desse estado para todos os jogadores conectados. `last_full_world_sync_day`
 em `world_state` registra a publicação por dia; o lock transacional da linha

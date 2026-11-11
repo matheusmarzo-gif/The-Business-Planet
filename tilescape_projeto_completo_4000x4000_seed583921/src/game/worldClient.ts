@@ -132,6 +132,7 @@ export function connectToWorld(
   let reconnectTimer: number | undefined;
   let stopped = false;
   let retryDelay = 1000;
+  let hasConnected = false;
 
   const scheduleReconnect = () => {
     if (stopped) return;
@@ -151,6 +152,7 @@ export function connectToWorld(
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = new URL(`${protocol}//${window.location.host}/ws`);
       url.searchParams.set('token', token);
+      url.searchParams.set('reconnect', hasConnected ? '1' : '0');
       socket = new WebSocket(url);
     } catch (error) {
       console.error('Não foi possível autenticar a conexão com o mundo:', error);
@@ -160,6 +162,7 @@ export function connectToWorld(
     }
 
     socket.addEventListener('open', () => {
+      hasConnected = true;
       retryDelay = 1000;
       onConnectionChange(true);
     });

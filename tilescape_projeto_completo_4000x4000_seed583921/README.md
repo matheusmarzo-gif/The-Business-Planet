@@ -127,6 +127,13 @@ Para verificar a conexão com PostgreSQL e Redis, abra
 `https://<endereco-do-servico>/api/health`. A resposta esperada é
 `{"status":"ok"}`. O mapa e o WebSocket `/ws` exigem uma sessão Neon Auth
 válida; as rotas do mundo verificam os tokens no servidor.
+O painel **Log** apresenta também, a partir da versão implantada, uma janela
+das últimas 24 horas com mensagens WebSocket por categoria, bytes de payload,
+conexões/reconexões, pico simultâneo observado e horas de conexão. A medição de
+bytes considera o conteúdo UTF-8 das mensagens e não inclui o overhead de
+WebSocket, TLS ou transporte; conexões anteriores à implantação não são
+incluídas. Cada aba conta como um socket e o pico é amostrado a cada 10 segundos.
+Compare os horários UTC do painel com o período selecionado no Render.
 Cada tipo de construção de um jogador recebe numeração romana individual
 (por exemplo, Loja de Arroz I e Loja de Arroz II). O nome aparece no painel de
 detalhes. A etiqueta sobre a construção mostra o nome do jogador somente para

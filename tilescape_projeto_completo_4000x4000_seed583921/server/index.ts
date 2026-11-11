@@ -47,6 +47,10 @@ import {
   type ResidenceType,
   type ResidencePlacementError,
 } from '../src/types/residence.js';
+import type {
+  WebSocketTrafficHour,
+  WebSocketTrafficSnapshot,
+} from '../src/types/websocketTraffic.js';
 import {
   getExpectedConstructionCost,
   getStockCapacity,
@@ -184,6 +188,9 @@ const COMMERCE_DIAGNOSTICS_CHANNEL = 'valdora:world:commerce-diagnostics';
 const PERFORMANCE_LOGS_KEY = 'valdora:world:performance-logs';
 const PERFORMANCE_LOG_LIMIT = 100;
 const PERFORMANCE_LOG_TTL_SECONDS = 7 * 24 * 60 * 60;
+const WEBSOCKET_TRAFFIC_KEY_PREFIX = 'valdora:world:websocket-traffic:';
+const WEBSOCKET_TRAFFIC_TTL_SECONDS = 8 * 24 * 60 * 60;
+const WEBSOCKET_TRAFFIC_WINDOW_HOURS = 24;
 const INSTANCE_ID = randomUUID();
 const PRESENCE_TTL_MS = 35_000;
 types.setTypeParser(types.builtins.NUMERIC, (value) => Number(value));
@@ -291,9 +298,200 @@ const pool = new Proxy(rawPool, {
 const redis = createClient({ url: process.env.REDIS_URL ?? 'redis://localhost:6379' });
 const subscriber = redis.duplicate();
 const clients = new Set<WebSocket>();
+const websocketReconnects = new WeakMap<WebSocket, boolean>();
+const websocketTrafficLastAccountedAt = new WeakMap<WebSocket, number>();
+type WebSocketTrafficCounter =
+  | 'connections'
+  | 'reconnections'
+  | 'connectionMilliseconds'
+  | 'snapshotMessages'
+  | 'snapshotPayloadBytes'
+  | 'worldUpdateMessages'
+  | 'worldUpdatePayloadBytes'
+  | 'commerceDiagnosticsMessages'
+  | 'commerceDiagnosticsPayloadBytes';
+interface PendingWebSocketTraffic {
+  counters: Partial<Record<WebSocketTrafficCounter, number>>;
+  peakConcurrentConnections: number;
+}
+const pendingWebSocketTraffic = new Map<string, PendingWebSocketTraffic>();
 const app = express();
 const server = createServer(app);
 const websocketServer = new WebSocketServer({ noServer: true });
+
+function getWebSocketTrafficHourKey(timestamp: number): string {
+  return new Date(timestamp).toISOString().slice(0, 13);
+}
+
+function getPendingWebSocketTraffic(timestamp: number): PendingWebSocketTraffic {
+  const hour = getWebSocketTrafficHourKey(timestamp);
+  let pending = pendingWebSocketTraffic.get(hour);
+  if (!pending) {
+    pending = { counters: {}, peakConcurrentConnections: 0 };
+    pendingWebSocketTraffic.set(hour, pending);
+  }
+  return pending;
+}
+
+function recordWebSocketTrafficCounter(
+  timestamp: number,
+  counter: WebSocketTrafficCounter,
+  amount: number,
+): void {
+  const pending = getPendingWebSocketTraffic(timestamp);
+  pending.counters[counter] = (pending.counters[counter] ?? 0) + amount;
+}
+
+function recordWebSocketMessage(
+  messageType: 'snapshot' | 'worldUpdate' | 'commerceDiagnostics',
+  payload: string,
+): void {
+  const bytes = Buffer.byteLength(payload, 'utf8');
+  const fields = {
+    snapshot: ['snapshotMessages', 'snapshotPayloadBytes'],
+    worldUpdate: ['worldUpdateMessages', 'worldUpdatePayloadBytes'],
+    commerceDiagnostics: ['commerceDiagnosticsMessages', 'commerceDiagnosticsPayloadBytes'],
+  } as const;
+  const [messageCounter, byteCounter] = fields[messageType];
+  const timestamp = Date.now();
+  recordWebSocketTrafficCounter(timestamp, messageCounter, 1);
+  recordWebSocketTrafficCounter(timestamp, byteCounter, bytes);
+}
+
+function accountWebSocketConnectionTime(websocket: WebSocket, timestamp: number): void {
+  const lastAccountedAt = websocketTrafficLastAccountedAt.get(websocket);
+  if (lastAccountedAt === undefined) return;
+
+  let segmentStart = lastAccountedAt;
+  while (segmentStart < timestamp) {
+    const date = new Date(segmentStart);
+    const nextHour = Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      date.getUTCHours() + 1,
+    );
+    const segmentEnd = Math.min(timestamp, nextHour);
+    recordWebSocketTrafficCounter(
+      segmentStart,
+      'connectionMilliseconds',
+      segmentEnd - segmentStart,
+    );
+    segmentStart = segmentEnd;
+  }
+  websocketTrafficLastAccountedAt.set(websocket, timestamp);
+}
+
+async function flushWebSocketTraffic(): Promise<void> {
+  const buckets = [...pendingWebSocketTraffic.entries()];
+  if (buckets.length === 0) return;
+  pendingWebSocketTraffic.clear();
+
+  let peakConnections = 0;
+  try {
+    await redis.zRemRangeByScore(PRESENCE_KEY, '-inf', Date.now());
+    peakConnections = await redis.zCard(PRESENCE_KEY);
+  } catch (error) {
+    console.error('Não foi possível medir conexões WebSocket simultâneas:', error);
+  }
+
+  for (const [hour, pending] of buckets) {
+    const key = `${WEBSOCKET_TRAFFIC_KEY_PREFIX}${hour}`;
+    if (hour === getWebSocketTrafficHourKey(Date.now())) {
+      pending.peakConcurrentConnections = Math.max(
+        pending.peakConcurrentConnections,
+        peakConnections,
+      );
+    }
+    const argumentsList = Object.entries(pending.counters).flatMap(([field, value]) => [
+      field,
+      String(Math.round(value)),
+    ]);
+    argumentsList.push(
+      'peakConcurrentConnections',
+      String(pending.peakConcurrentConnections),
+      String(WEBSOCKET_TRAFFIC_TTL_SECONDS),
+    );
+    try {
+      await redis.eval(
+        `for i = 1, #ARGV - 2, 2 do
+           redis.call('HINCRBY', KEYS[1], ARGV[i], ARGV[i + 1])
+         end
+         local peak = tonumber(ARGV[#ARGV - 1])
+         local current = tonumber(redis.call('HGET', KEYS[1], 'peakConcurrentConnections')) or 0
+         if peak > current then
+           redis.call('HSET', KEYS[1], 'peakConcurrentConnections', peak)
+         end
+         redis.call('EXPIRE', KEYS[1], ARGV[#ARGV])
+         return 1`,
+        { keys: [key], arguments: argumentsList },
+      );
+    } catch (error) {
+      const current = pendingWebSocketTraffic.get(hour);
+      if (current) {
+        for (const [field, value] of Object.entries(pending.counters)) {
+          const counter = field as WebSocketTrafficCounter;
+          current.counters[counter] = (current.counters[counter] ?? 0) + (value ?? 0);
+        }
+        current.peakConcurrentConnections = Math.max(
+          current.peakConcurrentConnections,
+          pending.peakConcurrentConnections,
+        );
+      } else {
+        pendingWebSocketTraffic.set(hour, pending);
+      }
+      console.error('Não foi possível persistir as métricas de tráfego WebSocket:', error);
+    }
+  }
+}
+
+async function getWebSocketTrafficSnapshot(): Promise<WebSocketTrafficSnapshot> {
+  const now = Date.now();
+  const hours = Array.from({ length: WEBSOCKET_TRAFFIC_WINDOW_HOURS }, (_, index) => {
+    const timestamp = now - index * 60 * 60 * 1000;
+    return {
+      timestamp,
+      hour: getWebSocketTrafficHourKey(timestamp),
+      key: `${WEBSOCKET_TRAFFIC_KEY_PREFIX}${getWebSocketTrafficHourKey(timestamp)}`,
+    };
+  }).reverse();
+  const [storedMetrics] = await Promise.all([
+    Promise.all(hours.map(({ key }) => redis.hGetAll(key))),
+    redis.zRemRangeByScore(PRESENCE_KEY, '-inf', now),
+  ]);
+  const activeConnections = await redis.zCard(PRESENCE_KEY);
+  return {
+    activeConnections,
+    hours: hours.map(({ hour }, index): WebSocketTrafficHour => {
+      const metrics = storedMetrics[index];
+      return {
+        hour,
+        connections: Number(metrics.connections ?? 0),
+        reconnections: Number(metrics.reconnections ?? 0),
+        connectionHours: Number(metrics.connectionMilliseconds ?? 0) / 3_600_000,
+        peakConcurrentConnections: Number(metrics.peakConcurrentConnections ?? 0),
+        snapshots: {
+          messages: Number(metrics.snapshotMessages ?? 0),
+          payloadBytes: Number(metrics.snapshotPayloadBytes ?? 0),
+        },
+        worldUpdates: {
+          messages: Number(metrics.worldUpdateMessages ?? 0),
+          payloadBytes: Number(metrics.worldUpdatePayloadBytes ?? 0),
+        },
+        commerceDiagnostics: {
+          messages: Number(metrics.commerceDiagnosticsMessages ?? 0),
+          payloadBytes: Number(metrics.commerceDiagnosticsPayloadBytes ?? 0),
+        },
+      };
+    }),
+  };
+}
+
+const websocketTrafficTimer = setInterval(() => {
+  const now = Date.now();
+  for (const websocket of clients) accountWebSocketConnectionTime(websocket, now);
+  void flushWebSocketTraffic();
+}, 10_000);
 
 function emptyPerformanceCounts(): PerformanceEntityCounts {
   return { residences: 0, workplaces: 0, shops: 0, warehouses: 0 };
@@ -841,7 +1039,10 @@ async function getSnapshot() {
 
 function broadcast(payload: string) {
   for (const client of clients) {
-    if (client.readyState === WebSocket.OPEN) client.send(payload);
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(payload);
+      recordWebSocketMessage('snapshot', payload);
+    }
   }
 }
 
@@ -899,7 +1100,11 @@ function deliverCities(message: string) {
   };
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(createPlayerWorldUpdate(typedUpdate, websocketUsers.get(client))));
+      const payload = JSON.stringify(
+        createPlayerWorldUpdate(typedUpdate, websocketUsers.get(client)),
+      );
+      client.send(payload);
+      recordWebSocketMessage('worldUpdate', payload);
     }
   }
 }
@@ -928,6 +1133,7 @@ function deliverCommerceDiagnostics(message: string) {
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN && websocketUsers.get(client) === ownerId) {
       client.send(payload);
+      recordWebSocketMessage('commerceDiagnostics', payload);
     }
   }
 }
@@ -4936,14 +5142,16 @@ async function start() {
       response.status(401).json({ error: 'unauthorized' });
       return;
     }
-    void redis
-      .lRange(PERFORMANCE_LOGS_KEY, 0, PERFORMANCE_LOG_LIMIT - 1)
-      .then((entries) => {
+    void Promise.all([
+      redis.lRange(PERFORMANCE_LOGS_KEY, 0, PERFORMANCE_LOG_LIMIT - 1),
+      getWebSocketTrafficSnapshot(),
+    ])
+      .then(([entries, websocketTraffic]) => {
         const logs = entries.map((entry) => JSON.parse(entry) as PerformanceLogRecord);
-        response.json({ logs });
+        response.json({ logs, websocketTraffic });
       })
       .catch((error: unknown) => {
-        console.error('Não foi possível consultar os logs de desempenho:', error);
+        console.error('Não foi possível consultar logs e métricas WebSocket:', error);
         response.status(503).json({ error: 'performance_logs_unavailable' });
       });
   });
@@ -7387,6 +7595,7 @@ async function start() {
 
       websocketServer.handleUpgrade(request, socket, head, (websocket) => {
         websocketUsers.set(websocket, wsUserId);
+        websocketReconnects.set(websocket, url.searchParams.get('reconnect') === '1');
         websocketServer.emit('connection', websocket, request);
       });
     })().catch((error: unknown) => {
@@ -7397,6 +7606,12 @@ async function start() {
 
   websocketServer.on('connection', (websocket) => {
     clients.add(websocket);
+    const connectedAt = Date.now();
+    websocketTrafficLastAccountedAt.set(websocket, connectedAt);
+    recordWebSocketTrafficCounter(connectedAt, 'connections', 1);
+    if (websocketReconnects.get(websocket)) {
+      recordWebSocketTrafficCounter(connectedAt, 'reconnections', 1);
+    }
     const presenceId = `${websocketUsers.get(websocket) ?? 'unknown'}|${randomUUID()}`;
     let presenceTimer: NodeJS.Timeout;
 
@@ -7409,18 +7624,22 @@ async function start() {
 
     void registerPresence()
       .then(async () => {
-        websocket.send(JSON.stringify(await getSnapshot()));
+        const snapshotPayload = JSON.stringify(await getSnapshot());
+        websocket.send(snapshotPayload);
+        recordWebSocketMessage('snapshot', snapshotPayload);
         const [cities, roads, buildings] = await Promise.all([
           getCities(),
           getRoadTiles(),
           getResidentialBuildings(),
         ]);
-        websocket.send(JSON.stringify(
+        const worldPayload = JSON.stringify(
           createPlayerWorldUpdate(
             { type: 'cities', cities, roads, buildings },
             websocketUsers.get(websocket),
           ),
-        ));
+        );
+        websocket.send(worldPayload);
+        recordWebSocketMessage('worldUpdate', worldPayload);
         await publishSnapshot();
         presenceTimer = setInterval(() => {
           void registerPresence().catch((error: unknown) => {
@@ -7435,6 +7654,7 @@ async function start() {
       });
 
     websocket.on('close', () => {
+      accountWebSocketConnectionTime(websocket, Date.now());
       clients.delete(websocket);
       clearInterval(presenceTimer);
       void redis
@@ -7474,10 +7694,17 @@ async function start() {
 
   const shutdown = () => {
     clearInterval(clockTimer);
-    websocketServer.close();
-    server.close(() => {
-      void Promise.all([redis.quit(), subscriber.quit(), pool.end()]).then(() => {
-        process.exit(0);
+    clearInterval(websocketTrafficTimer);
+    const disconnectedAt = Date.now();
+    for (const websocket of clients) {
+      accountWebSocketConnectionTime(websocket, disconnectedAt);
+    }
+    void flushWebSocketTraffic().finally(() => {
+      websocketServer.close();
+      server.close(() => {
+        void Promise.all([redis.quit(), subscriber.quit(), pool.end()]).then(() => {
+          process.exit(0);
+        });
       });
     });
   };

@@ -74,6 +74,7 @@ import { allocateWorkers, getDailyWorkPoints } from './types/employment';
 import { PRODUCTS } from './types/product';
 import { getWorkerTechnique } from './types/wellbeing';
 import type { PerformanceLogRecord } from './types/performanceLog';
+import type { WebSocketTrafficSnapshot } from './types/websocketTraffic';
 import {
   calculateResidenceAppealsFromIncome,
   type ResidenceBenefitCalculation,
@@ -435,6 +436,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isPerformanceLogLoading, setIsPerformanceLogLoading] = useState(false);
   const [performanceLogError, setPerformanceLogError] = useState('');
   const [performanceLogs, setPerformanceLogs] = useState<PerformanceLogRecord[]>([]);
+  const [websocketTraffic, setWebsocketTraffic] = useState<WebSocketTrafficSnapshot | null>(null);
   const [isConsumptionLoading, setIsConsumptionLoading] = useState(false);
   const [consumptionError, setConsumptionError] = useState('');
   const [consumption, setConsumption] = useState<Map<string, ProductConsumption>>(new Map());
@@ -799,8 +801,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setIsPerformanceLogLoading(true);
     setPerformanceLogError('');
     try {
-      const result = await cityRequest<{ logs: PerformanceLogRecord[] }>('/api/performance-logs');
+      const result = await cityRequest<{
+        logs: PerformanceLogRecord[];
+        websocketTraffic: WebSocketTrafficSnapshot;
+      }>('/api/performance-logs');
       setPerformanceLogs(result.logs);
+      setWebsocketTraffic(result.websocketTraffic);
     } catch (error) {
       setPerformanceLogError(error instanceof Error ? error.message : 'Não foi possível carregar os logs.');
     } finally {
@@ -2223,6 +2229,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         {isPerformanceLogOpen && (
           <PerformanceLogPanel
             logs={performanceLogs}
+            websocketTraffic={websocketTraffic}
             isLoading={isPerformanceLogLoading}
             error={performanceLogError}
             onRefresh={() => void loadPerformanceLogs()}

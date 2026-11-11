@@ -1237,7 +1237,16 @@ describe('shop sales', () => {
         (entry) => entry.residenceId === home32.id && entry.productId === 'rice',
     );
     assert.ok(desired);
-    assert.ok(Math.abs(desired.quantity - 32 * 0.03) < 1e-10);
+    const effectiveNeedPerPerson = shops.reduce((total, store) => {
+        const transaction = plan.transactionsByShop.get(store.id)?.[0];
+        assert.ok(transaction);
+        return total +
+          (transaction.candidate.resultShare ?? 0) *
+            (transaction.candidate.associatedBenefit ?? 0) *
+            0.03;
+    }, 0);
+    assert.ok(Math.abs(desired.quantity - 32 * effectiveNeedPerPerson) < 1e-10);
+    assert.notEqual(desired.quantity, 32 * 0.03);
     assert.ok(plan.purchases.every((purchase) => Number.isInteger(purchase.quantity)));
     assert.ok(
       plan.purchases.every((purchase) => {

@@ -882,9 +882,13 @@ pago no dia e no mês. No painel da cidade, **Consumo**
 mostra esses mesmos dados agregados, ponderando as médias pelo número de
 consumidores de cada residência. A quantidade desejada é repartida entre lojas
 que vendem o produto conforme a participação de benefício de cada uma
-(`necessidade básica × A_i / ΣA`); esse total por pessoa é distinto da meta
-operacional de cada loja, que pode exceder a necessidade. Quando os dados
-históricos de desejo ainda não existem, o valor aparece como indisponível.
+(`A_i / ΣA`) e a necessidade atendida em cada loja é multiplicada por seu
+benefício. Assim, a demanda efetiva por pessoa é
+`necessidade básica × Σ((A_i / ΣA) × A_i)`. Por exemplo, benefícios 2, 1 e 0,5
+produzem `necessidade básica × 1,5`. A meta operacional de cada loja também
+considera a alocação inteira de moradores e pode diferir ligeiramente por
+arredondamento. Quando os dados históricos de desejo ainda não existem, o valor
+aparece como indisponível.
 
 Use **Produtos** na barra inferior para consultar os 35 produtos especificados,
 com seus ícones, unidade de medida, peso, espaço ocupado e validade padrão.

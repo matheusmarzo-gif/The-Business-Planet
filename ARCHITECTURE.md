@@ -250,8 +250,9 @@ das cidades legíveis em tamanho fixo na tela.
   A rota agrega as compras das residências da cidade, divide as quantidades pela
   soma de consumidores para obter médias ponderadas pelo número de consumidores
   de cada residência, no último dia e nos últimos 30 dias. Mostra quantidade
-  consumida e desejada por pessoa; a quantidade desejada distribui a necessidade
-  diária por loja pela participação de benefício `A_i / ΣA`. Preços são
+  consumida e desejada por   pessoa; a quantidade desejada efetiva por pessoa é a necessidade básica
+  multiplicada pela média ponderada dos benefícios das lojas:
+  `necessidade × Σ((A_i / ΣA) × A_i)`. Preços são
   ponderados pelas unidades compradas. Esse total desejado por pessoa é distinto
   da meta operacional de cada loja, que pode exceder a necessidade. O painel
   reaproveita `ConsumptionPanel`.

@@ -1197,13 +1197,20 @@ export function planShopSalesDetailed(
       }
 
       const eligible = candidates.filter((candidate) => candidate.resultShare > 0);
+      const effectiveNeedPerPerson =
+        basicNeedPerPerson *
+        candidates.reduce(
+          (total, candidate) =>
+            total + candidate.resultShare * candidate.calculation.associatedBenefit,
+          0,
+        );
       desiredConsumption.push({
         residenceId: residence.id,
         productId,
-        quantity:
-          residence.consumers *
-          basicNeedPerPerson *
-          candidates.reduce((total, candidate) => total + candidate.resultShare, 0),
+        quantity: Math.min(
+          MAX_DIAGNOSTIC_VALUE,
+          residence.consumers * effectiveNeedPerPerson,
+        ),
       });
       if (eligible.length > 0) {
         let allocated = 0;

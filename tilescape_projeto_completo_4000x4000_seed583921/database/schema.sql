@@ -538,7 +538,9 @@ WITH expanded_diagnostics AS (
     transaction_data.value ->> 'productId' AS product_id,
     shop_history.day,
     (transaction_data.value ->> 'expectedDemand')::double precision AS expected_demand,
-    (transaction_data.value -> 'candidate' ->> 'resultShare')::double precision AS result_share
+    (transaction_data.value -> 'candidate' ->> 'resultShare')::double precision AS result_share,
+    (transaction_data.value -> 'candidate' ->> 'associatedBenefit')::double precision
+      AS associated_benefit
   FROM commerce_history shop_history
   CROSS JOIN LATERAL jsonb_array_elements(
     CASE
@@ -553,12 +555,13 @@ WITH expanded_diagnostics AS (
   )
     AND jsonb_typeof(transaction_data.value -> 'expectedDemand') = 'number'
     AND jsonb_typeof(transaction_data.value -> 'candidate' -> 'resultShare') = 'number'
+    AND jsonb_typeof(transaction_data.value -> 'candidate' -> 'associatedBenefit') = 'number'
     AND transaction_data.value ->> 'residenceId'
       ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
     AND transaction_data.value ->> 'productId' IS NOT NULL
 ), historical_desired_consumption AS (
   SELECT building_id, product_id, day,
-         SUM(expected_demand * result_share) AS desired_quantity
+         SUM(expected_demand * result_share * associated_benefit) AS desired_quantity
   FROM expanded_diagnostics
   GROUP BY building_id, product_id, day
 )

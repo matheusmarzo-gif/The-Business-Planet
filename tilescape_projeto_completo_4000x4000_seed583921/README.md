@@ -143,10 +143,13 @@ mapa na construção e abre seus detalhes.
 
 Cada push para a branch conectada ao Render pode iniciar uma nova publicação.
 O relógio global e sua persistência ficam no PostgreSQL; o Redis gerencia a
-presença e a distribuição das atualizações em tempo real. Após 00:30 no
-relógio do jogo, o servidor também envia a todos os jogadores conectados uma
-sincronização completa de cidades, estradas e construções, sem recarregar a
-página.
+presença e a distribuição das atualizações em tempo real. Ao conectar, cada
+jogador recebe o estado completo de cidades, estradas e construções. Depois,
+clientes atualizados recebem apenas as entidades alteradas ou removidas; se
+uma atualização ficar fora de sequência, a conexão é refeita para baixar o
+estado completo. O servidor também envia uma sincronização completa diária
+após 00:30 no relógio do jogo, sem recarregar a página. Clientes antigos seguem
+recebendo atualizações completas até serem atualizados.
 
 ## Executar localmente (opcional)
 

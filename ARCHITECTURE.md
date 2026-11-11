@@ -1037,18 +1037,27 @@ medido como duração observada no cliente PostgreSQL; o tempo restante é uma
 diferença aproximada e pode incluir cálculo e outras esperas, não somente CPU.
 
 O WebSocket `/ws` exige JWT. Ao conectar, o servidor envia o snapshot e o
-estado atual de cidades, estradas e residências. Atualizações compartilham um
-envelope `{ type: "cities", cities, roads, buildings }`; snapshots contêm hora
-do jogo, hora do servidor, velocidade, mapa e jogadores online.
-`src/game/worldClient.ts` reconecta com atraso exponencial limitado e valida o
-formato básico das mensagens antes de atualizar o React. A URL marca conexões
-aceitas após a primeira como reconexões para a telemetria, sem registrar tokens
-ou IDs de jogadores. O painel **Log** mostra contagens e bytes estimados por
-tipo, conexões simultâneas e horas-socket por hora UTC. Cada aba é uma conexão;
-reconexões registradas são as que completaram a autenticação e o handshake.
-Conexões e tráfego são agregados no Redis entre instâncias.
+estado completo atual de cidades, estradas e residências. Depois dessa carga
+inicial, clientes compatíveis recebem deltas `{ type: "world_delta", revision,
+cities?, roads?, buildings? }` com entidades inseridas/alteradas e chaves
+removidas; clientes antigos continuam recebendo atualizações completas
+`{ type: "cities", cities, roads, buildings }`. A revisão é sequencial e
+compartilhada via Redis entre instâncias. Se o cliente detectar uma lacuna,
+reconecta para receber um novo estado completo. O servidor usa um lock Redis
+para serializar publicações e cargas iniciais, e não publica deltas quando o
+estado persistido não mudou.
+
+Snapshots contêm hora do jogo, hora do servidor, velocidade, mapa e jogadores
+online. `src/game/worldClient.ts` valida mensagens e reconecta com atraso
+exponencial limitado; `src/GameApp.tsx` aplica os deltas ao estado local. A URL
+marca conexões aceitas após a primeira como reconexões para a telemetria, sem
+registrar tokens ou IDs de jogadores. O painel **Log** mostra contagens e bytes
+estimados por tipo, conexões simultâneas e horas-socket por hora UTC. Cada aba
+é uma conexão; reconexões registradas são as que completaram a autenticação e
+o handshake. Conexões e tráfego são agregados no Redis entre instâncias.
 Depois das 00:30 UTC do relógio do jogo, o líder publica uma sincronização
-completa desse estado para todos os jogadores conectados. `last_full_world_sync_day`
+completa desse estado para todos os jogadores conectados, permitindo reparar
+estado e reiniciar a sequência de revisões diariamente. `last_full_world_sync_day`
 em `world_state` registra a publicação por dia; o lock transacional da linha
 evita duplicatas entre instâncias e a marcação só é gravada após o Pub/Sub ter
 aceitado a mensagem.

@@ -61,6 +61,11 @@ import {
   type StockCapacityUpgradeQuote,
   type StockLevels,
 } from '../src/types/stockCapacity.js';
+import {
+  createWorldDelta,
+  type WorldDelta,
+  type WorldEntities,
+} from '../src/types/worldSync.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
 import { roundCurrency } from '../src/types/currency.js';
 import {
@@ -163,6 +168,7 @@ loadDotEnv({
 
 const PORT = Number(process.env.PORT ?? 3001);
 const websocketUsers = new WeakMap<object, string>();
+const websocketWorldDeltaSupport = new WeakMap<WebSocket, boolean>();
 const MAP = {
   width: WORLD_CONFIG.width,
   height: WORLD_CONFIG.height,
@@ -183,6 +189,10 @@ const CLOCK_LEADER_KEY = 'valdora:clock:leader';
 const PRESENCE_KEY = 'valdora:presence';
 const SNAPSHOT_CHANNEL = 'valdora:world:snapshots';
 const CITIES_CHANNEL = 'valdora:world:cities';
+const WORLD_SYNC_STATE_KEY = 'valdora:world:sync-state';
+const WORLD_SYNC_LOCK_KEY = 'valdora:world:sync-lock';
+const WORLD_SYNC_LOCK_LEASE_SECONDS = 60;
+const WORLD_SYNC_LOCK_WAIT_MS = 90_000;
 const PERFORMANCE_LOGS_KEY = 'valdora:world:performance-logs';
 const PERFORMANCE_LOG_LIMIT = 100;
 const PERFORMANCE_LOG_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -297,6 +307,7 @@ const redis = createClient({ url: process.env.REDIS_URL ?? 'redis://localhost:63
 const subscriber = redis.duplicate();
 const clients = new Set<WebSocket>();
 const websocketReconnects = new WeakMap<WebSocket, boolean>();
+const websocketWorldInitialized = new WeakMap<WebSocket, boolean>();
 const websocketTrafficLastAccountedAt = new WeakMap<WebSocket, number>();
 type WebSocketTrafficCounter =
   | 'connections'
@@ -1041,9 +1052,25 @@ function broadcast(payload: string) {
 }
 
 type WorldResidentialBuilding = ResidentialBuilding & { ownerId: string };
+type FullWorldUpdate = {
+  type: 'cities';
+  revision?: number;
+  cities: CityAssembly[];
+  roads: RoadTile[];
+  buildings: WorldResidentialBuilding[];
+};
+type WorldPublication = {
+  type: 'world_publication';
+  full: FullWorldUpdate;
+  delta: WorldDelta<WorldResidentialBuilding> | null;
+};
+type WorldSyncState = {
+  revision: number;
+  entities: WorldEntities<WorldResidentialBuilding>;
+};
 
 function createPlayerWorldUpdate(
-  update: { type: 'cities'; cities: CityAssembly[]; roads: RoadTile[]; buildings: WorldResidentialBuilding[] },
+  update: FullWorldUpdate,
   userId: string | undefined,
 ) {
   return {
@@ -1055,6 +1082,51 @@ function createPlayerWorldUpdate(
   };
 }
 
+function createPlayerWorldDelta(
+  delta: WorldDelta<WorldResidentialBuilding>,
+  userId: string | undefined,
+): WorldDelta<ResidentialBuilding> {
+  return {
+    type: 'world_delta',
+    revision: delta.revision,
+    ...(delta.cities ? { cities: delta.cities } : {}),
+    ...(delta.roads ? { roads: delta.roads } : {}),
+    ...(delta.buildings
+      ? {
+          buildings: {
+            ...delta.buildings,
+            upsert: delta.buildings.upsert.map(({ ownerId, ...building }) => ({
+              ...building,
+              isOwnedByCurrentUser: ownerId === userId,
+            })),
+          },
+        }
+      : {}),
+  };
+}
+
+function isFullWorldUpdate(value: unknown): value is FullWorldUpdate {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'type' in value &&
+    value.type === 'cities' &&
+    'cities' in value &&
+    Array.isArray(value.cities) &&
+    'roads' in value &&
+    Array.isArray(value.roads) &&
+    'buildings' in value &&
+    Array.isArray(value.buildings) &&
+    value.buildings.every(
+      (building) =>
+        typeof building === 'object' &&
+        building !== null &&
+        'ownerId' in building &&
+        typeof building.ownerId === 'string',
+    )
+  );
+}
+
 function deliverCities(message: string) {
   let update: unknown;
   try {
@@ -1063,42 +1135,61 @@ function deliverCities(message: string) {
     console.error('Não foi possível interpretar a atualização de cidades do Redis:', error);
     return;
   }
-  if (
-    typeof update !== 'object' ||
-    update === null ||
-    !('type' in update) ||
-    update.type !== 'cities' ||
-    !('cities' in update) ||
-    !Array.isArray(update.cities) ||
-    !('roads' in update) ||
-    !Array.isArray(update.roads) ||
-    !('buildings' in update) ||
-    !Array.isArray(update.buildings) ||
-    !update.buildings.every(
-      (building) =>
-        typeof building === 'object' &&
-        building !== null &&
-        'ownerId' in building &&
-        typeof building.ownerId === 'string',
-    )
-  ) {
+  if (typeof update !== 'object' || update === null || !('type' in update)) {
     console.error('O Redis publicou uma atualização de cidades inválida.');
     return;
   }
 
-  const typedUpdate = update as {
-    type: 'cities';
-    cities: CityAssembly[];
-    roads: RoadTile[];
-    buildings: WorldResidentialBuilding[];
-  };
-  for (const client of clients) {
-    if (client.readyState === WebSocket.OPEN) {
+  if ('type' in update && update.type === 'world_publication') {
+    if (
+      !('full' in update) ||
+      !isFullWorldUpdate(update.full) ||
+      !('delta' in update) ||
+      (update.delta !== null &&
+        (typeof update.delta !== 'object' ||
+          update.delta === null ||
+          !('type' in update.delta) ||
+          update.delta.type !== 'world_delta' ||
+          !('revision' in update.delta) ||
+          !Number.isInteger(update.delta.revision)))
+    ) {
+      console.error('O Redis publicou uma sincronização incremental inválida.');
+      return;
+    }
+
+    const publication = update as WorldPublication;
+    for (const client of clients) {
+      if (client.readyState !== WebSocket.OPEN) continue;
+      const sendDelta = Boolean(
+        websocketWorldDeltaSupport.get(client) &&
+          websocketWorldInitialized.get(client) &&
+          publication.delta,
+      );
       const payload = JSON.stringify(
-        createPlayerWorldUpdate(typedUpdate, websocketUsers.get(client)),
+        sendDelta && publication.delta
+          ? createPlayerWorldDelta(publication.delta, websocketUsers.get(client))
+          : createPlayerWorldUpdate(publication.full, websocketUsers.get(client)),
       );
       client.send(payload);
       recordWebSocketMessage('worldUpdate', payload);
+      if (!sendDelta) websocketWorldInitialized.set(client, true);
+    }
+    return;
+  }
+
+  if (!isFullWorldUpdate(update)) {
+    console.error('O Redis publicou uma atualização de cidades inválida.');
+    return;
+  }
+
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      const payload = JSON.stringify(
+        createPlayerWorldUpdate(update, websocketUsers.get(client)),
+      );
+      client.send(payload);
+      recordWebSocketMessage('worldUpdate', payload);
+      websocketWorldInitialized.set(client, false);
     }
   }
 }
@@ -1146,7 +1237,7 @@ async function publishDailyFullWorldStateIfDue(): Promise<void> {
       randomUUID(),
       publicationCounts,
       async () => {
-        Object.assign(publicationCounts, await publishCities());
+        Object.assign(publicationCounts, await publishCities(true));
         await client.query(
           'UPDATE world_state SET last_full_world_sync_day = $1::date WHERE id = 1',
           [state.day],
@@ -1283,14 +1374,184 @@ async function getResidentialBuildings(): Promise<WorldResidentialBuilding[]> {
   }));
 }
 
-async function publishCities(): Promise<PerformanceEntityCounts> {
+async function getWorldEntities(): Promise<WorldEntities<WorldResidentialBuilding>> {
   const [cities, roads, buildings] = await Promise.all([
     getCities(),
     getRoadTiles(),
     getResidentialBuildings(),
   ]);
-  await redis.publish(CITIES_CHANNEL, JSON.stringify({ type: 'cities', cities, roads, buildings }));
-  return getWorldPerformanceEntityCounts(buildings);
+  return { cities, roads, buildings };
+}
+
+async function withWorldSyncLock<Result>(
+  operation: (assertOwned: () => void) => Promise<Result>,
+): Promise<Result> {
+  const token = randomUUID();
+  const deadline = Date.now() + WORLD_SYNC_LOCK_WAIT_MS;
+  let acquired = false;
+  while (Date.now() < deadline) {
+    if (
+      await redis.set(WORLD_SYNC_LOCK_KEY, token, {
+        NX: true,
+        EX: WORLD_SYNC_LOCK_LEASE_SECONDS,
+      })
+    ) {
+      acquired = true;
+      break;
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+  }
+  if (!acquired) {
+    throw new Error('Não foi possível adquirir o bloqueio de sincronização do mundo.');
+  }
+
+  let lockLost = false;
+  const renewTimer = setInterval(() => {
+    void redis
+      .eval(
+        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('expire', KEYS[1], ARGV[2]) else return 0 end",
+        {
+          keys: [WORLD_SYNC_LOCK_KEY],
+          arguments: [token, String(WORLD_SYNC_LOCK_LEASE_SECONDS)],
+        },
+      )
+      .then((renewed) => {
+        if (Number(renewed) !== 1) lockLost = true;
+      })
+      .catch((error: unknown) => {
+        lockLost = true;
+        console.error('Não foi possível renovar o bloqueio de sincronização do mundo:', error);
+      });
+  }, Math.floor((WORLD_SYNC_LOCK_LEASE_SECONDS * 1000) / 3));
+
+  const assertOwned = () => {
+    if (lockLost) {
+      throw new Error('O bloqueio de sincronização do mundo foi perdido.');
+    }
+  };
+  let result!: Result;
+  let operationFailed = false;
+  let operationError: unknown;
+  try {
+    result = await operation(assertOwned);
+    assertOwned();
+  } catch (error) {
+    operationFailed = true;
+    operationError = error;
+  } finally {
+    clearInterval(renewTimer);
+    try {
+      await redis.eval(
+        "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+        { keys: [WORLD_SYNC_LOCK_KEY], arguments: [token] },
+      );
+    } catch (error) {
+      console.error('Não foi possível liberar o bloqueio de sincronização do mundo:', error);
+      if (!operationFailed) {
+        operationFailed = true;
+        operationError = error;
+      }
+    }
+  }
+  if (operationFailed) throw operationError;
+  return result;
+}
+
+function isWorldEntities(value: unknown): value is WorldEntities<WorldResidentialBuilding> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'cities' in value &&
+    Array.isArray(value.cities) &&
+    value.cities.every(
+      (city) =>
+        typeof city === 'object' &&
+        city !== null &&
+        'id' in city &&
+        typeof city.id === 'string',
+    ) &&
+    'roads' in value &&
+    Array.isArray(value.roads) &&
+    value.roads.every(
+      (road) =>
+        typeof road === 'object' &&
+        road !== null &&
+        'x' in road &&
+        Number.isInteger(road.x) &&
+        'y' in road &&
+        Number.isInteger(road.y),
+    ) &&
+    'buildings' in value &&
+    Array.isArray(value.buildings) &&
+    value.buildings.every(
+      (building) =>
+        typeof building === 'object' &&
+        building !== null &&
+        'id' in building &&
+        typeof building.id === 'string' &&
+        'ownerId' in building &&
+        typeof building.ownerId === 'string',
+    )
+  );
+}
+
+function isWorldSyncState(value: unknown): value is WorldSyncState {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'revision' in value &&
+    typeof value.revision === 'number' &&
+    Number.isInteger(value.revision) &&
+    value.revision >= 0 &&
+    'entities' in value &&
+    isWorldEntities(value.entities)
+  );
+}
+
+async function publishCities(forceFull = false): Promise<PerformanceEntityCounts> {
+  return withWorldSyncLock(async (assertOwned) => {
+    const current = await getWorldEntities();
+    assertOwned();
+    const cachedState = await redis.get(WORLD_SYNC_STATE_KEY);
+    let previousState: WorldSyncState | null = null;
+    if (cachedState !== null) {
+      try {
+        const parsed: unknown = JSON.parse(cachedState);
+        if (isWorldSyncState(parsed)) {
+          previousState = parsed;
+        } else {
+          console.error('O estado de sincronização do mundo no Redis está inválido; será recriado.');
+        }
+      } catch (error) {
+        console.error('Não foi possível interpretar o estado de sincronização do mundo no Redis:', error);
+      }
+    }
+
+    const delta = previousState
+      ? createWorldDelta(previousState.entities, current, previousState.revision + 1)
+      : null;
+    const revision = previousState
+      ? previousState.revision + (delta ? 1 : 0)
+      : 1;
+    const sendFull = forceFull || previousState === null;
+    if (!sendFull && delta === null) {
+      return getWorldPerformanceEntityCounts(current.buildings);
+    }
+
+    const publication: WorldPublication = {
+      type: 'world_publication',
+      full: { type: 'cities', revision, ...current },
+      delta: sendFull ? null : delta,
+    };
+    assertOwned();
+    await redis.publish(CITIES_CHANNEL, JSON.stringify(publication));
+    assertOwned();
+    await redis.set(
+      WORLD_SYNC_STATE_KEY,
+      JSON.stringify({ revision, entities: current } satisfies WorldSyncState),
+    );
+    return getWorldPerformanceEntityCounts(current.buildings);
+  });
 }
 
 async function runDailyImmigration(): Promise<boolean> {
@@ -7542,6 +7803,10 @@ async function start() {
       websocketServer.handleUpgrade(request, socket, head, (websocket) => {
         websocketUsers.set(websocket, wsUserId);
         websocketReconnects.set(websocket, url.searchParams.get('reconnect') === '1');
+        websocketWorldDeltaSupport.set(
+          websocket,
+          url.searchParams.get('worldUpdates') === 'delta-v1',
+        );
         websocketServer.emit('connection', websocket, request);
       });
     })().catch((error: unknown) => {
@@ -7552,6 +7817,7 @@ async function start() {
 
   websocketServer.on('connection', (websocket) => {
     clients.add(websocket);
+    websocketWorldInitialized.set(websocket, false);
     const connectedAt = Date.now();
     websocketTrafficLastAccountedAt.set(websocket, connectedAt);
     recordWebSocketTrafficCounter(connectedAt, 'connections', 1);
@@ -7573,19 +7839,31 @@ async function start() {
         const snapshotPayload = JSON.stringify(await getSnapshot());
         websocket.send(snapshotPayload);
         recordWebSocketMessage('snapshot', snapshotPayload);
-        const [cities, roads, buildings] = await Promise.all([
-          getCities(),
-          getRoadTiles(),
-          getResidentialBuildings(),
-        ]);
-        const worldPayload = JSON.stringify(
-          createPlayerWorldUpdate(
-            { type: 'cities', cities, roads, buildings },
-            websocketUsers.get(websocket),
-          ),
-        );
-        websocket.send(worldPayload);
-        recordWebSocketMessage('worldUpdate', worldPayload);
+        await withWorldSyncLock(async (assertOwned) => {
+          const world = await getWorldEntities();
+          const cachedState = await redis.get(WORLD_SYNC_STATE_KEY);
+          let revision = 0;
+          if (cachedState !== null) {
+            try {
+              const parsed: unknown = JSON.parse(cachedState);
+              if (isWorldSyncState(parsed)) {
+                revision = parsed.revision;
+              }
+            } catch (error) {
+              console.error('Não foi possível ler a revisão sincronizada do mundo:', error);
+            }
+          }
+          assertOwned();
+          const worldPayload = JSON.stringify(
+            createPlayerWorldUpdate(
+              { type: 'cities', revision, ...world },
+              websocketUsers.get(websocket),
+            ),
+          );
+          websocket.send(worldPayload);
+          recordWebSocketMessage('worldUpdate', worldPayload);
+          websocketWorldInitialized.set(websocket, true);
+        });
         await publishSnapshot();
         presenceTimer = setInterval(() => {
           void registerPresence().catch((error: unknown) => {

@@ -4,6 +4,7 @@ import type { CityZone } from '../types/city';
 import type { RoadTile } from '../types/road';
 import { getResidenceDefinition, type ResidentialBuilding } from '../types/residence';
 import { isCurrencyAmount } from '../types/currency';
+import type { EntityDelta, WorldDelta } from '../types/worldSync';
 
 export interface WorldSnapshot {
   worldTime: string;
@@ -60,6 +61,56 @@ function isRoadTile(value: unknown): value is RoadTile {
     Number.isInteger(road.x) &&
     Number.isInteger(road.y) &&
     typeof road.cityId === 'string'
+  );
+}
+
+function isEntityDelta<Entity, RemovedKey>(
+  value: unknown,
+  isEntity: (entity: unknown) => entity is Entity,
+  isRemovedKey: (key: unknown) => key is RemovedKey,
+): value is EntityDelta<Entity, RemovedKey> {
+  if (typeof value !== 'object' || value === null) return false;
+  const delta = value as Record<string, unknown>;
+  return (
+    Array.isArray(delta.upsert) &&
+    delta.upsert.every(isEntity) &&
+    Array.isArray(delta.removed) &&
+    delta.removed.every(isRemovedKey)
+  );
+}
+
+function isWorldDelta(value: unknown): value is WorldDelta<ResidentialBuilding> {
+  if (typeof value !== 'object' || value === null) return false;
+  const delta = value as Record<string, unknown>;
+  if (delta.type !== 'world_delta') return false;
+  if (typeof delta.revision !== 'number' || !Number.isInteger(delta.revision) || delta.revision < 1) {
+    return false;
+  }
+  const hasCities = 'cities' in delta;
+  const hasRoads = 'roads' in delta;
+  const hasBuildings = 'buildings' in delta;
+  return (
+    (hasCities || hasRoads || hasBuildings) &&
+    (!hasCities ||
+      isEntityDelta(delta.cities, isCityAssembly, (key): key is string => typeof key === 'string')) &&
+    (!hasRoads ||
+      isEntityDelta(
+        delta.roads,
+        isRoadTile,
+        (key): key is { x: number; y: number } =>
+          typeof key === 'object' &&
+          key !== null &&
+          'x' in key &&
+          Number.isInteger(key.x) &&
+          'y' in key &&
+          Number.isInteger(key.y),
+      )) &&
+    (!hasBuildings ||
+      isEntityDelta(
+        delta.buildings,
+        isResidentialBuilding,
+        (key): key is string => typeof key === 'string',
+      ))
   );
 }
 
@@ -125,12 +176,14 @@ export function connectToWorld(
   onCitiesChange: (cities: CityAssembly[]) => void,
   onRoadsChange: (roads: RoadTile[]) => void,
   onResidentialBuildingsChange: (buildings: ResidentialBuilding[]) => void,
+  onWorldDelta: (delta: WorldDelta<ResidentialBuilding>) => void,
 ): () => void {
   let socket: WebSocket | null = null;
   let reconnectTimer: number | undefined;
   let stopped = false;
   let retryDelay = 1000;
   let hasConnected = false;
+  let worldRevision: number | null = null;
 
   const scheduleReconnect = () => {
     if (stopped) return;
@@ -151,6 +204,7 @@ export function connectToWorld(
       const url = new URL(`${protocol}//${window.location.host}/ws`);
       url.searchParams.set('token', token);
       url.searchParams.set('reconnect', hasConnected ? '1' : '0');
+      url.searchParams.set('worldUpdates', 'delta-v1');
       socket = new WebSocket(url);
     } catch (error) {
       console.error('Não foi possível autenticar a conexão com o mundo:', error);
@@ -167,6 +221,21 @@ export function connectToWorld(
     socket.addEventListener('message', (event) => {
       try {
         const message: unknown = JSON.parse(String(event.data));
+        if (typeof message === 'object' && message !== null && 'type' in message &&
+          message.type === 'world_delta') {
+          if (!isWorldDelta(message)) {
+            console.error('O servidor enviou uma atualização incremental do mundo inválida.');
+            return;
+          }
+          if (worldRevision === null || message.revision !== worldRevision + 1) {
+            console.error('A sequência de atualizações do mundo foi interrompida; reconectando para sincronizar.');
+            socket?.close(4000, 'Sincronização completa necessária');
+            return;
+          }
+          worldRevision = message.revision;
+          onWorldDelta(message);
+          return;
+        }
         if (
           typeof message === 'object' &&
           message !== null &&
@@ -181,6 +250,13 @@ export function connectToWorld(
           (!('buildings' in message) ||
             (Array.isArray(message.buildings) && message.buildings.every(isResidentialBuilding)))
         ) {
+          worldRevision =
+            'revision' in message &&
+            typeof message.revision === 'number' &&
+            Number.isInteger(message.revision) &&
+            message.revision >= 0
+              ? message.revision
+              : null;
           onCitiesChange(
             message.cities.map((city) => ({
               ...city,
@@ -211,6 +287,7 @@ export function connectToWorld(
       onConnectionChange(false);
     });
     socket.addEventListener('close', () => {
+      worldRevision = null;
       onConnectionChange(false);
       scheduleReconnect();
     });

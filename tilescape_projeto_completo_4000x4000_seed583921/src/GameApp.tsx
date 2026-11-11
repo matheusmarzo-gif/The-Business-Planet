@@ -80,6 +80,7 @@ import {
   type ResidenceBenefitCalculation,
 } from './types/residence-relocation';
 import { loadCommerceDiagnostics, saveCommerceDiagnostics } from './utils/commerceDiagnosticsStorage';
+import { applyEntityDelta } from './types/worldSync';
 import { createMapGenerator } from './utils/mapGenerator';
 import { DEFAULT_TILE_LIST } from './utils/tileAssets';
 import { WORLD_CONFIG } from './utils/worldConfig';
@@ -553,6 +554,47 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setCities,
       setRoads,
       setResidentialBuildings,
+      (delta) => {
+        const cityDelta = delta.cities;
+        if (cityDelta) {
+          setCities((current) =>
+            applyEntityDelta(
+              current,
+              {
+                ...cityDelta,
+                upsert: cityDelta.upsert.map((city) => ({
+                  ...city,
+                  zones: city.zones ?? [],
+                })),
+              },
+              (city) => city.id,
+              (cityId) => cityId,
+            ),
+          );
+        }
+        const roadDelta = delta.roads;
+        if (roadDelta) {
+          setRoads((current) =>
+            applyEntityDelta(
+              current,
+              roadDelta,
+              (road) => `${road.x},${road.y}`,
+              ({ x, y }) => `${x},${y}`,
+            ),
+          );
+        }
+        const buildingDelta = delta.buildings;
+        if (buildingDelta) {
+          setResidentialBuildings((current) =>
+            applyEntityDelta(
+              current,
+              buildingDelta,
+              (building) => building.id,
+              (buildingId) => buildingId,
+            ),
+          );
+        }
+      },
     );
   }, [user.email]);
 

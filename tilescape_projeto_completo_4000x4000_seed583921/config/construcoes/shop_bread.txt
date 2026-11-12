@@ -4,7 +4,7 @@
   "requiredZone": "urban",
   "requiresRoad": true,
   "name": "Padaria",
-  "asset": "/buildings/commerce/padaria.png",
+  "asset": "/buildings/commerce/padaria.jxl",
   "width": 2,
   "height": 2,
   "capacity": 0,

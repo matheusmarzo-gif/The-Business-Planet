@@ -4,7 +4,7 @@
     "requiredZone":  "urban",
     "requiresRoad":  true,
     "name":  "Loja de Trigo",
-    "asset":  "/buildings/commerce/loja_trigo.png",
+    "asset":  "/buildings/commerce/loja_trigo.jxl",
     "width":  2,
     "height":  2,
     "capacity":  0,

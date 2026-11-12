@@ -4,7 +4,7 @@
   "requiredZone": "urban",
   "requiresRoad": true,
   "name": "Loja de Roupas",
-  "asset": "/buildings/commerce/loja_roupas.png",
+  "asset": "/buildings/commerce/loja_roupas.jxl",
   "width": 2,
   "height": 2,
   "capacity": 0,

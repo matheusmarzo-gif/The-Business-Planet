@@ -4,7 +4,7 @@
   "requiredZone": "rural",
   "requiresRoad": true,
   "name": "Fábrica de Pães",
-  "asset": "/buildings/industrial/fabrica_paes.png",
+  "asset": "/buildings/industrial/fabrica_paes.jxl",
   "width": 3,
   "height": 3,
   "capacity": 0,

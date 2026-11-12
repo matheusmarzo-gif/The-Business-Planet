@@ -4,7 +4,7 @@
     "requiredZone":  "urban",
     "requiresRoad":  true,
     "name":  "Açougue",
-    "asset":  "/buildings/commerce/loja_acougue.png",
+    "asset":  "/buildings/commerce/loja_acougue.jxl",
     "width":  2,
     "height":  2,
     "capacity":  0,

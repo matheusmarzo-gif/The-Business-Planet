@@ -4,7 +4,7 @@
   "requiredZone": "rural",
   "requiresRoad": true,
   "name": "Moinho",
-  "asset": "/buildings/industrial/moinho.png",
+  "asset": "/buildings/industrial/moinho.jxl",
   "width": 3,
   "height": 3,
   "capacity": 0,

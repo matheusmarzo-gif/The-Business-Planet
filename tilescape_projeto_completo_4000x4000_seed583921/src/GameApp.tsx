@@ -2013,19 +2013,19 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             aria-label={`Materiais nos armazéns próprios a até ${LINK_RADIUS} tiles da área visível: Madeira ${localResources?.wood ?? 'indisponível'}, Pedra ${localResources?.stone ?? 'indisponível'}, Ferro ${localResources?.iron ?? 'indisponível'} e Aço ${localResources?.steel ?? 'indisponível'}`}
           >
             <span title="Madeira nos armazéns próximos">
-              <img src="/products/madeira.png" alt="" />
+              <img src="/products/madeira.jxl" alt="" />
               {localResources ? localResources.wood.toLocaleString('pt-BR') : '—'}
             </span>
             <span title="Pedra nos armazéns próximos">
-              <img src="/products/pedra.png" alt="" />
+              <img src="/products/pedra.jxl" alt="" />
               {localResources ? localResources.stone.toLocaleString('pt-BR') : '—'}
             </span>
             <span title="Ferro nos armazéns próximos">
-              <img src="/products/ferro.png" alt="" />
+              <img src="/products/ferro.jxl" alt="" />
               {localResources ? localResources.iron.toLocaleString('pt-BR') : '—'}
             </span>
             <span title="Aço nos armazéns próximos">
-              <img src="/products/aco.png" alt="" />
+              <img src="/products/aco.jxl" alt="" />
               {localResources ? localResources.steel.toLocaleString('pt-BR') : '—'}
             </span>
           </div>
@@ -2479,11 +2479,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           {activeCategory === 'prefeitura' && user.isMaster ? (
             <>
               <button className="construction-card" type="button" onClick={openNewAssembly}>
-                <img src="/buildings/assembleia.png" alt="" />
+                <img src="/buildings/assembleia.jxl" alt="" />
                 <span><strong>Assembleia</strong><small>Ocupa 3 × 3 tiles · Área municipal 303 × 303</small></span>
               </button>
               <button className="construction-card" type="button" onClick={startRoadPlacement}>
-                <img src="/buildings/roads/grass_dirt1.png?v=11" alt="" />
+                <img src="/buildings/roads/grass_dirt1.jxl?v=12" alt="" />
                 <span><strong>Estrada de Terra</strong><small>Clique e arraste para traçar · Somente em áreas municipais</small></span>
               </button>
             </>

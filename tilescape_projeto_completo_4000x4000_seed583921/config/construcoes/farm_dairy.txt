@@ -4,7 +4,7 @@
     "requiredZone":  "rural",
     "requiresRoad":  true,
     "name":  "Fazenda leiteira",
-    "asset":  "/buildings/farms/fazenda_leiteira.png",
+    "asset":  "/buildings/farms/fazenda_leiteira.jxl",
     "width":  3,
     "height":  3,
     "capacity":  0,

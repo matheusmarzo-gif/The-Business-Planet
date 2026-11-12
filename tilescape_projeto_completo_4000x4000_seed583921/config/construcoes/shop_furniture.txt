@@ -4,7 +4,7 @@
   "requiredZone": "urban",
   "requiresRoad": true,
   "name": "Loja de Móveis",
-  "asset": "/buildings/commerce/loja_moveis.png",
+  "asset": "/buildings/commerce/loja_moveis.jxl",
   "width": 2,
   "height": 2,
   "capacity": 0,

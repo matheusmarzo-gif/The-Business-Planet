@@ -159,8 +159,10 @@ O build do Vite gera `dist/`. `npm start` executa o servidor, que serve `dist/`
 e atende às rotas HTTP e WebSocket na porta definida por `PORT` (padrão local
 3001). O HTML usa `Cache-Control: no-cache` para revalidar a versão publicada;
 arquivos estáticos públicos usam cache de um dia, e bundles JS/CSS com hash de
-conteúdo do Vite usam cache imutável de um ano. O Render pode compilar o cliente
-e hospedar esse processo como Web Service.
+conteúdo do Vite usam cache imutável de um ano. Imagens públicas são JPEG XL
+(`.jxl`), servidas com MIME `image/jxl`; o navegador precisa oferecer suporte a
+esse formato. O Render pode compilar o cliente e hospedar esse processo como Web
+Service.
 
 ## Autenticação e autorização
 

@@ -4,7 +4,7 @@
   "requiredZone": "rural",
   "requiresRoad": true,
   "name": "Fazenda de Ovelha",
-  "asset": "/buildings/farms/fazenda_ovelha.png",
+  "asset": "/buildings/farms/fazenda_ovelha.jxl",
   "width": 4,
   "height": 4,
   "capacity": 0,

@@ -4,7 +4,7 @@
   "requiredZone": "urban",
   "requiresRoad": true,
   "name": "Chocolateria",
-  "asset": "/buildings/commerce/chocolateria.png",
+  "asset": "/buildings/commerce/chocolateria.jxl",
   "width": 2,
   "height": 2,
   "capacity": 0,

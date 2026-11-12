@@ -4,7 +4,7 @@
     "requiredZone":  "rural",
     "requiresRoad":  true,
     "name":  "Coleta de Sal",
-    "asset":  "/buildings/resources/coleta_sal.png",
+    "asset":  "/buildings/resources/coleta_sal.jxl",
     "width":  2,
     "height":  2,
     "capacity":  0,

@@ -4,7 +4,7 @@
     "requiredZone":  "rural",
     "requiresRoad":  true,
     "name":  "Mina de Ferro",
-    "asset":  "/buildings/resources/mina_ferro.png",
+    "asset":  "/buildings/resources/mina_ferro.jxl",
     "width":  3,
     "height":  3,
     "capacity":  0,

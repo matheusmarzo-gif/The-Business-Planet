@@ -24,7 +24,7 @@ const product = (
 ): ProductDefinition => ({
   id,
   name,
-  icon: `/products/${icon}.png`,
+  icon: `/products/${icon}.jxl`,
   category,
   unit,
   weightKg,

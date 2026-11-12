@@ -4,7 +4,7 @@
     "requiredZone":  "rural",
     "requiresRoad":  true,
     "name":  "Fazenda de Milho",
-    "asset":  "/buildings/farms/fazenda_milho.png",
+    "asset":  "/buildings/farms/fazenda_milho.jxl",
     "width":  4,
     "height":  4,
     "capacity":  0,

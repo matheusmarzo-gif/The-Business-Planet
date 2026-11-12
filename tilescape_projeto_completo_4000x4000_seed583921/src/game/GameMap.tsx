@@ -36,10 +36,10 @@ import { isWithinLinkRadius } from '../types/logistics';
 const BASE_TILE_SIZE = 24;
 const MAX_CAMERA_ZOOM = 6;
 const BUILDING_TYPE_LABEL_MIN_ZOOM = 3;
-const ASSEMBLY_ASSET = '/buildings/assembleia.png';
+const ASSEMBLY_ASSET = '/buildings/assembleia.jxl';
 const ROAD_ASSETS = Array.from(
   { length: 11 },
-  (_, index) => `/buildings/roads/grass_dirt${index + 1}.png?v=11`,
+  (_, index) => `/buildings/roads/grass_dirt${index + 1}.jxl?v=12`,
 );
 const textureCache = new Map<string, PIXI.Texture>();
 const clamp = (value: number, min: number, max: number) =>

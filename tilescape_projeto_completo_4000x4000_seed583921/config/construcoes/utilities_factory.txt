@@ -4,7 +4,7 @@
   "requiredZone": "rural",
   "requiresRoad": true,
   "name": "Fábrica de Utilitários",
-  "asset": "/buildings/industrial/fabrica_utilitarios.png",
+  "asset": "/buildings/industrial/fabrica_utilitarios.jxl",
   "width": 5,
   "height": 5,
   "capacity": 0,

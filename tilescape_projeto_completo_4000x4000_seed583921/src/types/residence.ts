@@ -328,7 +328,7 @@ export function parseInputProductSelection(type: ResidenceType, value: unknown):
   return typeof productId === 'string' && selectableProducts.includes(productId) ? productId : null;
 }
 
-export const UNDER_CONSTRUCTION_ASSET = '/buildings/em_construcao.png';
+export const UNDER_CONSTRUCTION_ASSET = '/buildings/em_construcao.jxl';
 
 export interface ResidentialBuilding {
   id: string;

@@ -4,7 +4,7 @@
     "requiredZone":  "rural",
     "requiresRoad":  true,
     "name":  "Fazenda de Batata",
-    "asset":  "/buildings/farms/fazenda_batata.png",
+    "asset":  "/buildings/farms/fazenda_batata.jxl",
     "width":  4,
     "height":  4,
     "capacity":  0,

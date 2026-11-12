@@ -4,7 +4,7 @@
   "requiredZone": "rural",
   "requiresRoad": true,
   "name": "Cava de Areia",
-  "asset": "/buildings/resources/cava_areia.png",
+  "asset": "/buildings/resources/cava_areia.jxl",
   "width": 4,
   "height": 4,
   "capacity": 0,

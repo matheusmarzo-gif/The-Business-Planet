@@ -4,7 +4,7 @@
     "requiredZone":  "urban",
     "requiresRoad":  true,
     "name":  "Carvoaria",
-    "asset":  "/buildings/artisan/carvoaria.png",
+    "asset":  "/buildings/artisan/carvoaria.jxl",
     "width":  3,
     "height":  3,
     "capacity":  0,

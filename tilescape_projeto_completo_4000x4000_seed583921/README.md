@@ -151,6 +151,10 @@ estado completo. O servidor também envia uma sincronização completa diária
 após 00:30 no relógio do jogo, sem recarregar a página. Clientes antigos seguem
 recebendo atualizações completas até serem atualizados.
 
+As imagens do jogo são entregues no formato JPEG XL (`.jxl`) para reduzir a
+transferência. Use um navegador com suporte a JPEG XL; em navegadores sem esse
+suporte, as imagens do mapa e dos produtos podem não aparecer.
+
 ## Executar localmente (opcional)
 
 O Neon fornece o PostgreSQL e o Neon Auth do ambiente local por meio de

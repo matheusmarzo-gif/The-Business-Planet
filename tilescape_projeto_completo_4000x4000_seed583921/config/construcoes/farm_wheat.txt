@@ -4,7 +4,7 @@
     "requiredZone":  "rural",
     "requiresRoad":  true,
     "name":  "Fazenda de Trigo",
-    "asset":  "/buildings/farms/fazenda_trigo.png",
+    "asset":  "/buildings/farms/fazenda_trigo.jxl",
     "width":  4,
     "height":  4,
     "capacity":  0,

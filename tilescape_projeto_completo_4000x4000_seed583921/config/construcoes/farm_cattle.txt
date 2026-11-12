@@ -4,7 +4,7 @@
     "requiredZone":  "rural",
     "requiresRoad":  true,
     "name":  "Fazenda Bovina",
-    "asset":  "/buildings/farms/fazenda_bovina.png",
+    "asset":  "/buildings/farms/fazenda_bovina.jxl",
     "width":  4,
     "height":  4,
     "capacity":  0,

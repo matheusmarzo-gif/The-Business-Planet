@@ -4,7 +4,7 @@
     "requiredZone":  "urban",
     "requiresRoad":  true,
     "name":  "Casa de Engenho",
-    "asset":  "/buildings/artisan/casa_de_engenho.png",
+    "asset":  "/buildings/artisan/casa_de_engenho.jxl",
     "width":  3,
     "height":  3,
     "capacity":  0,

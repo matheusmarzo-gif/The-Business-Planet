@@ -4,7 +4,7 @@
   "requiredZone": "rural",
   "requiresRoad": true,
   "name": "Silo",
-  "asset": "/buildings/industrial/silo.png",
+  "asset": "/buildings/industrial/silo.jxl",
   "width": 4,
   "height": 4,
   "capacity": 0,

@@ -4,7 +4,7 @@
     "requiredZone":  "rural",
     "requiresRoad":  true,
     "name":  "Armazém",
-    "asset":  "/buildings/industrial/armazem.png",
+    "asset":  "/buildings/industrial/armazem.jxl",
     "width":  4,
     "height":  4,
     "capacity":  0,

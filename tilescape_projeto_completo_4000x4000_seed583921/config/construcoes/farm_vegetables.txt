@@ -4,7 +4,7 @@
     "requiredZone":  "rural",
     "requiresRoad":  true,
     "name":  "Fazenda de Vegetais",
-    "asset":  "/buildings/farms/fazenda_vegetais.png",
+    "asset":  "/buildings/farms/fazenda_vegetais.jxl",
     "width":  3,
     "height":  3,
     "capacity":  0,

@@ -1352,7 +1352,7 @@ describe('fazenda leiteira e demanda configurável', () => {
     );
     assert.deepEqual(dairy.cost, { wood: 50, stone: 15 });
     assert.equal(dairy.workPoints, 25000);
-    assert.equal(dairy.asset, '/buildings/farms/fazenda_leiteira.png');
+    assert.equal(dairy.asset, '/buildings/farms/fazenda_leiteira.jxl');
     assert.deepEqual(
       planProduction(
         dairy.production!,
@@ -1509,7 +1509,7 @@ describe('fazenda leiteira e demanda configurável', () => {
     assert.equal(dairyShop.stockCapacity, 120);
     assert.deepEqual(dairyShop.cost, { wood: 10, stone: 5 });
     assert.equal(dairyShop.stockProductId, 'milk');
-    assert.equal(dairyShop.asset, '/buildings/commerce/loja_leite.png');
+    assert.equal(dairyShop.asset, '/buildings/commerce/loja_leite.jxl');
     assert.equal(canLinkToWarehouse('farm_dairy'), true);
     assert.equal(canLinkToWarehouse('shop_milk'), true);
     assert.deepEqual(
@@ -1543,10 +1543,10 @@ describe('fazenda leiteira e demanda configurável', () => {
   it('defines the new food shops with rice-shop construction and stock capacity', () => {
     const riceShop = RESIDENCES.shop_rice;
     const expectedShops = [
-      ['shop_potato', 'potato', 'Loja de Batata', '/buildings/commerce/loja_batata.png'],
-      ['shop_corn', 'corn', 'Loja de Milho', '/buildings/commerce/loja_milho.png'],
-      ['shop_barley', 'barley', 'Loja de Cevada', '/buildings/commerce/loja_cevada.png'],
-      ['shop_wheat', 'wheat', 'Loja de Trigo', '/buildings/commerce/loja_trigo.png'],
+      ['shop_potato', 'potato', 'Loja de Batata', '/buildings/commerce/loja_batata.jxl'],
+      ['shop_corn', 'corn', 'Loja de Milho', '/buildings/commerce/loja_milho.jxl'],
+      ['shop_barley', 'barley', 'Loja de Cevada', '/buildings/commerce/loja_cevada.jxl'],
+      ['shop_wheat', 'wheat', 'Loja de Trigo', '/buildings/commerce/loja_trigo.jxl'],
     ] as const;
     for (const [type, productId, name, asset] of expectedShops) {
       const shop = RESIDENCES[type];
@@ -1571,10 +1571,10 @@ describe('fazenda leiteira e demanda configurável', () => {
 
   it('defines sugar, vegetable, salt, and spice shops with their own capacities and work rates', () => {
     const expectedShops = [
-      ['shop_sugar', 'sugar', 'Loja de Açúcar', '/buildings/commerce/loja_acucar.png', 5, 125],
-      ['shop_vegetables', 'vegetables', 'Loja de Vegetais', '/buildings/commerce/loja_vegetais.png', 25, 20],
-      ['shop_salt', 'salt', 'Loja de Sal', '/buildings/commerce/loja_sal.png', 25, 20],
-      ['shop_spices', 'spices', 'Loja de Especiarias', '/buildings/commerce/loja_especiarias.png', 5, 125],
+      ['shop_sugar', 'sugar', 'Loja de Açúcar', '/buildings/commerce/loja_acucar.jxl', 5, 125],
+      ['shop_vegetables', 'vegetables', 'Loja de Vegetais', '/buildings/commerce/loja_vegetais.jxl', 25, 20],
+      ['shop_salt', 'salt', 'Loja de Sal', '/buildings/commerce/loja_sal.jxl', 25, 20],
+      ['shop_spices', 'spices', 'Loja de Especiarias', '/buildings/commerce/loja_especiarias.jxl', 5, 125],
     ] as const;
     for (const [type, productId, name, asset, stockCapacity, workPointsPerUnit] of expectedShops) {
       const shop = RESIDENCES[type];
@@ -1609,10 +1609,10 @@ describe('fazenda leiteira e demanda configurável', () => {
 
   it('defines and connects the new goods shops', () => {
     const expectedShops = [
-      ['shop_clothing', 'clothing', 'Loja de Roupas', '/buildings/commerce/loja_roupas.png'],
-      ['shop_furniture', 'furniture', 'Loja de Móveis', '/buildings/commerce/loja_moveis.png'],
-      ['shop_utilities', 'utilities', 'Loja de Utilitários', '/buildings/commerce/loja_utilitarios.png'],
-      ['shop_glass', 'glass', 'Vidraçaria', '/buildings/commerce/loja_vidros.png'],
+      ['shop_clothing', 'clothing', 'Loja de Roupas', '/buildings/commerce/loja_roupas.jxl'],
+      ['shop_furniture', 'furniture', 'Loja de Móveis', '/buildings/commerce/loja_moveis.jxl'],
+      ['shop_utilities', 'utilities', 'Loja de Utilitários', '/buildings/commerce/loja_utilitarios.jxl'],
+      ['shop_glass', 'glass', 'Vidraçaria', '/buildings/commerce/loja_vidros.jxl'],
     ] as const;
     for (const [type, productId, name, asset] of expectedShops) {
       const shop = RESIDENCES[type];

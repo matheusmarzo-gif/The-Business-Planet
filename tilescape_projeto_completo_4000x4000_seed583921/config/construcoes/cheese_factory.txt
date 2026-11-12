@@ -4,7 +4,7 @@
   "requiredZone": "rural",
   "requiresRoad": true,
   "name": "Fábrica de Queijo",
-  "asset": "/buildings/industrial/fabrica_queijo.png",
+  "asset": "/buildings/industrial/fabrica_queijo.jxl",
   "width": 3,
   "height": 3,
   "capacity": 0,

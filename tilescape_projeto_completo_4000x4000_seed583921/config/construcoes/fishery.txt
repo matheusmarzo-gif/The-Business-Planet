@@ -4,7 +4,7 @@
     "requiredZone":  "urban",
     "requiresRoad":  true,
     "name":  "Pesqueiro",
-    "asset":  "/buildings/artisan/pesqueiro.png",
+    "asset":  "/buildings/artisan/pesqueiro.jxl",
     "width":  2,
     "height":  2,
     "capacity":  0,

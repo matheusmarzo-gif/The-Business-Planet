@@ -4,7 +4,7 @@
     "requiredZone":  "rural",
     "requiresRoad":  true,
     "name":  "Pedreira",
-    "asset":  "/buildings/resources/pedreira.png",
+    "asset":  "/buildings/resources/pedreira.jxl",
     "width":  2,
     "height":  2,
     "capacity":  0,

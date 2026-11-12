@@ -4,7 +4,7 @@
   "requiredZone": "urban",
   "requiresRoad": true,
   "name": "Loja de Utilitários",
-  "asset": "/buildings/commerce/loja_utilitarios.png",
+  "asset": "/buildings/commerce/loja_utilitarios.jxl",
   "width": 2,
   "height": 2,
   "capacity": 0,

@@ -4,7 +4,7 @@
   "requiredZone": "rural",
   "requiresRoad": true,
   "name": "Fazenda de Algodão",
-  "asset": "/buildings/farms/fazenda_algodao.png",
+  "asset": "/buildings/farms/fazenda_algodao.jxl",
   "width": 4,
   "height": 4,
   "capacity": 0,

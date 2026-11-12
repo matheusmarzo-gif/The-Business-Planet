@@ -4,7 +4,7 @@
   "requiredZone": "rural",
   "requiresRoad": true,
   "name": "Fazenda de Frutas",
-  "asset": "/buildings/farms/fazenda_frutas.png",
+  "asset": "/buildings/farms/fazenda_frutas.jxl",
   "width": 4,
   "height": 4,
   "capacity": 0,

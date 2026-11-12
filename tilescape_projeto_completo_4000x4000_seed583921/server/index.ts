@@ -7867,6 +7867,9 @@ async function start() {
       index: false,
       maxAge: '1d',
       setHeaders: (response, filePath) => {
+        if (filePath.endsWith('.jxl')) {
+          response.setHeader('Content-Type', 'image/jxl');
+        }
         if (/[\\/]assets[\\/].+-[A-Za-z0-9_-]{8,}\.(?:js|css)$/.test(filePath)) {
           response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
         }

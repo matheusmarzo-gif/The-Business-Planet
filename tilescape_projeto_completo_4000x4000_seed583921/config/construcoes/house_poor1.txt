@@ -4,7 +4,7 @@
     "requiredZone":  "urban",
     "requiresRoad":  true,
     "name":  "Residência simples 1",
-    "asset":  "/buildings/residences/house_poor1.png",
+    "asset":  "/buildings/residences/house_poor1.jxl",
     "width":  2,
     "height":  2,
     "capacity":  4,

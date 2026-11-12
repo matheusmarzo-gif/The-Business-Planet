@@ -4,7 +4,7 @@
   "requiredZone": "urban",
   "requiresRoad": true,
   "name": "Frutaria",
-  "asset": "/buildings/commerce/frutaria.png",
+  "asset": "/buildings/commerce/frutaria.jxl",
   "width": 2,
   "height": 2,
   "capacity": 0,

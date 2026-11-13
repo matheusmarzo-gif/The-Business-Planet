@@ -49,6 +49,11 @@ inclusive indústrias, e ordena os edifícios alfabeticamente por nome. Clique
 simples em qualquer construção abre seu painel; a conta Master pode arrastar
 uma construção para movê-la. O endpoint valida novamente a posição, mantém o
 estado da construção e rejeita movimentos que invalidem vínculos com armazéns.
+O Contábil também agrega estoques e movimentações de produtos e estima custos
+unitários por jogador. O custo de mão de obra usa o custo salarial por Work
+Point; matérias-primas usam o custo estimado do dia anterior, e compras entre
+jogadores entram na média ponderada por quantidade. Os históricos de consumo
+industrial e custos são mantidos por 35 dias.
 O schema aplicado na inicialização mantém a constraint
 `all_buildings_building_type_check` sincronizada com todos os tipos do
 catálogo, inclusive em bancos existentes; um teste de domínio verifica essa
@@ -109,8 +114,8 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/types/product.ts` | Catálogo estático dos produtos, unidades, peso, volume e validade padrão. |
 | `src/components/ProductCatalog.tsx` | Interface pesquisável para consultar as fichas de produtos. |
 | `src/components/CommerceHistoryPanel.tsx` | Histórico diário de despesas, vendas e resultado dos comércios. |
-| `src/components/AccountingPanel.tsx` | Relatórios agregados de lojas comerciais, armazéns, residências e produção do jogador autenticado. |
-| `src/types/accounting.ts` | Tipos da resposta da API contábil. |
+| `src/components/AccountingPanel.tsx` | Relatórios agregados de lojas comerciais, armazéns, residências, produção e produtos do jogador autenticado. |
+| `src/types/accounting.ts` | Tipos da resposta contábil e estimadores de custo unitário de produção e aquisição. |
 | `src/components/PerformanceLogPanel.tsx` | Exibição das medições recentes das etapas do processamento diário. |
 | `src/types/performanceLog.ts` | Tipos dos registros de desempenho retornados pela API. |
 | `src/components/CityZoneEditor.tsx` | Editor master das regiões urbanas e rurais de uma cidade. |
@@ -931,7 +936,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo e desejo médios por consumidor da cidade, ponderados pelas residências, além do preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira sem saldo prévio com C$ 25.000 (idempotente), preserva saldos existentes e retorna `{ balance }`. |
-| `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. A aba comercial agrega unidades vendidas/perdidas e calcula receita líquida estimada com custos médios persistidos no histórico diário, incluindo salários. |
+| `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. A aba comercial calcula receita líquida com custos médios diários persistidos; a aba Produto agrega estoque, produção, comércio entre jogadores e consumo residencial/industrial, além do custo unitário estimado. |
 | `PUT /api/residential-buildings/:id/farm-automation` | Dono da fazenda agrícola concluída | Valida e salva meses de replantio e limites de trabalhadores por fase; desativar mantém as preferências e o ciclo atual, mas interrompe novos plantios automáticos. |
 | `PATCH /api/residential-buildings/:id/input-product` | Dono do Moinho concluído | Seleciona trigo, cevada ou milho; descarta o estoque de outro insumo na mesma transação e publica a seleção/estoques. |
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
@@ -1013,6 +1018,16 @@ de sucesso.
   ancoradas no dia atual do jogo e mantém 35 dias de históricos financeiros.
   Valor empresarial e estoque usam preços médios atuais de venda anunciados nos
   armazéns; produtos sem preço anunciado não entram na estimativa.
+- `production_input_history` registra os produtos efetivamente consumidos por
+  construções produtivas e alimenta o consumo industrial da aba **Produto**.
+  `product_cost_history` conserva estimativas unitárias por jogador/produto/dia,
+  e `player_product_costs` guarda o valor mais recente. O custo combina Work
+  Points e salário do dia, insumos avaliados pelo custo do dia anterior e
+  compras externas pelo preço efetivamente pago; produção própria e importações
+  são ponderadas pela quantidade. O uso do dia anterior impede ciclos de
+  dependência no mesmo dia. O histórico começa com esta atualização; períodos
+  anteriores não podem ser reconstruídos. Insumos sem estimativa anterior
+  contribuem como custo zero até que seu próprio custo seja estimado.
 - A tabela `neon_auth."user"` é gerenciada pelo Neon Auth, não pelo esquema do
   jogo.
 

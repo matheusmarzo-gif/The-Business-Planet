@@ -72,9 +72,12 @@ import { roundCurrency } from '../src/types/currency.js';
 import {
   calculateDailyRentRevenue,
   calculateEstimatedShopNetRevenue,
+  estimateBlendedUnitCost,
+  estimateProductionUnitCost,
   getAccountingWeekRange,
   parseAccountingPeriodDays,
   parseAccountingWeekOffset,
+  type ProductUnitCostInput,
 } from '../src/types/accounting.js';
 import {
   isPastDailyWorldRefreshTime,
@@ -137,6 +140,7 @@ import {
   AUTOMATABLE_FARM_TYPES,
   FARM_CROP_TYPES,
   getDailyWorkRatio,
+  getHarvestDay,
   isAutomatableFarmType,
   isFarmCropType,
   parseFarmAutomationSettings,
@@ -186,6 +190,10 @@ const RESIDENCE_BUILDING_TYPES = Object.values(RESIDENCES)
 const PRODUCTION_BUILDING_TYPES = Object.values(RESIDENCES)
   .filter((definition) => Boolean(definition.production))
   .map((definition) => definition.type);
+const PRODUCT_PRODUCER_DEFINITIONS = Object.values(RESIDENCES).filter(
+  (definition) => Boolean(definition.stockProductId && (definition.production || definition.cropRule)),
+);
+const PRODUCT_PRODUCER_TYPES = PRODUCT_PRODUCER_DEFINITIONS.map((definition) => definition.type);
 const CLOCK_LEADER_KEY = 'valdora:clock:leader';
 const PRESENCE_KEY = 'valdora:presence';
 const SNAPSHOT_CHANNEL = 'valdora:world:snapshots';
@@ -2415,6 +2423,241 @@ async function logProductionBatch(
   }
 }
 
+function getProductionWorkPointsPerProductUnit(
+  definition: (typeof RESIDENCES)[ResidenceType],
+): number | null {
+  if (definition.cropRule) {
+    const rule = definition.cropRule;
+    let total = 0;
+    for (let month = 1; month <= 12; month += 1) {
+      const plantedDay = `2024-${String(month).padStart(2, '0')}-15`;
+      const growthDays =
+        (Date.parse(`${getHarvestDay(plantedDay, rule.growthMonths)}T00:00:00.000Z`) -
+          Date.parse(`${plantedDay}T00:00:00.000Z`)) /
+        86_400_000;
+      const plantingFactor = rule.plantingEfficiencyByQuarter[Math.floor((month - 1) / 3)];
+      const expectedYield = rule.baseYield * plantingFactor;
+      if (expectedYield <= 0) continue;
+      total +=
+        (rule.dailyWorkPoints * growthDays) / expectedYield +
+        rule.harvestWorkPointsPerUnit;
+    }
+    return total / 12;
+  }
+  const rule = definition.production;
+  return rule ? rule.workPointsPerUnit / (rule.batchSize ?? 1) : null;
+}
+
+function getConfiguredProductionInputsPerUnit(
+  definition: (typeof RESIDENCES)[ResidenceType],
+): { productId: string; quantity: number }[] {
+  const rule = definition.production;
+  if (!rule) return [];
+  const batchSize = rule.batchSize ?? 1;
+  const quantities = new Map<string, number>();
+  const addInput = (productId: string | undefined, batchQuantity: number | undefined) => {
+    if (productId && batchQuantity && batchQuantity > 0) {
+      quantities.set(productId, (quantities.get(productId) ?? 0) + batchQuantity / batchSize);
+    }
+  };
+  addInput('wood', rule.batchWood);
+  addInput('iron', rule.batchIron);
+  addInput('charcoal', rule.batchCharcoal);
+  addInput('tools', rule.batchTools);
+  addInput(rule.batchStockProductId, rule.batchStockAmount);
+  for (const [productId, quantity] of Object.entries(rule.batchInputs ?? {})) {
+    addInput(productId, quantity);
+  }
+  for (const [productId, quantity] of Object.entries(rule.batchInputRates ?? {})) {
+    addInput(productId, quantity);
+  }
+  return [...quantities].map(([productId, quantity]) => ({ productId, quantity }));
+}
+
+async function recordProductCostEstimates(client: PoolClient, day: string): Promise<void> {
+  const [
+    previousCostResult,
+    producerHistoryResult,
+    productionInputResult,
+    importResult,
+    ownerResult,
+  ] = await Promise.all([
+    client.query<{ user_id: string; product_id: string; unit_cost: string }>(
+      `SELECT DISTINCT ON (user_id, product_id) user_id, product_id, unit_cost::text
+       FROM product_cost_history
+       WHERE day < $1::date
+       ORDER BY user_id, product_id, day DESC`,
+      [day],
+    ),
+    client.query<{
+      id: string;
+      user_id: string;
+      building_type: ResidenceType;
+      produced: number;
+      work_points: number;
+      employee_expense: number;
+    }>(
+      `SELECT building.id, building.created_by AS user_id, building.building_type,
+              history.produced, history.work_points,
+              COALESCE(payroll.employee_expense, 0)::float8 AS employee_expense
+       FROM production_history history
+       JOIN all_buildings building ON building.id = history.building_id
+       LEFT JOIN building_payroll_history payroll
+         ON payroll.building_id = building.id AND payroll.day = history.day
+       WHERE history.day = $1::date
+         AND building.building_type = ANY($2::text[])
+         AND building.status = 'completed'`,
+      [day, PRODUCT_PRODUCER_TYPES],
+    ),
+    client.query<{ building_id: string; product_id: string; quantity: number }>(
+      `SELECT history.building_id, history.product_id, history.quantity
+       FROM production_input_history history
+       JOIN all_buildings building ON building.id = history.building_id
+       WHERE history.day = $1::date
+         AND building.building_type = ANY($2::text[])`,
+      [day, PRODUCT_PRODUCER_TYPES],
+    ),
+    client.query<{
+      user_id: string;
+      product_id: string;
+      quantity: string;
+      expense: string;
+    }>(
+      `SELECT buyer.created_by AS user_id, history.product_id,
+              SUM(history.quantity)::text AS quantity,
+              SUM(history.quantity::numeric * history.unit_price)::text AS expense
+       FROM warehouse_trade_history history
+       JOIN all_buildings buyer ON buyer.id = history.buyer_id
+       JOIN all_buildings seller ON seller.id = history.seller_id
+       WHERE history.day = $1::date
+         AND buyer.created_by <> seller.created_by
+       GROUP BY buyer.created_by, history.product_id`,
+      [day],
+    ),
+    client.query<{ user_id: string }>(
+      'SELECT DISTINCT created_by AS user_id FROM all_buildings',
+    ),
+  ]);
+  const previousCosts = new Map<string, number>(
+    previousCostResult.rows.map((row) => [
+      `${row.user_id}\u0000${row.product_id}`,
+      Number(row.unit_cost),
+    ]),
+  );
+  const inputsByBuilding = new Map<string, { productId: string; quantity: number }[]>();
+  for (const row of productionInputResult.rows) {
+    const inputs = inputsByBuilding.get(row.building_id) ?? [];
+    inputs.push({ productId: row.product_id, quantity: row.quantity });
+    inputsByBuilding.set(row.building_id, inputs);
+  }
+  const productionByProduct = new Map<
+    string,
+    { quantity: number; totalCost: number }
+  >();
+  for (const row of producerHistoryResult.rows) {
+    const definition = RESIDENCES[row.building_type];
+    const productId = definition.stockProductId;
+    if (!productId || row.produced <= 0) continue;
+    const key = `${row.user_id}\u0000${productId}`;
+    const previousCost = previousCosts.get(key) ?? null;
+    const costPerWorkPoint =
+      row.work_points > 0 ? row.employee_expense / row.work_points : null;
+    const workPointsPerUnit = getProductionWorkPointsPerProductUnit(definition);
+    let productionUnitCost = previousCost;
+    if (costPerWorkPoint !== null && workPointsPerUnit !== null) {
+      const recordedInputs = inputsByBuilding.get(row.id);
+      const inputsPerUnit = recordedInputs?.length
+        ? recordedInputs.map((input) => ({
+            quantity: input.quantity / row.produced,
+            unitCost: previousCosts.get(`${row.user_id}\u0000${input.productId}`) ?? null,
+          }))
+        : getConfiguredProductionInputsPerUnit(definition).map((input) => ({
+            quantity: input.quantity,
+            unitCost: previousCosts.get(`${row.user_id}\u0000${input.productId}`) ?? null,
+          }));
+      productionUnitCost = estimateProductionUnitCost(
+        workPointsPerUnit,
+        costPerWorkPoint,
+        inputsPerUnit,
+      );
+    }
+    if (productionUnitCost === null) continue;
+    const production = productionByProduct.get(key) ?? { quantity: 0, totalCost: 0 };
+    production.quantity += row.produced;
+    production.totalCost += row.produced * productionUnitCost;
+    productionByProduct.set(key, production);
+  }
+  const importsByProduct = new Map<
+    string,
+    { quantity: number; expense: number }
+  >();
+  for (const row of importResult.rows) {
+    importsByProduct.set(`${row.user_id}\u0000${row.product_id}`, {
+      quantity: Number(row.quantity),
+      expense: Number(row.expense),
+    });
+  }
+  const owners = new Set(ownerResult.rows.map((row) => row.user_id));
+  for (const row of importResult.rows) owners.add(row.user_id);
+  const entries: { userId: string; productId: string; unitCost: number; sourceQuantity: number }[] =
+    [];
+  for (const userId of owners) {
+    for (const product of PRODUCTS) {
+      const key = `${userId}\u0000${product.id}`;
+      const previousUnitCost = previousCosts.get(key) ?? null;
+      const production = productionByProduct.get(key) ?? { quantity: 0, totalCost: 0 };
+      const imported = importsByProduct.get(key) ?? { quantity: 0, expense: 0 };
+      const estimate = estimateBlendedUnitCost({
+        producedQuantity: production.quantity,
+        productionUnitCost:
+          production.quantity > 0 ? production.totalCost / production.quantity : null,
+        importedQuantity: imported.quantity,
+        importExpense: imported.expense,
+        previousUnitCost,
+      });
+      if (estimate.unitCost === null) continue;
+      entries.push({
+        userId,
+        productId: product.id,
+        unitCost: estimate.unitCost,
+        sourceQuantity: estimate.sourceQuantity,
+      });
+    }
+  }
+  if (entries.length === 0) return;
+  await client.query(
+    `INSERT INTO product_cost_history (user_id, product_id, day, unit_cost, source_quantity)
+     SELECT batch.user_id, batch.product_id, $1::date, batch.unit_cost, batch.source_quantity
+     FROM UNNEST($2::text[], $3::text[], $4::numeric[], $5::double precision[])
+       AS batch(user_id, product_id, unit_cost, source_quantity)
+     ON CONFLICT (user_id, product_id, day) DO UPDATE
+     SET unit_cost = EXCLUDED.unit_cost,
+         source_quantity = EXCLUDED.source_quantity`,
+    [
+      day,
+      entries.map((entry) => entry.userId),
+      entries.map((entry) => entry.productId),
+      entries.map((entry) => entry.unitCost),
+      entries.map((entry) => entry.sourceQuantity),
+    ],
+  );
+  await client.query(
+    `INSERT INTO player_product_costs (user_id, product_id, unit_cost, updated_day)
+     SELECT batch.user_id, batch.product_id, batch.unit_cost, $4::date
+     FROM UNNEST($1::text[], $2::text[], $3::numeric[])
+       AS batch(user_id, product_id, unit_cost)
+     ON CONFLICT (user_id, product_id) DO UPDATE
+     SET unit_cost = EXCLUDED.unit_cost,
+         updated_day = EXCLUDED.updated_day`,
+    [
+      entries.map((entry) => entry.userId),
+      entries.map((entry) => entry.productId),
+      entries.map((entry) => entry.unitCost),
+      day,
+    ],
+  );
+}
+
 // Às 12:00 distribui os trabalhadores e às 00:00 cobra a folha de pagamento dos donos.
 async function runDailyEmployment(): Promise<boolean> {
   const client = await pool.connect();
@@ -2446,10 +2689,12 @@ async function runDailyEmployment(): Promise<boolean> {
     }
 
     let changed = false;
+    let productCostUpdateDue = false;
     const performanceCycleId = randomUUID();
     if (state.last_payroll === null) {
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
     } else if (state.last_payroll < state.day) {
+      productCostUpdateDue = true;
       const payrollCounts = emptyPerformanceCounts();
       const { workplaces, workers, assignmentRows, averageTechniques } = await measurePerformanceStage(
         'folha e aluguel',
@@ -3240,6 +3485,42 @@ async function runDailyEmployment(): Promise<boolean> {
             .filter(([, quantity]) => quantity > 0)
             .map(([productId, quantity]) => ({ id: update.id, productId, quantity })),
         );
+        const productionInputsToLog = new Map<string, number>();
+        const addProductionInput = (buildingId: string, productId: string, quantity: number) => {
+          if (quantity <= 0) return;
+          const key = `${buildingId}\u0000${productId}`;
+          productionInputsToLog.set(key, (productionInputsToLog.get(key) ?? 0) + quantity);
+        };
+        for (const update of productionUpdates) {
+          addProductionInput(update.id, 'tools', update.toolDemand);
+          addProductionInput(update.id, 'wood', update.woodUsed);
+          addProductionInput(update.id, 'iron', update.ironUsed);
+          addProductionInput(update.id, 'charcoal', update.charcoalUsed);
+          addProductionInput(update.id, 'sugarcane', update.sugarcaneUsed);
+          for (const [productId, quantity] of Object.entries(update.inputStocksUsed)) {
+            addProductionInput(update.id, productId, quantity);
+          }
+        }
+        if (productionInputsToLog.size > 0) {
+          const entries = [...productionInputsToLog].map(([key, quantity]) => {
+            const [buildingId, productId] = key.split('\u0000');
+            return { buildingId, productId, quantity };
+          });
+          await client.query(
+            `INSERT INTO production_input_history (building_id, product_id, day, quantity)
+             SELECT batch.building_id, batch.product_id, $1::date, batch.quantity
+             FROM UNNEST($2::uuid[], $3::text[], $4::double precision[])
+               AS batch(building_id, product_id, quantity)
+             ON CONFLICT (building_id, product_id, day) DO UPDATE
+             SET quantity = production_input_history.quantity + EXCLUDED.quantity`,
+            [
+              state.day,
+              entries.map((entry) => entry.buildingId),
+              entries.map((entry) => entry.productId),
+              entries.map((entry) => entry.quantity),
+            ],
+          );
+        }
         if (inputConsumptions.length > 0) {
           const { rowCount } = await client.query(
             `UPDATE building_input_stock stock
@@ -3932,6 +4213,16 @@ async function runDailyEmployment(): Promise<boolean> {
          WHERE day < $1::date - 34`,
         [state.day],
       );
+      await client.query(
+        `DELETE FROM production_input_history
+         WHERE day < $1::date - 34`,
+        [state.day],
+      );
+      await client.query(
+        `DELETE FROM product_cost_history
+         WHERE day < $1::date - 34`,
+        [state.day],
+      );
     }
 
     if (state.hour >= 18 && (state.last_spoilage === null || state.last_spoilage < state.day)) {
@@ -4100,6 +4391,19 @@ async function runDailyEmployment(): Promise<boolean> {
       await applyWarehouseTrades(client, trades, ownerOf, state.day);
       if (trades.length > 0) changed = true;
       await client.query('UPDATE world_state SET last_warehouse_trade_slot = $1 WHERE id = 1', [tradeSlot]);
+      productCostUpdateDue = true;
+    }
+
+    if (productCostUpdateDue) {
+      await client.query('SAVEPOINT product_cost_estimates');
+      try {
+        await recordProductCostEstimates(client, state.day);
+        await client.query('RELEASE SAVEPOINT product_cost_estimates');
+      } catch (costError) {
+        await client.query('ROLLBACK TO SAVEPOINT product_cost_estimates');
+        await client.query('RELEASE SAVEPOINT product_cost_estimates');
+        console.error(`Falha ao atualizar custos estimados dos produtos (${state.day}):`, costError);
+      }
     }
 
     await client.query('COMMIT');
@@ -5028,6 +5332,8 @@ async function start() {
         payrollResult,
         warehouseBuildingsResult,
         productResult,
+        productFlowResult,
+        productCostResult,
         residenceResult,
         productionResult,
         weeklyFinanceResult,
@@ -5121,6 +5427,82 @@ async function start() {
            GROUP BY history.product_id
            ORDER BY history.product_id`,
           [userId, day, periodDays],
+        ),
+        pool.query<{
+          product_id: string;
+          produced_quantity: string;
+          imported_quantity: string;
+          exported_quantity: string;
+          residential_consumption: string;
+          production_input_consumption: string;
+        }>(
+          `WITH product_ids AS (
+             SELECT UNNEST($6::text[]) AS product_id
+           ), production AS (
+             SELECT definition.stock_product_id AS product_id,
+                    SUM(history.produced)::text AS quantity
+             FROM production_history history
+             JOIN all_buildings building ON building.id = history.building_id
+             JOIN UNNEST($4::text[], $5::text[])
+               AS definition(building_type, stock_product_id)
+               ON definition.building_type = building.building_type
+             WHERE building.created_by = $1
+               AND history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date
+             GROUP BY definition.stock_product_id
+           ), trades AS (
+             SELECT history.product_id,
+                    SUM(history.quantity) FILTER (
+                      WHERE buyer.created_by = $1 AND seller.created_by <> $1
+                    )::text AS imported,
+                    SUM(history.quantity) FILTER (
+                      WHERE seller.created_by = $1 AND buyer.created_by <> $1
+                    )::text AS exported
+             FROM warehouse_trade_history history
+             JOIN all_buildings buyer ON buyer.id = history.buyer_id
+             JOIN all_buildings seller ON seller.id = history.seller_id
+             WHERE history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date
+               AND (buyer.created_by = $1 OR seller.created_by = $1)
+             GROUP BY history.product_id
+           ), residential AS (
+             SELECT history.product_id, SUM(history.quantity)::text AS quantity
+             FROM residence_consumption history
+             JOIN all_buildings building ON building.id = history.building_id
+             WHERE building.created_by = $1
+               AND history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date
+             GROUP BY history.product_id
+           ), production_inputs AS (
+             SELECT history.product_id, SUM(history.quantity)::text AS quantity
+             FROM production_input_history history
+             JOIN all_buildings building ON building.id = history.building_id
+             WHERE building.created_by = $1
+               AND history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date
+             GROUP BY history.product_id
+           )
+           SELECT product_ids.product_id,
+                  COALESCE(production.quantity, '0') AS produced_quantity,
+                  COALESCE(trades.imported, '0') AS imported_quantity,
+                  COALESCE(trades.exported, '0') AS exported_quantity,
+                  COALESCE(residential.quantity, '0') AS residential_consumption,
+                  COALESCE(production_inputs.quantity, '0') AS production_input_consumption
+           FROM product_ids
+           LEFT JOIN production USING (product_id)
+           LEFT JOIN trades USING (product_id)
+           LEFT JOIN residential USING (product_id)
+           LEFT JOIN production_inputs USING (product_id)`,
+          [
+            userId,
+            day,
+            periodDays,
+            PRODUCT_PRODUCER_DEFINITIONS.map((definition) => definition.type),
+            PRODUCT_PRODUCER_DEFINITIONS.map((definition) => definition.stockProductId ?? ''),
+            PRODUCTS.map((product) => product.id),
+          ],
+        ),
+        pool.query<{ product_id: string; unit_cost: string }>(
+          `SELECT product_id, unit_cost::text
+           FROM player_product_costs
+           WHERE user_id = $1`,
+          [userId],
         ),
         pool.query<{
           id: string;
@@ -5296,6 +5678,28 @@ async function start() {
       );
       const weeklyRevenue = Number(weeklyFinanceResult.rows[0]?.revenue ?? 0);
       const weeklyExpenses = Number(weeklyFinanceResult.rows[0]?.expenses ?? 0);
+      const productFlows = new Map(
+        productFlowResult.rows.map((row) => [row.product_id, row]),
+      );
+      const productCosts = new Map(
+        productCostResult.rows.map((row) => [row.product_id, Number(row.unit_cost)]),
+      );
+      const productSummaries = PRODUCTS.map((product) => {
+        const flow = productFlows.get(product.id);
+        const residentialConsumption = Number(flow?.residential_consumption ?? 0);
+        const productionInputConsumption = Number(flow?.production_input_consumption ?? 0);
+        return {
+          productId: product.id,
+          stockQuantity: inventoryQuantities.get(product.id) ?? 0,
+          producedQuantity: Number(flow?.produced_quantity ?? 0),
+          importedQuantity: Number(flow?.imported_quantity ?? 0),
+          exportedQuantity: Number(flow?.exported_quantity ?? 0),
+          consumedQuantity: residentialConsumption + productionInputConsumption,
+          residentialConsumption,
+          productionInputConsumption,
+          unitCostEstimate: productCosts.get(product.id) ?? null,
+        };
+      });
       const products = productResult.rows.map((row) => {
         const purchaseExpense = Number(row.purchase_expense);
         const salesRevenue = Number(row.sales_revenue);
@@ -5365,6 +5769,7 @@ async function start() {
           RESIDENCES[first.type].name.localeCompare(RESIDENCES[second.type].name, 'pt-BR') ||
           first.buildingNumber - second.buildingNumber,
         ),
+        products: productSummaries,
         warehouse: {
           employeeExpense: Number(payrollResult.rows[0]?.employee_expense ?? 0),
           buildings: warehouseBuildingsResult.rows.map((row) => ({

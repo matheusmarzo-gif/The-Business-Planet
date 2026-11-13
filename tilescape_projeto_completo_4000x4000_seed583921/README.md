@@ -940,7 +940,7 @@ não podem ser reconstruídos.
 
 ## Contábil
 
-O botão **Contábil** na barra inferior tem uma aba **Resumo** e quatro abas
+O botão **Contábil** na barra inferior tem uma aba **Resumo** e cinco abas
 detalhadas. O resumo permite consultar a semana atual ou qualquer uma das quatro
 semanas anteriores. O lucro/prejuízo inclui receitas das lojas, aluguéis e
 vendas de armazéns, menos compras de armazéns, despesas de produtos e salários.
@@ -964,7 +964,16 @@ vendas menos custo de compras). O resultado por produto não desconta salários.
 **Residências** lista moradores, capacidade e aluguel efetivamente gerado para
 cada casa no período selecionado, com o mesmo atalho **Visualizar**. **Produção**
 lista fazendas, pesqueiros, recursos e oficinas, seus salários e unidades
-produzidas no período selecionado. O histórico de aluguel começa com esta atualização;
+produzidas no período selecionado. **Produto** lista todos os produtos com o
+estoque atual, produção, compras e vendas entre jogadores, consumo e custo
+unitário estimado no período. O consumo separa residências e insumos industriais
+no detalhe ao passar o cursor. O custo de produção usa o custo salarial por
+Work Point e o custo estimado no dia anterior para os insumos; compras externas
+e produção própria são combinadas pela quantidade. Usar o dia anterior evita
+ciclos de dependência entre produtos, como carvão e ferramentas. Como é uma
+estimativa, insumos sem custo anterior entram inicialmente com custo zero. Os
+históricos de consumo industrial e custos começam com esta atualização; períodos
+anteriores não podem ser reconstruídos. O histórico de aluguel começa com esta atualização;
 salários de construções não comerciais anteriores a ela não podem ser
 reconstruídos. O histórico financeiro de armazéns começa com esta atualização;
 transações anteriores não podem ser reconstruídas.

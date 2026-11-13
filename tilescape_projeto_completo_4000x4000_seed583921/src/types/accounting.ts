@@ -92,6 +92,18 @@ export interface AccountingProductionBuilding {
   stockProductId: string | null;
 }
 
+export interface AccountingProduct {
+  productId: string;
+  stockQuantity: number;
+  producedQuantity: number;
+  importedQuantity: number;
+  exportedQuantity: number;
+  consumedQuantity: number;
+  residentialConsumption: number;
+  productionInputConsumption: number;
+  unitCostEstimate: number | null;
+}
+
 export interface AccountingSummary {
   periodDays: AccountingPeriodDays;
   weekOffset: AccountingWeekOffset;
@@ -108,10 +120,79 @@ export interface AccountingSummary {
   shops: AccountingShop[];
   residences: AccountingResidence[];
   production: AccountingProductionBuilding[];
+  products: AccountingProduct[];
   warehouse: {
     employeeExpense: number;
     buildings: AccountingWarehouse[];
     products: AccountingWarehouseProduct[];
+  };
+}
+
+export interface ProductUnitCostInput {
+  quantity: number;
+  unitCost: number | null;
+}
+
+export function estimateProductionUnitCost(
+  workPointsPerUnit: number,
+  costPerWorkPoint: number,
+  inputs: readonly ProductUnitCostInput[],
+): number {
+  if (
+    !Number.isFinite(workPointsPerUnit) ||
+    workPointsPerUnit < 0 ||
+    !Number.isFinite(costPerWorkPoint) ||
+    costPerWorkPoint < 0
+  ) {
+    throw new RangeError('O custo de produção exige Work Points e custo unitário válidos.');
+  }
+  const materialCost = inputs.reduce((total, input) => {
+    if (
+      !Number.isFinite(input.quantity) ||
+      input.quantity < 0 ||
+      (input.unitCost !== null && (!Number.isFinite(input.unitCost) || input.unitCost < 0))
+    ) {
+      throw new RangeError('Os insumos do custo de produção são inválidos.');
+    }
+    return total + input.quantity * (input.unitCost ?? 0);
+  }, 0);
+  return Math.round((workPointsPerUnit * costPerWorkPoint + materialCost) * 1_000_000) /
+    1_000_000;
+}
+
+export function estimateBlendedUnitCost(input: {
+  producedQuantity: number;
+  productionUnitCost: number | null;
+  importedQuantity: number;
+  importExpense: number;
+  previousUnitCost: number | null;
+}): { unitCost: number | null; sourceQuantity: number } {
+  const { producedQuantity, productionUnitCost, importedQuantity, importExpense, previousUnitCost } =
+    input;
+  if (
+    !Number.isFinite(producedQuantity) ||
+    producedQuantity < 0 ||
+    (productionUnitCost !== null &&
+      (!Number.isFinite(productionUnitCost) || productionUnitCost < 0)) ||
+    !Number.isFinite(importedQuantity) ||
+    importedQuantity < 0 ||
+    !Number.isFinite(importExpense) ||
+    importExpense < 0 ||
+    (previousUnitCost !== null &&
+      (!Number.isFinite(previousUnitCost) || previousUnitCost < 0))
+  ) {
+    throw new RangeError('As quantidades e os custos do produto são inválidos.');
+  }
+  const productionCost = productionUnitCost ?? previousUnitCost;
+  const pricedProductionQuantity = productionCost === null ? 0 : producedQuantity;
+  const sourceQuantity = pricedProductionQuantity + importedQuantity;
+  if (sourceQuantity === 0) {
+    return { unitCost: previousUnitCost, sourceQuantity: 0 };
+  }
+  return {
+    unitCost:
+      (pricedProductionQuantity * (productionCost ?? 0) + importExpense) / sourceQuantity,
+    sourceQuantity,
   };
 }
 

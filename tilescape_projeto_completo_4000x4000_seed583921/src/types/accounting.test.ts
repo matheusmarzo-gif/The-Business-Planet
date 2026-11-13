@@ -3,6 +3,8 @@ import test from 'node:test';
 import {
   calculateDailyRentRevenue,
   calculateEstimatedShopNetRevenue,
+  estimateBlendedUnitCost,
+  estimateProductionUnitCost,
   getAccountingWeekRange,
   getAccountingPeriodLabel,
   parseAccountingPeriodDays,
@@ -34,6 +36,41 @@ test('rejects invalid inputs for estimated shop net revenue', () => {
   assert.throws(() => calculateEstimatedShopNetRevenue(1, -1, 0, 1, 0), RangeError);
   assert.throws(() => calculateEstimatedShopNetRevenue(1, 0, 0, Number.NaN, 0), RangeError);
   assert.throws(() => calculateEstimatedShopNetRevenue(1, 0, 0, 1, -1), RangeError);
+});
+
+test('estimates production cost from Work Points and yesterday input prices', () => {
+  assert.equal(estimateProductionUnitCost(1000, 0.09, []), 90);
+  assert.equal(
+    estimateProductionUnitCost(400, 0.1, [
+      { quantity: 2, unitCost: 3 },
+      { quantity: 1, unitCost: null },
+    ]),
+    46,
+  );
+  assert.throws(() => estimateProductionUnitCost(-1, 0.1, []), RangeError);
+});
+
+test('blends owned production and external purchases by quantity and carries prior estimates', () => {
+  assert.deepEqual(
+    estimateBlendedUnitCost({
+      producedQuantity: 50,
+      productionUnitCost: 10,
+      importedQuantity: 50,
+      importExpense: 1500,
+      previousUnitCost: 8,
+    }),
+    { unitCost: 20, sourceQuantity: 100 },
+  );
+  assert.deepEqual(
+    estimateBlendedUnitCost({
+      producedQuantity: 0,
+      productionUnitCost: null,
+      importedQuantity: 0,
+      importExpense: 0,
+      previousUnitCost: 8,
+    }),
+    { unitCost: 8, sourceQuantity: 0 },
+  );
 });
 
 test('parses only supported accounting periods', () => {

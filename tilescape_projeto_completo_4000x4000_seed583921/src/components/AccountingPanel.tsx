@@ -25,6 +25,8 @@ interface AccountingPanelProps {
 }
 
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+const quantity = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
+const unitCost = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 
 export default function AccountingPanel({
   summary,
@@ -37,7 +39,9 @@ export default function AccountingPanel({
   onViewBuilding,
   onClose,
 }: AccountingPanelProps) {
-  const [activeTab, setActiveTab] = useState<'summary' | 'shops' | 'warehouses' | 'residences' | 'production'>('summary');
+  const [activeTab, setActiveTab] = useState<
+    'summary' | 'shops' | 'warehouses' | 'residences' | 'production' | 'products'
+  >('summary');
   const periodLabel = getAccountingPeriodLabel(periodDays);
   const weeklySummary = summary?.weeklySummary;
   const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
@@ -119,6 +123,15 @@ export default function AccountingPanel({
           onClick={() => setActiveTab('production')}
         >
           Produção
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'products'}
+          className={activeTab === 'products' ? 'active' : ''}
+          onClick={() => setActiveTab('products')}
+        >
+          Produto
         </button>
       </div>
       {error && <p role="alert" className="warehouse-error">{error}</p>}
@@ -297,7 +310,7 @@ export default function AccountingPanel({
             ))}
           </div>
         </>
-      ) : (
+      ) : activeTab === 'production' ? (
         <>
           <p className="accounting-history-note">
             Salários e produção somam os registros diários do período selecionado. Não há dados recuperáveis de
@@ -326,6 +339,46 @@ export default function AccountingPanel({
                   <button type="button" className="accounting-view-button" onClick={() => onViewBuilding(building)}>
                     Visualizar
                   </button>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="accounting-history-note">
+            Estoque atual e movimentações do período selecionado. Consumo inclui as residências e os insumos
+            usados na produção. Custos são estimativas atualizadas diariamente, combinando Work Points,
+            insumos avaliados pelo custo do dia anterior e compras de outros jogadores; períodos sem histórico
+            de insumos não podem ser reconstruídos.
+          </p>
+          <div className="warehouse-list accounting-list">
+            <div className="accounting-product-row warehouse-head">
+              <span>Produto</span>
+              <span>Estoque</span>
+              <span>Produzido</span>
+              <span>Importado</span>
+              <span>Exportado</span>
+              <span>Consumido</span>
+              <span>Custo estimado</span>
+            </div>
+            {summary?.products.map((item) => {
+              const product = PRODUCTS.find((entry) => entry.id === item.productId);
+              return (
+                <div className="accounting-product-row" key={item.productId}>
+                  <span>{product?.name ?? item.productId}</span>
+                  <span>{quantity.format(item.stockQuantity)}</span>
+                  <span>{quantity.format(item.producedQuantity)}</span>
+                  <span>{quantity.format(item.importedQuantity)}</span>
+                  <span>{quantity.format(item.exportedQuantity)}</span>
+                  <span title={`Residências: ${quantity.format(item.residentialConsumption)} · Produção: ${quantity.format(item.productionInputConsumption)}`}>
+                    {quantity.format(item.consumedQuantity)}
+                  </span>
+                  <span>
+                    {item.unitCostEstimate === null
+                      ? 'Indisponível'
+                      : `C$ ${unitCost.format(item.unitCostEstimate)} / un.`}
+                  </span>
                 </div>
               );
             })}

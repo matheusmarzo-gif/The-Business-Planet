@@ -389,6 +389,37 @@ CREATE TABLE IF NOT EXISTS production_history (
   PRIMARY KEY (building_id, day)
 );
 
+CREATE TABLE IF NOT EXISTS production_input_history (
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL,
+  day DATE NOT NULL,
+  quantity DOUBLE PRECISION NOT NULL CHECK (quantity >= 0),
+  PRIMARY KEY (building_id, product_id, day)
+);
+
+CREATE INDEX IF NOT EXISTS production_input_history_day_idx
+  ON production_input_history (day, building_id);
+
+CREATE TABLE IF NOT EXISTS product_cost_history (
+  user_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  day DATE NOT NULL,
+  unit_cost NUMERIC(14, 6) NOT NULL CHECK (unit_cost >= 0),
+  source_quantity DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (source_quantity >= 0),
+  PRIMARY KEY (user_id, product_id, day)
+);
+
+CREATE INDEX IF NOT EXISTS product_cost_history_user_day_idx
+  ON product_cost_history (user_id, day DESC);
+
+CREATE TABLE IF NOT EXISTS player_product_costs (
+  user_id TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  unit_cost NUMERIC(14, 6) NOT NULL CHECK (unit_cost >= 0),
+  updated_day DATE NOT NULL,
+  PRIMARY KEY (user_id, product_id)
+);
+
 CREATE TABLE IF NOT EXISTS commerce_history (
   building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   day DATE NOT NULL,

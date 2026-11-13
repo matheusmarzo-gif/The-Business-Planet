@@ -5,11 +5,26 @@ import {
   calculateEstimatedShopNetRevenue,
   estimateBlendedUnitCost,
   estimateProductionUnitCost,
+  getShopSalesAndLossByProduct,
   getAccountingWeekRange,
   getAccountingPeriodLabel,
   parseAccountingPeriodDays,
   parseAccountingWeekOffset,
 } from './accounting.js';
+
+test('aggregates shop sales and stock loss by the product sold', () => {
+  assert.deepEqual(
+    getShopSalesAndLossByProduct([
+      { type: 'shop_rice', unitsSold: 8, unitsLost: 2 },
+      { type: 'shop_rice', unitsSold: 5, unitsLost: 1 },
+      { type: 'shop_fish', unitsSold: 3, unitsLost: 4 },
+    ]),
+    new Map([
+      ['rice', { soldQuantity: 13, lostQuantity: 3 }],
+      ['fish', { soldQuantity: 3, lostQuantity: 4 }],
+    ]),
+  );
+});
 
 test('calculates daily rent for occupied residences to cents', () => {
   assert.equal(calculateDailyRentRevenue(3, 1.23), 3.69);

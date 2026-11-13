@@ -1,4 +1,4 @@
-import type { ResidenceType } from './residence.js';
+import { RESIDENCES, type ResidenceType } from './residence.js';
 import { roundCurrency } from './currency.js';
 
 export const ACCOUNTING_PERIOD_DAYS = [1, 7, 30] as const;
@@ -98,10 +98,27 @@ export interface AccountingProduct {
   producedQuantity: number;
   importedQuantity: number;
   exportedQuantity: number;
+  shopSalesQuantity: number;
+  shopStockLossQuantity: number;
   consumedQuantity: number;
   residentialConsumption: number;
   productionInputConsumption: number;
   unitCostEstimate: number | null;
+}
+
+export function getShopSalesAndLossByProduct(
+  shops: readonly Pick<AccountingShop, 'type' | 'unitsSold' | 'unitsLost'>[],
+): Map<string, { soldQuantity: number; lostQuantity: number }> {
+  const quantities = new Map<string, { soldQuantity: number; lostQuantity: number }>();
+  for (const shop of shops) {
+    const productId = RESIDENCES[shop.type].stockProductId;
+    if (!productId) continue;
+    const totals = quantities.get(productId) ?? { soldQuantity: 0, lostQuantity: 0 };
+    totals.soldQuantity += shop.unitsSold;
+    totals.lostQuantity += shop.unitsLost;
+    quantities.set(productId, totals);
+  }
+  return quantities;
 }
 
 export interface AccountingSummary {

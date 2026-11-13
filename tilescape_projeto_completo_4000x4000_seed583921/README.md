@@ -1006,16 +1006,19 @@ lista fazendas, pesqueiros, recursos e oficinas, seus salários e unidades
 produzidas no período selecionado. **Produto** lista todos os produtos com o
 estoque atual, produção, compras e vendas entre jogadores, consumo e custo
 unitário estimado no período. O consumo separa residências e insumos industriais
-no detalhe ao passar o cursor. O custo de produção usa o custo salarial por
-Work Point e o custo estimado no dia anterior para os insumos; compras externas
-e produção própria são combinadas pela quantidade. Usar o dia anterior evita
-ciclos de dependência entre produtos, como carvão e ferramentas. Como é uma
-estimativa, insumos sem custo anterior entram inicialmente com custo zero. Os
-históricos de consumo industrial e custos começam com esta atualização; períodos
-anteriores não podem ser reconstruídos. O histórico de aluguel começa com esta atualização;
-salários de construções não comerciais anteriores a ela não podem ser
-reconstruídos. O histórico financeiro de armazéns começa com esta atualização;
-transações anteriores não podem ser reconstruídas.
+no detalhe ao passar o cursor. **Lojas e perda de estoque** soma as vendas das
+lojas e as unidades perdidas por validade; passe o cursor para ver cada parcela.
+A busca filtra os produtos pelo nome, como no painel do armazém. O custo de
+produção usa o custo salarial por Work Point e o custo estimado no dia anterior
+para os insumos; compras externas e produção própria são combinadas pela
+quantidade. Usar o dia anterior evita ciclos de dependência entre produtos, como
+carvão e ferramentas. Como é uma estimativa, insumos sem custo anterior entram
+inicialmente com custo zero. Os históricos de consumo industrial e custos
+começam com esta atualização; períodos anteriores não podem ser reconstruídos.
+O histórico de aluguel começa com esta atualização; salários de construções não
+comerciais anteriores a ela não podem ser reconstruídos. O histórico financeiro
+de armazéns começa com esta atualização; transações anteriores não podem ser
+reconstruídas.
 
 - **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque máximo atingido, estoque mínimo preservado, sem espaço, Work Points insuficientes ou armazém sem estoque). Falhas internas são exibidas separadamente, com a etapa e a mensagem do erro.
 - **Validade e espaço de armazenamento:** às 18:00 de cada dia do jogo, a perda esperada de cada produto perecível é `estoque atual / validade em dias`. A parte inteira é removida e a fração vira probabilidade de perder uma unidade adicional (por exemplo, 10 unidades com validade de 100 dias: 0,1 unidade/dia, ou 10% de chance de perder uma). Não há controle por lote ou data de entrada; produtos recém-adicionados seguem a mesma regra sobre o estoque agregado. A regra cobre os estoques principais de fazendas, comércios, construções artesanais e recursos, além dos produtos nos armazéns (indústrias). Produtos sem validade, como madeira, pedra, ferro e Ferramentas, não se deterioram. O espaço ocupado é atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o armazém está selecionado.

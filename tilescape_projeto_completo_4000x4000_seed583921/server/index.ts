@@ -75,6 +75,7 @@ import {
   calculateEstimatedShopNetRevenue,
   estimateBlendedUnitCost,
   estimateProductionUnitCost,
+  getShopSalesAndLossByProduct,
   getAccountingWeekRange,
   parseAccountingPeriodDays,
   parseAccountingWeekOffset,
@@ -5926,8 +5927,16 @@ async function start() {
       const productCosts = new Map(
         productCostResult.rows.map((row) => [row.product_id, Number(row.unit_cost)]),
       );
+      const shopSalesAndLoss = getShopSalesAndLossByProduct(
+        shopResult.rows.map((row) => ({
+          type: row.building_type,
+          unitsSold: Number(row.units_sold),
+          unitsLost: Number(row.units_lost),
+        })),
+      );
       const productSummaries = PRODUCTS.map((product) => {
         const flow = productFlows.get(product.id);
+        const shopFlow = shopSalesAndLoss.get(product.id);
         const residentialConsumption = Number(flow?.residential_consumption ?? 0);
         const productionInputConsumption = Number(flow?.production_input_consumption ?? 0);
         return {
@@ -5936,6 +5945,8 @@ async function start() {
           producedQuantity: Number(flow?.produced_quantity ?? 0),
           importedQuantity: Number(flow?.imported_quantity ?? 0),
           exportedQuantity: Number(flow?.exported_quantity ?? 0),
+          shopSalesQuantity: shopFlow?.soldQuantity ?? 0,
+          shopStockLossQuantity: shopFlow?.lostQuantity ?? 0,
           consumedQuantity: residentialConsumption + productionInputConsumption,
           residentialConsumption,
           productionInputConsumption,

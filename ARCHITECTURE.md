@@ -1050,6 +1050,9 @@ de sucesso.
   armazéns; produtos sem preço anunciado não entram na estimativa.
 - `production_input_history` registra os produtos efetivamente consumidos por
   construções produtivas e alimenta o consumo industrial da aba **Produto**.
+  Essa aba também agrega `commerce_history.units_sold` e `units_lost` por
+  produto, exibindo a soma de vendas das lojas e perdas por validade com o
+  detalhamento no tooltip; a busca de produtos é filtrada no cliente pelo nome.
   `product_cost_history` conserva estimativas unitárias por jogador/produto/dia,
   e `player_product_costs` guarda o valor mais recente. O custo combina Work
   Points e salário do dia, insumos avaliados pelo custo do dia anterior e

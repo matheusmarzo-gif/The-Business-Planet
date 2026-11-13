@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { PRODUCTS } from '../types/product';
 import { getResidentialBuildingName } from '../types/residence';
 import { formatMoney } from '../types/wallet';
@@ -42,8 +42,17 @@ export default function AccountingPanel({
   const [activeTab, setActiveTab] = useState<
     'summary' | 'shops' | 'warehouses' | 'residences' | 'production' | 'products'
   >('summary');
+  const [productSearch, setProductSearch] = useState('');
   const periodLabel = getAccountingPeriodLabel(periodDays);
   const weeklySummary = summary?.weeklySummary;
+  const filteredProducts = useMemo(() => {
+    const query = productSearch.trim().toLocaleLowerCase('pt-BR');
+    return (summary?.products ?? []).filter((item) => {
+      if (!query) return true;
+      const product = PRODUCTS.find((entry) => entry.id === item.productId);
+      return (product?.name ?? item.productId).toLocaleLowerCase('pt-BR').includes(query);
+    });
+  }, [productSearch, summary?.products]);
   const formatDay = (day: string) => `${day.slice(8, 10)}/${day.slice(5, 7)}/${day.slice(0, 4)}`;
 
   return (
@@ -349,9 +358,18 @@ export default function AccountingPanel({
           <p className="accounting-history-note">
             Estoque atual e movimentações do período selecionado. Consumo inclui as residências e os insumos
             usados na produção. Custos são estimativas atualizadas diariamente, combinando Work Points,
-            insumos avaliados pelo custo do dia anterior e compras de outros jogadores; períodos sem histórico
-            de insumos não podem ser reconstruídos.
+            insumos avaliados pelo custo do dia anterior e compras de outros jogadores. A coluna lojas e perda
+            de estoque soma vendas das lojas e produtos perdidos por validade no período.
           </p>
+          <label className="warehouse-search accounting-product-search">
+            <span>Buscar produto</span>
+            <input
+              type="search"
+              value={productSearch}
+              onChange={(event) => setProductSearch(event.target.value)}
+              placeholder="Ex.: trigo, leite, madeira"
+            />
+          </label>
           <div className="warehouse-list accounting-list">
             <div className="accounting-product-row warehouse-head">
               <span>Produto</span>
@@ -359,11 +377,13 @@ export default function AccountingPanel({
               <span>Produzido</span>
               <span>Importado</span>
               <span>Exportado</span>
+              <span>Lojas e perda de estoque</span>
               <span>Consumido</span>
               <span>Custo estimado</span>
             </div>
-            {summary?.products.map((item) => {
+            {filteredProducts.map((item) => {
               const product = PRODUCTS.find((entry) => entry.id === item.productId);
+              const shopsAndLoss = item.shopSalesQuantity + item.shopStockLossQuantity;
               return (
                 <div className="accounting-product-row" key={item.productId}>
                   <span>{product?.name ?? item.productId}</span>
@@ -371,6 +391,11 @@ export default function AccountingPanel({
                   <span>{quantity.format(item.producedQuantity)}</span>
                   <span>{quantity.format(item.importedQuantity)}</span>
                   <span>{quantity.format(item.exportedQuantity)}</span>
+                  <span
+                    title={`Vendas nas lojas: ${quantity.format(item.shopSalesQuantity)} · Perda de estoque: ${quantity.format(item.shopStockLossQuantity)}`}
+                  >
+                    {quantity.format(shopsAndLoss)}
+                  </span>
                   <span title={`Residências: ${quantity.format(item.residentialConsumption)} · Produção: ${quantity.format(item.productionInputConsumption)}`}>
                     {quantity.format(item.consumedQuantity)}
                   </span>
@@ -382,6 +407,9 @@ export default function AccountingPanel({
                 </div>
               );
             })}
+            {!isLoading && !error && filteredProducts.length === 0 && (
+              <p className="warehouse-empty">Nenhum produto encontrado.</p>
+            )}
           </div>
         </>
       )}

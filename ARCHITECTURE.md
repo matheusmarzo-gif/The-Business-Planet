@@ -44,7 +44,10 @@ vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor processa mudança
 de moradores entre residências concluídas da mesma cidade. Uma alteração de
 aluguel também reavalia imediatamente os moradores da residência alterada como
 origem, considerando as demais residências da cidade apenas como destinos com
-capacidade disponível. A gravação do aluguel, da nova ocupação e do histórico
+capacidade disponível. O total que pode sair de cada origem é limitado a 100%
+para até 15 moradores, 75% para 16–30, 50% para 31–100 e 30% acima de 100;
+esse teto é arredondado para baixo e compartilhado entre todos os destinos. A
+gravação do aluguel, da nova ocupação e do histórico
 `residence_relocation_log` é atômica.
 Na alocação diária de empregos, as residências concluídas com moradores são
 processadas por apreço interno decrescente; empates são resolvidos pelo ID.

@@ -212,6 +212,13 @@ export function getAssociatedResidenceBenefit(input: {
   }).associatedBenefit;
 }
 
+function getRelocationRate(occupants: number): number {
+  if (occupants > 100) return 0.3;
+  if (occupants > 30) return 0.5;
+  if (occupants > 15) return 0.75;
+  return 1;
+}
+
 export function planResidenceRelocations(
   residences: ResidenceRelocationCandidate[],
   sourceResidenceId?: string,
@@ -226,6 +233,7 @@ export function planResidenceRelocations(
   for (const source of sources) {
     let sourceOccupants = currentOccupants.get(source.id) ?? 0;
     if (sourceOccupants <= 0) continue;
+    let remainingRelocatable = Math.floor(sourceOccupants * getRelocationRate(sourceOccupants));
 
     const associatedSource = getAssociatedResidenceBenefit({
       rent: source.rent,
@@ -234,7 +242,12 @@ export function planResidenceRelocations(
       internalAppeal: source.internalAppeal,
     });
     for (const destination of ordered) {
-      if (destination.id === source.id || destination.cityId !== source.cityId || sourceOccupants <= 0) {
+      if (
+        destination.id === source.id ||
+        destination.cityId !== source.cityId ||
+        sourceOccupants <= 0 ||
+        remainingRelocatable <= 0
+      ) {
         continue;
       }
       const destinationOccupants = currentOccupants.get(destination.id) ?? 0;
@@ -254,10 +267,12 @@ export function planResidenceRelocations(
       const quantity = Math.min(
         sourceOccupants,
         free,
+        remainingRelocatable,
         Number.isFinite(ratio) ? Math.floor(sourceOccupants * (ratio - 1)) : sourceOccupants,
       );
       if (quantity <= 0) continue;
       sourceOccupants -= quantity;
+      remainingRelocatable -= quantity;
       currentOccupants.set(source.id, sourceOccupants);
       currentOccupants.set(destination.id, destinationOccupants + quantity);
       relocations.push({

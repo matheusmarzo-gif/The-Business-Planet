@@ -131,6 +131,44 @@ test('moves the calculated percentage and respects destination capacity', () => 
   assert.ok(moves[0].associatedDestination > moves[0].associatedSource);
 });
 
+test('limits internal relocation according to the source residence population', () => {
+  const cases = [
+    { occupants: 101, expected: 30 },
+    { occupants: 100, expected: 50 },
+    { occupants: 31, expected: 15 },
+    { occupants: 30, expected: 22 },
+    { occupants: 16, expected: 12 },
+    { occupants: 15, expected: 15 },
+    { occupants: 14, expected: 14 },
+  ];
+
+  for (const { occupants, expected } of cases) {
+    const moves = planResidenceRelocations([
+      residence({ id: 'source', occupants, capacity: occupants, rent: 40 }),
+      residence({ id: 'destination', occupants: 0, capacity: occupants, rent: 1 }),
+    ]);
+
+    assert.equal(
+      moves.reduce((total, move) => total + move.quantity, 0),
+      expected,
+      `occupants: ${occupants}`,
+    );
+  }
+});
+
+test('applies the relocation limit once across multiple destinations', () => {
+  const moves = planResidenceRelocations([
+    residence({ id: 'source', occupants: 101, capacity: 101, rent: 40 }),
+    residence({ id: 'destination-a', occupants: 0, capacity: 101, rent: 1 }),
+    residence({ id: 'destination-b', occupants: 0, capacity: 101, rent: 1 }),
+  ]);
+
+  assert.equal(
+    moves.reduce((total, move) => total + move.quantity, 0),
+    30,
+  );
+});
+
 test('can reevaluate only the residence whose rent changed', () => {
   const moves = planResidenceRelocations(
     [

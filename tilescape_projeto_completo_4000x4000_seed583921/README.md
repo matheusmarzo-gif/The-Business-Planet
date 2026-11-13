@@ -384,10 +384,14 @@ moradores se tiverem vaga. A comparação usa o custo médio mensal da casa
 (consumo médio dos últimos 30 dias,
 valorizado pelo preço médio pago de cada produto, mais aluguel), a renda média
 diária por morador e o apreço local. A mudança só ocorre quando o benefício
-associado da residência de destino é maior; a quantidade é limitada pelas vagas
-e pelos moradores da casa de origem. Cada mudança é registrada no histórico do
-servidor. Como moradores são NPCs sem carteira individual, não há débito
-separado. Clique em outro ponto do mapa ou em × para fechar.
+associado da residência de destino é maior. De cada residência de origem, podem
+se mudar até 30% dos moradores se ela tiver mais de 100; até 50% se tiver de 31
+a 100; até 75% se tiver de 16 a 30; e até 100% se tiver até 15. O limite é
+arredondado para baixo e vale para o total que sai daquela residência, mesmo
+quando há vários destinos; as vagas também limitam a mudança. Cada mudança é
+registrada no histórico do servidor. Como moradores são NPCs sem carteira
+individual, não há débito separado. Clique em outro ponto do mapa ou em × para
+fechar.
 
 No mesmo horário mensal, a população cresce ou decresce por residência
 concluída. O crescimento exige vaga na casa, ofertas de emprego na cidade e

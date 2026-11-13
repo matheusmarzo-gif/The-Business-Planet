@@ -28,7 +28,10 @@ de um deles.
 População e pessoas empregadas são agregadas a partir das residências e dos
 vínculos de trabalho; a economia da cidade compara os gastos residenciais com
 a massa salarial mensal. O bem-estar individual das residências é calculado
-pelas necessidades supridas.
+pelas necessidades supridas. No dia 7 de cada mês, às 03:00, a população também
+cresce ou decresce por residência conforme o bem-estar, o desemprego municipal,
+as vagas de emprego e a capacidade habitacional. A emigração pode ser recebida
+por uma cidade vizinha elegível a menos de 850 tiles.
 O jogo também processa rotinas diárias de imigração, emprego, consumo, produção,
 vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor também
 processa mudanças de moradores entre residências concluídas da mesma cidade,
@@ -1141,8 +1144,8 @@ atualizado.
 
 ## Limites e próximos passos já conhecidos
 
-- A população e os indicadores agregados da cidade ainda não evoluem; cada
-  residência concluída, porém, tem bem-estar individual dinâmico.
+- A população cresce e decresce mensalmente por residência; bem-estar municipal,
+  emprego e economia são agregados a partir dos dados persistidos.
 - O catálogo habilita casas, armazéns, fazendas agrícolas e leite, lojas de
   arroz, peixe e leite, pesqueiro, recursos e ferramentaria para todos os
   jogadores autenticados. Custos de materiais de construção ainda não são
@@ -1155,5 +1158,5 @@ atualizado.
   de entrada atual.
 
 - Obras e economia diária: às 00:00 o progresso das obras usa `advanceConstruction` (employment.ts; conclui quando Work Points >= necessários, para todos os tipos). Vendas, produção, fazendas e transporte rodam, cada etapa, sob seu próprio SAVEPOINT (`runStage`): se uma falhar, as demais, a folha e as obras do dia são preservadas e o erro é registrado com o nome da etapa. As etapas agrupam leituras e gravações de construções com arrays PostgreSQL, preservando o cálculo e as transações; o transporte continua isolando falhas por armazém.
-- Métricas do processamento diário: as etapas de economia, alocação, imigração, mudanças de residência e publicação registram duração, consultas PostgreSQL, espera pelo lock, contagens globais de residências/locais de trabalho/lojas/armazéns e status; a lista Redis tem limite de 100 registros e expira após sete dias.
+- Métricas do processamento diário: as etapas de economia, alocação, imigração, mudanças de residência, crescimento populacional e publicação registram duração, consultas PostgreSQL, espera pelo lock, contagens globais de residências/locais de trabalho/lojas/armazéns e status; a lista Redis tem limite de 100 registros e expira após sete dias.
 - Sincronização diária: a partir de 00:30 UTC do relógio do jogo, uma mensagem completa de cidades, estradas e construções é publicada pelo Redis para os jogadores conectados, no máximo uma vez por dia. A atualização não recarrega a página; `worldClient.ts` aplica o estado recebido.

@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS world_state (
 
 ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS last_residence_relocation_day DATE;
+ALTER TABLE world_state
+  ADD COLUMN IF NOT EXISTS last_population_change_day DATE;
 
 CREATE TABLE IF NOT EXISTS player_wallets (
   user_id TEXT PRIMARY KEY,

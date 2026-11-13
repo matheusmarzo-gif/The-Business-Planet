@@ -15,7 +15,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "pretest": "npm run config:generate",
-    "test": "tsx --test src/types/accounting.test.ts src/types/city.test.ts src/types/commerce.test.ts src/types/farming.test.ts src/types/logistics.test.ts src/types/residence-construction.test.ts src/types/residence-relocation.test.ts src/types/stockCapacity.test.ts src/types/wellbeing.test.ts src/types/worldSync.test.ts src/utils/commerceDiagnosticsStorage.test.ts",
+    "test": "tsx --test src/types/accounting.test.ts src/types/city.test.ts src/types/commerce.test.ts src/types/farming.test.ts src/types/logistics.test.ts src/types/population.test.ts src/types/residence-construction.test.ts src/types/residence-relocation.test.ts src/types/stockCapacity.test.ts src/types/wellbeing.test.ts src/types/worldSync.test.ts src/utils/commerceDiagnosticsStorage.test.ts",
     "prelint": "npm run config:generate",
     "lint": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json"
   },

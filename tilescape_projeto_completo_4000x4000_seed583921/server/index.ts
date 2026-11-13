@@ -2373,6 +2373,21 @@ async function applyWalletBatch(
   );
 }
 
+async function removeCrossCityJobAssignments(
+  client: PoolClient,
+  buildingId: string | null = null,
+): Promise<void> {
+  await client.query(
+    `DELETE FROM job_assignments assignment
+     USING all_buildings workplace, all_buildings residence
+     WHERE assignment.workplace_id = workplace.id
+       AND assignment.residence_id = residence.id
+       AND workplace.city_id <> residence.city_id
+       AND ($1::uuid IS NULL OR workplace.id = $1 OR residence.id = $1)`,
+    [buildingId],
+  );
+}
+
 async function logProductionBatch(
   client: { query: (text: string, values: unknown[]) => Promise<unknown> },
   day: string,
@@ -4323,6 +4338,7 @@ async function runDailyEmployment(): Promise<boolean> {
           }
           return {
             id: building.id,
+            cityId: building.cityId,
             type: building.type,
             x: building.x,
             y: building.y,
@@ -5203,6 +5219,7 @@ async function start() {
   try {
     await capacityClient.query('BEGIN');
     await capacityClient.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    await removeCrossCityJobAssignments(capacityClient);
     const { rows: limitedBuildings } = await capacityClient.query<{
       id: string;
       building_type: ResidenceType;
@@ -6215,6 +6232,7 @@ async function start() {
            RETURNING ${ALL_BUILDING_COLUMNS}`,
           [selected.id, x, y, destinationCity.id],
         );
+        await removeCrossCityJobAssignments(client, selected.id);
         await client.query('COMMIT');
         response.json(mapResidentialBuilding(updatedRows[0]));
         void publishCities().catch((error: unknown) => {

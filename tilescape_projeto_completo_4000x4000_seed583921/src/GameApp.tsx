@@ -2186,6 +2186,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                   }
                   return {
                     id: building.id,
+                    cityId: building.cityId,
                     type: building.type,
                     x: building.x,
                     y: building.y,
@@ -2201,6 +2202,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                 )
                 .map((building) => ({
                   id: building.id,
+                  cityId: building.cityId,
                   type: building.type,
                   x: building.x,
                   y: building.y,

@@ -1123,6 +1123,7 @@ export function planShopSalesDetailed(
       if (residence.consumers <= 0) continue;
       const nearby = productShops.filter(
         (shop) =>
+          shop.cityId === residence.cityId &&
           getDistanceBetweenBuildings(shop, residence) <=
           GAME_RULES.consumption.distance.radiusTiles,
       );

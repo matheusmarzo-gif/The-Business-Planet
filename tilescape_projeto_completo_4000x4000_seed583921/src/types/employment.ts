@@ -12,6 +12,7 @@ import { GAME_RULES } from '../generated/gameConfig.js';
 
 export interface EmploymentResidence {
   id: string;
+  cityId: string;
   type: ResidenceType;
   x: number;
   y: number;
@@ -22,6 +23,7 @@ export interface EmploymentResidence {
 
 export interface EmploymentWorkplace {
   id: string;
+  cityId: string;
   type: ResidenceType;
   x: number;
   y: number;
@@ -198,7 +200,11 @@ export function allocateWorkers(
   for (const residence of sortedResidences) {
     const offers = workplaces.flatMap((workplace) => {
       const vacancies = openJobs.get(workplace.id) ?? 0;
-      if (vacancies <= 0 || !isWithinWorkerSearchRadius(workplace, residence)) return [];
+      if (
+        vacancies <= 0 ||
+        workplace.cityId !== residence.cityId ||
+        !isWithinWorkerSearchRadius(workplace, residence)
+      ) return [];
       if (
         residence.technique <
         (workplace.minimumWorkerTechnique ?? DEFAULT_MIN_WORKER_TECHNIQUE)

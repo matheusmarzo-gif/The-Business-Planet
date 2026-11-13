@@ -41,9 +41,14 @@ da cidade e considerando as residências desocupadas na média regional de 10
 tiles. Cada construção com trabalhadores (inclusive uma obra) persiste o nível
 mínimo de técnica exigido (10–40; padrão 10). Na alocação diária, cada residência
 só pode oferecer trabalhadores quando sua técnica, derivada do bem-estar, atinge
-o mínimo configurado pela construção. A prévia de contratação no cliente aplica
-a mesma regra compartilhada. O painel mostra a técnica média dos trabalhadores
-atualmente alocados a cada construção.
+o mínimo configurado pela construção. Tanto a distribuição diária quanto a prévia
+de contratação exigem que residência e local de trabalho pertençam à mesma
+cidade; o raio de busca de 60 tiles não permite cruzar limites municipais.
+Movimentar uma construção entre cidades remove imediatamente as atribuições
+incompatíveis, e as existentes são reconciliadas na inicialização do servidor.
+O painel mostra a técnica média dos trabalhadores atualmente alocados a cada
+construção. Nas vendas, uma loja só atende residências da mesma cidade e ainda
+respeita o raio de alcance de 60 tiles.
 O relatório contábil de produção inclui toda construção com regra de produção,
 inclusive indústrias, e ordena os edifícios alfabeticamente por nome. Clique
 simples em qualquer construção abre seu painel; a conta Master pode arrastar

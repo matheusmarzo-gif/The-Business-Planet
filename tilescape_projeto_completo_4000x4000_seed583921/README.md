@@ -667,7 +667,8 @@ ocupa 4 × 4 e emprega até 30; custa 250 madeiras e 75 pedras e exige 125.000
 Work Points. Cada tile deve
 estar coberto por uma ou mais áreas rurais, sem sobrepor estradas ou construções,
 e ao lado de uma estrada. Toda obra e fazenda concluída têm um raio de 60 tiles
-para procurar trabalhadores (exibido no painel; veja "Empregos e salários"). O
+para procurar trabalhadores (exibido no painel; veja "Empregos e salários"),
+limitado à própria cidade. O
 funcionamento é o mesmo das residências (prévia, obra, demolição e painel
 lateral), mas sem moradores nem aluguel.
 
@@ -714,7 +715,7 @@ desejados**, **salário por dia** e **carga horária** (4 a 14 h). Durante a obr
 edifício; ao concluir, o número desejado e os empregados são reduzidos ao máximo
 definitivo da construção (por exemplo, 1 na Leitaria). Em construções
 concluídas vale o limite do catálogo. Todo dia às 12:00 (horário do mundo), cada
-residência considera todas as ofertas com vagas a até 60 tiles. O benefício de
+residência considera ofertas com vagas a até 60 tiles na mesma cidade. O benefício de
 cada oferta é `vagas × bônus × F_H² × (salário diário ÷ horas) × fator_distância`, com
 `F_H = 1 − 0,5·(|H−8|/6)²` e `fator_distância = √(60 / (60 + d))`, onde `d` é a
 distância entre os centros da residência e do trabalho. O bônus depende das
@@ -747,8 +748,9 @@ Points gerados pelos funcionários no dia: arroz/batata/milho/cevada/trigo e
 carne vermelha usam 25 WP/unidade; peixe, 50; açúcar/especiarias, 125;
 vegetais/sal, 20; e leite, 1 WP/litro. Padaria, Queijaria, Frutaria e
 Chocolateria usam, respectivamente, 3, 26, 160 e 54 WP por unidade. Para cada
-produto, cada residência considera lojas do produto em até 60 tiles, mas somente
-moradores empregados entram na demanda e na divisão entre as lojas. O custo de
+produto, cada residência considera apenas lojas do produto na mesma cidade e em
+até 60 tiles; somente moradores empregados entram na demanda e na divisão entre
+as lojas. O custo de
 referência `RR` é o custo diário por pessoa
 da cesta básica e `RR2`, o da cesta intermediária. Ambos usam preços médios
 ponderados pelas unidades vendidas nos últimos 30 dias. Produtos sem vendas no
@@ -764,8 +766,8 @@ Para cada produto, as residências são processadas por bem-estar decrescente;
 em caso de empate, a ordem é por ID crescente. Como estoque e capacidade são
 consumidos durante o processamento, uma residência prioritária pode receber
 estoque que já não estará disponível para as seguintes. Os moradores empregados
-são divididos entre as lojas
-elegíveis em até 60 tiles, proporcionalmente ao benefício associado. O
+são divididos entre as lojas elegíveis da mesma cidade e em até 60 tiles,
+proporcionalmente ao benefício associado. O
 arredondamento pelo método dos maiores restos mantém o número de consumidores
 inteiro e igual à população empregada da residência quando existe benefício
 positivo. Se o custo de

@@ -1316,22 +1316,31 @@ describe('shop sales', () => {
     ]);
   });
 
-  it('allows nearby stores across city borders but respects the 60-tile range', () => {
+  it('sells only within the residence city and the 60-tile range', () => {
     const shops = [
       { ...shop('near', 0, 10, 100, 100), productId: 'milk', type: 'shop_milk' as const },
       { ...shop('distant', 1000, 10, 100, 100), productId: 'milk', type: 'shop_milk' as const },
       { ...shop('other-city', 4, 10, 100, 100), cityId: 'city-b', productId: 'milk', type: 'shop_milk' as const },
     ];
+    const otherCityHome = { ...home('other-home', 0, 2, 100), cityId: 'city-b' };
+    const prices = cityPrices('milk', 10);
+    prices.set(getCityProductKey('city-b', 'milk'), 10);
     const plan = planShopSalesDetailed(
-      [home('home', 0, 2, 100)],
+      [home('home', 0, 2, 100), otherCityHome],
       shops,
       demandByProduct,
-      cityPrices('milk', 10),
+      prices,
       () => 0,
     );
-    assert.equal(plan.transactionsByShop.get('near')?.length, 1);
+    assert.deepEqual(
+      plan.transactionsByShop.get('near')?.map((transaction) => transaction.residenceId),
+      ['home'],
+    );
     assert.equal(plan.transactionsByShop.get('distant')?.length, 0);
-    assert.equal(plan.transactionsByShop.get('other-city')?.length, 1);
+    assert.deepEqual(
+      plan.transactionsByShop.get('other-city')?.map((transaction) => transaction.residenceId),
+      ['other-home'],
+    );
   });
 });
 
@@ -1660,6 +1669,7 @@ describe('fazenda leiteira e demanda configurável', () => {
 describe('work settings', () => {
   const workplace = (id: string, x: number, wage: number, desiredWorkers: number) => ({
     id,
+    cityId: 'city-a',
     type: 'farm_rice' as const,
     x,
     y: 0,
@@ -1675,6 +1685,7 @@ describe('work settings', () => {
 
     const homes = [{
       id: 'home',
+      cityId: 'city-a',
       type: 'house_poor2' as const,
       x: 0,
       y: 0,
@@ -1684,6 +1695,7 @@ describe('work settings', () => {
     }];
     const workplace = {
       id: 'dairy-shop',
+      cityId: 'city-a',
       type: 'shop_milk' as const,
       x: 1,
       y: 0,
@@ -1810,6 +1822,7 @@ describe('work settings', () => {
   it('only assigns workers whose residence technique meets each workplace minimum', () => {
     const home = {
       id: 'home',
+      cityId: 'city-a',
       type: 'house_poor1' as const,
       x: 100,
       y: 100,
@@ -1829,9 +1842,31 @@ describe('work settings', () => {
     ]);
   });
 
+  it('does not assign residents to workplaces in another city, even within the search radius', () => {
+    const home = {
+      id: 'home',
+      cityId: 'city-a',
+      type: 'house_poor1' as const,
+      x: 100,
+      y: 100,
+      occupants: 10,
+      internalAppeal: 10,
+      technique: 10,
+    };
+    const sameCity = workplace('same-city', 99, 10, 10);
+    sameCity.y = 99;
+    const otherCity = { ...sameCity, id: 'other-city', cityId: 'city-b' };
+
+    assert.deepEqual(allocateWorkers([home], [sameCity]), [
+      { workplaceId: 'same-city', residenceId: 'home', count: 10 },
+    ]);
+    assert.deepEqual(allocateWorkers([home], [otherCity]), []);
+  });
+
   it('distributes each home proportionally and rounds allocations to its population', () => {
     const home = {
       id: 'home',
+      cityId: 'city-a',
       type: 'house_poor1' as const,
       x: 100,
       y: 100,
@@ -1857,6 +1892,7 @@ describe('work settings', () => {
   it('caps proportional shares at vacancies and redistributes overflow', () => {
     const home = {
       id: 'home',
+      cityId: 'city-a',
       type: 'house_poor1' as const,
       x: 100,
       y: 100,
@@ -1878,6 +1914,7 @@ describe('work settings', () => {
     const homes = [
       {
         id: 'a',
+        cityId: 'city-a',
         type: 'house_poor1' as const,
         x: 10,
         y: 10,
@@ -1887,6 +1924,7 @@ describe('work settings', () => {
       },
       {
         id: 'b',
+        cityId: 'city-a',
         type: 'house_poor1' as const,
         x: 12,
         y: 10,
@@ -1928,6 +1966,7 @@ describe('work settings', () => {
     const homes = [
       {
         id: 'z-high-appeal',
+        cityId: 'city-a',
         type: 'house_poor1' as const,
         x: 10,
         y: 10,
@@ -1937,6 +1976,7 @@ describe('work settings', () => {
       },
       {
         id: 'a-low-appeal',
+        cityId: 'city-a',
         type: 'house_poor1' as const,
         x: 10,
         y: 10,

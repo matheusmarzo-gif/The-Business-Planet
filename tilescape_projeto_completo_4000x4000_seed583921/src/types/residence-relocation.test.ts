@@ -131,6 +131,19 @@ test('moves the calculated percentage and respects destination capacity', () => 
   assert.ok(moves[0].associatedDestination > moves[0].associatedSource);
 });
 
+test('can reevaluate only the residence whose rent changed', () => {
+  const moves = planResidenceRelocations(
+    [
+      residence({ id: 'other-source', occupants: 10, capacity: 10, rent: 40 }),
+      residence({ id: 'target-source', occupants: 10, capacity: 10, rent: 40 }),
+      residence({ id: 'destination', occupants: 0, capacity: 10, rent: 1 }),
+    ],
+    'target-source',
+  );
+  assert.ok(moves.length > 0);
+  assert.ok(moves.every((move) => move.sourceId === 'target-source'));
+});
+
 test('does not move residents between cities or when the destination is not better', () => {
   assert.deepEqual(
     planResidenceRelocations([

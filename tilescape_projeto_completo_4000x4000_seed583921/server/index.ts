@@ -172,6 +172,7 @@ import {
   calculateResidenceBenefit,
   getResidenceBenefitIncome,
   planResidenceRelocations,
+  type ResidenceRelocation,
 } from '../src/types/residence-relocation.js';
 import { DEFAULT_TILE_LIST } from '../src/utils/tileAssets.js';
 import { createMapGenerator } from '../src/utils/mapGenerator.js';
@@ -1681,6 +1682,171 @@ async function runDailyImmigration(): Promise<boolean> {
   }
 }
 
+async function applyResidenceRelocations(
+  client: PoolClient,
+  day: string,
+  counts: PerformanceEntityCounts,
+  sourceResidenceId?: string,
+): Promise<ResidenceRelocation[]> {
+  const { rows: residences } = await client.query<{
+    id: string;
+    city_id: string;
+    building_type: ResidenceType;
+    tile_x: number;
+    tile_y: number;
+    rent: number;
+    occupants: number;
+  }>(
+    `SELECT id, city_id, building_type, tile_x, tile_y, rent, occupants
+     FROM all_buildings
+     WHERE status = 'completed'`,
+  );
+  counts.residences = residences.filter(
+    (row) => getResidenceDefinition(row.building_type)?.kind === 'residence',
+  ).length;
+  const { rows: workplaces } = await client.query<{ id: string; wage: number }>(
+    'SELECT id, wage FROM all_buildings',
+  );
+  const { rows: assignments } = await client.query<{
+    workplace_id: string;
+    residence_id: string;
+    count: number;
+  }>('SELECT workplace_id, residence_id, count FROM job_assignments');
+  const assignmentsForIncome = assignments.map((row) => ({
+    workplaceId: row.workplace_id,
+    residenceId: row.residence_id,
+    count: row.count,
+  }));
+  const averageIncomes = getAverageIncomes(
+    residences.map((row) => ({ id: row.id })),
+    new Map(workplaces.map((row) => [row.id, row.wage])),
+    assignmentsForIncome,
+  );
+  const residentialRows = residences.filter(
+    (row) => getResidenceDefinition(row.building_type)?.kind === 'residence',
+  );
+  const employedByResidence = new Map<string, number>();
+  for (const assignment of assignmentsForIncome) {
+    employedByResidence.set(
+      assignment.residenceId,
+      (employedByResidence.get(assignment.residenceId) ?? 0) + assignment.count,
+    );
+  }
+  const cityIncomeTotals = new Map<string, { income: number; employees: number }>();
+  for (const residence of residentialRows) {
+    const employed = employedByResidence.get(residence.id) ?? 0;
+    const current = cityIncomeTotals.get(residence.city_id) ?? { income: 0, employees: 0 };
+    current.income += (averageIncomes.get(residence.id) ?? 0) * employed;
+    current.employees += employed;
+    cityIncomeTotals.set(residence.city_id, current);
+  }
+  const cityAverageSalaries = new Map(
+    [...cityIncomeTotals].map(([cityId, totals]) => [
+      cityId,
+      totals.employees > 0 ? totals.income / totals.employees : 0,
+    ]),
+  );
+  const appealValues = calculateResidenceAppeals(
+    residentialRows.map((row) => ({
+      id: row.id,
+      cityId: row.city_id,
+      x: row.tile_x + RESIDENCES[row.building_type].width / 2,
+      y: row.tile_y + RESIDENCES[row.building_type].height / 2,
+      salaryAverage: averageIncomes.get(row.id) ?? 0,
+      cityAverageSalary: cityAverageSalaries.get(row.city_id) ?? 0,
+      constructionAppeal: RESIDENCES[row.building_type].localAppeal,
+    })),
+  );
+  const { rows: productCosts } = await client.query<{
+    building_id: string;
+    monthly_products_cost: number;
+  }>(
+    `WITH product_costs AS (
+       SELECT building_id, product_id,
+              SUM(quantity) FILTER (WHERE consumers IS NOT NULL)
+                / NULLIF(SUM(consumers), 0) AS per_person_quantity,
+              SUM(spent) FILTER (WHERE consumers IS NOT NULL)
+                / NULLIF(SUM(quantity) FILTER (WHERE consumers IS NOT NULL), 0)
+                AS average_price
+       FROM residence_consumption
+       WHERE day >= $1::date - 30 AND day < $1::date
+       GROUP BY building_id, product_id
+     )
+     SELECT building_id,
+            COALESCE(SUM(per_person_quantity * average_price), 0)::float8
+              AS monthly_products_cost
+     FROM product_costs
+     GROUP BY building_id`,
+    [day],
+  );
+  const productsCostByResidence = new Map(
+    productCosts.map((row) => [row.building_id, row.monthly_products_cost]),
+  );
+  const candidates = residentialRows.map((row) => {
+    const appeal = appealValues.get(row.id);
+    if (!appeal) throw new Error(`Não foi possível calcular os apreços da residência ${row.id}.`);
+    return {
+      id: row.id,
+      cityId: row.city_id,
+      type: row.building_type,
+      rent: row.rent,
+      occupants: row.occupants,
+      capacity: RESIDENCES[row.building_type].capacity,
+      monthlyCost: row.rent + (productsCostByResidence.get(row.id) ?? 0),
+      dailyIncome: averageIncomes.get(row.id) ?? 0,
+      internalAppeal: appeal.internalAppeal,
+    };
+  });
+  const relocations = planResidenceRelocations(candidates, sourceResidenceId);
+  const occupantsByResidence = new Map(candidates.map((row) => [row.id, row.occupants]));
+  const affectedResidenceIds = new Set<string>();
+  for (const relocation of relocations) {
+    occupantsByResidence.set(
+      relocation.sourceId,
+      (occupantsByResidence.get(relocation.sourceId) ?? 0) - relocation.quantity,
+    );
+    affectedResidenceIds.add(relocation.sourceId);
+    occupantsByResidence.set(
+      relocation.destinationId,
+      (occupantsByResidence.get(relocation.destinationId) ?? 0) + relocation.quantity,
+    );
+    affectedResidenceIds.add(relocation.destinationId);
+  }
+  if (relocations.length > 0) {
+    const updates = [...affectedResidenceIds].map((id) => ({
+      id,
+      occupants: occupantsByResidence.get(id) ?? 0,
+    }));
+    await client.query(
+      `UPDATE all_buildings building
+       SET occupants = changes.occupants
+       FROM UNNEST($1::uuid[], $2::integer[]) AS changes(id, occupants)
+       WHERE building.id = changes.id`,
+      [updates.map(({ id }) => id), updates.map(({ occupants }) => occupants)],
+    );
+    await client.query(
+      `INSERT INTO residence_relocation_log
+         (day, source_residence_id, destination_residence_id, quantity,
+          associated_source, associated_destination)
+       SELECT $1::date, batch.source_id, batch.destination_id, batch.quantity,
+              batch.associated_source, batch.associated_destination
+       FROM UNNEST(
+         $2::uuid[], $3::uuid[], $4::integer[],
+         $5::double precision[], $6::double precision[]
+       ) AS batch(source_id, destination_id, quantity, associated_source, associated_destination)`,
+      [
+        day,
+        relocations.map((item) => item.sourceId),
+        relocations.map((item) => item.destinationId),
+        relocations.map((item) => item.quantity),
+        relocations.map((item) => item.associatedSource),
+        relocations.map((item) => item.associatedDestination),
+      ],
+    );
+  }
+  return relocations;
+}
+
 async function runMonthlyResidenceRelocation(): Promise<boolean> {
   const client = await pool.connect();
   try {
@@ -1714,156 +1880,7 @@ async function runMonthlyResidenceRelocation(): Promise<boolean> {
       randomUUID(),
       counts,
       async () => {
-        const { rows: residences } = await client.query<{
-          id: string;
-          city_id: string;
-          building_type: ResidenceType;
-          tile_x: number;
-          tile_y: number;
-          rent: number;
-          occupants: number;
-        }>(
-          `SELECT id, city_id, building_type, tile_x, tile_y, rent, occupants
-           FROM all_buildings
-           WHERE status = 'completed'`,
-        );
-        counts.residences = residences.filter(
-          (row) => getResidenceDefinition(row.building_type)?.kind === 'residence',
-        ).length;
-        const { rows: workplaces } = await client.query<{ id: string; wage: number }>(
-          'SELECT id, wage FROM all_buildings',
-        );
-        const { rows: assignments } = await client.query<{
-          workplace_id: string;
-          residence_id: string;
-          count: number;
-        }>('SELECT workplace_id, residence_id, count FROM job_assignments');
-        const assignmentsForIncome = assignments.map((row) => ({
-          workplaceId: row.workplace_id,
-          residenceId: row.residence_id,
-          count: row.count,
-        }));
-        const averageIncomes = getAverageIncomes(
-          residences.map((row) => ({ id: row.id })),
-          new Map(workplaces.map((row) => [row.id, row.wage])),
-          assignmentsForIncome,
-        );
-        const residentialRows = residences.filter(
-          (row) => getResidenceDefinition(row.building_type)?.kind === 'residence',
-        );
-        const employedByResidence = new Map<string, number>();
-        for (const assignment of assignmentsForIncome) {
-          employedByResidence.set(
-            assignment.residenceId,
-            (employedByResidence.get(assignment.residenceId) ?? 0) + assignment.count,
-          );
-        }
-        const cityIncomeTotals = new Map<string, { income: number; employees: number }>();
-        for (const residence of residentialRows) {
-          const employed = employedByResidence.get(residence.id) ?? 0;
-          const current = cityIncomeTotals.get(residence.city_id) ?? { income: 0, employees: 0 };
-          current.income += (averageIncomes.get(residence.id) ?? 0) * employed;
-          current.employees += employed;
-          cityIncomeTotals.set(residence.city_id, current);
-        }
-        const cityAverageSalaries = new Map(
-          [...cityIncomeTotals].map(([cityId, totals]) => [
-            cityId,
-            totals.employees > 0 ? totals.income / totals.employees : 0,
-          ]),
-        );
-        const appealValues = calculateResidenceAppeals(
-          residentialRows.map((row) => ({
-            id: row.id,
-            cityId: row.city_id,
-            x: row.tile_x + RESIDENCES[row.building_type].width / 2,
-            y: row.tile_y + RESIDENCES[row.building_type].height / 2,
-            salaryAverage: averageIncomes.get(row.id) ?? 0,
-            cityAverageSalary: cityAverageSalaries.get(row.city_id) ?? 0,
-            constructionAppeal: RESIDENCES[row.building_type].localAppeal,
-          })),
-        );
-        const { rows: productCosts } = await client.query<{
-          building_id: string;
-          monthly_products_cost: number;
-        }>(
-          `WITH product_costs AS (
-             SELECT building_id, product_id,
-                    SUM(quantity) FILTER (WHERE consumers IS NOT NULL)
-                      / NULLIF(SUM(consumers), 0) AS per_person_quantity,
-                    SUM(spent) FILTER (WHERE consumers IS NOT NULL)
-                      / NULLIF(SUM(quantity) FILTER (WHERE consumers IS NOT NULL), 0)
-                      AS average_price
-             FROM residence_consumption
-             WHERE day >= $1::date - 30 AND day < $1::date
-             GROUP BY building_id, product_id
-           )
-           SELECT building_id,
-                  COALESCE(SUM(per_person_quantity * average_price), 0)::float8
-                    AS monthly_products_cost
-           FROM product_costs
-           GROUP BY building_id`,
-          [state.day],
-        );
-        const productsCostByResidence = new Map(
-          productCosts.map((row) => [row.building_id, row.monthly_products_cost]),
-        );
-        const candidates = residentialRows.map((row) => {
-          const appeal = appealValues.get(row.id);
-          if (!appeal) throw new Error(`Não foi possível calcular os apreços da residência ${row.id}.`);
-          return {
-            id: row.id,
-            cityId: row.city_id,
-            type: row.building_type,
-            rent: row.rent,
-            occupants: row.occupants,
-            capacity: RESIDENCES[row.building_type].capacity,
-            monthlyCost: row.rent + (productsCostByResidence.get(row.id) ?? 0),
-            dailyIncome: averageIncomes.get(row.id) ?? 0,
-            internalAppeal: appeal.internalAppeal,
-          };
-        });
-        const relocations = planResidenceRelocations(candidates);
-        const occupantsByResidence = new Map(candidates.map((row) => [row.id, row.occupants]));
-        for (const relocation of relocations) {
-          occupantsByResidence.set(
-            relocation.sourceId,
-            (occupantsByResidence.get(relocation.sourceId) ?? 0) - relocation.quantity,
-          );
-          occupantsByResidence.set(
-            relocation.destinationId,
-            (occupantsByResidence.get(relocation.destinationId) ?? 0) + relocation.quantity,
-          );
-        }
-        if (relocations.length > 0) {
-          const updates = [...occupantsByResidence.entries()];
-          await client.query(
-            `UPDATE all_buildings building
-             SET occupants = changes.occupants
-             FROM UNNEST($1::uuid[], $2::integer[]) AS changes(id, occupants)
-             WHERE building.id = changes.id`,
-            [updates.map(([id]) => id), updates.map(([, occupants]) => occupants)],
-          );
-          await client.query(
-            `INSERT INTO residence_relocation_log
-               (day, source_residence_id, destination_residence_id, quantity,
-                associated_source, associated_destination)
-             SELECT $1::date, batch.source_id, batch.destination_id, batch.quantity,
-                    batch.associated_source, batch.associated_destination
-             FROM UNNEST(
-               $2::uuid[], $3::uuid[], $4::integer[],
-               $5::double precision[], $6::double precision[]
-             ) AS batch(source_id, destination_id, quantity, associated_source, associated_destination)`,
-            [
-              state.day,
-              relocations.map((item) => item.sourceId),
-              relocations.map((item) => item.destinationId),
-              relocations.map((item) => item.quantity),
-              relocations.map((item) => item.associatedSource),
-              relocations.map((item) => item.associatedDestination),
-            ],
-          );
-        }
+        const relocations = await applyResidenceRelocations(client, state.day, counts);
         await client.query(
           'UPDATE world_state SET last_residence_relocation_day = $1 WHERE id = 1',
           [state.day],
@@ -7826,35 +7843,99 @@ async function start() {
       return;
     }
 
-    void pool
-      .query<ResidentialBuildingRow>(
-        `UPDATE all_buildings
-         SET rent = $3
-         WHERE id = $1 AND created_by = $2 AND building_type = ANY($4::text[])
-         RETURNING ${ALL_BUILDING_COLUMNS}`,
-        [request.params.id, userId, rent, RESIDENCE_BUILDING_TYPES],
-      )
-      .then(async ({ rows }) => {
-        if (!rows[0]) {
-          const existing = await pool.query(
-            'SELECT 1 FROM all_buildings WHERE id = $1',
-            [request.params.id],
-          );
-          response
-            .status(existing.rowCount ? 403 : 404)
-            .json({ error: existing.rowCount ? 'residence_not_owned' : 'residence_not_found' });
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const { rows: stateRows } = await client.query<{ day: string }>(
+          `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
+           FROM world_state WHERE id = 1 FOR UPDATE`,
+        );
+        const state = stateRows[0];
+        if (!state) throw new Error('O relógio do mundo não está disponível para a realocação.');
+        const { rows } = await client.query<ResidentialBuildingRow & { created_by: string }>(
+          `SELECT ${ALL_BUILDING_COLUMNS}, created_by
+           FROM all_buildings WHERE id = $1 FOR UPDATE`,
+          [request.params.id],
+        );
+        const residence = rows[0];
+        if (!residence) {
+          await client.query('ROLLBACK');
+          response.status(404).json({ error: 'residence_not_found' });
+          return;
+        }
+        if (
+          residence.created_by !== userId ||
+          !RESIDENCE_BUILDING_TYPES.includes(residence.building_type)
+        ) {
+          await client.query('ROLLBACK');
+          response.status(403).json({ error: 'residence_not_owned' });
           return;
         }
 
-        response.json(mapResidentialBuilding(rows[0]));
-        void publishCities().catch((error: unknown) => {
-          console.error('O aluguel foi atualizado, mas a atualização do mundo falhou:', error);
+        const rentChanged = Number(residence.rent) !== rent;
+        if (rentChanged) {
+          await client.query('UPDATE all_buildings SET rent = $2 WHERE id = $1', [
+            residence.id,
+            rent,
+          ]);
+          if (
+            residence.status === 'completed' &&
+            getResidenceDefinition(residence.building_type)?.kind === 'residence'
+          ) {
+            const relocationCounts = emptyPerformanceCounts();
+            await measurePerformanceStage(
+              'mudanças de residência',
+              'mudança de aluguel',
+              state.day,
+              randomUUID(),
+              relocationCounts,
+              async () =>
+                (await applyResidenceRelocations(
+                  client,
+                  state.day,
+                  relocationCounts,
+                  residence.id,
+                )).length > 0,
+              0,
+              false,
+              5,
+            );
+          }
+        }
+
+        const { rows: updatedRows } = await client.query<ResidentialBuildingRow>(
+          `SELECT ${ALL_BUILDING_COLUMNS} FROM all_buildings WHERE id = $1`,
+          [residence.id],
+        );
+        const updatedResidence = updatedRows[0];
+        if (!updatedResidence) {
+          throw new Error(
+            `Não foi possível carregar a residência ${residence.id} após alterar o aluguel.`,
+          );
+        }
+        await client.query('COMMIT');
+        response.json(mapResidentialBuilding(updatedResidence));
+        if (rentChanged) {
+          void publishCities().catch((error: unknown) => {
+            console.error('O aluguel foi atualizado, mas a atualização do mundo falhou:', error);
+          });
+        }
+      } catch (error) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter a alteração de aluguel:', rollbackError);
         });
-      })
-      .catch((error: unknown) => {
-        console.error('Não foi possível atualizar o aluguel:', error);
+        throw error;
+      } finally {
+        client.release();
+      }
+    })().catch((error: unknown) => {
+      console.error('Não foi possível atualizar o aluguel e realocar moradores:', error);
+      if (!response.headersSent) {
         response.status(503).json({ error: 'residence_unavailable' });
-      });
+      }
+    });
   });
   app.patch('/api/residential-buildings/:id/price', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);

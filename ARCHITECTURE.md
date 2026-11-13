@@ -35,9 +35,12 @@ por uma cidade vizinha elegível a menos de 850 tiles. O servidor persiste em
 `city_assemblies.population_change_last_month` a variação líquida de cada cidade
 resultante do último processamento mensal e a publica no estado das cidades.
 O jogo também processa rotinas diárias de imigração, emprego, consumo, produção,
-vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor também
-processa mudanças de moradores entre residências concluídas da mesma cidade,
-persistindo cada transferência em `residence_relocation_log`.
+vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor processa mudanças
+de moradores entre residências concluídas da mesma cidade. Uma alteração de
+aluguel também reavalia imediatamente os moradores da residência alterada como
+origem, considerando as demais residências da cidade apenas como destinos com
+capacidade disponível. A gravação do aluguel, da nova ocupação e do histórico
+`residence_relocation_log` é atômica.
 Na alocação diária de empregos, as residências concluídas com moradores são
 processadas por apreço interno decrescente; empates são resolvidos pelo ID.
 O apreço é calculado com as rendas médias residenciais e a média salarial

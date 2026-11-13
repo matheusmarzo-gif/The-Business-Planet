@@ -214,12 +214,16 @@ export function getAssociatedResidenceBenefit(input: {
 
 export function planResidenceRelocations(
   residences: ResidenceRelocationCandidate[],
+  sourceResidenceId?: string,
 ): ResidenceRelocation[] {
   const currentOccupants = new Map(residences.map((residence) => [residence.id, residence.occupants]));
   const relocations: ResidenceRelocation[] = [];
   const ordered = [...residences].sort((a, b) => a.id.localeCompare(b.id));
+  const sources = ordered.filter(
+    (residence) => sourceResidenceId === undefined || residence.id === sourceResidenceId,
+  );
 
-  for (const source of ordered) {
+  for (const source of sources) {
     let sourceOccupants = currentOccupants.get(source.id) ?? 0;
     if (sourceOccupants <= 0) continue;
 

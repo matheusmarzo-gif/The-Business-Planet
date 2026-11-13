@@ -375,14 +375,19 @@ da cidade é a soma dos ocupantes das suas residências, e o bem-estar municipal
 a média do bem-estar das residências ponderada pelo número de moradores. Todo dia às 00:00 do
 relógio do jogo, o aluguel por pessoa é multiplicado pelos moradores e creditado
 ao dono da residência. No dia 7 de cada mês, às 03:00, moradores também podem
-mudar entre residências concluídas da mesma cidade. A comparação usa o custo
-médio mensal da casa (consumo médio dos últimos 30 dias, valorizado pelo preço
-médio pago de cada produto, mais aluguel), a renda média diária por morador e o
-apreço local. A mudança só ocorre quando o benefício associado da residência de
-destino é maior; a quantidade é limitada pelas vagas e pelos moradores da casa
-de origem. Cada mudança é registrada no histórico do servidor. Como moradores
-são NPCs sem carteira individual, não há débito separado. Clique em outro ponto
-do mapa ou em × para fechar.
+mudar entre residências concluídas da mesma cidade. Quando o aluguel de uma
+residência concluída muda, seus moradores são reavaliados imediatamente, sem
+esperar o dia 7, e podem se mudar para outras residências da mesma cidade com
+vagas e benefício associado maior. Essa reavaliação considera apenas moradores
+da residência cujo aluguel mudou como origem; as demais casas só podem receber
+moradores se tiverem vaga. A comparação usa o custo médio mensal da casa
+(consumo médio dos últimos 30 dias,
+valorizado pelo preço médio pago de cada produto, mais aluguel), a renda média
+diária por morador e o apreço local. A mudança só ocorre quando o benefício
+associado da residência de destino é maior; a quantidade é limitada pelas vagas
+e pelos moradores da casa de origem. Cada mudança é registrada no histórico do
+servidor. Como moradores são NPCs sem carteira individual, não há débito
+separado. Clique em outro ponto do mapa ou em × para fechar.
 
 No mesmo horário mensal, a população cresce ou decresce por residência
 concluída. O crescimento exige vaga na casa, ofertas de emprego na cidade e

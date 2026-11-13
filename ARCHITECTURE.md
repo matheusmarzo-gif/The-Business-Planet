@@ -31,7 +31,9 @@ a massa salarial mensal. O bem-estar individual das residências é calculado
 pelas necessidades supridas. No dia 7 de cada mês, às 03:00, a população também
 cresce ou decresce por residência conforme o bem-estar, o desemprego municipal,
 as vagas de emprego e a capacidade habitacional. A emigração pode ser recebida
-por uma cidade vizinha elegível a menos de 850 tiles.
+por uma cidade vizinha elegível a menos de 850 tiles. O servidor persiste em
+`city_assemblies.population_change_last_month` a variação líquida de cada cidade
+resultante do último processamento mensal e a publica no estado das cidades.
 O jogo também processa rotinas diárias de imigração, emprego, consumo, produção,
 vendas e aluguel. No dia 7 de cada mês, às 03:00, o servidor também
 processa mudanças de moradores entre residências concluídas da mesma cidade,

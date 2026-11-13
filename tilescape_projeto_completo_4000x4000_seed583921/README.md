@@ -94,7 +94,8 @@ O servidor cria a tabela necessária (`world_state`) automaticamente ao iniciar.
 
 Ao selecionar uma residência concluída, o painel mostra, logo abaixo de
 **Salvar aluguel**, o benefício associado calculado com o aluguel, a média de
-gastos dos últimos 30 dias e o salário médio dos empregados da residência.
+gastos dos últimos 30 dias e a renda diária média por morador da residência.
+Se ela estiver vazia, o cálculo usa a renda média por morador da cidade.
 O painel também mostra o apreço da empregabilidade (salário médio dos empregados
 dividido pelo salário médio dos empregados da cidade), o apreço da região
 (média da empregabilidade das residências
@@ -276,8 +277,9 @@ municipal incompatível. Clique para selecionar o centro. A Assembleia ocupa
 ocupa 303 × 303 tiles. Áreas municipais não podem se sobrepor nem ultrapassar
 os limites do mapa, e o servidor valida essas regras antes de salvar.
 Clique na Assembleia para consultar os dados da cidade; a conta master também
-pode editar o nome. O painel mostra população, pessoas empregadas, vagas de
-emprego ainda abertas e salário médio diário dos empregados. O botão **Consumo**
+pode editar o nome. O painel mostra população, crescimento ou decrescimento
+populacional líquido do último processamento mensal, pessoas empregadas, vagas
+de emprego ainda abertas e salário médio diário dos empregados. O botão **Consumo**
 abre o consumo médio por pessoa no último dia e nos últimos 30 dias, com as
 quantidades consumidas e desejadas por produto e o preço médio pago. A economia
 é `INTEIRO(100 × gastos residenciais com produtos nos últimos 30 dias /

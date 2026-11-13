@@ -138,6 +138,14 @@ export interface ResidenceBenefitCalculation {
   productContributions: { productId: string; contribution: number }[];
 }
 
+export function getResidenceBenefitIncome(
+  occupants: number,
+  residenceAverageIncome: number,
+  cityAverageIncome: number,
+): number {
+  return occupants > 0 ? residenceAverageIncome : cityAverageIncome;
+}
+
 export function calculateResidenceBenefit(input: {
   rent: number;
   monthlyCost: number;

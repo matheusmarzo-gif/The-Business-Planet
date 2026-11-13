@@ -45,6 +45,7 @@ export default function CityAssemblyModal({
   const parsedMinimumWage = parseCityMinimumWage(Number(minimumWageDraft));
   const minimumWageChanged =
     city !== null && parsedMinimumWage !== null && parsedMinimumWage !== city.minimumWage;
+  const populationChange = city?.populationChangeLastMonth ?? 0;
 
   useEffect(() => {
     setMinimumWageDraft(String(city?.minimumWage ?? MIN_CITY_MINIMUM_WAGE));
@@ -97,6 +98,14 @@ export default function CityAssemblyModal({
 
           <dl className="city-stat-list">
             <div><dt>POPULAÇÃO</dt><dd>{city?.population ?? 0}</dd></div>
+            <div>
+              <dt>
+                {populationChange < 0
+                  ? 'DECRESCIMENTO POPULACIONAL NO ÚLTIMO MÊS:'
+                  : 'CRESCIMENTO POPULACIONAL NO ÚLTIMO MÊS:'}
+              </dt>
+              <dd>{Math.abs(populationChange)}</dd>
+            </div>
             <div><dt>BEM-ESTAR</dt><dd>{money.format(city?.wellbeing ?? 0)}</dd></div>
             <div><dt>ECONOMIA</dt><dd>{city?.economy ?? 0}</dd></div>
             <div><dt>PESSOAS EMPREGADAS</dt><dd>{city?.employed ?? 0}</dd></div>

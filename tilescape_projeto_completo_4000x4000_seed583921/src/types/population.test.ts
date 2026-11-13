@@ -126,6 +126,8 @@ describe('population change', () => {
     assert.deepEqual(plan.migrations, [
       { sourceCityId: 'declining', destinationCityId: 'neighbor', quantity: 1 },
     ]);
+    assert.equal(plan.populationChangeByCity.get('declining'), -3);
+    assert.equal(plan.populationChangeByCity.get('neighbor'), 1);
   });
 
   it('allows departures to leave the world when no eligible neighboring city can receive them', () => {

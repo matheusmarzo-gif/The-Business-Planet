@@ -4,6 +4,7 @@ import {
   calculateResidenceAppealsFromIncome,
   calculateResidenceAppeals,
   calculateResidenceBenefit,
+  getResidenceBenefitIncome,
   planResidenceRelocations,
 } from './residence-relocation.js';
 
@@ -171,4 +172,20 @@ test('returns the associated benefit and its tooltip components', () => {
   assert.ok(calculation.errorBenefit > 0);
   assert.ok(calculation.idealBenefit > 0);
   assert.ok(calculation.associatedBenefit > 0);
+});
+
+test('uses city average income for empty homes and residence average otherwise', () => {
+  const emptyHomeIncome = getResidenceBenefitIncome(0, 0, 20);
+  assert.equal(emptyHomeIncome, 20);
+  assert.equal(getResidenceBenefitIncome(3, 10, 20), 10);
+  const calculation = calculateResidenceBenefit({
+    rent: 1,
+    monthlyCost: 20,
+    dailyIncome: emptyHomeIncome,
+    employabilityAppeal: 1,
+    regionalAppeal: 1,
+    constructionAppeal: 50,
+  });
+  assert.ok(calculation.errorBenefit > 0);
+  assert.ok(calculation.idealBenefit > 0);
 });

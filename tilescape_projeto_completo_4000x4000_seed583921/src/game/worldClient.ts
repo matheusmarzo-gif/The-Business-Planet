@@ -31,6 +31,8 @@ function isCityAssembly(value: unknown): value is CityAssembly {
     city.minimumWage >= 1 &&
     city.minimumWage <= 100000 &&
     Number.isInteger(city.population) &&
+    (city.populationChangeLastMonth === undefined ||
+      Number.isSafeInteger(city.populationChangeLastMonth)) &&
     isValidCityWellbeing(city.wellbeing) &&
     Number.isInteger(city.economy) &&
     (city.employed === undefined || Number.isInteger(city.employed)) &&

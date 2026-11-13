@@ -47,6 +47,7 @@ export interface CityAssembly {
   centerY: number;
   minimumWage: number;
   population: number;
+  populationChangeLastMonth?: number;
   wellbeing: number;
   economy: number;
   employed?: number;

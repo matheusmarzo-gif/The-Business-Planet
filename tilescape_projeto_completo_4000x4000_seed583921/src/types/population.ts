@@ -31,6 +31,7 @@ export interface PopulationMigration {
 export interface PopulationChangePlan {
   occupantsByResidence: Map<string, number>;
   migrations: PopulationMigration[];
+  populationChangeByCity: Map<string, number>;
 }
 
 export function getPopulationGrowthRate(wellbeing: number): number {
@@ -134,6 +135,7 @@ export function planMonthlyPopulationChange(
       (homesByCity.get(city.id) ?? []).reduce((total, home) => total + home.occupants, 0),
     ]),
   );
+  const startingPopulationByCity = new Map(populationByCity);
   const decliningCityIds = new Set(
     cities
       .filter(
@@ -252,5 +254,11 @@ export function planMonthlyPopulationChange(
       occupantsByResidence.delete(residenceId);
     }
   }
-  return { occupantsByResidence, migrations };
+  const populationChangeByCity = new Map(
+    cities.map((city) => [
+      city.id,
+      (populationByCity.get(city.id) ?? 0) - (startingPopulationByCity.get(city.id) ?? 0),
+    ]),
+  );
+  return { occupantsByResidence, migrations, populationChangeByCity };
 }

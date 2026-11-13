@@ -166,6 +166,7 @@ import {
   calculateResidenceAppealsFromIncome,
   calculateResidenceAppeals,
   calculateResidenceBenefit,
+  getResidenceBenefitIncome,
   planResidenceRelocations,
 } from '../src/types/residence-relocation.js';
 import { DEFAULT_TILE_LIST } from '../src/utils/tileAssets.js';
@@ -617,6 +618,7 @@ interface CityAssembly {
   centerY: number;
   minimumWage: number;
   population: number;
+  populationChangeLastMonth?: number;
   wellbeing: number;
   economy: number;
   zones: CityZone[];
@@ -1286,9 +1288,11 @@ async function getCities(): Promise<CityAssembly[]> {
       center_y: number;
       minimum_wage: number;
       population: number;
+      population_change_last_month: number;
       zones: CityZone[];
     }>(
       `SELECT city.id, city.name, city.center_x, city.center_y, city.minimum_wage,
+            city.population_change_last_month,
             COALESCE((
               SELECT SUM(home.occupants)::integer
               FROM all_buildings AS home
@@ -1375,6 +1379,7 @@ async function getCities(): Promise<CityAssembly[]> {
       centerY: row.center_y,
       minimumWage: row.minimum_wage,
       population: row.population,
+      populationChangeLastMonth: row.population_change_last_month,
       wellbeing: wellbeingByCity.get(row.id) ?? 0,
       economy: calculateCityEconomy(
         monthlySpendingByCity.get(row.id) ?? 0,
@@ -2011,6 +2016,7 @@ async function runMonthlyPopulationChange(): Promise<boolean> {
           residenceRows.map((residence) => [residence.id, residence.occupants]),
         );
         const plan = planMonthlyPopulationChange(cities, residences);
+        let changed = false;
 
         if (plan.occupantsByResidence.size > 0) {
           const updates = [...plan.occupantsByResidence.entries()];
@@ -2026,14 +2032,27 @@ async function runMonthlyPopulationChange(): Promise<boolean> {
               await limitResidenceJobAssignments(client, residenceId, occupants);
             }
           }
+          changed = true;
         }
 
+        const { rowCount: updatedCityCount } = await client.query(
+          `UPDATE city_assemblies AS city
+           SET population_change_last_month = changes.amount
+           FROM UNNEST($1::uuid[], $2::integer[]) AS changes(id, amount)
+           WHERE city.id = changes.id
+             AND city.population_change_last_month IS DISTINCT FROM changes.amount`,
+          [
+            cityRows.map((city) => city.id),
+            cityRows.map((city) => plan.populationChangeByCity.get(city.id) ?? 0),
+          ],
+        );
+        if ((updatedCityCount ?? 0) > 0) changed = true;
         await client.query(
           'UPDATE world_state SET last_population_change_day = $1 WHERE id = 1',
           [state.day],
         );
         await client.query('COMMIT');
-        return plan.occupantsByResidence.size > 0;
+        return changed;
       },
       lockWaitMs,
       false,
@@ -4970,12 +4989,14 @@ async function createCityAssembly(
       center_y: number;
       minimum_wage: number;
       population: number;
+      population_change_last_month: number;
       wellbeing: number;
       economy: number;
     }>(
       `INSERT INTO city_assemblies (id, name, center_x, center_y, created_by)
        VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, center_x, center_y, population, wellbeing, economy, minimum_wage`,
+       RETURNING id, name, center_x, center_y, population, population_change_last_month,
+                 wellbeing, economy, minimum_wage`,
       [randomUUID(), city.name, city.centerX, city.centerY, userId],
     );
     await client.query('COMMIT');
@@ -4988,6 +5009,7 @@ async function createCityAssembly(
         centerY: row.center_y,
         minimumWage: row.minimum_wage,
         population: row.population,
+        populationChangeLastMonth: row.population_change_last_month,
         wellbeing: row.wellbeing,
         economy: row.economy,
         zones: [],
@@ -5019,6 +5041,7 @@ async function replaceCityZones(
       center_y: number;
       minimum_wage: number;
       population: number;
+      population_change_last_month: number;
       economy: number;
     }>(
       `SELECT id, name, center_x, center_y,
@@ -5027,7 +5050,7 @@ async function replaceCityZones(
                 FROM all_buildings AS home
                 WHERE home.city_id = city_assemblies.id
               ), 0) AS population,
-              economy, minimum_wage
+              population_change_last_month, economy, minimum_wage
        FROM city_assemblies WHERE id = $1 FOR UPDATE`,
       [cityId],
     );
@@ -5078,6 +5101,7 @@ async function replaceCityZones(
         centerY: cityRow.center_y,
         minimumWage: cityRow.minimum_wage,
         population: cityRow.population,
+        populationChangeLastMonth: cityRow.population_change_last_month,
         wellbeing: cityWellbeing,
         economy: cityRow.economy,
         zones: normalizedZones,
@@ -6253,7 +6277,11 @@ async function start() {
       const calculation = calculateResidenceBenefit({
         rent: row.rent,
         monthlyCost: row.rent + row.monthly_products_cost,
-        dailyIncome: row.daily_income,
+        dailyIncome: getResidenceBenefitIncome(
+          row.occupants,
+          row.daily_income,
+          cityAverageSalary,
+        ),
         ...appealValues,
       });
       response.json({ ...calculation, productContributions: row.product_contributions });

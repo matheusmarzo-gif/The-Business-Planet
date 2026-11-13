@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS city_assemblies (
   center_y INTEGER NOT NULL CHECK (center_y BETWEEN 151 AND 3848),
   minimum_wage NUMERIC(12, 2) NOT NULL DEFAULT 1 CHECK (minimum_wage BETWEEN 1 AND 100000),
   population INTEGER NOT NULL DEFAULT 0 CHECK (population >= 0),
+  population_change_last_month INTEGER NOT NULL DEFAULT 0,
   wellbeing INTEGER NOT NULL DEFAULT 0 CHECK (wellbeing BETWEEN 0 AND 100),
   economy INTEGER NOT NULL DEFAULT 0 CHECK (economy >= 0),
   created_by TEXT NOT NULL,
@@ -35,6 +36,8 @@ CREATE TABLE IF NOT EXISTS city_assemblies (
 ALTER TABLE city_assemblies
   ADD COLUMN IF NOT EXISTS minimum_wage NUMERIC(12, 2) NOT NULL DEFAULT 1
   CHECK (minimum_wage BETWEEN 1 AND 100000);
+ALTER TABLE city_assemblies
+  ADD COLUMN IF NOT EXISTS population_change_last_month INTEGER NOT NULL DEFAULT 0;
 
 DO $$
 BEGIN

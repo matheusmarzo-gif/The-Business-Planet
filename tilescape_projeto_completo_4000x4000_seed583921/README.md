@@ -392,12 +392,18 @@ separado. Clique em outro ponto do mapa ou em × para fechar.
 No mesmo horário mensal, a população cresce ou decresce por residência
 concluída. O crescimento exige vaga na casa, ofertas de emprego na cidade e
 desemprego de no máximo 10% (desempregados ÷ população). As taxas mensais são
-0,3% para bem-estar de 50 a 99; 1,5% de 100 a 124; 3% de 125 a 149; e 1,5% de
-150 a 162. A faixa acima de 162 teria taxa de 0,3%, mas não é atingível com o
-limite atual de bem-estar. Frações de moradores são arredondadas
-probabilisticamente. Se o desemprego ultrapassar 10%, casas com bem-estar de 0
-a 50 perdem 2% da
-população; casas acima de 100 perdem 1%, que pode emigrar para uma cidade
+0,1% para bem-estar de 0 a 50; 0,3% acima de 50 e abaixo de 100; 1,5% de 100
+a 124; 3% de 125 a 149; e 1,5% de 150 a 162. A faixa acima de 162 teria taxa
+de 0,3%, mas não é atingível com o limite atual de bem-estar. Casas parcialmente
+ocupadas crescem pela própria taxa de bem-estar. Para as casas vazias, o jogo
+calcula uma única taxa sobre a população das casas que estavam lotadas, usando o
+bem-estar médio ponderado pelos moradores, e distribui esse crescimento pelas
+casas vazias em ordem de ID, respeitando a capacidade. Por exemplo, 40.000
+moradores em casas lotadas com bem-estar médio 35 geram 40 novos moradores:
+32 ocupam a primeira casa vazia e 8, a próxima. Frações de moradores são
+arredondadas probabilisticamente. Se o desemprego ultrapassar 10%, casas com
+bem-estar de 0 a 50 perdem 2% da população; casas acima de 100 perdem 1%, que
+pode emigrar para uma cidade
 aleatória a menos de 850 tiles e que não esteja em decrescimento. Os emigrantes
 ocupam primeiro as residências concluídas mais baratas da cidade de destino.
 Sem cidade vizinha elegível ou capacidade para recebê-los, a população que saiu

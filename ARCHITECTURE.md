@@ -30,8 +30,13 @@ vínculos de trabalho; a economia da cidade compara os gastos residenciais com
 a massa salarial mensal. O bem-estar individual das residências é calculado
 pelas necessidades supridas. No dia 7 de cada mês, às 03:00, a população também
 cresce ou decresce por residência conforme o bem-estar, o desemprego municipal,
-as vagas de emprego e a capacidade habitacional. A emigração pode ser recebida
-por uma cidade vizinha elegível a menos de 850 tiles. O servidor persiste em
+as vagas de emprego e a capacidade habitacional. Casas parcialmente ocupadas
+crescem pela própria taxa de bem-estar; o crescimento destinado às casas vazias
+é calculado sobre os moradores das casas que estavam lotadas, com bem-estar
+médio ponderado pela população, e distribuído pelas casas vazias em ordem de ID
+até sua capacidade. As taxas mensais incluem 0,1% para bem-estar de 0 a 50.
+A emigração pode ser recebida por uma cidade vizinha elegível a menos de 850
+tiles. O servidor persiste em
 `city_assemblies.population_change_last_month` a variação líquida de cada cidade
 resultante do último processamento mensal e a publica no estado das cidades.
 O jogo também processa rotinas diárias de imigração, emprego, consumo, produção,

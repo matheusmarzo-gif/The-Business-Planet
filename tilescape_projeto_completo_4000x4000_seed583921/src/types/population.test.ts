@@ -12,8 +12,10 @@ import {
 
 describe('population change', () => {
   it('uses the confirmed wellbeing bands for internal growth', () => {
-    assert.equal(getPopulationGrowthRate(49.99), 0);
-    assert.equal(getPopulationGrowthRate(50), 0.003);
+    assert.equal(getPopulationGrowthRate(0), 0.001);
+    assert.equal(getPopulationGrowthRate(49.99), 0.001);
+    assert.equal(getPopulationGrowthRate(50), 0.001);
+    assert.equal(getPopulationGrowthRate(50.01), 0.003);
     assert.equal(getPopulationGrowthRate(99), 0.003);
     assert.equal(getPopulationGrowthRate(100), 0.015);
     assert.equal(getPopulationGrowthRate(124), 0.015);
@@ -81,6 +83,99 @@ describe('population change', () => {
     assert.equal(plan.occupantsByResidence.get('a-nearly-full'), 128);
     assert.equal(plan.occupantsByResidence.has('b-after-threshold'), false);
     assert.equal(plan.occupantsByResidence.has('no-jobs'), false);
+  });
+
+  it('distributes growth from full homes across empty residences by their capacity', () => {
+    const city: PopulationCity = {
+      id: 'city',
+      centerX: 0,
+      centerY: 0,
+      employed: 40000,
+      jobOffers: 1,
+    };
+    const fullHomes: PopulationResidence[] = [
+      ...Array.from({ length: 312 }, (_, index) => ({
+        id: `full-large-${String(index).padStart(3, '0')}`,
+        cityId: 'city',
+        type: 'house_poor3' as const,
+        status: 'completed' as const,
+        occupants: 128,
+        wellbeing: 35,
+        rent: 1,
+      })),
+      ...Array.from({ length: 2 }, (_, index) => ({
+        id: `full-small-${index}`,
+        cityId: 'city',
+        type: 'house_poor2' as const,
+        status: 'completed' as const,
+        occupants: 32,
+        wellbeing: 35,
+        rent: 1,
+      })),
+    ];
+    const emptyHomes: PopulationResidence[] = ['empty-a', 'empty-b'].map((id) => ({
+      id,
+      cityId: 'city',
+      type: 'house_poor2',
+      status: 'completed',
+      occupants: 0,
+      wellbeing: 0,
+      rent: 1,
+    }));
+
+    const plan = planMonthlyPopulationChange(
+      [city],
+      [...fullHomes, ...emptyHomes],
+      () => 0.99,
+    );
+
+    assert.equal(plan.occupantsByResidence.get('empty-a'), 32);
+    assert.equal(plan.occupantsByResidence.get('empty-b'), 8);
+    assert.equal(plan.populationChangeByCity.get('city'), 40);
+  });
+
+  it('weights the full-home wellbeing average by occupants before calculating growth', () => {
+    const city: PopulationCity = {
+      id: 'city',
+      centerX: 0,
+      centerY: 0,
+      employed: 160,
+      jobOffers: 1,
+    };
+    const residences: PopulationResidence[] = [
+      {
+        id: 'large-low-wellbeing',
+        cityId: 'city',
+        type: 'house_poor3',
+        status: 'completed',
+        occupants: 128,
+        wellbeing: 0,
+        rent: 1,
+      },
+      {
+        id: 'small-high-wellbeing',
+        cityId: 'city',
+        type: 'house_poor2',
+        status: 'completed',
+        occupants: 32,
+        wellbeing: 150,
+        rent: 1,
+      },
+      {
+        id: 'empty',
+        cityId: 'city',
+        type: 'house_poor1',
+        status: 'completed',
+        occupants: 0,
+        wellbeing: 0,
+        rent: 1,
+      },
+    ];
+
+    const plan = planMonthlyPopulationChange([city], residences, () => 0.3);
+
+    assert.equal(plan.occupantsByResidence.has('empty'), false);
+    assert.equal(plan.populationChangeByCity.get('city'), 0);
   });
 
   it('reduces population in declining cities and transfers high-wellbeing emigrants', () => {

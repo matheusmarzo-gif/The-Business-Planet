@@ -38,7 +38,7 @@ export function getPopulationGrowthRate(wellbeing: number): number {
   if (!Number.isFinite(wellbeing) || wellbeing < 0) {
     throw new RangeError('O bem-estar usado para calcular o crescimento populacional é inválido.');
   }
-  if (wellbeing < 50) return 0;
+  if (wellbeing <= 50) return 0.001;
   if (wellbeing < 100) return 0.003;
   if (wellbeing < 125) return 0.015;
   if (wellbeing < 150) return 0.03;
@@ -227,6 +227,10 @@ export function planMonthlyPopulationChange(
       continue;
     }
     const cityHomes = homesByCity.get(city.id) ?? [];
+    const fullHomes = cityHomes.filter(
+      (home) => home.occupants >= RESIDENCES[home.type].capacity,
+    );
+    const emptyHomes = cityHomes.filter((home) => home.occupants === 0);
     for (const home of cityHomes) {
       if (
         getUnemploymentRate(populationByCity.get(city.id) ?? 0, city.employed) >
@@ -246,6 +250,32 @@ export function planMonthlyPopulationChange(
       home.occupants += increase;
       occupantsByResidence.set(home.id, home.occupants);
       populationByCity.set(city.id, (populationByCity.get(city.id) ?? 0) + increase);
+    }
+
+    if (
+      getUnemploymentRate(populationByCity.get(city.id) ?? 0, city.employed) >
+      CITY_UNEMPLOYMENT_THRESHOLD
+    ) {
+      continue;
+    }
+
+    const fullPopulation = fullHomes.reduce((total, home) => total + home.occupants, 0);
+    if (fullPopulation === 0 || emptyHomes.length === 0) continue;
+    const weightedWellbeing =
+      fullHomes.reduce((total, home) => total + home.wellbeing * home.occupants, 0) /
+      fullPopulation;
+    let remainingGrowth = roundPopulationChange(
+      fullPopulation,
+      getPopulationGrowthRate(weightedWellbeing),
+      random,
+    );
+    for (const home of emptyHomes) {
+      if (remainingGrowth <= 0) break;
+      const increase = Math.min(RESIDENCES[home.type].capacity, remainingGrowth);
+      home.occupants += increase;
+      occupantsByResidence.set(home.id, home.occupants);
+      populationByCity.set(city.id, (populationByCity.get(city.id) ?? 0) + increase);
+      remainingGrowth -= increase;
     }
   }
 

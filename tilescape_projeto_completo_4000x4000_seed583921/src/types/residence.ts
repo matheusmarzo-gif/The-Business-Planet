@@ -243,6 +243,22 @@ export function parseRent(value: unknown): number | null {
   return roundCurrency(rent);
 }
 
+export function isRentIncreaseWithinCityAverageStepLimit(
+  currentRent: number,
+  proposedRent: number,
+  cityAverageRent: number,
+): boolean {
+  if (
+    !isCurrencyAmount(currentRent) ||
+    !isCurrencyAmount(proposedRent) ||
+    !Number.isFinite(cityAverageRent) ||
+    cityAverageRent < 0
+  ) {
+    return false;
+  }
+  return currentRent < cityAverageRent || proposedRent <= currentRent * 2;
+}
+
 export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = BUILDING_CONFIGS;
 
 const CONSTRUCTION_MENU_ORDER: Partial<Record<ConstructionCategory, readonly ResidenceType[]>> = {

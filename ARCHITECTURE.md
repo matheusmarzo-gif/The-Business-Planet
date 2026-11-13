@@ -47,8 +47,10 @@ origem, considerando as demais residências da cidade apenas como destinos com
 capacidade disponível. O total que pode sair de cada origem é limitado a 100%
 para até 15 moradores, 75% para 16–30, 50% para 31–100 e 30% acima de 100;
 esse teto é arredondado para baixo e compartilhado entre todos os destinos. A
-gravação do aluguel, da nova ocupação e do histórico
-`residence_relocation_log` é atômica.
+alteração do aluguel é validada pelo servidor: se o aluguel atual for igual ou
+superior à média dos aluguéis das residências concluídas da cidade, um aumento
+não pode exceder duas vezes o aluguel atual. A gravação do aluguel, da nova
+ocupação e do histórico `residence_relocation_log` é atômica.
 Na alocação diária de empregos, as residências concluídas com moradores são
 processadas por apreço interno decrescente; empates são resolvidos pelo ID.
 O apreço é calculado com as rendas médias residenciais e a média salarial

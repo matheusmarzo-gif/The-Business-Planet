@@ -392,6 +392,10 @@ quando há vários destinos; as vagas também limitam a mudança. Cada mudança 
 registrada no histórico do servidor. Como moradores são NPCs sem carteira
 individual, não há débito separado. Clique em outro ponto do mapa ou em × para
 fechar.
+Se o aluguel atual for igual ou superior à média dos aluguéis das residências
+concluídas da cidade, cada aumento pode no máximo dobrar o valor atual. Com
+média municipal e aluguel atual de C$ 10, por exemplo, pode-se alterar para
+C$ 20 e depois para C$ 40, mas não para C$ 40 de uma só vez.
 
 No mesmo horário mensal, a população cresce ou decresce por residência
 concluída. O crescimento exige vaga na casa, ofertas de emprego na cidade e

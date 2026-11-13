@@ -255,6 +255,8 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Não foi possível carregar os dados atuais para a simulação de vendas.';
         } else if (body.error === 'invalid_rent') {
           error = 'O aluguel deve ser de C$ 0,01 a C$ 100.000, com até 2 casas decimais.';
+        } else if (body.error === 'rent_increase_step_limit') {
+          error = 'Quando o aluguel atual está na média ou acima dela, aumentos podem no máximo dobrar o valor por alteração.';
         } else if (body.error === 'invalid_warehouse_setting') {
           error = 'Informe estoques desejáveis inteiros (0 a 1.000.000), valor entre C$ 0 e C$ 1.000.000 com até 2 casas decimais e o tipo venda/compra.';
         } else if (body.error === 'not_a_warehouse') {

@@ -34,6 +34,7 @@ import {
 import {
   getResidenceDefinition,
   getResidencePlacementError,
+  isRentIncreaseWithinCityAverageStepLimit,
   isStorageBuilding,
   canStoreProduct,
   isPlayerBuildableConstructionType,
@@ -7875,6 +7876,32 @@ async function start() {
         }
 
         const rentChanged = Number(residence.rent) !== rent;
+        if (rentChanged && residence.city_id) {
+          const { rows: averageRentRows } = await client.query<{
+            city_average_rent: number | null;
+          }>(
+            `SELECT AVG(rent)::float8 AS city_average_rent
+             FROM all_buildings
+             WHERE city_id = $1
+               AND status = 'completed'
+               AND building_type = ANY($2::text[])`,
+            [residence.city_id, RESIDENCE_BUILDING_TYPES],
+          );
+          const cityAverageRent = averageRentRows[0]?.city_average_rent;
+          if (
+            cityAverageRent !== null &&
+            cityAverageRent !== undefined &&
+            !isRentIncreaseWithinCityAverageStepLimit(
+              Number(residence.rent),
+              rent,
+              cityAverageRent,
+            )
+          ) {
+            await client.query('ROLLBACK');
+            response.status(400).json({ error: 'rent_increase_step_limit' });
+            return;
+          }
+        }
         if (rentChanged) {
           await client.query('UPDATE all_buildings SET rent = $2 WHERE id = $1', [
             residence.id,

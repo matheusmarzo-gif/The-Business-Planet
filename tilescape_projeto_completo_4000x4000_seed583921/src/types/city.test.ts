@@ -27,6 +27,7 @@ import {
   getCityPopulation,
 } from './immigration';
 import {
+  isRentIncreaseWithinCityAverageStepLimit,
   isTileInResidenceFootprint,
   parseRent,
   getResidencePlacementError,
@@ -2024,6 +2025,18 @@ describe('work settings', () => {
     assert.equal(parseRent({ rent: 2.5 }), 2.5);
     assert.equal(parseRent({ rent: 0 }), null);
     assert.equal(parseRent({ rent: 2.501 }), null);
+  });
+
+  it('limits rent increases when the current rent is at or above the city average', () => {
+    assert.equal(isRentIncreaseWithinCityAverageStepLimit(10, 20, 10), true);
+    assert.equal(isRentIncreaseWithinCityAverageStepLimit(10, 20.01, 10), false);
+    assert.equal(isRentIncreaseWithinCityAverageStepLimit(10, 40, 10), false);
+    assert.equal(isRentIncreaseWithinCityAverageStepLimit(5, 10, 10), true);
+    assert.equal(isRentIncreaseWithinCityAverageStepLimit(5, 100, 10), true);
+    assert.equal(isRentIncreaseWithinCityAverageStepLimit(20, 40, 10), true);
+    assert.equal(isRentIncreaseWithinCityAverageStepLimit(20, 40.01, 10), false);
+    assert.equal(isRentIncreaseWithinCityAverageStepLimit(20, 10, 10), true);
+    assert.equal(isRentIncreaseWithinCityAverageStepLimit(10, 20, Number.NaN), false);
   });
 });
 

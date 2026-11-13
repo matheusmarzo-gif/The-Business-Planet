@@ -33,11 +33,7 @@ import {
   getRequiredCityZone,
   MAX_CITY_ZONES,
 } from './types/city';
-import {
-  DEFAULT_SHOP_PRICE,
-  getShopSalesCapacity,
-  simulateShopSales,
-} from './types/commerce';
+import { DEFAULT_SHOP_PRICE, type ShopSalesSimulation } from './types/commerce';
 import { LINK_RADIUS } from './types/logistics';
 import {
   type AccountingBuildingPosition,
@@ -247,6 +243,16 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Você só pode ligar a armazéns que construiu.';
         } else if (body.error === 'invalid_price') {
           error = 'O preço deve ser de C$ 0,01 a C$ 100.000, com até 2 casas decimais.';
+        } else if (body.error === 'invalid_sale_simulation_settings') {
+          error = 'Informe um preço, salário e carga horária válidos para simular as vendas.';
+        } else if (body.error === 'shop_not_owned') {
+          error = 'Você só pode simular as vendas de lojas que possui.';
+        } else if (body.error === 'shop_not_found') {
+          error = 'Essa loja não existe mais.';
+        } else if (body.error === 'not_a_completed_shop') {
+          error = 'A simulação só está disponível para lojas concluídas.';
+        } else if (body.error === 'sale_simulation_unavailable') {
+          error = 'Não foi possível carregar os dados atuais para a simulação de vendas.';
         } else if (body.error === 'invalid_rent') {
           error = 'O aluguel deve ser de C$ 0,01 a C$ 100.000, com até 2 casas decimais.';
         } else if (body.error === 'invalid_warehouse_setting') {
@@ -2122,43 +2128,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onSaveRent={(rent) => void saveRent(selectedResidence.id, rent)}
             residenceBenefit={residenceBenefit}
             onSavePrice={(price) => void savePrice(selectedResidence.id, price)}
-            onSimulateSale={(settings) => {
-              try {
-                const cachedDays = loadCommerceDiagnostics(
-                  window.localStorage,
-                  user.email,
-                  selectedResidence.id,
-                );
-                const transactions = [...cachedDays.entries()]
-                  .sort(([firstDay], [secondDay]) => secondDay.localeCompare(firstDay))[0]?.[1];
-                if (!transactions || transactions.length === 0) return null;
-                const workers = selectedResidence.employed;
-                const workPoints = workers * getDailyWorkPoints(
-                  settings.workHoursPerDay,
-                  RESIDENCE_STATS.health,
-                  selectedResidence.averageWorkerTechnique ?? 10,
-                );
-                return simulateShopSales(transactions, {
-                  price: settings.price,
-                  stock: selectedResidence.stock,
-                  dailyCapacity: getShopSalesCapacity(
-                    selectedResidence.type,
-                    workPoints,
-                    workers,
-                  ),
-                  wage: settings.wage,
-                  workers,
-                });
-              } catch (error) {
-                return {
-                  unitsSold: 0,
-                  profitLoss: 0,
-                  error: error instanceof Error
-                    ? error.message
-                    : 'Não foi possível simular as vendas com o cache local.',
-                };
-              }
-            }}
+            onSimulateSale={(settings) =>
+              cityRequest<ShopSalesSimulation>(
+                `/api/residential-buildings/${selectedResidence.id}/simulate-sales`,
+                {
+                  method: 'POST',
+                  body: JSON.stringify(settings),
+                },
+              )
+            }
             onSimulateHiring={(settings) => {
               const completedResidences = residentialBuildings.filter((building) =>
                 RESIDENCES[building.type].kind === 'residence' &&

@@ -539,10 +539,12 @@ tipo, usa-se a média desse tipo na cidade, considerando todos os jogadores.
 Somente quando não houver nenhum comércio similar concluído na cidade o preço
 inicial será C$ 10. O dono pode alterar esse preço depois no painel.
 
-O botão **Simular venda**, abaixo do preço, estima vendas e resultado com o
-histórico de comportamento guardado no navegador, o preço informado, estoque e
-funcionários atuais; não consulta o servidor. Sem histórico local, a interface
-avisa que ainda é cedo para simular. **Simular contratação**, abaixo do salário,
+O botão **Simular venda**, abaixo do preço, consulta o estado atual no servidor:
+considera residências concluídas empregadas a até 60 tiles da loja e, para cada
+residência, comércios do mesmo tipo a até 60 tiles dela. Usa preços médios
+recentes da cidade, estoques, funcionários e capacidades atuais, além do preço,
+salário e carga horária informados no painel; não depende do cache local.
+**Simular contratação**, abaixo do salário,
 calcula localmente a estimativa de empregados usando as construções e moradores
 recebidos no mapa e os valores digitados no formulário.
 

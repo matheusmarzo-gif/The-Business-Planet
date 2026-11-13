@@ -53,7 +53,14 @@ Movimentar uma construção entre cidades remove imediatamente as atribuições
 incompatíveis, e as existentes são reconciliadas na inicialização do servidor.
 O painel mostra a técnica média dos trabalhadores atualmente alocados a cada
 construção. Nas vendas, uma loja só atende residências da mesma cidade e ainda
-respeita o raio de alcance de 60 tiles.
+respeita o raio de alcance de 60 tiles. **Simular venda** consulta o servidor e
+recalcula a estimativa pelo endpoint
+`POST /api/residential-buildings/:id/simulate-sales` com as residências
+concluídas a até 60 tiles da loja selecionada; para cada residência, considera
+concorrentes do mesmo tipo de construção a até 60 tiles dela, usando estoques,
+preços e empregos atuais, além dos parâmetros editados no painel. A rota valida
+a propriedade da loja e lê um snapshot consistente sem persistir alterações; a
+simulação não depende do cache local de diagnósticos.
 O relatório contábil de produção inclui toda construção com regra de produção,
 inclusive indústrias, e ordena os edifícios alfabeticamente por nome. Clique
 simples em qualquer construção abre seu painel; a conta Master pode arrastar

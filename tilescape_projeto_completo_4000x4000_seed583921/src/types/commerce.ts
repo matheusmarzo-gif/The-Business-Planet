@@ -152,21 +152,28 @@ export interface ShopSalesSimulation {
 }
 
 export function simulateShopSales(
-  transactions: readonly ShopResidenceTransaction[],
+  shopId: string,
+  residences: readonly SalesResidence[],
+  shops: readonly SalesShop[],
+  demandByProduct: ReadonlyMap<string, number>,
+  averagePrices: ReadonlyMap<string, number>,
   settings: {
     price: number;
-    stock: number;
     dailyCapacity: number;
     wage: number;
     workers: number;
   },
-): ShopSalesSimulation | null {
-  if (transactions.length === 0) return null;
+  random: () => number = Math.random,
+  history: readonly CityProductSale[] = [],
+): ShopSalesSimulation {
+  const targetShop = shops.find((shop) => shop.id === shopId);
+  if (!targetShop) {
+    throw new RangeError(`A loja ${shopId} não está disponível para simular vendas.`);
+  }
   if (
     !isCurrencyAmount(settings.price) ||
     settings.price < MIN_SHOP_PRICE ||
-    !Number.isInteger(settings.stock) ||
-    settings.stock < 0 ||
+    settings.price > MAX_SHOP_PRICE ||
     !Number.isFinite(settings.dailyCapacity) ||
     settings.dailyCapacity < 0 ||
     !isCurrencyAmount(settings.wage) ||
@@ -174,29 +181,36 @@ export function simulateShopSales(
     !Number.isInteger(settings.workers) ||
     settings.workers < 0
   ) {
-    throw new RangeError('As configurações atuais da loja são inválidas para simular vendas.');
+    throw new RangeError('As configurações enviadas são inválidas para simular vendas.');
   }
 
-  const expectedQuantity = transactions.reduce((total, transaction) => {
-    const candidate = transaction.candidate;
-    const residents = candidate.allocatedResidents ?? 0;
-    const need = candidate.basicNeedPerPerson ?? transaction.basicNeedPerPerson ?? 0;
-    const calculation = getPurchaseBenefitCalculation(
-      transaction.averageIncome,
-      settings.price,
-      need,
-      candidate.referenceBasketCost ?? transaction.referenceBasketCost ?? 0,
-      candidate.distance,
-      {
-        basketType: transaction.basketType,
-        intermediateBasketCost:
-          candidate.intermediateBasketCost ?? transaction.intermediateBasketCost,
-        advancedBasketCost: candidate.advancedBasketCost ?? transaction.advancedBasketCost,
-      },
+  const cityShops = shops
+    .filter((shop) => shop.cityId === targetShop.cityId)
+    .map((shop) =>
+      shop.id === shopId
+        ? { ...shop, price: settings.price, capacity: settings.dailyCapacity }
+        : shop,
     );
-    return total + getExpectedStoreDemand(residents, need, calculation.logAssociatedBenefit);
-  }, 0);
-  const unitsSold = Math.floor(Math.min(settings.stock, settings.dailyCapacity, expectedQuantity));
+  const nearbyResidences = residences.filter(
+    (residence) =>
+      residence.cityId === targetShop.cityId &&
+      residence.consumers > 0 &&
+      getDistanceBetweenBuildings(targetShop, residence) <=
+        GAME_RULES.consumption.distance.radiusTiles,
+  );
+  const salesPlan = planShopSalesDetailed(
+    nearbyResidences,
+    cityShops,
+    demandByProduct,
+    averagePrices,
+    random,
+    history.filter((sale) => sale.cityId === targetShop.cityId),
+    { competingShopType: targetShop.type },
+  );
+  const unitsSold = salesPlan.purchases.reduce(
+    (total, purchase) => total + (purchase.shopId === shopId ? purchase.quantity : 0),
+    0,
+  );
   const revenue = roundCurrency(unitsSold * settings.price);
   const employeeExpense = roundCurrency(settings.wage * settings.workers);
   return {
@@ -1038,7 +1052,7 @@ export function getPurchaseBenefitCalculation(
   };
 }
 
-function getDistanceBetweenBuildings(
+export function getDistanceBetweenBuildings(
   first: Pick<SalesShop, 'type' | 'x' | 'y'>,
   second: Pick<SalesResidence, 'type' | 'x' | 'y'>,
 ): number {
@@ -1087,6 +1101,7 @@ export function planShopSalesDetailed(
   averagePrices: ReadonlyMap<string, number>,
   random: () => number = Math.random,
   history: CityProductSale[] = [],
+  options: { competingShopType?: ResidenceType } = {},
 ): StoreSalesPlan {
   const remainingStock = new Map(shops.map((shop) => [shop.id, shop.stock]));
   const remainingCapacity = new Map(shops.map((shop) => [shop.id, shop.capacity]));
@@ -1118,7 +1133,12 @@ export function planShopSalesDetailed(
     if (basicNeedPerPerson === undefined) {
       throw new Error(`A demanda básica não está configurada para ${productId}.`);
     }
-    const productShops = shops.filter((shop) => shop.productId === productId);
+    const productShops = shops.filter(
+      (shop) =>
+        shop.productId === productId &&
+        (options.competingShopType === undefined ||
+          shop.type === options.competingShopType),
+    );
     for (const residence of sortedResidences) {
       if (residence.consumers <= 0) continue;
       const nearby = productShops.filter(

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import {
   MAX_CITY_MINIMUM_WAGE,
   MIN_CITY_MINIMUM_WAGE,
@@ -40,6 +40,7 @@ import {
   type StockCapacityKey,
   type StockCapacityUpgradeQuote,
 } from '../types/stockCapacity';
+import type { ShopSalesSimulation } from '../types/commerce';
 
 interface ResidencePanelProps {
   building: ResidentialBuilding;
@@ -56,11 +57,9 @@ interface ResidencePanelProps {
   onSaveRent: (rent: number) => void;
   residenceBenefit: ResidenceBenefitCalculation | null;
   onSavePrice: (price: number) => void;
-  onSimulateSale: (settings: { price: number; wage: number; workHoursPerDay: number }) => {
-    unitsSold: number;
-    profitLoss: number;
-    error?: string;
-  } | null;
+  onSimulateSale: (
+    settings: { price: number; wage: number; workHoursPerDay: number },
+  ) => Promise<ShopSalesSimulation>;
   onSimulateHiring: (settings: {
     wage: number;
     workHoursPerDay: number;
@@ -228,6 +227,8 @@ export default function ResidencePanel({
   );
   const [price, setPrice] = useState(String(building.price));
   const [saleSimulationMessage, setSaleSimulationMessage] = useState('');
+  const [isSimulatingSale, setIsSimulatingSale] = useState(false);
+  const saleSimulationRequestId = useRef(0);
   const [hiringSimulationMessage, setHiringSimulationMessage] = useState('');
   const [inputProductId, setInputProductId] = useState(
     building.selectedInputProductId ?? definition.defaultInputProductId ?? '',
@@ -244,12 +245,14 @@ export default function ResidencePanel({
   }, [building.id, building.selectedInputProductId, definition.defaultInputProductId]);
 
   useEffect(() => {
+    saleSimulationRequestId.current += 1;
     setWage(String(building.wage));
     setHours(String(building.workHoursPerDay));
     setRent(String(building.rent));
     setDesired(String(building.desiredWorkers));
     setMinimumWorkerTechnique(String(building.minimumWorkerTechnique));
     setSaleSimulationMessage('');
+    setIsSimulatingSale(false);
     setHiringSimulationMessage('');
   }, [
     building.id,
@@ -836,20 +839,18 @@ export default function ResidencePanel({
             <>
               <button
                 type="button"
-                disabled={isSaving}
-                onClick={() => {
-                  const result = onSimulateSale({
-                    price: Number(price),
-                    wage: Number(wage),
-                    workHoursPerDay: Number(hours),
-                  });
-                  if (result === null) {
-                    setSaleSimulationMessage(
-                      'ainda é muito cedo para uma simulação! Só conseguimos simular os dados com base em comportamentos passados.',
-                    );
-                  } else if (result.error) {
-                    setSaleSimulationMessage(result.error);
-                  } else {
+                disabled={isSaving || isSimulatingSale}
+                onClick={async () => {
+                  const requestId = ++saleSimulationRequestId.current;
+                  setIsSimulatingSale(true);
+                  setSaleSimulationMessage('');
+                  try {
+                    const result = await onSimulateSale({
+                      price: Number(price),
+                      wage: Number(wage),
+                      workHoursPerDay: Number(hours),
+                    });
+                    if (requestId !== saleSimulationRequestId.current) return;
                     const outcome =
                       result.profitLoss < 0
                         ? 'prejuízo estimado'
@@ -859,10 +860,21 @@ export default function ResidencePanel({
                     setSaleSimulationMessage(
                       `Estimativa: ${number.format(result.unitsSold)} unidade(s) vendida(s); ${outcome}: ${formatMoney(Math.abs(result.profitLoss))}.`,
                     );
+                  } catch (error) {
+                    if (requestId !== saleSimulationRequestId.current) return;
+                    setSaleSimulationMessage(
+                      error instanceof Error
+                        ? error.message
+                        : 'Não foi possível simular as vendas com os dados atuais.',
+                    );
+                  } finally {
+                    if (requestId === saleSimulationRequestId.current) {
+                      setIsSimulatingSale(false);
+                    }
                   }
                 }}
               >
-                Simular venda
+                {isSimulatingSale ? 'Simulando…' : 'Simular venda'}
               </button>
               {saleSimulationMessage && <small role="status">{saleSimulationMessage}</small>}
             </>

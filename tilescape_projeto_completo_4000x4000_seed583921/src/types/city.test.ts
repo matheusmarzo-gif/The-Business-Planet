@@ -771,44 +771,15 @@ describe('shop sales', () => {
     assert.ok(fartherStore.associatedBenefit < calculation.associatedBenefit);
   });
 
-  it('simulates sales from cached transactions and applies current stock, capacity, and payroll', () => {
-    assert.equal(simulateShopSales([], {
-      price: 3,
-      stock: 5,
-      dailyCapacity: 8,
-      wage: 2,
-      workers: 4,
-    }), null);
+  it('simulates sales from nearby residents and applies real stock, capacity, and payroll', () => {
     const result = simulateShopSales(
-      [{
-        residenceId: 'home',
-        occupants: 100,
-        averageIncome: 100,
-        areaAveragePrice: 1,
-        expectedDemand: 100,
-        desiredQuantity: 100,
-        basicNeedPerPerson: 1,
-        referenceBasketCost: 10,
-        candidate: {
-          shopId: 'shop',
-          price: 1,
-          distance: 0,
-          desiredQuantity: 100,
-          benefit: 1,
-          rank: 1,
-          stockAvailable: 100,
-          capacityAvailable: 100,
-          available: 100,
-          demandBefore: 100,
-          purchased: 0,
-          demandAfter: 100,
-          allocatedResidents: 100,
-          basicNeedPerPerson: 1,
-          referenceBasketCost: 10,
-          outcome: 'purchased',
-        },
-      }],
-      { price: 3, stock: 5, dailyCapacity: 8, wage: 2, workers: 4 },
+      'shop',
+      [home('home', 0, 100, 100)],
+      [shop('shop', 0, 1, 5, 100)],
+      demandByProduct,
+      cityPrices('rice', 1),
+      { price: 3, dailyCapacity: 8, wage: 2, workers: 4 },
+      () => 0,
     );
     assert.deepEqual(result, {
       unitsSold: 5,
@@ -816,6 +787,52 @@ describe('shop sales', () => {
       employeeExpense: 8,
       profitLoss: 7,
     });
+    const noNearbyResidents = simulateShopSales(
+      'shop',
+      [],
+      [shop('shop', 0, 1, 5, 100)],
+      demandByProduct,
+      cityPrices('rice', 1),
+      { price: 3, dailyCapacity: 8, wage: 2, workers: 4 },
+      () => 0,
+    );
+    assert.equal(noNearbyResidents.unitsSold, 0);
+  });
+
+  it('compares only same-type shops within reach of each considered residence', () => {
+    const target = shop('target', 0, 1, 100, 100);
+    const homeAtEdge = home('home', 60, 100, 100);
+    const sameTypeRival = shop('same-type-rival', 120, 1, 100, 100);
+    const differentTypeRival = {
+      ...shop('different-type-rival', 60, 1, 100, 100),
+      type: 'shop_potato' as const,
+    };
+    const options = { competingShopType: target.type };
+    const sameTypePlan = planShopSalesDetailed(
+      [homeAtEdge],
+      [target, sameTypeRival],
+      demandByProduct,
+      cityPrices('rice', 1),
+      () => 0,
+      [],
+      options,
+    );
+    const targetShareWithSameTypeRival =
+      sameTypePlan.transactionsByShop.get(target.id)?.[0].candidate.resultShare;
+    assert.equal(targetShareWithSameTypeRival, 0.5);
+
+    const differentTypePlan = planShopSalesDetailed(
+      [homeAtEdge],
+      [target, differentTypeRival],
+      demandByProduct,
+      cityPrices('rice', 1),
+      () => 0,
+      [],
+      options,
+    );
+    const targetShareWithDifferentTypeRival =
+      differentTypePlan.transactionsByShop.get(target.id)?.[0].candidate.resultShare;
+    assert.equal(targetShareWithDifferentTypeRival, 1);
   });
 
   it('accepts fractional shop prices in commerce diagnostics', () => {

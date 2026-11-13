@@ -104,7 +104,11 @@ import {
   getShopSalesCapacity,
   parsePrice,
   planShopSalesDetailed,
+  simulateShopSales,
   type CityProductSale,
+  type SalesResidence,
+  type SalesShop,
+  type ShopSalesSimulation,
   type ShopResidenceTransaction,
 } from '../src/types/commerce.js';
 import {
@@ -6730,6 +6734,248 @@ async function start() {
     })().catch((error: unknown) => {
       console.error('Não foi possível consultar o histórico do comércio:', error);
       response.status(503).json({ error: 'residence_unavailable' });
+    });
+  });
+  app.post('/api/residential-buildings/:id/simulate-sales', requireAuth, (request, response) => {
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_residence' });
+      return;
+    }
+    const userId = authenticatedUserIds.get(request);
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    const price = parsePrice(request.body);
+    const workSettings =
+      typeof request.body === 'object' && request.body !== null
+        ? parseWorkSettings({ ...request.body, desiredWorkers: 0 })
+        : null;
+    if (price === null || workSettings === null) {
+      response.status(400).json({ error: 'invalid_sale_simulation_settings' });
+      return;
+    }
+
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        const { rows: targetRows } = await client.query<{
+          id: string;
+          created_by: string;
+          city_id: string | null;
+          building_type: ResidenceType;
+          status: string;
+        }>(
+          `SELECT id, created_by, city_id, building_type, status
+           FROM all_buildings WHERE id = $1`,
+          [request.params.id],
+        );
+        const target = targetRows[0];
+        if (!target) {
+          await client.query('ROLLBACK');
+          response.status(404).json({ error: 'shop_not_found' });
+          return;
+        }
+        if (target.created_by !== userId) {
+          await client.query('ROLLBACK');
+          response.status(403).json({ error: 'shop_not_owned' });
+          return;
+        }
+        const targetDefinition = getResidenceDefinition(target.building_type);
+        if (
+          target.status !== 'completed' ||
+          targetDefinition?.kind !== 'shop' ||
+          !targetDefinition.stockProductId ||
+          !target.city_id
+        ) {
+          await client.query('ROLLBACK');
+          response.status(400).json({ error: 'not_a_completed_shop' });
+          return;
+        }
+        const cityId = target.city_id;
+
+        const { rows: buildingRows } = await client.query<{
+          id: string;
+          city_id: string;
+          building_type: ResidenceType;
+          tile_x: number;
+          tile_y: number;
+          status: string;
+          price: number;
+          stock: number;
+          wage: number;
+          work_hours_per_day: number;
+          occupants: number;
+          wellbeing: number;
+        }>(
+          `SELECT id, city_id, building_type, tile_x, tile_y, status,
+                  price::float8 AS price, stock, wage::float8 AS wage,
+                  work_hours_per_day, occupants, wellbeing::float8 AS wellbeing
+           FROM all_buildings
+           WHERE city_id = $1`,
+          [cityId],
+        );
+        const { rows: assignmentRows } = await client.query<{
+          workplace_id: string;
+          residence_id: string;
+          count: number;
+          residence_wellbeing: number;
+        }>(
+          `SELECT assignments.workplace_id, assignments.residence_id, assignments.count,
+                  COALESCE(residence.wellbeing, 0)::float8 AS residence_wellbeing
+           FROM job_assignments assignments
+           JOIN all_buildings workplace ON workplace.id = assignments.workplace_id
+           JOIN all_buildings residence ON residence.id = assignments.residence_id
+           WHERE workplace.city_id = $1 AND residence.city_id = $1`,
+          [cityId],
+        );
+        const assignmentsForIncome = assignmentRows.map((assignment) => ({
+          workplaceId: assignment.workplace_id,
+          residenceId: assignment.residence_id,
+          count: assignment.count,
+        }));
+        const wages = new Map(
+          buildingRows.map((building) => [
+            building.id,
+            building.id === target.id ? workSettings.wage : building.wage,
+          ]),
+        );
+        const residentialRows = buildingRows.filter((building) => {
+          return (
+            building.status === 'completed' &&
+            getResidenceDefinition(building.building_type)?.kind === 'residence'
+          );
+        });
+        const averageIncomes = getAverageIncomes(
+          residentialRows.map((residence) => ({ id: residence.id })),
+          wages,
+          assignmentsForIncome,
+        );
+        const workersByWorkplace = new Map<string, number>();
+        const consumersByResidence = new Map<string, number>();
+        for (const assignment of assignmentRows) {
+          workersByWorkplace.set(
+            assignment.workplace_id,
+            (workersByWorkplace.get(assignment.workplace_id) ?? 0) + assignment.count,
+          );
+          consumersByResidence.set(
+            assignment.residence_id,
+            (consumersByResidence.get(assignment.residence_id) ?? 0) + assignment.count,
+          );
+        }
+        const averageTechniques = mapAverageWorkerTechniques(assignmentRows);
+        const shopRows = buildingRows.filter((building) => {
+          const definition = getResidenceDefinition(building.building_type);
+          return (
+            building.status === 'completed' &&
+            definition?.kind === 'shop' &&
+            Boolean(definition.stockProductId)
+          );
+        });
+        const shops: SalesShop[] = shopRows.map((building) => {
+          const definition = getResidenceDefinition(building.building_type);
+          if (!definition?.stockProductId) {
+            throw new Error(`O comércio ${building.id} não tem produto de venda configurado.`);
+          }
+          const workers = workersByWorkplace.get(building.id) ?? 0;
+          const workHours =
+            building.id === target.id ? workSettings.workHoursPerDay : building.work_hours_per_day;
+          return {
+            id: building.id,
+            cityId: building.city_id,
+            productId: definition.stockProductId,
+            type: building.building_type,
+            x: building.tile_x,
+            y: building.tile_y,
+            price: building.id === target.id ? price : building.price,
+            stock: building.stock,
+            capacity: getShopSalesCapacity(
+              building.building_type,
+              workers *
+                getDailyWorkPoints(
+                  workHours,
+                  RESIDENCE_STATS.health,
+                  averageTechniques.get(building.id) ?? 10,
+                ),
+              workers,
+            ),
+          };
+        });
+        const residences: SalesResidence[] = residentialRows.map((building) => ({
+          id: building.id,
+          cityId: building.city_id,
+          type: building.building_type,
+          x: building.tile_x,
+          y: building.tile_y,
+          consumers: consumersByResidence.get(building.id) ?? 0,
+          averageIncome: averageIncomes.get(building.id) ?? 0,
+          wellbeing: building.wellbeing,
+        }));
+        const { rows: worldRows } = await client.query<{ day: string }>(
+          `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
+           FROM world_state WHERE id = 1`,
+        );
+        const world = worldRows[0];
+        if (!world) throw new Error('O relógio do mundo não está disponível para a simulação.');
+        const shopTypes = [...new Set(shopRows.map((shop) => shop.building_type))];
+        const { rows: monthlySalesRows } = await client.query<{
+          building_type: ResidenceType;
+          units_sold: number;
+          sale_price: number;
+        }>(
+          `SELECT shop.building_type, history.units_sold, history.sale_price
+           FROM commerce_history history
+           JOIN all_buildings shop ON shop.id = history.building_id
+           WHERE shop.city_id = $1
+             AND history.day >= $2::date - $4::integer
+             AND history.day < $2::date
+             AND shop.status = 'completed'
+             AND shop.building_type = ANY($3::text[])`,
+          [cityId, world.day, shopTypes, GAME_RULES.consumption.averagePriceWindowDays],
+        );
+        const monthlySales: CityProductSale[] = monthlySalesRows.flatMap((sale) => {
+          const productId = getResidenceDefinition(sale.building_type)?.stockProductId;
+          return productId
+            ? [{
+                cityId,
+                productId,
+                unitsSold: sale.units_sold,
+                price: sale.sale_price,
+              }]
+            : [];
+        });
+        const averagePrices = getCityProductAveragePrices(shops, monthlySales);
+        const targetShop = shops.find((shop) => shop.id === target.id);
+        if (!targetShop) throw new Error(`Não foi possível carregar a loja ${target.id}.`);
+        const simulation: ShopSalesSimulation = simulateShopSales(
+          target.id,
+          residences,
+          shops,
+          demandBasicByProduct,
+          averagePrices,
+          {
+            price,
+            dailyCapacity: targetShop.capacity,
+            wage: workSettings.wage,
+            workers: workersByWorkplace.get(target.id) ?? 0,
+          },
+          Math.random,
+          monthlySales,
+        );
+        await client.query('COMMIT');
+        response.json(simulation);
+      } catch (error) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter a simulação de vendas:', rollbackError);
+        });
+        throw error;
+      } finally {
+        client.release();
+      }
+    })().catch((error: unknown) => {
+      console.error('Não foi possível simular as vendas com os dados atuais:', error);
+      response.status(503).json({ error: 'sale_simulation_unavailable' });
     });
   });
   app.get('/api/residential-buildings/:id/consumption', requireAuth, (request, response) => {

@@ -17,6 +17,7 @@ export interface EmploymentResidence {
   x: number;
   y: number;
   occupants: number;
+  wellbeing: number;
   internalAppeal: number;
   technique: number;
 }
@@ -176,9 +177,9 @@ export function getEmploymentSummary(workplaces: EmploymentSummaryWorkplace[]): 
 }
 
 /**
- * Distribui primeiro as residências com maior apreço interno e, em empate, por id.
- * As vagas remanescentes são atualizadas para cada residência seguinte; a maior
- * sobra distribui os arredondamentos inteiros entre ofertas da mesma residência.
+ * Prioriza bem-estar decrescente, depois apreço interno decrescente e, em empate,
+ * id crescente. As vagas remanescentes são atualizadas para cada residência
+ * seguinte; a maior sobra distribui os arredondamentos inteiros entre ofertas.
  */
 export function allocateWorkers(
   residences: EmploymentResidence[],
@@ -195,7 +196,10 @@ export function allocateWorkers(
 
   const assignments: JobAssignment[] = [];
   const sortedResidences = [...residences].sort(
-    (a, b) => b.internalAppeal - a.internalAppeal || a.id.localeCompare(b.id),
+    (a, b) =>
+      b.wellbeing - a.wellbeing ||
+      b.internalAppeal - a.internalAppeal ||
+      a.id.localeCompare(b.id),
   );
   for (const residence of sortedResidences) {
     const offers = workplaces.flatMap((workplace) => {

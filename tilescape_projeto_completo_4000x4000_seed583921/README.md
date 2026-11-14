@@ -770,9 +770,10 @@ repartidos entre os postos proporcionalmente a esses benefícios. O arredondamen
 inteiro pelo método dos maiores restos mantém a soma igual ao número de moradores
 que podem ser contratados; se uma oferta atingir suas vagas, o excedente é
 redistribuído entre as demais. As vagas restantes são atualizadas antes de
-processar a próxima residência. A ordem das residências é pelo apreço interno,
-do maior para o menor; em caso de empate, usa-se o ID para manter o resultado
-determinístico. O apreço interno segue a regra dos apreços residenciais e é
+processar a próxima residência. A ordem das residências é pelo bem-estar,
+do maior para o menor; em caso de empate, desempata-se pelo apreço interno,
+também do maior para o menor, e depois pelo ID crescente. O apreço interno segue
+a regra dos apreços residenciais e é
 recalculado antes da alocação, considerando a média salarial da cidade ponderada
 pelos moradores e a média regional de residências concluídas em até 10 tiles,
 inclusive residências desocupadas. A prévia de contratação usa a mesma ordem.

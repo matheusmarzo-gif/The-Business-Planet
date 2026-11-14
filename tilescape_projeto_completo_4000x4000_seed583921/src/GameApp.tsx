@@ -2293,6 +2293,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                     x: building.x,
                     y: building.y,
                     occupants: building.occupants,
+                    wellbeing: building.wellbeing,
                     internalAppeal: appeal.internalAppeal,
                     technique: getWorkerTechnique(building.wellbeing),
                   };

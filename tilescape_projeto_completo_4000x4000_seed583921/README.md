@@ -997,11 +997,11 @@ construções. Produtos sem preço anunciado ficam fora do valor estimado.
 **Lojas comerciais**
 lista todas as lojas do jogador e soma salários pagos, receita e unidades vendidas
 e perdidas no período selecionado (último dia ou últimos 7 ou 30 dias). A receita
-líquida estimada subtrai da receita o custo médio do produto nos armazéns da
-cidade no dia registrado, multiplicado pelas unidades vendidas e perdidas, e
-também os salários. Esse custo é salvo no histórico diário para que os valores
-passados não mudem junto com os preços atuais; períodos anteriores sem esse
-registro ou sem preço disponível aparecem como indisponíveis. **Visualizar**
+líquida estimada subtrai da receita o custo estimado atual do produto mostrado
+na aba **Produto**, multiplicado pelas unidades vendidas e perdidas, e também os
+salários. Esse custo atual é aplicado a todo o período selecionado; se não houver
+estimativa disponível, o resultado aparece como indisponível quando houve vendas
+ou perdas. **Visualizar**
 centraliza a loja no mapa e abre seus detalhes. **Armazéns** mostra os armazéns do jogador (também com **Visualizar**),
 salários pagos e, por produto,
 quantidades e valores comprados/vendidos, além do resultado bruto (receita de

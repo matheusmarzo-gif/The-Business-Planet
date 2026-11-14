@@ -121,6 +121,14 @@ export function getShopSalesAndLossByProduct(
   return quantities;
 }
 
+export function getShopProductUnitCostEstimate(
+  shopType: ResidenceType,
+  productUnitCosts: ReadonlyMap<string, number>,
+): number | null {
+  const productId = RESIDENCES[shopType].stockProductId;
+  return productId ? productUnitCosts.get(productId) ?? null : null;
+}
+
 export interface AccountingSummary {
   periodDays: AccountingPeriodDays;
   weekOffset: AccountingWeekOffset;
@@ -224,7 +232,7 @@ export function calculateEstimatedShopNetRevenue(
   revenue: number,
   unitsSold: number,
   unitsLost: number,
-  averageUnitCost: number | null,
+  unitCostEstimate: number | null,
   employeeExpense: number,
 ): number | null {
   const totalUnits = unitsSold + unitsLost;
@@ -237,10 +245,11 @@ export function calculateEstimatedShopNetRevenue(
     unitsLost < 0 ||
     !Number.isFinite(employeeExpense) ||
     employeeExpense < 0 ||
-    (averageUnitCost !== null && (!Number.isFinite(averageUnitCost) || averageUnitCost < 0))
+    (unitCostEstimate !== null &&
+      (!Number.isFinite(unitCostEstimate) || unitCostEstimate < 0))
   ) {
     throw new RangeError('Os valores da receita líquida estimada são inválidos.');
   }
-  if (totalUnits > 0 && averageUnitCost === null) return null;
-  return roundCurrency(revenue - totalUnits * (averageUnitCost ?? 0) - employeeExpense);
+  if (totalUnits > 0 && unitCostEstimate === null) return null;
+  return roundCurrency(revenue - totalUnits * (unitCostEstimate ?? 0) - employeeExpense);
 }

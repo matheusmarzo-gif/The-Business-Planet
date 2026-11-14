@@ -75,6 +75,7 @@ import {
   calculateEstimatedShopNetRevenue,
   estimateBlendedUnitCost,
   estimateProductionUnitCost,
+  getShopProductUnitCostEstimate,
   getShopSalesAndLossByProduct,
   getAccountingWeekRange,
   parseAccountingPeriodDays,
@@ -5670,24 +5671,13 @@ async function start() {
           revenue: string;
           units_sold: string;
           units_lost: string;
-          average_unit_cost: string | null;
-          has_unpriced_units: boolean;
         }>(
           `SELECT building.id, building.building_type, building.building_number,
                   building.tile_x, building.tile_y,
                   COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense,
                   COALESCE(SUM(history.units_sold::bigint * history.sale_price), 0)::text AS revenue,
                   COALESCE(SUM(history.units_sold), 0)::text AS units_sold,
-                  COALESCE(SUM(history.units_lost), 0)::text AS units_lost,
-                  (
-                    SUM(history.average_unit_cost * (history.units_sold + history.units_lost))
-                    / NULLIF(SUM(history.units_sold + history.units_lost)
-                        FILTER (WHERE history.average_unit_cost IS NOT NULL), 0)
-                  )::text AS average_unit_cost,
-                  COALESCE(BOOL_OR(
-                    (history.units_sold + history.units_lost > 0)
-                    AND history.average_unit_cost IS NULL
-                  ), FALSE) AS has_unpriced_units
+                  COALESCE(SUM(history.units_lost), 0)::text AS units_lost
            FROM all_buildings building
            LEFT JOIN commerce_history history
              ON history.building_id = building.id
@@ -6065,11 +6055,7 @@ async function start() {
             Number(row.revenue),
             Number(row.units_sold),
             Number(row.units_lost),
-            row.has_unpriced_units
-              ? null
-              : row.average_unit_cost === null
-                ? null
-                : Number(row.average_unit_cost),
+            getShopProductUnitCostEstimate(row.building_type, productCosts),
             Number(row.employee_expense),
           ),
         })),

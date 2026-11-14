@@ -82,8 +82,10 @@ estado da construção e rejeita movimentos que invalidem vínculos com armazén
 O Contábil também agrega estoques e movimentações de produtos e estima custos
 unitários por jogador. O custo de mão de obra usa o custo salarial por Work
 Point; matérias-primas usam o custo estimado do dia anterior, e compras entre
-jogadores entram na média ponderada por quantidade. Os históricos de consumo
-industrial e custos são mantidos por 35 dias.
+jogadores entram na média ponderada por quantidade. A receita líquida estimada
+em **Contábil → Lojas** usa o custo unitário estimado atual da aba **Produto**
+para valorar as vendas e perdas do período selecionado, além de subtrair os
+salários. Os históricos de consumo industrial e custos são mantidos por 35 dias.
 O schema aplicado na inicialização mantém a constraint
 `all_buildings_building_type_check` sincronizada com todos os tipos do
 catálogo, inclusive em bancos existentes; um teste de domínio verifica essa
@@ -684,12 +686,14 @@ mapeamento e verificar todas as curvas.
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
   preço unitário de venda e custo médio ponderado do produto nos armazéns da
-  cidade naquele dia. Esse custo fica persistido em `average_unit_cost`, sem ser
-  recalculado para períodos passados. A rotina de validade soma a `units_lost`
-  da mesma tabela as unidades perdidas pelo estoque da loja a cada dia. A receita
-  líquida estimada subtrai da receita o custo salvo multiplicado pelas unidades
-  vendidas e perdidas e os salários. Os detalhes do diagnóstico (renda, moradores,
-  produto, `RR`, `Pf`, `w`, `q`, benefícios de erro/ideal/associado,
+  cidade naquele dia. Esse custo fica persistido em `average_unit_cost` para
+  preservar o contexto diário. A rotina de validade soma a `units_lost` da mesma
+  tabela as unidades perdidas pelo estoque da loja a cada dia. A estimativa de
+  receita líquida em **Contábil → Lojas** usa o custo estimado atual do produto
+  em `player_product_costs`, multiplicado pelas unidades vendidas e perdidas no
+  período selecionado, e subtrai os salários; se houver movimentação sem custo
+  estimado, o resultado fica indisponível. Os detalhes do diagnóstico (renda,
+  moradores, produto, `RR`, `Pf`, `w`, `q`, benefícios de erro/ideal/associado,
   participação e moradores alocados, quantidade, estoque/capacidade, resultado
   e decomposição de `RR`, `RR2` e `RR3` por produto (cesta, necessidade diária, preço
   médio, origem do preço, vendas/receita do período e contribuição) são
@@ -728,11 +732,12 @@ mapeamento e verificar todas as curvas.
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
   preço unitário de venda e custo médio ponderado do produto nos armazéns da
-  cidade no dia, persistido em `average_unit_cost`. A deterioração soma
-  `units_lost` ao histórico diário comercial; dias anteriores à migração não
-  podem ser reconstruídos. A receita líquida estimada subtrai o custo salvo
-  multiplicado pelas unidades vendidas e perdidas e os salários. Os detalhes do
-  cálculo da demanda (renda, moradores,
+  cidade no dia, persistido em `average_unit_cost` para preservar o contexto
+  diário. A deterioração soma `units_lost` ao histórico diário comercial; dias
+  anteriores à migração não podem ser reconstruídos. A receita líquida estimada
+  em **Contábil → Lojas** usa o custo atual do produto em `player_product_costs`
+  para valorar as unidades vendidas e perdidas do período e subtrai os salários.
+  Os detalhes do cálculo da demanda (renda, moradores,
   média efetiva da área, demanda esperada e arredondada; preço, distância,
   benefício, posição no ranking, estoque/capacidade disponíveis, demanda
   antes/depois, quantidade comprada e resultado da tentativa por loja candidata)

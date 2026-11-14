@@ -5,6 +5,7 @@ import {
   calculateEstimatedShopNetRevenue,
   estimateBlendedUnitCost,
   estimateProductionUnitCost,
+  getShopProductUnitCostEstimate,
   getShopSalesAndLossByProduct,
   getAccountingWeekRange,
   getAccountingPeriodLabel,
@@ -40,10 +41,18 @@ test('rejects invalid rent inputs', () => {
   assert.throws(() => calculateDailyRentRevenue(1, Number.NaN), RangeError);
 });
 
-test('estimates shop net revenue from daily average warehouse cost and payroll', () => {
-  assert.equal(calculateEstimatedShopNetRevenue(100, 10, 2, 3, 10), 54);
+test('uses the product tab unit-cost estimate to calculate shop net revenue', () => {
+  const productUnitCosts = new Map([['rice', 2.5]]);
+  const unitCost = getShopProductUnitCostEstimate('shop_rice', productUnitCosts);
+
+  assert.equal(unitCost, 2.5);
+  assert.equal(calculateEstimatedShopNetRevenue(100, 10, 2, unitCost, 10), 60);
   assert.equal(calculateEstimatedShopNetRevenue(1, 0, 0, null, 0.5), 0.5);
   assert.equal(calculateEstimatedShopNetRevenue(100, 10, 2, null, 10), null);
+});
+
+test('returns no shop product cost when the product has no estimate', () => {
+  assert.equal(getShopProductUnitCostEstimate('shop_rice', new Map()), null);
 });
 
 test('rejects invalid inputs for estimated shop net revenue', () => {

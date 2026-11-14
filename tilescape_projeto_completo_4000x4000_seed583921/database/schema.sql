@@ -294,6 +294,69 @@ ALTER TABLE all_buildings
       'glass_factory', 'sand_pit'
     ));
 
+CREATE TABLE IF NOT EXISTS building_footprint_catalog (
+  building_type TEXT PRIMARY KEY,
+  tile_count SMALLINT NOT NULL CHECK (tile_count > 0)
+);
+
+CREATE TABLE IF NOT EXISTS player_rank_metrics (
+  user_id TEXT PRIMARY KEY,
+  building_tiles INTEGER NOT NULL DEFAULT 0 CHECK (building_tiles >= 0)
+);
+
+CREATE OR REPLACE FUNCTION update_player_building_tiles()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  footprint_tiles INTEGER;
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    SELECT tile_count INTO footprint_tiles
+    FROM building_footprint_catalog
+    WHERE building_type = NEW.building_type;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'Missing footprint for building type %', NEW.building_type;
+    END IF;
+    INSERT INTO player_rank_metrics (user_id, building_tiles)
+    VALUES (NEW.created_by, footprint_tiles)
+    ON CONFLICT (user_id) DO UPDATE
+    SET building_tiles = player_rank_metrics.building_tiles + EXCLUDED.building_tiles;
+    RETURN NEW;
+  END IF;
+
+  SELECT tile_count INTO footprint_tiles
+  FROM building_footprint_catalog
+  WHERE building_type = OLD.building_type;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Missing footprint for building type %', OLD.building_type;
+  END IF;
+  UPDATE player_rank_metrics
+  SET building_tiles = building_tiles - footprint_tiles
+  WHERE user_id = OLD.created_by AND building_tiles >= footprint_tiles;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Building tile total is inconsistent for player %', OLD.created_by;
+  END IF;
+  RETURN OLD;
+END;
+$$;
+
+CREATE TABLE IF NOT EXISTS player_investment_history (
+  id BIGSERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  day DATE NOT NULL,
+  amount NUMERIC(14, 2) NOT NULL CHECK (amount >= 0),
+  category TEXT NOT NULL CHECK (category IN ('construction', 'stock_upgrade'))
+);
+
+CREATE TABLE IF NOT EXISTS leaderboard_history_metadata (
+  id SMALLINT PRIMARY KEY CHECK (id = 1),
+  investment_tracking_from_day DATE NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS player_investment_history_day_idx
+  ON player_investment_history (day, user_id);
+
 CREATE TABLE IF NOT EXISTS warehouse_product_settings (
   building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   product_id TEXT NOT NULL,
@@ -394,6 +457,9 @@ CREATE TABLE IF NOT EXISTS production_history (
   PRIMARY KEY (building_id, day)
 );
 
+CREATE INDEX IF NOT EXISTS production_history_day_idx
+  ON production_history (day, building_id);
+
 CREATE TABLE IF NOT EXISTS production_input_history (
   building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
   product_id TEXT NOT NULL,
@@ -438,6 +504,9 @@ CREATE TABLE IF NOT EXISTS commerce_history (
   PRIMARY KEY (building_id, day)
 );
 
+CREATE INDEX IF NOT EXISTS commerce_history_day_idx
+  ON commerce_history (day, building_id);
+
 ALTER TABLE commerce_history
   DROP CONSTRAINT IF EXISTS commerce_history_sale_price_check,
   ADD COLUMN IF NOT EXISTS units_lost INTEGER NOT NULL DEFAULT 0,
@@ -469,6 +538,9 @@ CREATE TABLE IF NOT EXISTS building_payroll_history (
   PRIMARY KEY (building_id, day)
 );
 
+CREATE INDEX IF NOT EXISTS building_payroll_history_day_idx
+  ON building_payroll_history (day, building_id);
+
 INSERT INTO building_payroll_history (building_id, day, employee_expense)
 SELECT building_id, day, employee_expense FROM commerce_history
 UNION ALL
@@ -484,6 +556,9 @@ CREATE TABLE IF NOT EXISTS residence_rent_history (
   PRIMARY KEY (building_id, day)
 );
 
+CREATE INDEX IF NOT EXISTS residence_rent_history_day_idx
+  ON residence_rent_history (day, building_id);
+
 CREATE TABLE IF NOT EXISTS warehouse_trade_history (
   id BIGSERIAL PRIMARY KEY,
   day DATE NOT NULL,
@@ -493,6 +568,9 @@ CREATE TABLE IF NOT EXISTS warehouse_trade_history (
   quantity INTEGER NOT NULL CHECK (quantity > 0),
   unit_price NUMERIC(12, 2) NOT NULL CHECK (unit_price >= 0)
 );
+
+CREATE INDEX IF NOT EXISTS warehouse_trade_history_day_idx
+  ON warehouse_trade_history (day);
 
 ALTER TABLE warehouse_trade_history
   ALTER COLUMN unit_price TYPE NUMERIC(12, 2) USING unit_price::numeric(12, 2);

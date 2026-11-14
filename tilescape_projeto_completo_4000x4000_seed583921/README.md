@@ -1026,6 +1026,26 @@ comerciais anteriores a ela não podem ser reconstruídos. O histórico financei
 de armazéns começa com esta atualização; transações anteriores não podem ser
 reconstruídas.
 
+## Ranking
+
+O botão **Ranking**, na barra superior, abre classificações globais por valor
+estimado da empresa, expansão territorial (soma de `largura × altura` de todas
+as construções, inclusive em andamento), vendas e produção por produto, lucro e
+investimento. O valor da empresa estima o custo de reposição das construções
+pelos preços médios atuais de venda dos armazéns. Vendas por produto combinam
+lojas e comércio entre jogadores; produção usa o histórico de produção. Os
+rankings de vendas, produção e finanças podem ser vistos nos últimos 30 ou 365
+dias. Cada lista mostra os 30 primeiros jogadores e também a posição do jogador
+atual quando ele estiver fora do top 30.
+O lucro considera vendas, aluguéis e comércio entre jogadores, descontando
+compras de produtos e folha salarial. O investimento considera materiais de
+construção e upgrades de estoque pagos; o valor dos materiais é estimado pelos
+custos registrados para o jogador, com fallback para preços médios anunciados;
+se não houver estimativa nem preço, o material contribui com valor zero.
+O histórico de investimentos começa quando esta funcionalidade é implantada;
+não é possível reconstruir valores de períodos anteriores, e a cobertura de 365
+dias aumenta gradualmente.
+
 - **Histórico do armazém:** o botão Histórico do armazém mostra, por dia, os Work Points gerados e cada transporte tentado, quanto foi movido e o motivo quando não foi tudo (estoque máximo atingido, estoque mínimo preservado, sem espaço, Work Points insuficientes ou armazém sem estoque). Falhas internas são exibidas separadamente, com a etapa e a mensagem do erro.
 - **Validade e espaço de armazenamento:** às 18:00 de cada dia do jogo, a perda esperada de cada produto perecível é `estoque atual / validade em dias`. A parte inteira é removida e a fração vira probabilidade de perder uma unidade adicional (por exemplo, 10 unidades com validade de 100 dias: 0,1 unidade/dia, ou 10% de chance de perder uma). Não há controle por lote ou data de entrada; produtos recém-adicionados seguem a mesma regra sobre o estoque agregado. A regra cobre os estoques principais de fazendas, comércios, construções artesanais e recursos, além dos produtos nos armazéns (indústrias). Produtos sem validade, como madeira, pedra, ferro e Ferramentas, não se deterioram. O espaço ocupado é atualizado ao abrir **Produtos e estoque** e reconsultado enquanto o armazém está selecionado.
 

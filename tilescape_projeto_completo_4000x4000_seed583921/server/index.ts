@@ -82,6 +82,7 @@ import {
   parseAccountingWeekOffset,
   type ProductUnitCostInput,
 } from '../src/types/accounting.js';
+import { rankPlayers } from '../src/types/leaderboard.js';
 import {
   isPastDailyWorldRefreshTime,
   isValidTimeScale,
@@ -220,6 +221,7 @@ const WORLD_SYNC_LOCK_WAIT_MS = 90_000;
 const PERFORMANCE_LOGS_KEY = 'valdora:world:performance-logs';
 const PERFORMANCE_LOG_LIMIT = 100;
 const PERFORMANCE_LOG_TTL_SECONDS = 7 * 24 * 60 * 60;
+const LEADERBOARD_HISTORY_DAYS = 365;
 const WEBSOCKET_TRAFFIC_KEY_PREFIX = 'valdora:world:websocket-traffic:';
 const WEBSOCKET_TRAFFIC_TTL_SECONDS = 8 * 24 * 60 * 60;
 const WEBSOCKET_TRAFFIC_WINDOW_HOURS = 24;
@@ -3598,7 +3600,7 @@ async function runDailyEmployment(): Promise<boolean> {
       }
       await client.query(
         'DELETE FROM commerce_history WHERE day < $1::date - $2::integer',
-        [state.day, Math.max(34, GAME_RULES.consumption.averagePriceWindowDays)],
+        [state.day, Math.max(LEADERBOARD_HISTORY_DAYS - 1, GAME_RULES.consumption.averagePriceWindowDays)],
       );
       });
       await runStage('produção', async () => {
@@ -4478,23 +4480,33 @@ async function runDailyEmployment(): Promise<boolean> {
       await client.query('UPDATE world_state SET last_payroll_day = $1 WHERE id = 1', [state.day]);
       await client.query(
         `DELETE FROM warehouse_payroll_history
-         WHERE day < $1::date - 34`,
-        [state.day],
+         WHERE day < $1::date - $2::integer`,
+        [state.day, LEADERBOARD_HISTORY_DAYS - 1],
       );
       await client.query(
         `DELETE FROM building_payroll_history
-         WHERE day < $1::date - 34`,
-        [state.day],
+         WHERE day < $1::date - $2::integer`,
+        [state.day, LEADERBOARD_HISTORY_DAYS - 1],
       );
       await client.query(
         `DELETE FROM residence_rent_history
-         WHERE day < $1::date - 34`,
-        [state.day],
+         WHERE day < $1::date - $2::integer`,
+        [state.day, LEADERBOARD_HISTORY_DAYS - 1],
       );
       await client.query(
         `DELETE FROM warehouse_trade_history
-         WHERE day < $1::date - 34`,
-        [state.day],
+         WHERE day < $1::date - $2::integer`,
+        [state.day, LEADERBOARD_HISTORY_DAYS - 1],
+      );
+      await client.query(
+        `DELETE FROM production_history
+         WHERE day < $1::date - $2::integer`,
+        [state.day, LEADERBOARD_HISTORY_DAYS - 1],
+      );
+      await client.query(
+        `DELETE FROM player_investment_history
+         WHERE day < $1::date - $2::integer`,
+        [state.day, LEADERBOARD_HISTORY_DAYS - 1],
       );
       await client.query(
         `DELETE FROM production_input_history
@@ -5319,6 +5331,8 @@ async function createResidentialBuilding(
       return { building: null, error: 'outside_municipality' };
     }
 
+    let constructionInvestment = 0;
+    let constructionMaterialsWithdrawn = false;
     if (!isFirstWarehouse && !isMaster) {
       const constructionCenterX = position.x + definition.width / 2;
       const constructionCenterY = position.y + definition.height / 2;
@@ -5358,6 +5372,44 @@ async function createResidentialBuilding(
         await client.query('ROLLBACK');
         return { building: null, error: 'insufficient_materials' };
       }
+      constructionMaterialsWithdrawn = withdrawals.length > 0;
+      const { rows: productCostRows } = await client.query<{
+        product_id: string;
+        unit_cost: string;
+      }>(
+        `SELECT product_id, unit_cost::text
+         FROM player_product_costs
+         WHERE user_id = $1 AND product_id = ANY($2::text[])`,
+        [userId, ['wood', 'stone', 'iron', 'steel']],
+      );
+      const { rows: marketPriceRows } = await client.query<{
+        product_id: string;
+        average_price: string;
+      }>(
+        `SELECT product_id, AVG(price)::text AS average_price
+         FROM warehouse_product_settings
+         WHERE mode = 'sell' AND price > 0
+           AND product_id = ANY($1::text[])
+         GROUP BY product_id`,
+        [['wood', 'stone', 'iron', 'steel']],
+      );
+      const productCosts = new Map(
+        productCostRows.map((row) => [row.product_id, Number(row.unit_cost)]),
+      );
+      const marketPrices = new Map(
+        marketPriceRows.map((row) => [row.product_id, Number(row.average_price)]),
+      );
+      constructionInvestment = roundCurrency(
+        withdrawals.reduce(
+          (total, withdrawal) =>
+            total +
+            withdrawal.quantity *
+              (productCosts.get(withdrawal.productId) ??
+                marketPrices.get(withdrawal.productId) ??
+                0),
+          0,
+        ),
+      );
       for (const withdrawal of withdrawals) {
         const { rowCount } = await client.query(
           `UPDATE warehouse_stock
@@ -5408,6 +5460,18 @@ async function createResidentialBuilding(
         city.minimumWage,
       ],
     );
+    if (constructionMaterialsWithdrawn) {
+      const { rows: dayRows } = await client.query<{ day: string }>(
+        `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
+         FROM world_state WHERE id = 1`,
+      );
+      if (!dayRows[0]) throw new Error('O relógio do mundo não está disponível para registrar o investimento.');
+      await client.query(
+        `INSERT INTO player_investment_history (user_id, day, amount, category)
+         VALUES ($1, $2::date, $3, 'construction')`,
+        [userId, dayRows[0].day, constructionInvestment],
+      );
+    }
     await client.query('COMMIT');
     return { building: mapResidentialBuilding(rows[0]), error: null };
   } catch (error) {
@@ -5506,6 +5570,73 @@ function rejectWebSocketUpgrade(socket: Duplex, status: 401 | 404 | 503) {
   socket.destroy();
 }
 
+async function synchronizeBuildingFootprintMetrics(): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('LOCK TABLE all_buildings IN SHARE ROW EXCLUSIVE MODE');
+    const footprintEntries = Object.values(RESIDENCES).map((definition) => ({
+      type: definition.type,
+      tileCount: definition.width * definition.height,
+    }));
+    await client.query(
+      `INSERT INTO building_footprint_catalog (building_type, tile_count)
+       SELECT footprint.building_type, footprint.tile_count
+       FROM UNNEST($1::text[], $2::smallint[]) AS footprint(building_type, tile_count)
+       ON CONFLICT (building_type) DO UPDATE
+       SET tile_count = EXCLUDED.tile_count`,
+      [
+        footprintEntries.map((entry) => entry.type),
+        footprintEntries.map((entry) => entry.tileCount),
+      ],
+    );
+    const { rows: unknownTypes } = await client.query<{ building_type: string }>(
+      `SELECT DISTINCT building.building_type
+       FROM all_buildings building
+       LEFT JOIN building_footprint_catalog footprint
+         ON footprint.building_type = building.building_type
+       WHERE footprint.building_type IS NULL`,
+    );
+    if (unknownTypes.length > 0) {
+      throw new Error(
+        `Não há área cadastrada para as construções: ${unknownTypes.map((row) => row.building_type).join(', ')}.`,
+      );
+    }
+    await client.query('DELETE FROM player_rank_metrics');
+    await client.query(
+      `INSERT INTO player_rank_metrics (user_id, building_tiles)
+       SELECT building.created_by, SUM(footprint.tile_count)::integer
+       FROM all_buildings building
+       JOIN building_footprint_catalog footprint
+         ON footprint.building_type = building.building_type
+       GROUP BY building.created_by`,
+    );
+    const { rows: triggerRows } = await client.query<{ installed: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM pg_trigger
+         WHERE tgname = 'all_buildings_rank_tiles_trigger'
+           AND tgrelid = 'all_buildings'::regclass
+           AND NOT tgisinternal
+       ) AS installed`,
+    );
+    if (!triggerRows[0]?.installed) {
+      await client.query(
+        `CREATE TRIGGER all_buildings_rank_tiles_trigger
+         AFTER INSERT OR DELETE ON all_buildings
+         FOR EACH ROW EXECUTE FUNCTION update_player_building_tiles()`,
+      );
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter a sincronização das áreas das construções:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function start() {
   const auth = getAuthConfig();
   const requireAuth = requireAuthentication(auth);
@@ -5563,6 +5694,13 @@ async function start() {
      VALUES (1, TIMESTAMPTZ '1100-01-01 06:00:00+00', clock_timestamp())
      ON CONFLICT (id) DO NOTHING`,
   );
+  await synchronizeBuildingFootprintMetrics();
+  await pool.query(
+    `INSERT INTO leaderboard_history_metadata (id, investment_tracking_from_day)
+     SELECT 1, (world_time AT TIME ZONE 'UTC')::date
+     FROM world_state WHERE id = 1
+     ON CONFLICT (id) DO NOTHING`,
+  );
   await Promise.all([
     subscriber.subscribe(SNAPSHOT_CHANNEL, (message) => broadcast(message)),
     subscriber.subscribe(CITIES_CHANNEL, deliverCities),
@@ -5614,6 +5752,319 @@ async function start() {
         console.error('Não foi possível consultar a carteira:', error);
         response.status(503).json({ error: 'wallet_unavailable' });
       });
+  });
+  app.get('/api/rankings', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    const periodDays =
+      request.query.days === undefined
+        ? 30
+        : request.query.days === '30'
+          ? 30
+          : request.query.days === '365'
+            ? LEADERBOARD_HISTORY_DAYS
+            : null;
+    if (periodDays === null) {
+      response.status(400).json({ error: 'invalid_ranking_period' });
+      return;
+    }
+    void (async () => {
+      const { rows: clockRows } = await pool.query<{ day: string }>(
+        `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
+         FROM world_state WHERE id = 1`,
+      );
+      const worldDay = clockRows[0]?.day;
+      if (!worldDay) {
+        response.status(503).json({ error: 'world_unavailable' });
+        return;
+      }
+
+      const [
+        playerResult,
+        marketPriceResult,
+        buildingResult,
+        buildingTilesResult,
+        activityResult,
+        profitResult,
+        investmentResult,
+        trackingResult,
+      ] = await Promise.all([
+        pool.query<{ id: string; name: string | null }>(
+          `SELECT id, name
+           FROM neon_auth."user"
+           ORDER BY name, id`,
+        ),
+        pool.query<{ product_id: string; average_price: string }>(
+          `SELECT product_id, AVG(price)::text AS average_price
+           FROM warehouse_product_settings
+           WHERE mode = 'sell' AND price > 0
+           GROUP BY product_id`,
+        ),
+        pool.query<{ player_id: string; building_type: string }>(
+          `SELECT created_by AS player_id, building_type
+           FROM all_buildings`,
+        ),
+        pool.query<{ player_id: string; building_tiles: string }>(
+          `SELECT user_id AS player_id, building_tiles::text
+           FROM player_rank_metrics`,
+        ),
+        pool.query<{
+          player_id: string;
+          building_type: string;
+          product_id: string | null;
+          activity: 'shop_sales' | 'trade_sales' | 'production';
+          quantity: string;
+        }>(
+          `SELECT building.created_by AS player_id,
+                  building.building_type,
+                  NULL::text AS product_id,
+                  'shop_sales'::text AS activity,
+                  SUM(history.units_sold)::text AS quantity
+           FROM commerce_history history
+           JOIN all_buildings building ON building.id = history.building_id
+           WHERE history.day BETWEEN $1::date - ($2::integer - 1) AND $1::date
+           GROUP BY building.created_by, building.building_type
+           UNION ALL
+           SELECT seller.created_by AS player_id,
+                  seller.building_type,
+                  history.product_id,
+                  'trade_sales'::text AS activity,
+                  SUM(history.quantity)::text AS quantity
+           FROM warehouse_trade_history history
+           JOIN all_buildings seller ON seller.id = history.seller_id
+           WHERE history.day BETWEEN $1::date - ($2::integer - 1) AND $1::date
+           GROUP BY seller.created_by, seller.building_type, history.product_id
+           UNION ALL
+           SELECT building.created_by AS player_id,
+                  building.building_type,
+                  NULL::text AS product_id,
+                  'production'::text AS activity,
+                  SUM(history.produced)::text AS quantity
+           FROM production_history history
+           JOIN all_buildings building ON building.id = history.building_id
+           WHERE history.day BETWEEN $1::date - ($2::integer - 1) AND $1::date
+           GROUP BY building.created_by, building.building_type`,
+          [worldDay, periodDays],
+        ),
+        pool.query<{ player_id: string; income: string; expenses: string }>(
+          `WITH financial_flows AS (
+             SELECT building.created_by AS player_id,
+                    COALESCE(SUM(history.units_sold::bigint * history.sale_price), 0) AS income,
+                    COALESCE(SUM(history.product_expense), 0) AS expenses
+             FROM commerce_history history
+             JOIN all_buildings building ON building.id = history.building_id
+             WHERE history.day BETWEEN $1::date - ($2::integer - 1) AND $1::date
+             GROUP BY building.created_by
+             UNION ALL
+             SELECT building.created_by, COALESCE(SUM(history.rent_revenue), 0), 0::numeric
+             FROM residence_rent_history history
+             JOIN all_buildings building ON building.id = history.building_id
+             WHERE history.day BETWEEN $1::date - ($2::integer - 1) AND $1::date
+             GROUP BY building.created_by
+             UNION ALL
+             SELECT seller.created_by,
+                    COALESCE(SUM(history.quantity::bigint * history.unit_price), 0),
+                    0::numeric
+             FROM warehouse_trade_history history
+             JOIN all_buildings seller ON seller.id = history.seller_id
+             WHERE history.day BETWEEN $1::date - ($2::integer - 1) AND $1::date
+             GROUP BY seller.created_by
+             UNION ALL
+             SELECT buyer.created_by, 0::numeric,
+                    COALESCE(SUM(history.quantity::bigint * history.unit_price), 0)
+             FROM warehouse_trade_history history
+             JOIN all_buildings buyer ON buyer.id = history.buyer_id
+             WHERE history.day BETWEEN $1::date - ($2::integer - 1) AND $1::date
+             GROUP BY buyer.created_by
+             UNION ALL
+             SELECT building.created_by, 0::numeric,
+                    COALESCE(SUM(history.employee_expense), 0)
+             FROM building_payroll_history history
+             JOIN all_buildings building ON building.id = history.building_id
+             WHERE history.day BETWEEN $1::date - ($2::integer - 1) AND $1::date
+             GROUP BY building.created_by
+           )
+           SELECT player_id,
+                  SUM(income)::text AS income,
+                  SUM(expenses)::text AS expenses
+           FROM financial_flows
+           GROUP BY player_id`,
+          [worldDay, periodDays],
+        ),
+        pool.query<{ player_id: string; amount: string }>(
+          `SELECT user_id AS player_id, SUM(amount)::text AS amount
+           FROM player_investment_history
+           WHERE day BETWEEN $1::date - ($2::integer - 1) AND $1::date
+           GROUP BY user_id`,
+          [worldDay, periodDays],
+        ),
+        pool.query<{
+          sales_since: string;
+          production_since: string;
+          profit_since: string;
+          investment_since: string;
+        }>(
+          `SELECT
+             to_char(
+               GREATEST(
+                 $1::date - ($2::integer - 1),
+                 COALESCE(
+                   GREATEST(
+                     (SELECT MIN(day) FROM commerce_history),
+                     (SELECT MIN(day) FROM warehouse_trade_history)
+                   ),
+                   $1::date
+                 )
+               ),
+               'YYYY-MM-DD'
+             ) AS sales_since,
+             to_char(
+               GREATEST(
+                 $1::date - ($2::integer - 1),
+                 COALESCE((SELECT MIN(day) FROM production_history), $1::date)
+               ),
+               'YYYY-MM-DD'
+             ) AS production_since,
+             to_char(
+               GREATEST(
+                 $1::date - ($2::integer - 1),
+                 COALESCE(
+                   GREATEST(
+                     (SELECT MIN(day) FROM commerce_history),
+                     (SELECT MIN(day) FROM residence_rent_history),
+                     (SELECT MIN(day) FROM warehouse_trade_history),
+                     (SELECT MIN(day) FROM building_payroll_history)
+                   ),
+                   $1::date
+                 )
+               ),
+               'YYYY-MM-DD'
+             ) AS profit_since,
+             to_char(
+               GREATEST(
+                 $1::date - ($2::integer - 1),
+                 COALESCE(metadata.investment_tracking_from_day, $1::date)
+               ),
+               'YYYY-MM-DD'
+             ) AS investment_since
+           FROM (SELECT 1) singleton
+           LEFT JOIN leaderboard_history_metadata metadata ON metadata.id = 1`,
+          [worldDay, LEADERBOARD_HISTORY_DAYS],
+        ),
+      ]);
+
+      const players = playerResult.rows.map((row) => ({
+        playerId: row.id,
+        playerName: row.name?.trim() || `Jogador ${row.id.slice(0, 8)}`,
+      }));
+      const marketPrices = new Map(
+        marketPriceResult.rows.map((row) => [row.product_id, Number(row.average_price)]),
+      );
+      const companyValueByPlayer = new Map<string, number>();
+      for (const row of buildingResult.rows) {
+        const definition = getResidenceDefinition(row.building_type);
+        if (!definition) {
+          throw new Error(`Tipo de construção inválido no ranking: ${row.building_type}`);
+        }
+        const constructionCost = definition.cost;
+        const value =
+          constructionCost.wood * (marketPrices.get('wood') ?? 0) +
+          constructionCost.stone * (marketPrices.get('stone') ?? 0) +
+          (constructionCost.iron ?? 0) * (marketPrices.get('iron') ?? 0) +
+          (constructionCost.steel ?? 0) * (marketPrices.get('steel') ?? 0);
+        companyValueByPlayer.set(
+          row.player_id,
+          (companyValueByPlayer.get(row.player_id) ?? 0) + value,
+        );
+      }
+      for (const [playerId, value] of companyValueByPlayer) {
+        companyValueByPlayer.set(playerId, roundCurrency(value));
+      }
+      const buildingTilesByPlayer = new Map(
+        buildingTilesResult.rows.map((row) => [row.player_id, Number(row.building_tiles)]),
+      );
+      const salesByPlayerAndProduct = new Map<string, Map<string, number>>();
+      const productionByPlayerAndProduct = new Map<string, Map<string, number>>();
+      const addProductActivity = (
+        target: Map<string, Map<string, number>>,
+        playerId: string,
+        productId: string,
+        quantity: number,
+      ): void => {
+        const productQuantities = target.get(playerId) ?? new Map<string, number>();
+        productQuantities.set(productId, (productQuantities.get(productId) ?? 0) + quantity);
+        target.set(playerId, productQuantities);
+      };
+      for (const row of activityResult.rows) {
+        const quantity = Number(row.quantity);
+        if (!Number.isFinite(quantity) || quantity < 0) {
+          throw new Error('O histórico de atividade contém uma quantidade inválida.');
+        }
+        const productId = row.product_id ??
+          getResidenceDefinition(row.building_type)?.stockProductId;
+        if (!productId) {
+          throw new Error(`Não há produto associado à atividade de ${row.building_type}.`);
+        }
+        addProductActivity(
+          row.activity === 'production' ? productionByPlayerAndProduct : salesByPlayerAndProduct,
+          row.player_id,
+          productId,
+          quantity,
+        );
+      }
+      const profitByPlayer = new Map(
+        profitResult.rows.map((row) => [
+          row.player_id,
+          roundCurrency(Number(row.income) - Number(row.expenses)),
+        ]),
+      );
+      const investmentByPlayer = new Map(
+        investmentResult.rows.map((row) => [row.player_id, roundCurrency(Number(row.amount))]),
+      );
+      const rank = (scores: Map<string, number>) =>
+        rankPlayers(
+          players.map((player) => ({
+            ...player,
+            score: scores.get(player.playerId) ?? 0,
+          })),
+          userId,
+        );
+      const productRankings = PRODUCTS.map((product) => ({
+        productId: product.id,
+        sales: rank(
+          new Map(
+            players.map((player) => [
+              player.playerId,
+              salesByPlayerAndProduct.get(player.playerId)?.get(product.id) ?? 0,
+            ]),
+          ),
+        ),
+        production: rank(
+          new Map(
+            players.map((player) => [
+              player.playerId,
+              productionByPlayerAndProduct.get(player.playerId)?.get(product.id) ?? 0,
+            ]),
+          ),
+        ),
+      }));
+      response.json({
+        periodDays,
+        worldDay,
+        historyAvailableSince: trackingResult.rows[0] ?? null,
+        companyValue: rank(companyValueByPlayer),
+        buildingTiles: rank(buildingTilesByPlayer),
+        products: productRankings,
+        profit: rank(profitByPlayer),
+        investment: rank(investmentByPlayer),
+      });
+    })().catch((error: unknown) => {
+      console.error('Não foi possível calcular os rankings do mundo:', error);
+      response.status(503).json({ error: 'rankings_unavailable' });
+    });
   });
   app.get('/api/accounting', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);
@@ -7726,6 +8177,7 @@ async function start() {
     void (async () => {
       const client = await pool.connect();
       let walletBalance: number | null = null;
+      let investmentAmount = 0;
       try {
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
@@ -7800,6 +8252,7 @@ async function start() {
             return;
           }
           walletBalance = walletRows[0].balance;
+          investmentAmount = quote.upgradeCost;
         }
         const { rows: updated } = await client.query<ResidentialBuildingRow>(
           `UPDATE all_buildings
@@ -7814,6 +8267,18 @@ async function start() {
           [building.id, slot.key, targetLevel],
         );
         if (!updated[0]) throw new Error(`O estoque da construção ${building.id} não foi atualizado.`);
+        if (investmentAmount > 0) {
+          const { rows: dayRows } = await client.query<{ day: string }>(
+            `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
+             FROM world_state WHERE id = 1`,
+          );
+          if (!dayRows[0]) throw new Error('O relógio do mundo não está disponível para registrar o investimento.');
+          await client.query(
+            `INSERT INTO player_investment_history (user_id, day, amount, category)
+             VALUES ($1, $2::date, $3, 'stock_upgrade')`,
+            [userId, dayRows[0].day, investmentAmount],
+          );
+        }
         await client.query('COMMIT');
         response.json({
           building: mapResidentialBuilding(updated[0]),

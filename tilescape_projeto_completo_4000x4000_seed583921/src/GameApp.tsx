@@ -5,10 +5,12 @@ import {
   Map as MapIcon,
   Radio,
   Activity,
+  Trophy,
 } from 'lucide-react';
 import CityAssemblyModal from './components/CityAssemblyModal';
 import ConstructionBar, { ConstructionCategory } from './components/ConstructionBar';
 import AccountingPanel from './components/AccountingPanel';
+import RankingPanel from './components/RankingPanel';
 import CityZoneEditor from './components/CityZoneEditor';
 import ProductCatalog from './components/ProductCatalog';
 import ResidencePanel from './components/ResidencePanel';
@@ -41,6 +43,10 @@ import {
   type AccountingWeekOffset,
   type AccountingSummary,
 } from './types/accounting';
+import type {
+  LeaderboardPeriodDays,
+  LeaderboardSummary,
+} from './types/leaderboard';
 import type { FarmAutomationSettings } from './types/farming';
 import {
   MAX_WAGE,
@@ -149,7 +155,9 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
   const response = await fetch(path, { ...init, headers });
   if (!response.ok) {
-    let error = 'Não foi possível concluir a operação da cidade.';
+    let error = path.startsWith('/api/rankings')
+      ? 'Não foi possível carregar o ranking do mundo.'
+      : 'Não foi possível concluir a operação da cidade.';
     let errorCode = '';
     try {
       const body: unknown = await response.json();
@@ -443,6 +451,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [accountingSummary, setAccountingSummary] = useState<AccountingSummary | null>(null);
   const [accountingPeriodDays, setAccountingPeriodDays] = useState<AccountingPeriodDays>(30);
   const [accountingWeekOffset, setAccountingWeekOffset] = useState<AccountingWeekOffset>(0);
+  const [isRankingOpen, setIsRankingOpen] = useState(false);
+  const [isRankingLoading, setIsRankingLoading] = useState(false);
+  const [rankingError, setRankingError] = useState('');
+  const [rankingSummary, setRankingSummary] = useState<LeaderboardSummary | null>(null);
+  const [rankingPeriodDays, setRankingPeriodDays] = useState<LeaderboardPeriodDays>(30);
   const [isPerformanceLogOpen, setIsPerformanceLogOpen] = useState(false);
   const [isPerformanceLogLoading, setIsPerformanceLogLoading] = useState(false);
   const [performanceLogError, setPerformanceLogError] = useState('');
@@ -859,6 +872,24 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
+  const loadRankings = async (
+    periodDays: LeaderboardPeriodDays = rankingPeriodDays,
+  ) => {
+    setIsRankingOpen(true);
+    setIsRankingLoading(true);
+    setRankingError('');
+    setRankingSummary(null);
+    try {
+      setRankingSummary(
+        await cityRequest<LeaderboardSummary>(`/api/rankings?days=${periodDays}`),
+      );
+    } catch (error) {
+      setRankingError(error instanceof Error ? error.message : 'Não foi possível carregar o ranking.');
+    } finally {
+      setIsRankingLoading(false);
+    }
+  };
+
   const loadPerformanceLogs = async () => {
     setIsPerformanceLogLoading(true);
     setPerformanceLogError('');
@@ -879,6 +910,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const togglePerformanceLogs = () => {
     const shouldOpen = !isPerformanceLogOpen;
     setIsAccountingOpen(false);
+    setIsRankingOpen(false);
     setIsMasterPanelOpen(false);
     setIsPerformanceLogOpen(shouldOpen);
     if (shouldOpen) void loadPerformanceLogs();
@@ -895,11 +927,34 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setResidencePlacementType(null);
     setResidencePlacementMessage('');
     setRoadPlacementMessage('');
+    setIsRankingOpen(false);
+    setIsPerformanceLogOpen(false);
     if (isAccountingOpen) {
       setIsAccountingOpen(false);
     } else {
       void loadAccounting();
     }
+  };
+
+  const toggleRankings = () => {
+    if (isRankingOpen) {
+      setIsRankingOpen(false);
+      return;
+    }
+    closeCityZoneEditor();
+    setActiveCategory(null);
+    setIsProductCatalogOpen(false);
+    setIsDemolitionMode(false);
+    setDemolitionMessage('');
+    setIsPlacingCity(false);
+    setIsPlacingRoads(false);
+    setResidencePlacementType(null);
+    setResidencePlacementMessage('');
+    setRoadPlacementMessage('');
+    setIsAccountingOpen(false);
+    setIsPerformanceLogOpen(false);
+    setIsMasterPanelOpen(false);
+    void loadRankings();
   };
 
   const viewAccountingBuilding = (position: AccountingBuildingPosition) => {
@@ -2017,6 +2072,16 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             <Radio size={14} />
             {isOnline ? 'MUNDO AO VIVO' : 'CONECTANDO'}
           </span>
+          <button
+            type="button"
+            className={`ranking-button${isRankingOpen ? ' active' : ''}`}
+            aria-label="Abrir ranking"
+            aria-expanded={isRankingOpen}
+            title="Ranking dos jogadores"
+            onClick={toggleRankings}
+          >
+            <Trophy size={17} />
+          </button>
           <div className="player-money" title="Seu dinheiro">
             {balance === null ? 'C$ —' : formatMoney(balance)}
           </div>
@@ -2056,7 +2121,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
               type="button"
               className="master-button"
               aria-expanded={isMasterPanelOpen}
-              onClick={() => setIsMasterPanelOpen((open) => !open)}
+              onClick={() => {
+                setIsRankingOpen(false);
+                setIsMasterPanelOpen((open) => !open);
+              }}
             >
               Master
             </button>
@@ -2356,6 +2424,19 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             }}
             onViewBuilding={viewAccountingBuilding}
             onClose={() => setIsAccountingOpen(false)}
+          />
+        )}
+        {isRankingOpen && (
+          <RankingPanel
+            summary={rankingSummary}
+            isLoading={isRankingLoading}
+            error={rankingError}
+            periodDays={rankingPeriodDays}
+            onPeriodChange={(days) => {
+              setRankingPeriodDays(days);
+              void loadRankings(days);
+            }}
+            onClose={() => setIsRankingOpen(false)}
           />
         )}
         {selectedResidence && selectedResidenceKey && isWarehouseOpen && (

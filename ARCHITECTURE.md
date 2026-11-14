@@ -86,6 +86,14 @@ jogadores entram na média ponderada por quantidade. A receita líquida estimada
 em **Contábil → Lojas** usa o custo unitário estimado atual da aba **Produto**
 para valorar as vendas e perdas do período selecionado, além de subtrair os
 salários. Os históricos de consumo industrial e custos são mantidos por 35 dias.
+O painel **Ranking** expõe as classificações globais por valor estimado da
+empresa, área ocupada por construções, vendas e produção por produto, lucro e
+investimento. As listas mostram o top 30 e a posição do jogador autenticado
+quando fora dele. Os rankings financeiros usam períodos de 30 e 365 dias;
+históricos anuais indisponíveis antes desta implantação crescem gradualmente.
+Lucro agrega vendas, aluguéis e comércio entre jogadores, menos compras de
+produtos e folha salarial. Investimento agrega materiais de construções e
+upgrades de estoque pagos.
 O schema aplicado na inicialização mantém a constraint
 `all_buildings_building_type_check` sincronizada com todos os tipos do
 catálogo, inclusive em bancos existentes; um teste de domínio verifica essa
@@ -748,7 +756,8 @@ mapeamento e verificar todas as curvas.
   Receita e lucro/prejuízo são calculados dos dados financeiros.
   Como o abastecimento pelo armazém do mesmo dono é uma transferência interna
   sem cobrança, esse movimento registra C$ 0 de gasto com produto. O histórico
-  financeiro conserva no mínimo 35 dias para os cinco períodos semanais e só o dono consulta pela rota de histórico do
+  financeiro conserva até 365 dias para os rankings anuais, quando disponível,
+  além dos cinco períodos semanais; só o dono consulta pela rota de histórico do
   comércio. O cache local legado de diagnósticos conserva até 30 dias e alimenta
   a simulação de venda no navegador; a simulação de contratação também usa o snapshot local,
   sem novas consultas ao servidor. A coluna
@@ -977,6 +986,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo e desejo médios por consumidor da cidade, ponderados pelas residências, além do preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira sem saldo prévio com C$ 25.000 (idempotente), preserva saldos existentes e retorna `{ balance }`. |
 | `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. A aba comercial calcula receita líquida com custos médios diários persistidos; a aba Produto agrega estoque, produção, comércio entre jogadores e consumo residencial/industrial, além do custo unitário estimado. |
+| `GET /api/rankings?days=30\|365` | Autenticado | Retorna rankings globais com os 30 primeiros e a posição do jogador atual, se estiver fora do top 30: valor estimado da empresa, área total das construções, vendas/produção por produto, lucro e investimentos no período selecionado. |
 | `PUT /api/residential-buildings/:id/farm-automation` | Dono da fazenda agrícola concluída | Valida e salva meses de replantio e limites de trabalhadores por fase; desativar mantém as preferências e o ciclo atual, mas interrompe novos plantios automáticos. |
 | `PATCH /api/residential-buildings/:id/input-product` | Dono do Moinho concluído | Seleciona trigo, cevada ou milho; descarta o estoque de outro insumo na mesma transação e publica a seleção/estoques. |
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
@@ -1055,7 +1065,8 @@ de sucesso.
   `residence_rent_history`. O endpoint contábil restringe os relatórios ao dono
   autenticado e filtra os relatórios detalhados pelo período selecionado (1, 7
   ou 30 dias, incluindo o dia corrente). O resumo usa semanas de sete dias
-  ancoradas no dia atual do jogo e mantém 35 dias de históricos financeiros.
+  ancoradas no dia atual do jogo e mantém até 365 dias de históricos financeiros,
+  quando os dados históricos estão disponíveis.
   Valor empresarial e estoque usam preços médios atuais de venda anunciados nos
   armazéns; produtos sem preço anunciado não entram na estimativa.
 - `production_input_history` registra os produtos efetivamente consumidos por
@@ -1071,6 +1082,14 @@ de sucesso.
   dependência no mesmo dia. O histórico começa com esta atualização; períodos
   anteriores não podem ser reconstruídos. Insumos sem estimativa anterior
   contribuem como custo zero até que seu próprio custo seja estimado.
+- `building_footprint_catalog` mapeia o tipo de construção à sua área em tiles;
+  `player_rank_metrics` mantém o total por jogador. Na inicialização, o servidor
+  preenche o catálogo, recalcula os totais sob lock de `all_buildings` e só então
+  instala o trigger de inserção/remoção que mantém esses totais atualizados.
+  `player_investment_history` registra os valores de construções e upgrades de
+  estoque pagos, e `leaderboard_history_metadata` marca quando começou o
+  rastreamento de investimentos. Os registros financeiros são retidos por até
+  365 dias; períodos anteriores ao início dos históricos não são reconstruíveis.
 - A tabela `neon_auth."user"` é gerenciada pelo Neon Auth, não pelo esquema do
   jogo.
 

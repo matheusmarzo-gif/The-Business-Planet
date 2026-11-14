@@ -174,6 +174,7 @@ import {
   calculateResidenceBenefit,
   getResidenceBenefitIncome,
   planResidenceRelocations,
+  type ResidenceEmploymentOffer,
   type ResidenceRelocation,
 } from '../src/types/residence-relocation.js';
 import { DEFAULT_TILE_LIST } from '../src/utils/tileAssets.js';
@@ -1706,8 +1707,24 @@ async function applyResidenceRelocations(
   counts.residences = residences.filter(
     (row) => getResidenceDefinition(row.building_type)?.kind === 'residence',
   ).length;
-  const { rows: workplaces } = await client.query<{ id: string; wage: number }>(
-    'SELECT id, wage FROM all_buildings',
+  const { rows: workplaces } = await client.query<{
+    id: string;
+    city_id: string;
+    building_type: ResidenceType;
+    tile_x: number;
+    tile_y: number;
+    wage: number;
+    desired_workers: number;
+    status: ResidentialBuilding['status'];
+    employed: number;
+  }>(
+    `SELECT workplace.id, workplace.city_id, workplace.building_type,
+            workplace.tile_x, workplace.tile_y, workplace.wage,
+            workplace.desired_workers, workplace.status,
+            COALESCE(SUM(assignment.count), 0)::int AS employed
+     FROM all_buildings workplace
+     LEFT JOIN job_assignments assignment ON assignment.workplace_id = workplace.id
+     GROUP BY workplace.id`,
   );
   const { rows: assignments } = await client.query<{
     workplace_id: string;
@@ -1748,16 +1765,46 @@ async function applyResidenceRelocations(
       totals.employees > 0 ? totals.income / totals.employees : 0,
     ]),
   );
+  const employmentOffers: ResidenceEmploymentOffer[] = workplaces.flatMap((workplace) => {
+    if (
+      getResidenceDefinition(workplace.building_type)?.kind === 'residence' &&
+      workplace.status !== 'under_construction'
+    ) {
+      return [];
+    }
+    const vacancies = Math.max(
+      0,
+      Math.min(
+        workplace.desired_workers,
+        getMaxDesiredWorkers(workplace.building_type, workplace.status),
+      ) - workplace.employed,
+    );
+    return vacancies > 0
+      ? [{
+          cityId: workplace.city_id,
+          type: workplace.building_type,
+          x: workplace.tile_x,
+          y: workplace.tile_y,
+          wage: workplace.wage,
+          vacancies,
+        }]
+      : [];
+  });
   const appealValues = calculateResidenceAppeals(
     residentialRows.map((row) => ({
       id: row.id,
       cityId: row.city_id,
+      type: row.building_type,
       x: row.tile_x + RESIDENCES[row.building_type].width / 2,
       y: row.tile_y + RESIDENCES[row.building_type].height / 2,
+      occupants: row.occupants,
+      employed: employedByResidence.get(row.id) ?? 0,
+      capacity: RESIDENCES[row.building_type].capacity,
       salaryAverage: averageIncomes.get(row.id) ?? 0,
       cityAverageSalary: cityAverageSalaries.get(row.city_id) ?? 0,
       constructionAppeal: RESIDENCES[row.building_type].localAppeal,
     })),
+    employmentOffers,
   );
   const { rows: productCosts } = await client.query<{
     building_id: string;
@@ -4535,19 +4582,46 @@ async function runDailyEmployment(): Promise<boolean> {
           building.status === 'completed' &&
           getResidenceDefinition(building.type)?.kind === 'residence',
       );
+      const employmentOffers: ResidenceEmploymentOffer[] = buildings.flatMap((building) => {
+        if (
+          getResidenceDefinition(building.type)?.kind === 'residence' &&
+          building.status !== 'under_construction'
+        ) {
+          return [];
+        }
+        const desiredWorkers = Math.min(
+          building.desiredWorkers,
+          getMaxDesiredWorkers(building.type, building.status),
+        );
+        const vacancies = Math.max(0, desiredWorkers - building.employed);
+        return vacancies > 0
+          ? [{
+              cityId: building.cityId,
+              type: building.type,
+              x: building.x,
+              y: building.y,
+              wage: building.wage,
+              vacancies,
+            }]
+          : [];
+      });
       const residenceAppeals = calculateResidenceAppealsFromIncome(
         completedResidences.map((building) => {
           const definition = RESIDENCES[building.type];
           return {
             id: building.id,
             cityId: building.cityId,
+            type: building.type,
             x: building.x + definition.width / 2,
             y: building.y + definition.height / 2,
             salaryAverage: building.averageIncome,
+            employed: building.employed,
             occupants: building.occupants,
+            capacity: definition.capacity,
             constructionAppeal: definition.localAppeal,
           };
         }),
+        employmentOffers,
       );
       const residences = completedResidences
         .filter((building) => building.occupants > 0)
@@ -6276,9 +6350,11 @@ async function start() {
         tile_x: number;
         tile_y: number;
         occupants: number;
+        employed: number;
         payroll: number;
       }>(
         `SELECT home.id, home.building_type, home.tile_x, home.tile_y, home.occupants,
+                COALESCE(SUM(assignments.count), 0)::int AS employed,
                 COALESCE(SUM(assignments.count * workplace.wage), 0)::float8 AS payroll
          FROM all_buildings home
          LEFT JOIN job_assignments assignments ON assignments.residence_id = home.id
@@ -6289,20 +6365,64 @@ async function start() {
          GROUP BY home.id`,
         [row.city_id, residenceTypes],
       );
-      const cityOccupants = cityResidences.reduce((total, home) => total + home.occupants, 0);
-      const cityAverageSalary = cityOccupants > 0
-        ? cityResidences.reduce((total, home) => total + home.payroll, 0) / cityOccupants
+      const cityEmployees = cityResidences.reduce((total, home) => total + home.employed, 0);
+      const cityAverageSalary = cityEmployees > 0
+        ? cityResidences.reduce((total, home) => total + home.payroll, 0) / cityEmployees
         : 0;
+      const { rows: workplaceRows } = await pool.query<{
+        building_type: ResidenceType;
+        tile_x: number;
+        tile_y: number;
+        wage: number;
+        desired_workers: number;
+        status: ResidentialBuilding['status'];
+        employed: number;
+      }>(
+        `SELECT workplace.building_type, workplace.tile_x, workplace.tile_y,
+                workplace.wage, workplace.desired_workers, workplace.status,
+                COALESCE(SUM(assignment.count), 0)::int AS employed
+         FROM all_buildings workplace
+         LEFT JOIN job_assignments assignment ON assignment.workplace_id = workplace.id
+         WHERE workplace.city_id = $1
+           AND (
+             workplace.building_type <> ALL($2::text[])
+             OR workplace.status = 'under_construction'
+           )
+         GROUP BY workplace.id`,
+        [row.city_id, residenceTypes],
+      );
+      const employmentOffers: ResidenceEmploymentOffer[] = workplaceRows.flatMap((workplace) => {
+        const desiredWorkers = Math.min(
+          workplace.desired_workers,
+          getMaxDesiredWorkers(workplace.building_type, workplace.status),
+        );
+        const vacancies = Math.max(0, desiredWorkers - workplace.employed);
+        return vacancies > 0
+          ? [{
+              cityId: row.city_id,
+              type: workplace.building_type,
+              x: workplace.tile_x,
+              y: workplace.tile_y,
+              wage: workplace.wage,
+              vacancies,
+            }]
+          : [];
+      });
       const appealValues = calculateResidenceAppeals(
         cityResidences.map((home) => ({
           id: home.id,
           cityId: row.city_id,
+          type: home.building_type,
           x: home.tile_x + RESIDENCES[home.building_type].width / 2,
           y: home.tile_y + RESIDENCES[home.building_type].height / 2,
-          salaryAverage: home.occupants > 0 ? home.payroll / home.occupants : 0,
+          occupants: home.occupants,
+          employed: home.employed,
+          capacity: RESIDENCES[home.building_type].capacity,
+          salaryAverage: home.employed > 0 ? home.payroll / home.employed : 0,
           cityAverageSalary,
           constructionAppeal: RESIDENCES[home.building_type].localAppeal,
         })),
+        employmentOffers,
       ).get(request.params.id);
       if (!appealValues) {
         throw new Error(`Não foi possível calcular os apreços da residência ${request.params.id}.`);

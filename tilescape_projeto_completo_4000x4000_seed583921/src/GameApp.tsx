@@ -66,7 +66,11 @@ import type {
   StockCapacityKey,
   StockCapacityUpgradeQuote,
 } from './types/stockCapacity';
-import { allocateWorkers, getDailyWorkPoints } from './types/employment';
+import {
+  allocateWorkers,
+  getDailyWorkPoints,
+  getMaxDesiredWorkers,
+} from './types/employment';
 import { PRODUCTS } from './types/product';
 import { getWorkerTechnique } from './types/wellbeing';
 import type { PerformanceLogRecord } from './types/performanceLog';
@@ -2144,16 +2148,66 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                 RESIDENCES[building.type].kind === 'residence' &&
                 building.status === 'completed',
               );
+              const workplaces = residentialBuildings
+                .filter((building) =>
+                  RESIDENCES[building.type].kind !== 'residence' ||
+                  building.status === 'under_construction',
+                )
+                .map((building) => ({
+                  id: building.id,
+                  cityId: building.cityId,
+                  type: building.type,
+                  x: building.x,
+                  y: building.y,
+                  wage: building.id === selectedResidence.id ? settings.wage : building.wage,
+                  workHoursPerDay:
+                    building.id === selectedResidence.id
+                      ? settings.workHoursPerDay
+                      : building.workHoursPerDay,
+                  desiredWorkers:
+                    building.id === selectedResidence.id
+                      ? settings.desiredWorkers
+                      : building.desiredWorkers,
+                  employed: building.employed,
+                  minimumWorkerTechnique:
+                    building.id === selectedResidence.id
+                      ? settings.minimumWorkerTechnique
+                      : building.minimumWorkerTechnique,
+                  status: building.status,
+                }));
+              const employmentOffers = workplaces.flatMap((workplace) => {
+                const vacancies = Math.max(
+                  0,
+                  Math.min(
+                    workplace.desiredWorkers,
+                    getMaxDesiredWorkers(workplace.type, workplace.status),
+                  ) - workplace.employed,
+                );
+                return vacancies > 0
+                  ? [{
+                      cityId: workplace.cityId,
+                      type: workplace.type,
+                      x: workplace.x,
+                      y: workplace.y,
+                      wage: workplace.wage,
+                      vacancies,
+                    }]
+                  : [];
+              });
               const residenceAppeals = calculateResidenceAppealsFromIncome(
                 completedResidences.map((building) => ({
                   id: building.id,
                   cityId: building.cityId,
+                  type: building.type,
                   x: building.x + RESIDENCES[building.type].width / 2,
                   y: building.y + RESIDENCES[building.type].height / 2,
                   salaryAverage: building.averageIncome,
                   occupants: building.occupants,
+                  employed: building.employed,
+                  capacity: RESIDENCES[building.type].capacity,
                   constructionAppeal: RESIDENCES[building.type].localAppeal,
                 })),
+                employmentOffers,
               );
               const residences = completedResidences
                 .filter((building) => building.occupants > 0)
@@ -2175,32 +2229,6 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                     technique: getWorkerTechnique(building.wellbeing),
                   };
                 });
-              const workplaces = residentialBuildings
-                .filter((building) =>
-                  RESIDENCES[building.type].kind !== 'residence' ||
-                  building.status === 'under_construction',
-                )
-                .map((building) => ({
-                  id: building.id,
-                  cityId: building.cityId,
-                  type: building.type,
-                  x: building.x,
-                  y: building.y,
-                  wage: building.id === selectedResidence.id ? settings.wage : building.wage,
-                  workHoursPerDay:
-                    building.id === selectedResidence.id
-                      ? settings.workHoursPerDay
-                      : building.workHoursPerDay,
-                  desiredWorkers:
-                    building.id === selectedResidence.id
-                      ? settings.desiredWorkers
-                      : building.desiredWorkers,
-                  minimumWorkerTechnique:
-                    building.id === selectedResidence.id
-                      ? settings.minimumWorkerTechnique
-                      : building.minimumWorkerTechnique,
-                  status: building.status,
-                }));
               return allocateWorkers(residences, workplaces)
                 .filter((assignment) => assignment.workplaceId === selectedResidence.id)
                 .reduce((total, assignment) => total + assignment.count, 0);

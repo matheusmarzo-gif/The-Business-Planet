@@ -1,21 +1,35 @@
-import type { ResidenceType } from './residence.js';
+import {
+  isWithinWorkerSearchRadius,
+  type ResidenceType,
+} from './residence.js';
 
 export const RESIDENCE_APPEAL_RADIUS = 10;
 
 export interface ResidenceAppealCandidate {
   id: string;
   cityId: string;
+  type: ResidenceType;
   x: number;
   y: number;
+  occupants: number;
+  employed: number;
+  capacity: number;
   salaryAverage: number;
   cityAverageSalary: number;
   constructionAppeal: number;
 }
 
-export interface ResidenceIncomeAppealCandidate
-  extends Omit<ResidenceAppealCandidate, 'cityAverageSalary'> {
-  occupants: number;
+export interface ResidenceEmploymentOffer {
+  cityId: string;
+  type: ResidenceType;
+  x: number;
+  y: number;
+  wage: number;
+  vacancies: number;
 }
+
+export type ResidenceIncomeAppealCandidate =
+  Omit<ResidenceAppealCandidate, 'cityAverageSalary'>;
 
 export interface ResidenceAppealValues {
   employabilityAppeal: number;
@@ -26,13 +40,14 @@ export interface ResidenceAppealValues {
 
 export function calculateResidenceAppealsFromIncome(
   residences: ResidenceIncomeAppealCandidate[],
+  employmentOffers: readonly ResidenceEmploymentOffer[] = [],
 ): Map<string, ResidenceAppealValues> {
-  const cityTotals = new Map<string, { payroll: number; occupants: number }>();
+  const cityTotals = new Map<string, { payroll: number; employees: number }>();
   for (const residence of residences) {
-    const totals = cityTotals.get(residence.cityId) ?? { payroll: 0, occupants: 0 };
-    const occupants = Math.max(0, residence.occupants);
-    totals.payroll += Math.max(0, residence.salaryAverage) * occupants;
-    totals.occupants += occupants;
+    const totals = cityTotals.get(residence.cityId) ?? { payroll: 0, employees: 0 };
+    const employed = Math.max(0, residence.employed);
+    totals.payroll += Math.max(0, residence.salaryAverage) * employed;
+    totals.employees += employed;
     cityTotals.set(residence.cityId, totals);
   }
   return calculateResidenceAppeals(
@@ -40,22 +55,25 @@ export function calculateResidenceAppealsFromIncome(
       const totals = cityTotals.get(residence.cityId);
       return {
         ...residence,
-        cityAverageSalary: totals && totals.occupants > 0
-          ? totals.payroll / totals.occupants
+        cityAverageSalary: totals && totals.employees > 0
+          ? totals.payroll / totals.employees
           : 0,
       };
     }),
+    employmentOffers,
   );
 }
 
 export function calculateResidenceAppeals(
   residences: ResidenceAppealCandidate[],
+  employmentOffers: readonly ResidenceEmploymentOffer[] = [],
 ): Map<string, ResidenceAppealValues> {
   const employabilityAppeals = new Map(
     residences.map((residence) => [
       residence.id,
       residence.cityAverageSalary > 0
-        ? residence.salaryAverage / residence.cityAverageSalary
+        ? getResidenceEmployabilitySalary(residence, employmentOffers) /
+          residence.cityAverageSalary
         : 0,
     ]),
   );
@@ -104,6 +122,39 @@ export function calculateResidenceAppeals(
       ];
     }),
   );
+}
+
+function getResidenceEmployabilitySalary(
+  residence: ResidenceAppealCandidate,
+  employmentOffers: readonly ResidenceEmploymentOffer[],
+): number {
+  if (
+    residence.occupants > 0 &&
+    residence.employed * 2 >= residence.occupants
+  ) {
+    return residence.salaryAverage;
+  }
+
+  let vacancies = 0;
+  let weightedWage = 0;
+  for (const offer of employmentOffers) {
+    if (
+      offer.cityId !== residence.cityId ||
+      offer.vacancies <= 0 ||
+      !isWithinWorkerSearchRadius(
+        { type: residence.type, x: residence.x, y: residence.y },
+        { type: offer.type, x: offer.x, y: offer.y },
+      )
+    ) {
+      continue;
+    }
+    vacancies += offer.vacancies;
+    weightedWage += offer.wage * offer.vacancies;
+  }
+
+  return vacancies >= residence.capacity && vacancies > 0
+    ? weightedWage / vacancies
+    : residence.salaryAverage;
 }
 
 export interface ResidenceRelocationCandidate {

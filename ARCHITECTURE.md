@@ -98,10 +98,14 @@ demanda o custo mensal (`Cb`), os apreços de empregabilidade, região,
 construção e interno, `benefício erro`, `benefício ideal` e o benefício
 associado usando consumo dos últimos 30 dias, aluguel e salário médio dos
 empregados da residência.
-O apreço de empregabilidade é o salário médio dos empregados da residência
-dividido pelo salário médio dos empregados da cidade; o apreço da região é a
-média dos apreços de empregabilidade das residências concluídas da mesma cidade
-num raio de 10 tiles, incluindo a própria residência. O apreço interno é o maior
+O salário médio da cidade é ponderado pelo número de empregados. O apreço de
+empregabilidade usa o salário médio da residência quando ao menos metade de seus
+moradores está empregada. Caso contrário, considera as vagas na mesma cidade e
+num raio de 60 tiles: se o total de vagas alcança a capacidade máxima da
+residência, usa o salário médio ofertado ponderado pelo número de vagas; se não,
+usa o salário médio da residência. O apreço da região é a média dos apreços de
+empregabilidade das residências concluídas da mesma cidade num raio de 10 tiles,
+incluindo a própria residência. O apreço interno é o maior
 entre 10 e o produto dos apreços da construção e da região. A média diária de cada produto usa a
 quantidade dividida pelo total de dias-consumidor empregados no período e o tooltip também lista a contribuição de
 cada produto para o `Cb`; o cliente exibe os valores abaixo de “Salvar aluguel”.

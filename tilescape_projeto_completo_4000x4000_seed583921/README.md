@@ -96,12 +96,17 @@ Ao selecionar uma residência concluída, o painel mostra, logo abaixo de
 **Salvar aluguel**, o benefício associado calculado com o aluguel, a média de
 gastos dos últimos 30 dias e a renda diária média por morador da residência.
 Se ela estiver vazia, o cálculo usa a renda média por morador da cidade.
-O painel também mostra o apreço da empregabilidade (salário médio dos empregados
-dividido pelo salário médio dos empregados da cidade), o apreço da região
-(média da empregabilidade das residências
-concluídas da mesma cidade num raio de 10 tiles, incluindo a própria casa), o
-apreço da construção e o apreço interno. O apreço interno é o maior valor
-entre 10 e o produto do apreço da construção pelo apreço da região. Passe o
+O painel também mostra o apreço da empregabilidade. Quando pelo menos metade
+dos moradores está empregada, ele compara o salário médio da residência com a
+média salarial dos empregados da cidade. Abaixo desse limite, se houver vagas
+suficientes para a capacidade total da residência num raio de 60 tiles e na
+mesma cidade, compara a média salarial ofertada nessas vagas — ponderada pela
+quantidade de vagas de cada construção — com a média salarial municipal. Se não
+houver vagas suficientes, usa o salário médio da residência. O apreço da região
+é a média da empregabilidade das residências concluídas da mesma cidade num raio
+de 10 tiles, incluindo a própria casa. O painel também mostra o apreço da
+construção e o apreço interno, que é o maior valor entre 10 e o produto do
+apreço da construção pelo apreço da região. Passe o
 mouse sobre o benefício associado para consultar `Cb` (média de gastos),
 `benefício erro` e `benefício ideal`, além da contribuição individual de cada
 produto para o `Cb`. A média diária de cada produto considera a quantidade

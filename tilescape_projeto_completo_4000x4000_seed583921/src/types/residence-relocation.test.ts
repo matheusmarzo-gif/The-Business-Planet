@@ -26,8 +26,12 @@ test('calculates employability and regional appeal from completed homes in the s
     {
       id: 'home',
       cityId: 'city',
+      type: 'house_poor1',
       x: 0,
       y: 0,
+      occupants: 10,
+      employed: 5,
+      capacity: 10,
       salaryAverage: 10,
       cityAverageSalary: 20,
       constructionAppeal: 40,
@@ -35,8 +39,12 @@ test('calculates employability and regional appeal from completed homes in the s
     {
       id: 'neighbor',
       cityId: 'city',
+      type: 'house_poor1',
       x: 10,
       y: 0,
+      occupants: 10,
+      employed: 5,
+      capacity: 10,
       salaryAverage: 30,
       cityAverageSalary: 20,
       constructionAppeal: 80,
@@ -44,8 +52,12 @@ test('calculates employability and regional appeal from completed homes in the s
     {
       id: 'far',
       cityId: 'city',
+      type: 'house_poor1',
       x: 21,
       y: 0,
+      occupants: 10,
+      employed: 5,
+      capacity: 10,
       salaryAverage: 100,
       cityAverageSalary: 20,
       constructionAppeal: 100,
@@ -53,12 +65,18 @@ test('calculates employability and regional appeal from completed homes in the s
     {
       id: 'other-city',
       cityId: 'other',
+      type: 'house_poor1',
       x: 1,
       y: 0,
+      occupants: 10,
+      employed: 5,
+      capacity: 10,
       salaryAverage: 100,
       cityAverageSalary: 20,
       constructionAppeal: 100,
     },
+  ], [
+    { cityId: 'city', type: 'shop_rice', x: 0, y: 0, wage: 100, vacancies: 10 },
   ]);
   assert.deepEqual(appeals.get('home'), {
     employabilityAppeal: 0.5,
@@ -75,8 +93,12 @@ test('keeps internal appeal at least 10', () => {
     {
       id: 'home',
       cityId: 'city',
+      type: 'house_poor1',
       x: 0,
       y: 0,
+      occupants: 0,
+      employed: 0,
+      capacity: 10,
       salaryAverage: 0,
       cityAverageSalary: 20,
       constructionAppeal: 40,
@@ -85,40 +107,96 @@ test('keeps internal appeal at least 10', () => {
   assert.equal(appeal.internalAppeal, 10);
 });
 
-test('calculates city-wide weighted income and includes vacant homes in regional appeal', () => {
+test('weights city salary by employed residents and includes vacant homes in regional appeal', () => {
   const appeals = calculateResidenceAppealsFromIncome([
     {
       id: 'home-a',
       cityId: 'city',
+      type: 'house_poor1',
       x: 0,
       y: 0,
       salaryAverage: 10,
       occupants: 2,
+      employed: 2,
+      capacity: 10,
       constructionAppeal: 10,
     },
     {
       id: 'home-b',
       cityId: 'city',
+      type: 'house_poor1',
       x: 1,
       y: 0,
       salaryAverage: 30,
       occupants: 1,
+      employed: 1,
+      capacity: 10,
       constructionAppeal: 10,
     },
     {
       id: 'vacant-home',
       cityId: 'city',
+      type: 'house_poor1',
       x: 2,
       y: 0,
-      salaryAverage: 100,
+      salaryAverage: 0,
       occupants: 0,
+      employed: 0,
+      capacity: 10,
       constructionAppeal: 10,
     },
   ]);
 
   assert.ok(Math.abs((appeals.get('home-a')?.employabilityAppeal ?? 0) - 0.6) < 1e-12);
-  assert.ok(Math.abs((appeals.get('home-a')?.regionalAppeal ?? 0) - 2.8) < 1e-12);
-  assert.ok(Math.abs((appeals.get('vacant-home')?.regionalAppeal ?? 0) - 2.8) < 1e-12);
+  assert.ok(Math.abs((appeals.get('home-a')?.regionalAppeal ?? 0) - 0.8) < 1e-12);
+  assert.ok(Math.abs((appeals.get('vacant-home')?.regionalAppeal ?? 0) - 0.8) < 1e-12);
+});
+
+test('uses the vacancy-weighted local wage when less than half the home is employed', () => {
+  const appeals = calculateResidenceAppeals([
+    {
+      id: 'home',
+      cityId: 'city',
+      type: 'house_poor1',
+      x: 0,
+      y: 0,
+      occupants: 4,
+      employed: 1,
+      capacity: 10,
+      salaryAverage: 10,
+      cityAverageSalary: 26,
+      constructionAppeal: 10,
+    },
+  ], [
+    { cityId: 'city', type: 'shop_rice', x: 0, y: 0, wage: 20, vacancies: 2 },
+    { cityId: 'city', type: 'shop_rice', x: 50, y: 0, wage: 60, vacancies: 8 },
+    { cityId: 'city', type: 'shop_rice', x: 200, y: 0, wage: 100, vacancies: 100 },
+    { cityId: 'other-city', type: 'shop_rice', x: 0, y: 0, wage: 200, vacancies: 100 },
+  ]);
+
+  assert.equal(appeals.get('home')?.employabilityAppeal, 2);
+});
+
+test('falls back to the home salary when local vacancies do not cover capacity', () => {
+  const [appeal] = calculateResidenceAppeals([
+    {
+      id: 'home',
+      cityId: 'city',
+      type: 'house_poor1',
+      x: 0,
+      y: 0,
+      occupants: 4,
+      employed: 1,
+      capacity: 10,
+      salaryAverage: 10,
+      cityAverageSalary: 20,
+      constructionAppeal: 10,
+    },
+  ], [
+    { cityId: 'city', type: 'shop_rice', x: 0, y: 0, wage: 100, vacancies: 9 },
+  ]).values();
+
+  assert.equal(appeal.employabilityAppeal, 0.5);
 });
 
 test('moves the calculated percentage and respects destination capacity', () => {

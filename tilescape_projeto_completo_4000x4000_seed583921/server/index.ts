@@ -25,6 +25,7 @@ import {
   MUNICIPAL_AREA_RADIUS,
 } from '../src/types/city.js';
 import {
+  getRoadConstructionCost,
   getRoadPlacementError,
   MAX_ROAD_PATH_TILES,
   type RoadPlacementError,
@@ -5043,11 +5044,29 @@ function parseRoadPath(
 async function createRoadPath(
   path: RoadPosition[],
   userId: string,
-): Promise<{ roads: RoadTile[] | null; error: RoadPlacementError | null }> {
+  isMaster: boolean,
+): Promise<
+  | {
+      roads: RoadTile[];
+      error: null;
+      balance: number | null;
+      constructionCost: number;
+      roadsBuilt: number;
+    }
+  | {
+      roads: null;
+      error: RoadPlacementError | 'insufficient_road_funds' | 'road_cost_exceeds_limit';
+    }
+> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const { rows: countRows } = await client.query<{ road_count: string }>(
+      'SELECT COUNT(*)::text AS road_count FROM road_tiles WHERE created_by = $1',
+      [userId],
+    );
+    const ownedRoadCount = Number(countRows[0]?.road_count ?? 0);
     const { rows: cityRows } = await client.query<{
       id: string;
       center_x: number;
@@ -5064,6 +5083,8 @@ async function createRoadPath(
     );
     const residentialBuildings = residentialRows.map(mapResidentialBuilding);
 
+    let roadsBuilt = 0;
+    let constructionCost = 0;
     for (const position of path) {
       const placementError = getRoadPlacementError(
         position,
@@ -5085,12 +5106,57 @@ async function createRoadPath(
         await client.query('ROLLBACK');
         return { roads: null, error: 'outside_municipality' };
       }
-      await client.query(
+      const { rowCount } = await client.query(
         `INSERT INTO road_tiles (tile_x, tile_y, city_id, created_by)
          VALUES ($1, $2, $3, $4)
          ON CONFLICT (tile_x, tile_y) DO NOTHING`,
         [position.x, position.y, city.id, userId],
       );
+      if (rowCount === 1) {
+        roadsBuilt += 1;
+        if (!isMaster) {
+          const totalCost = getRoadConstructionCost(ownedRoadCount, roadsBuilt);
+          if (totalCost === null) {
+            await client.query('ROLLBACK');
+            return { roads: null, error: 'road_cost_exceeds_limit' };
+          }
+          constructionCost = totalCost;
+        }
+      }
+    }
+
+    let balance: number | null = null;
+    if (!isMaster) {
+      await client.query(
+        `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO NOTHING`,
+        [userId, STARTING_BALANCE],
+      );
+      const { rows: walletRows } = await client.query<{ balance: string }>(
+        'SELECT balance::text FROM player_wallets WHERE user_id = $1 FOR UPDATE',
+        [userId],
+      );
+      if (!walletRows[0]) throw new Error('A carteira do jogador não foi encontrada.');
+      const walletBalance = Number(walletRows[0].balance);
+      if (!Number.isFinite(walletBalance) || walletBalance < constructionCost) {
+        await client.query('ROLLBACK');
+        return { roads: null, error: 'insufficient_road_funds' };
+      }
+      balance = walletBalance;
+      if (constructionCost > 0) {
+        const { rows: updatedWalletRows } = await client.query<{ balance: string }>(
+          `UPDATE player_wallets
+           SET balance = balance - $2::numeric
+           WHERE user_id = $1 AND balance >= $2::numeric
+           RETURNING balance::text`,
+          [userId, constructionCost],
+        );
+        if (!updatedWalletRows[0]) {
+          await client.query('ROLLBACK');
+          return { roads: null, error: 'insufficient_road_funds' };
+        }
+        balance = Number(updatedWalletRows[0].balance);
+      }
     }
 
     const { rows: roadRows } = await client.query<{
@@ -5106,6 +5172,9 @@ async function createRoadPath(
         cityId: road.city_id,
       })),
       error: null,
+      balance,
+      constructionCost,
+      roadsBuilt,
     };
   } catch (error) {
     await client.query('ROLLBACK').catch((rollbackError: unknown) => {
@@ -5797,6 +5866,7 @@ async function start() {
         activityResult,
         profitResult,
         investmentResult,
+        roadTilesResult,
         trackingResult,
       ] = await Promise.all([
         pool.query<{ id: string; name: string | null }>(
@@ -5913,6 +5983,11 @@ async function start() {
            GROUP BY user_id`,
           [worldDay, periodDays],
         ),
+        pool.query<{ player_id: string; road_tiles: string }>(
+          `SELECT created_by AS player_id, COUNT(*)::text AS road_tiles
+           FROM road_tiles
+           GROUP BY created_by`,
+        ),
         pool.query<{
           sales_since: string;
           production_since: string;
@@ -6003,6 +6078,9 @@ async function start() {
       const buildingTilesByPlayer = new Map(
         buildingTilesResult.rows.map((row) => [row.player_id, Number(row.building_tiles)]),
       );
+      const roadTilesByPlayer = new Map(
+        roadTilesResult.rows.map((row) => [row.player_id, Number(row.road_tiles)]),
+      );
       const salesByPlayerAndProduct = new Map<string, Map<string, number>>();
       const productionByPlayerAndProduct = new Map<string, Map<string, number>>();
       const addProductActivity = (
@@ -6074,6 +6152,7 @@ async function start() {
         historyAvailableSince: trackingResult.rows[0] ?? null,
         companyValue: rank(companyValueByPlayer),
         buildingTiles: rank(buildingTilesByPlayer),
+        roadTiles: rank(roadTilesByPlayer),
         products: productRankings,
         profit: rank(profitByPlayer),
         investment: rank(investmentByPlayer),
@@ -9095,7 +9174,7 @@ async function start() {
         response.status(503).json({ error: 'city_zones_unavailable' });
       });
   });
-  app.post('/api/roads', requireAuth, requireMasterAuth, (request, response) => {
+  app.post('/api/roads', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);
     const { path, error } = parseRoadPath(request.body);
     if (!path) {
@@ -9107,13 +9186,16 @@ async function start() {
       return;
     }
 
-    void createRoadPath(path, userId)
-      .then(({ roads, error: placementError }) => {
+    void isMasterUser(userId)
+      .then((isMaster) => createRoadPath(path, userId, isMaster))
+      .then(({ roads, error: placementError, ...result }) => {
         if (!roads) {
-          response.status(409).json({ error: placementError });
+          response.status(
+            placementError === 'insufficient_road_funds' ? 402 : 409,
+          ).json({ error: placementError });
           return;
         }
-        response.status(201).json(roads);
+        response.status(201).json({ roads, ...result });
         void publishCities().catch((publishError: unknown) => {
           console.error('A estrada foi construída, mas a atualização do mundo falhou:', publishError);
         });

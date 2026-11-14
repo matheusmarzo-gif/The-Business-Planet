@@ -4,6 +4,37 @@ import { RESIDENCES } from './residence.js';
 import type { ResidentialBuilding } from './residence.js';
 
 export const MAX_ROAD_PATH_TILES = 600;
+export const ROAD_TILE_BASE_COST = 100;
+const ROAD_PRICE_TIER_SIZE = 100;
+const MAX_ROAD_CHARGE = 999_999_999_999.99;
+
+export function getNextRoadTileCost(ownedRoadCount: number): number | null {
+  if (!Number.isSafeInteger(ownedRoadCount) || ownedRoadCount < 0) {
+    throw new RangeError('A quantidade de estradas existentes é inválida.');
+  }
+  const tier = Math.floor(Math.max(ownedRoadCount - 1, 0) / ROAD_PRICE_TIER_SIZE);
+  const cost = ROAD_TILE_BASE_COST * 2 ** tier;
+  return cost <= MAX_ROAD_CHARGE ? cost : null;
+}
+
+export function getRoadConstructionCost(
+  ownedRoadCount: number,
+  newRoadCount: number,
+): number | null {
+  if (!Number.isSafeInteger(ownedRoadCount) || ownedRoadCount < 0) {
+    throw new RangeError('A quantidade de estradas existentes é inválida.');
+  }
+  if (!Number.isSafeInteger(newRoadCount) || newRoadCount < 0) {
+    throw new RangeError('A quantidade de novas estradas é inválida.');
+  }
+  let total = 0;
+  for (let index = 0; index < newRoadCount; index += 1) {
+    const tileCost = getNextRoadTileCost(ownedRoadCount + index);
+    if (tileCost === null || total + tileCost > MAX_ROAD_CHARGE) return null;
+    total += tileCost;
+  }
+  return total;
+}
 
 export interface RoadTile {
   x: number;

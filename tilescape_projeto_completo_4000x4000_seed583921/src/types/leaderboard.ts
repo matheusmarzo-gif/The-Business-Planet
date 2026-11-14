@@ -32,6 +32,7 @@ export interface LeaderboardSummary {
   historyAvailableSince: LeaderboardHistoryAvailability | null;
   companyValue: LeaderboardEntry[];
   buildingTiles: LeaderboardEntry[];
+  roadTiles: LeaderboardEntry[];
   products: ProductLeaderboard[];
   profit: LeaderboardEntry[];
   investment: LeaderboardEntry[];

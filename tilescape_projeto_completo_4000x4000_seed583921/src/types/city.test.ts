@@ -43,7 +43,11 @@ import {
   type ResidentialBuilding,
   toRomanNumeral,
 } from './residence';
-import { getRoadPlacementError } from './road';
+import {
+  getNextRoadTileCost,
+  getRoadConstructionCost,
+  getRoadPlacementError,
+} from './road';
 import {
   allocateWorkers,
   getDailyWorkPoints,
@@ -321,13 +325,13 @@ describe('rice farming', () => {
     assert.equal(getHarvestDay('2026-08-31'), '2027-02-28');
   });
 
-  it('yields 1000 units at full productivity and scales with Work Points', () => {
-    assert.equal(grow('2026-01-10', 1000).yieldUnits, 1000);
-    assert.equal(grow('2026-01-10', 1500).yieldUnits, 1000);
-    assert.equal(grow('2026-01-10', 800).yieldUnits, 800);
-    assert.equal(grow('2026-05-10', 1000).yieldUnits, 600);
-    assert.equal(grow('2026-08-10', 1000).yieldUnits, 400);
-    assert.equal(grow('2026-11-10', 1000).yieldUnits, 200);
+  it('yields 1500 rice units at full productivity and scales with Work Points', () => {
+    assert.equal(grow('2026-01-10', 1000).yieldUnits, 1500);
+    assert.equal(grow('2026-01-10', 1500).yieldUnits, 1500);
+    assert.equal(grow('2026-01-10', 800).yieldUnits, 1200);
+    assert.equal(grow('2026-05-10', 1000).yieldUnits, 900);
+    assert.equal(grow('2026-08-10', 1000).yieldUnits, 600);
+    assert.equal(grow('2026-11-10', 1000).yieldUnits, 300);
     assert.equal(grow('2026-01-10', 0).yieldUnits, 0);
   });
 
@@ -372,16 +376,16 @@ describe('other crop farms', () => {
         efficiencies,
       );
     }
-    assert.equal(grow('2026-01-10', 'farm_potato', 1000).yieldUnits, 500);
-    assert.equal(grow('2026-04-10', 'farm_potato', 1000).yieldUnits, 1000);
-    assert.equal(grow('2026-10-10', 'farm_wheat', 1000).yieldUnits, 1000);
-    assert.equal(grow('2026-07-10', 'farm_barley', 1000).yieldUnits, 1000);
-    assert.equal(grow('2026-10-10', 'farm_corn', 1000).yieldUnits, 100);
+    assert.equal(grow('2026-01-10', 'farm_potato', 1000).yieldUnits, 750);
+    assert.equal(grow('2026-04-10', 'farm_potato', 1000).yieldUnits, 1500);
+    assert.equal(grow('2026-10-10', 'farm_wheat', 1000).yieldUnits, 1500);
+    assert.equal(grow('2026-07-10', 'farm_barley', 1000).yieldUnits, 1500);
+    assert.equal(grow('2026-10-10', 'farm_corn', 1000).yieldUnits, 150);
     assert.equal(grow('2026-01-10', 'farm_cane', 100).yieldUnits, 1800);
-    assert.equal(grow('2026-01-10', 'farm_spices', 5000).yieldUnits, 600);
-    assert.equal(grow('2026-01-10', 'farm_vegetables', 5000).yieldUnits, 200);
-    assert.equal(grow('2026-07-10', 'farm_vegetables', 5000).yieldUnits, 1000);
-    assert.equal(grow('2026-01-10', 'farm_vegetables', 2500).yieldUnits, 100);
+    assert.equal(grow('2026-01-10', 'farm_spices', 5000).yieldUnits, 800);
+    assert.equal(grow('2026-01-10', 'farm_vegetables', 5000).yieldUnits, 300);
+    assert.equal(grow('2026-07-10', 'farm_vegetables', 5000).yieldUnits, 1500);
+    assert.equal(grow('2026-01-10', 'farm_vegetables', 2500).yieldUnits, 150);
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_vegetables.growthMonths), '2026-03-31');
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_cattle.growthMonths), '2028-01-31');
     assert.equal(grow('2026-04-10', 'farm_cattle', 500).yieldUnits, 4000);
@@ -439,7 +443,17 @@ describe('other crop farms', () => {
         FARM_CROP_RULES.farm_cotton.harvestWorkPointsPerUnit,
         FARM_CROP_RULES.farm_cotton.baseYield,
       ],
-        [100, 25, 2000, 5000, 10, 600, 5000, 10, 1000, 500, 50, 100, 1000, 100, 300],
+        [100, 25, 2000, 5000, 10, 800, 5000, 10, 1500, 500, 50, 100, 1000, 100, 300],
+    );
+    assert.deepEqual(
+      [
+        FARM_CROP_RULES.farm_rice.baseYield,
+        FARM_CROP_RULES.farm_wheat.baseYield,
+        FARM_CROP_RULES.farm_barley.baseYield,
+        FARM_CROP_RULES.farm_potato.baseYield,
+        FARM_CROP_RULES.farm_corn.baseYield,
+      ],
+      [1500, 1500, 1500, 1500, 1500],
     );
     assert.deepEqual(
       planHarvest(
@@ -2116,6 +2130,22 @@ describe('immigration', () => {
   it('uses the 128-person capacity of the third simple residence', () => {
     const result = allocateImmigrants([home('large', 'house_poor3', 1)], 150);
     assert.equal(result.get('large'), 128);
+  });
+});
+
+describe('road construction prices', () => {
+  it('doubles the cost for each additional hundred owned roads', () => {
+    assert.equal(getNextRoadTileCost(0), 100);
+    assert.equal(getNextRoadTileCost(100), 100);
+    assert.equal(getNextRoadTileCost(101), 200);
+    assert.equal(getNextRoadTileCost(200), 200);
+    assert.equal(getNextRoadTileCost(201), 400);
+    assert.equal(getRoadConstructionCost(100, 2), 300);
+    assert.equal(getRoadConstructionCost(0, 0), 0);
+    assert.equal(getRoadConstructionCost(3_500, 1), null);
+    assert.throws(() => getNextRoadTileCost(-1), RangeError);
+    assert.throws(() => getRoadConstructionCost(-1, 0), RangeError);
+    assert.throws(() => getRoadConstructionCost(0, -1), RangeError);
   });
 });
 

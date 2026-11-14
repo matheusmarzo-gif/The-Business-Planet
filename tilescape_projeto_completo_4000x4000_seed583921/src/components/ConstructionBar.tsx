@@ -19,7 +19,6 @@ interface ConstructionBarProps {
   demolitionMode: boolean;
   productCatalogOpen: boolean;
   accountingOpen: boolean;
-  isMaster: boolean;
   onSelect: (category: ConstructionCategory) => void;
   onToggleProductCatalog: () => void;
   onToggleAccounting: () => void;
@@ -33,7 +32,7 @@ const categories = [
   { id: 'residencias', label: 'Residências', Icon: House },
   { id: 'recursos', label: 'Recursos', Icon: Pickaxe },
   { id: 'industrias', label: 'Indústrias', Icon: Factory },
-  { id: 'prefeitura', label: 'Prefeitura', Icon: Landmark, masterOnly: true },
+  { id: 'prefeitura', label: 'Prefeitura', Icon: Landmark },
 ] as const;
 
 export default function ConstructionBar({
@@ -41,7 +40,6 @@ export default function ConstructionBar({
   demolitionMode,
   productCatalogOpen,
   accountingOpen,
-  isMaster,
   onSelect,
   onToggleProductCatalog,
   onToggleAccounting,
@@ -49,21 +47,19 @@ export default function ConstructionBar({
 }: ConstructionBarProps) {
   return (
     <nav className="construction-bar" aria-label="Ações do mundo">
-      {categories
-        .filter((category) => !('masterOnly' in category) || isMaster)
-        .map(({ id, label, Icon }) => (
-          <button
-            key={id}
-            className={`construction-tab${activeCategory === id ? ' active' : ''}`}
-            type="button"
-            aria-label={label}
-            aria-pressed={activeCategory === id}
-            onClick={() => onSelect(id)}
-          >
-            <Icon size={20} strokeWidth={1.8} />
-            <span>{label}</span>
-          </button>
-        ))}
+      {categories.map(({ id, label, Icon }) => (
+        <button
+          key={id}
+          className={`construction-tab${activeCategory === id ? ' active' : ''}`}
+          type="button"
+          aria-label={label}
+          aria-pressed={activeCategory === id}
+          onClick={() => onSelect(id)}
+        >
+          <Icon size={20} strokeWidth={1.8} />
+          <span>{label}</span>
+        </button>
+      ))}
       <button
         className={`construction-tab${accountingOpen ? ' active' : ''}`}
         type="button"

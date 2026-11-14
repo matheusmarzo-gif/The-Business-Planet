@@ -23,7 +23,7 @@
                      "growthMonths":  6,
                      "dailyWorkPoints":  5000,
                      "harvestWorkPointsPerUnit":  10,
-                     "baseYield":  600,
+                     "baseYield":  800,
                      "plantingEfficiencyByQuarter":  [
                                                          1,
                                                          0.6,

@@ -728,3 +728,4 @@ CREATE TABLE IF NOT EXISTS road_tiles (
 );
 
 CREATE INDEX IF NOT EXISTS road_tiles_city_id_idx ON road_tiles (city_id);
+CREATE INDEX IF NOT EXISTS road_tiles_created_by_idx ON road_tiles (created_by);

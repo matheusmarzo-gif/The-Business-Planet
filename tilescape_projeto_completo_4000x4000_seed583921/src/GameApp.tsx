@@ -221,6 +221,10 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'Reduza o estoque armazenado até caber na capacidade do nível inferior.';
         } else if (body.error === 'insufficient_funds') {
           error = 'Saldo insuficiente para realizar o upgrade do estoque.';
+        } else if (body.error === 'insufficient_road_funds') {
+          error = 'Saldo insuficiente para construir esse trajeto de estrada.';
+        } else if (body.error === 'road_cost_exceeds_limit') {
+          error = 'O custo desse trajeto excede o limite monetário permitido.';
         } else if (body.error === 'building_not_completed') {
           error = 'Só é possível alterar o nível de estoque de uma construção concluída.';
         } else if (body.error === 'stock_upgrade_unavailable') {
@@ -1673,17 +1677,29 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       return [...current, ...pendingPath.filter((road) => !positions.has(`${road.x},${road.y}`))];
     });
     try {
-      const updatedRoads = await cityRequest<RoadTile[]>('/api/roads', {
+      const result = await cityRequest<{
+        roads: RoadTile[];
+        balance: number | null;
+        constructionCost: number;
+        roadsBuilt: number;
+      }>('/api/roads', {
         method: 'POST',
         body: JSON.stringify({ path }),
       });
-      setRoads(updatedRoads);
+      setRoads(result.roads);
+      if (result.balance !== null) setBalance(result.balance);
       setPendingRoads((current) =>
         current.filter(
           (road) => !path.some((position) => position.x === road.x && position.y === road.y),
         ),
       );
-      setRoadPlacementMessage('');
+      setRoadPlacementMessage(
+        result.roadsBuilt === 0
+          ? 'O trajeto não adicionou novos tiles de estrada.'
+          : result.constructionCost === 0
+            ? `Estrada construída: ${result.roadsBuilt} tiles, sem custo para a conta Master.`
+            : `Estrada construída: ${result.roadsBuilt} tiles por ${formatMoney(result.constructionCost)}.`,
+      );
     } catch (error) {
       setPendingRoads((current) =>
         current.filter(
@@ -2519,7 +2535,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         )}
         {isPlacingRoads && (
           <div className="placement-banner" role="status">
-            {roadPlacementMessage || 'Clique e arraste sobre terra dentro de uma área municipal para traçar até 600 tiles de estrada.'}
+            {roadPlacementMessage ||
+              `Clique e arraste sobre terra dentro de uma área municipal para traçar até 600 tiles de estrada.${
+                user.isMaster
+                  ? ' Construção gratuita para a conta Master.'
+                  : ' Custo: C$ 100 por tile até completar 100 estradas próprias; depois, o valor dobra a cada faixa de 100.'
+              }`}
             <button type="button" onClick={() => {
               setIsPlacingRoads(false);
               setRoadPlacementMessage('');
@@ -2568,15 +2589,25 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                 : `: ${activeZoneCount === 1 ? '1 região' : `${activeZoneCount} regiões`}.`}
             </p>
           )}
-          {activeCategory === 'prefeitura' && user.isMaster ? (
+          {activeCategory === 'prefeitura' ? (
             <>
-              <button className="construction-card" type="button" onClick={openNewAssembly}>
-                <img src="/buildings/assembleia.jxl" alt="" />
-                <span><strong>Assembleia</strong><small>Ocupa 3 × 3 tiles · Área municipal 303 × 303</small></span>
-              </button>
+              {user.isMaster && (
+                <button className="construction-card" type="button" onClick={openNewAssembly}>
+                  <img src="/buildings/assembleia.jxl" alt="" />
+                  <span><strong>Assembleia</strong><small>Ocupa 3 × 3 tiles · Área municipal 303 × 303</small></span>
+                </button>
+              )}
               <button className="construction-card" type="button" onClick={startRoadPlacement}>
                 <img src="/buildings/roads/grass_dirt1.jxl?v=12" alt="" />
-                <span><strong>Estrada de Terra</strong><small>Clique e arraste para traçar · Somente em áreas municipais</small></span>
+                <span>
+                  <strong>Estrada de Terra</strong>
+                  <small>Clique e arraste para traçar · Somente em áreas municipais</small>
+                  <small>
+                    {user.isMaster
+                      ? 'Gratuita para a conta Master.'
+                      : 'C$ 100 por tile na faixa de 0–100 estradas próprias; o custo dobra a cada 100 estradas.'}
+                  </small>
+                </span>
               </button>
             </>
           ) : activeCategory === 'residencias' ||
@@ -2638,7 +2669,6 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         demolitionMode={isDemolitionMode}
         productCatalogOpen={isProductCatalogOpen}
         accountingOpen={isAccountingOpen}
-        isMaster={user.isMaster}
         onSelect={(category) => {
           closeCityZoneEditor();
           setSelectedResidenceId(null);

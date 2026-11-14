@@ -15,10 +15,11 @@ atualizações entre instâncias.
 
 O mapa base é determinístico: não é persistido tile a tile. Cidades, estradas
 e residências são sobrepostas ao terreno gerado. Atualmente, a Prefeitura
-oferece a Assembleia e a Estrada de Terra. A conta master pode dividir cada
-área municipal em regiões urbanas e rurais persistentes. Todos os jogadores
-autenticados podem iniciar as construções do catálogo nas respectivas zonas e
-ao lado de estradas; o primeiro armazém de cada jogador é gratuito e instantâneo,
+oferece Estrada de Terra a todos e Assembleia somente à conta master. A conta
+master pode dividir cada área municipal em regiões urbanas e rurais persistentes.
+Todos os jogadores autenticados podem iniciar as construções do catálogo nas
+respectivas zonas e ao lado de estradas; o primeiro armazém de cada jogador é
+gratuito e instantâneo,
 e as obras regulares progridem por Work Points. A conta master pode concluí-las
 instantaneamente. O jogo também possui um catálogo de produtos, estoques
 persistentes e produção para as construções habilitadas; estoques perecíveis
@@ -88,9 +89,9 @@ em **Contábil → Lojas** usa o custo unitário estimado atual da aba **Produto
 para valorar as vendas e perdas do período selecionado, além de subtrair os
 salários. Os históricos de consumo industrial e custos são mantidos por 35 dias.
 O painel **Ranking** expõe as classificações globais por valor estimado da
-empresa, área ocupada por construções, vendas e produção por produto, lucro e
-investimento. As listas mostram o top 30 e a posição do jogador autenticado
-quando fora dele. Os rankings financeiros usam períodos de 30 e 365 dias;
+empresa, área ocupada por construções, quantidade de estradas, vendas e produção
+por produto, lucro e investimento. As listas mostram o top 30 e a posição do
+jogador autenticado quando fora dele. Os rankings financeiros usam períodos de 30 e 365 dias;
 históricos anuais indisponíveis antes desta implantação crescem gradualmente.
 Lucro agrega vendas, aluguéis e comércio entre jogadores, menos compras de
 produtos e folha salarial. Investimento agrega materiais de construções e
@@ -229,10 +230,9 @@ Service.
 5. Operações administrativas verificam também, no PostgreSQL, se o usuário
    corresponde ao e-mail configurado em `MASTER_EMAIL`.
 
-Esconder a aba Prefeitura para não-masters é somente controle de interface. O
-servidor protege as rotas administrativas com autenticação e autorização
-independentes. Nunca aceite `isMaster`, IDs de usuário ou validações de
-posicionamento fornecidas pelo browser como autoridade.
+A aba Prefeitura é visível a todos, mas a permissão para criar ou editar
+Assembleias é validada pelo servidor. Nunca aceite `isMaster`, IDs de usuário
+ou validações de posicionamento fornecidas pelo browser como autoridade.
 
 ## Mapa e coordenadas
 
@@ -278,7 +278,9 @@ das cidades legíveis em tamanho fixo na tela.
   outra Assembleia.
 - A prévia verde/vermelha é uma indicação rápida do cliente. O servidor repete
   as validações sob lock transacional antes de inserir.
-- A Prefeitura e a criação/edição de Assembleias são restritas à conta master.
+- A aba Prefeitura e a construção de estradas são acessíveis a todos os
+  jogadores autenticados; a criação/edição de Assembleias permanece restrita à
+  conta master.
 - A conta master pode abrir o editor de regiões ao clicar em uma Assembleia e
   definir até 100 retângulos urbanos ou rurais por cidade, arrastando no mapa.
   Cada retângulo deve ficar dentro dos limites municipais. Regiões do mesmo
@@ -292,8 +294,7 @@ das cidades legíveis em tamanho fixo na tela.
   Cada tile do footprint deve estar coberto por pelo menos uma região do tipo
   exigido; a união de várias regiões do mesmo tipo pode cobrir a construção
   inteira, inclusive quando ela atravessa a interseção delas.
-  Todas as seis categorias de construções são exibidas para jogadores
-  autenticados; a Prefeitura permanece restrita à conta master. O servidor
+  Todas as categorias são exibidas para jogadores autenticados. O servidor
   aplica o mapeamento de zonas ao posicionar qualquer construção do catálogo.
 - Qualquer jogador autenticado pode consultar cidades. `getCities` calcula a
   população, empregados nos estabelecimentos da cidade, vagas ainda abertas e
@@ -320,7 +321,15 @@ reimplemente as fórmulas separadamente no React e no servidor.
 
 ## Estradas de Terra
 
-- A opção aparece no catálogo da Prefeitura e requer permissão master.
+- A opção aparece no catálogo da Prefeitura para todos os jogadores autenticados.
+- Jogadores não-Master pagam por tile: C$ 100 quando possuem de 0 a 100
+  estradas, C$ 200 de 101 a 200, C$ 400 de 201 a 300 e assim sucessivamente,
+  dobrando a cada faixa. A conta master constrói gratuitamente. O servidor
+  conta somente os tiles inseridos, calcula e debita o custo na mesma transação;
+  em caso de saldo insuficiente ou custo além do limite monetário, nenhuma
+  estrada é gravada.
+- Tiles de proprietários diferentes continuam conectados pela geometria
+  ortogonal; o renderizador considera todos os tiles vizinhos sem filtrar dono.
 - O jogador clica e arrasta; os pontos entre eventos do mouse são interpolados
   como caminho ortogonal para que o traço não deixe buracos diagonais.
 - Cada tile precisa ser terra, estar dentro de uma área municipal e não cruzar
@@ -334,7 +343,9 @@ reimplemente as fórmulas separadamente no React e no servidor.
   vizinhos ortogonais; a URL inclui versão de cache para carregar assets novos.
 - Os tiles são persistidos individualmente em `road_tiles`; a chave primária
   garante um único tile de estrada em cada coordenada. Cada tile aponta para a
-  cidade proprietária, e a remoção da cidade remove suas estradas por cascata.
+  cidade proprietária e para o jogador que o construiu; a remoção da cidade
+  remove suas estradas por cascata. `road_tiles_created_by_idx` dá suporte à
+  contagem de estradas por jogador.
 - Ao construir, a interface apresenta a Assembleia ou os tiles de estrada
   imediatamente como estado otimista enquanto aguarda a API. A resposta
   autoritativa substitui essa prévia; em caso de falha, os tiles temporários
@@ -989,7 +1000,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo e desejo médios por consumidor da cidade, ponderados pelas residências, além do preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira sem saldo prévio com C$ 25.000 (idempotente), preserva saldos existentes e retorna `{ balance }`. |
 | `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. A aba comercial calcula receita líquida com custos médios diários persistidos; a aba Produto agrega estoque, produção, comércio entre jogadores e consumo residencial/industrial, além do custo unitário estimado. |
-| `GET /api/rankings?days=30\|365` | Autenticado | Retorna rankings globais com os 30 primeiros e a posição do jogador atual, se estiver fora do top 30: valor estimado da empresa, área total das construções, vendas/produção por produto, lucro e investimentos no período selecionado. |
+| `GET /api/rankings?days=30\|365` | Autenticado | Retorna rankings globais com os 30 primeiros e a posição do jogador atual, se estiver fora do top 30: valor estimado da empresa, área total das construções, quantidade de tiles de estrada, vendas/produção por produto, lucro e investimentos no período selecionado. |
 | `PUT /api/residential-buildings/:id/farm-automation` | Dono da fazenda agrícola concluída | Valida e salva meses de replantio e limites de trabalhadores por fase; desativar mantém as preferências e o ciclo atual, mas interrompe novos plantios automáticos. |
 | `PATCH /api/residential-buildings/:id/input-product` | Dono do Moinho concluído | Seleciona trigo, cevada ou milho; descarta o estoque de outro insumo na mesma transação e publica a seleção/estoques. |
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
@@ -1009,7 +1020,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `PATCH /api/cities/:id` | Master | Altera o nome de uma cidade. |
 | `PUT /api/cities/:id/zones` | Master | Valida e substitui as regiões urbanas/rurais da cidade. |
 | `DELETE /api/cities/:id` | Criador da cidade | Demole a Assembleia e remove as estradas da área. |
-| `POST /api/roads` | Master | Valida e grava um caminho de estrada de até 600 tiles. |
+| `POST /api/roads` | Autenticado | Valida e grava até 600 tiles, debitando atomicamente a tarifa progressiva de não-Masters; Master é gratuito. |
 | `DELETE /api/roads/:x/:y` | Criador do tile | Demole um tile de estrada sem confirmação; publica o novo estado. |
 | `DELETE /api/roads` | Autenticado | Demole os tiles próprios de um caminho de até 600 tiles e publica o novo estado. |
 | `POST /api/residential-buildings` | Autenticado | Valida o estoque e desconta atomicamente Madeira, Pedra e Ferro quando exigido pela configuração (exceto para Master); o primeiro armazém do jogador é concluído e gratuito. |
@@ -1182,7 +1193,7 @@ Não documente valores, tokens ou URLs privadas aqui.
 | `NEON_AUTH_BASE_URL` | Configuração de autenticação e issuer esperado. |
 | `NEON_AUTH_JWKS_URL` | Chaves usadas pelo servidor para validar JWTs. |
 | `VITE_NEON_AUTH_URL` | URL de Auth embutida no bundle Vite; o Vite também aceita `NEON_AUTH_BASE_URL`. |
-| `MASTER_EMAIL` | Identifica no servidor a conta com acesso à Prefeitura. |
+| `MASTER_EMAIL` | Identifica no servidor a conta master, que pode criar Assembleias e usar ferramentas administrativas. |
 | `PORT` | Porta HTTP/WebSocket fornecida pelo host; padrão local 3001. |
 
 `neon.ts` declara Neon Auth. `.env.local` e `.env.*` são ignorados pelo Git;

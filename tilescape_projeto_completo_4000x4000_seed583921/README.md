@@ -194,10 +194,11 @@ opção apaga os volumes, incluindo o banco e o estado persistente do mundo.
 O mapa tem uma barra inferior com as categorias Construções Artesanais,
 Comerciais, Fazendas, Residências, Recursos, Indústrias e Prefeitura. As seis
 categorias de construções estão disponíveis para todos os jogadores autenticados;
-a Prefeitura aparece somente para a conta Neon Auth configurada em
-`MASTER_EMAIL`. Cadastre o mesmo e-mail nas variáveis locais e no Render; crie
-essa conta pelo formulário do jogo para ativar a permissão. O botão **Contábil**
-abre os relatórios das lojas comerciais, dos armazéns, das residências e da
+a categoria Prefeitura também aparece para todos. Nela, todos podem construir
+estradas; somente a conta Neon Auth configurada em `MASTER_EMAIL` pode construir
+ou gerenciar Assembleias. Cadastre o mesmo e-mail nas variáveis locais e no
+Render; crie essa conta pelo formulário do jogo para ativar a permissão. O
+botão **Contábil** abre os relatórios das lojas comerciais, dos armazéns, das residências e da
 produção do jogador conectado, incluindo todas as construções industriais e
 artesanais produtivas. A lista de produção é ordenada alfabeticamente pelo nome
 da construção. Ao selecionar uma categoria de construção na
@@ -321,9 +322,14 @@ serão removidas.
 Na Prefeitura, selecione **Estrada de Terra** e clique e arraste para desenhar
 um traçado de até 600 tiles. As peças retas e curvas se ajustam aos trechos
 vizinhos; estradas só são aceitas em terra dentro de uma área municipal e não
-podem passar sobre a Assembleia. Apenas a conta master pode construí-las; os
-traçados são salvos e sincronizados com o mundo. As junções em T e cruzamentos
-de quatro vias também se ajustam às conexões vizinhas. O traçado aparece
+podem passar por construções. Jogadores não-Master pagam C$ 100 por tile
+enquanto tiverem de 0 a 100 estradas próprias; a partir da 101ª, o preço dobra
+a cada faixa adicional de 100 estradas. O servidor calcula e debita o custo na
+mesma transação da construção, considerando somente tiles novos. A conta Master
+constrói gratuitamente. Estradas se conectam normalmente mesmo quando os tiles
+adjacentes pertencem a jogadores diferentes. Os traçados são salvos e
+sincronizados com o mundo. As junções em T e cruzamentos de quatro vias também
+se ajustam às conexões vizinhas. O traçado aparece
 imediatamente enquanto o servidor salva e some com uma mensagem caso a
 operação seja rejeitada. Cada tile pode ser demolido individualmente e sua
 remoção é sincronizada com os demais jogadores.
@@ -719,15 +725,15 @@ lateral), mas sem moradores nem aluguel.
 
 | Fazenda | Produto | Eficiência pelo mês de plantio (1–3 / 4–6 / 7–9 / 10–12) | Crescimento | Work Points por dia / por unidade colhida | Rendimento máximo |
 |---|---|---|---:|---:|---:|
-| Arroz | Arroz | 100 % / 60 % / 40 % / 20 % | 6 meses | 1.000 / 20 | 1.000 |
-| Batata | Batata | 50 % / 100 % / 20 % / 80 % | 6 meses | 1.000 / 20 | 1.000 |
-| Trigo | Trigo | 40 % / 50 % / 60 % / 100 % | 6 meses | 1.000 / 20 | 1.000 |
-| Cevada | Cevada | 30 % / 70 % / 100 % / 60 % | 6 meses | 1.000 / 20 | 1.000 |
-| Milho | Milho | 80 % / 100 % / 10 % / 10 % | 6 meses | 1.000 / 20 | 1.000 |
+| Arroz | Arroz | 100 % / 60 % / 40 % / 20 % | 6 meses | 1.000 / 20 | 1.500 |
+| Batata | Batata | 50 % / 100 % / 20 % / 80 % | 6 meses | 1.000 / 20 | 1.500 |
+| Trigo | Trigo | 40 % / 50 % / 60 % / 100 % | 6 meses | 1.000 / 20 | 1.500 |
+| Cevada | Cevada | 30 % / 70 % / 100 % / 60 % | 6 meses | 1.000 / 20 | 1.500 |
+| Milho | Milho | 80 % / 100 % / 10 % / 10 % | 6 meses | 1.000 / 20 | 1.500 |
 | Bovina | Carne vermelha | 40 % / 100 % / 80 % / 60 % | 24 meses | 500 / 40 | 4.000 |
 | Cana | Cana | 90 % / 80 % / 100 % / 90 % | 6 meses | 100 / 25 | 2.000 |
-| Especiarias | Especiarias | 100 % / 60 % / 60 % / 60 % | 6 meses | 5.000 / 10 | 600 |
-| Vegetais | Vegetais | 20 % / 40 % / 100 % / 80 % | 2 meses | 5.000 / 10 | 1.000 |
+| Especiarias | Especiarias | 100 % / 60 % / 60 % / 60 % | 6 meses | 5.000 / 10 | 800 |
+| Vegetais | Vegetais | 20 % / 40 % / 100 % / 80 % | 2 meses | 5.000 / 10 | 1.500 |
 | Frutas | Fruta | 100 % / 80 % / 60 % / 40 % | 12 meses | 5.000 / 20 | 1.000 |
 | Cacau | Cacau | 100 % / 90 % / 70 % / 50 % | 12 meses | 2.000 / 62 | 400 |
 
@@ -1034,8 +1040,10 @@ reconstruídas.
 
 O botão **Ranking**, na barra superior, abre classificações globais por valor
 estimado da empresa, expansão territorial (soma de `largura × altura` de todas
-as construções, inclusive em andamento), vendas e produção por produto, lucro e
-investimento. O valor da empresa estima o custo de reposição das construções
+as construções, inclusive em andamento), número de estradas, vendas e produção
+por produto, lucro e investimento. A contagem de estradas usa os tiles criados
+por cada jogador; trechos adjacentes se conectam mesmo entre proprietários
+diferentes. O valor da empresa estima o custo de reposição das construções
 pelos custos unitários estimados do jogador, com fallback para preços médios de
 venda anunciados. Vendas por produto combinam
 lojas e comércio entre jogadores; produção usa o histórico de produção. Os

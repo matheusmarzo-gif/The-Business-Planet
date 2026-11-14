@@ -19,11 +19,13 @@ import type {
 import { formatMoney } from '../types/wallet';
 
 type RankingTab = 'company' | 'expansion' | 'products' | 'finance';
+type ExpansionMetric = 'buildings' | 'roads';
 type ProductMetric = 'sales' | 'production';
 type FinanceMetric = 'profit' | 'investment';
 type RankingMetric =
   | 'company'
   | 'expansion'
+  | 'roads'
   | ProductMetric
   | FinanceMetric;
 
@@ -54,6 +56,7 @@ function formatScore(score: number, metric: RankingMetric, unit: string): string
     return formatMoney(score);
   }
   if (metric === 'expansion') return `${integer.format(score)} tiles`;
+  if (metric === 'roads') return `${integer.format(score)} estradas`;
   return `${quantity.format(score)} ${unit}`;
 }
 
@@ -78,6 +81,7 @@ export default function RankingPanel({
   onClose,
 }: RankingPanelProps) {
   const [activeTab, setActiveTab] = useState<RankingTab>('company');
+  const [expansionMetric, setExpansionMetric] = useState<ExpansionMetric>('buildings');
   const [productMetric, setProductMetric] = useState<ProductMetric>('sales');
   const [financeMetric, setFinanceMetric] = useState<FinanceMetric>('profit');
   const [selectedProductId, setSelectedProductId] = useState(PRODUCTS[0]?.id ?? '');
@@ -89,21 +93,25 @@ export default function RankingPanel({
     activeTab === 'company'
       ? 'company'
       : activeTab === 'expansion'
-        ? 'expansion'
+        ? expansionMetric === 'buildings'
+          ? 'expansion'
+          : 'roads'
         : activeTab === 'products'
           ? productMetric
           : financeMetric;
   const entries = useMemo((): LeaderboardEntry[] => {
     if (!summary) return [];
     if (activeTab === 'company') return summary.companyValue;
-    if (activeTab === 'expansion') return summary.buildingTiles;
+    if (activeTab === 'expansion') {
+      return expansionMetric === 'buildings' ? summary.buildingTiles : summary.roadTiles;
+    }
     if (activeTab === 'products') {
       return productMetric === 'sales'
         ? selectedProductRanking?.sales ?? []
         : selectedProductRanking?.production ?? [];
     }
     return financeMetric === 'profit' ? summary.profit : summary.investment;
-  }, [activeTab, financeMetric, productMetric, selectedProductRanking, summary]);
+  }, [activeTab, expansionMetric, financeMetric, productMetric, selectedProductRanking, summary]);
   const unit = selectedProduct?.unit === 'liter' ? 'L' : 'unidades';
   const hasProductActivity =
     (metric !== 'sales' && metric !== 'production') || entries.some((entry) => entry.score > 0);
@@ -113,7 +121,9 @@ export default function RankingPanel({
     activeTab === 'company'
       ? 'Empresa mais valorizada'
       : activeTab === 'expansion'
-        ? 'Mais expansivo'
+        ? expansionMetric === 'buildings'
+          ? 'Mais expansivo'
+          : 'Quem tem mais estradas'
         : activeTab === 'products'
           ? `${productMetric === 'sales' ? 'Quem mais vende' : 'Quem mais produz'} · ${selectedProduct?.name ?? 'Produto'}`
           : financeMetric === 'profit'
@@ -162,7 +172,7 @@ export default function RankingPanel({
         ))}
       </div>
 
-      {(activeTab === 'products' || activeTab === 'finance') && (
+      {(activeTab === 'products' || activeTab === 'finance' || activeTab === 'expansion') && (
         <div className="ranking-controls">
           <div className="ranking-subtabs" role="tablist" aria-label="Métrica do ranking">
             {activeTab === 'products' ? (
@@ -186,7 +196,7 @@ export default function RankingPanel({
                   <Factory size={14} /> Produção
                 </button>
               </>
-            ) : (
+            ) : activeTab === 'finance' ? (
               <>
                 <button
                   type="button"
@@ -207,22 +217,45 @@ export default function RankingPanel({
                   <Coins size={14} /> Investimentos
                 </button>
               </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={expansionMetric === 'buildings'}
+                  className={expansionMetric === 'buildings' ? 'active' : ''}
+                  onClick={() => setExpansionMetric('buildings')}
+                >
+                  <Building2 size={14} /> Construções
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={expansionMetric === 'roads'}
+                  className={expansionMetric === 'roads' ? 'active' : ''}
+                  onClick={() => setExpansionMetric('roads')}
+                >
+                  <Map size={14} /> Estradas
+                </button>
+              </>
             )}
           </div>
-          <div className="ranking-period-switch" aria-label="Período do ranking">
-            {([30, 365] as const).map((days) => (
-              <button
-                type="button"
-                key={days}
-                aria-pressed={periodDays === days}
-                className={periodDays === days ? 'active' : ''}
-                disabled={isLoading}
-                onClick={() => onPeriodChange(days)}
-              >
-                {days === 30 ? '30 dias' : '1 ano'}
-              </button>
-            ))}
-          </div>
+          {activeTab !== 'expansion' && (
+            <div className="ranking-period-switch" aria-label="Período do ranking">
+              {([30, 365] as const).map((days) => (
+                <button
+                  type="button"
+                  key={days}
+                  aria-pressed={periodDays === days}
+                  className={periodDays === days ? 'active' : ''}
+                  disabled={isLoading}
+                  onClick={() => onPeriodChange(days)}
+                >
+                  {days === 30 ? '30 dias' : '1 ano'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -244,7 +277,11 @@ export default function RankingPanel({
 
       <div className="ranking-result-heading">
         <div>
-          <span className="eyebrow">{activeTab === 'company' || activeTab === 'expansion' ? 'VALORES ATUAIS' : periodLabel.toLocaleUpperCase('pt-BR')}</span>
+          <span className="eyebrow">
+            {activeTab === 'company' || activeTab === 'expansion'
+              ? 'VALORES ATUAIS'
+              : periodLabel.toLocaleUpperCase('pt-BR')}
+          </span>
           <h2>{heading}</h2>
         </div>
         {summary && <span className="ranking-world-day">Dia do reino · {formatDay(summary.worldDay)}</span>}
@@ -267,7 +304,9 @@ export default function RankingPanel({
       )}
       {activeTab === 'expansion' && (
         <p className="ranking-note">
-          Soma dos tiles ocupados por todas as construções do jogador, inclusive obras em andamento.
+          {expansionMetric === 'buildings'
+            ? 'Soma dos tiles ocupados por todas as construções do jogador, inclusive obras em andamento.'
+            : 'Quantidade de tiles de estrada construídos pelo jogador. As estradas se conectam independentemente de quem as construiu.'}
         </p>
       )}
       {periodDays === 365 && historyStart && (

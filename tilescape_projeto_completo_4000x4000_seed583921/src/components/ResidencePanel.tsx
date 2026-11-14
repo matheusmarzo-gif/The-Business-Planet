@@ -65,7 +65,7 @@ interface ResidencePanelProps {
     workHoursPerDay: number;
     desiredWorkers: number;
     minimumWorkerTechnique: number;
-  }) => Promise<number>;
+  }) => number;
   onSaveInputProduct: (productId: string) => void;
   onOpenWarehouse: () => void;
   warehouseStock: ReadonlyMap<string, number>;
@@ -230,8 +230,6 @@ export default function ResidencePanel({
   const [isSimulatingSale, setIsSimulatingSale] = useState(false);
   const saleSimulationRequestId = useRef(0);
   const [hiringSimulationMessage, setHiringSimulationMessage] = useState('');
-  const [isSimulatingHiring, setIsSimulatingHiring] = useState(false);
-  const hiringSimulationRequestId = useRef(0);
   const [inputProductId, setInputProductId] = useState(
     building.selectedInputProductId ?? definition.defaultInputProductId ?? '',
   );
@@ -248,7 +246,6 @@ export default function ResidencePanel({
 
   useEffect(() => {
     saleSimulationRequestId.current += 1;
-    hiringSimulationRequestId.current += 1;
     setWage(String(building.wage));
     setHours(String(building.workHoursPerDay));
     setRent(String(building.rent));
@@ -257,7 +254,6 @@ export default function ResidencePanel({
     setSaleSimulationMessage('');
     setIsSimulatingSale(false);
     setHiringSimulationMessage('');
-    setIsSimulatingHiring(false);
   }, [
     building.id,
     building.wage,
@@ -781,37 +777,18 @@ export default function ResidencePanel({
             <>
               <button
                 type="button"
-                disabled={isSaving || isSimulatingHiring}
-                onClick={async () => {
-                  const requestId = ++hiringSimulationRequestId.current;
-                  setIsSimulatingHiring(true);
-                  setHiringSimulationMessage('');
-                  try {
-                    const hired = await onSimulateHiring({
-                      wage: Number(wage),
-                      workHoursPerDay: Number(hours),
-                      desiredWorkers: Number(desired),
-                      minimumWorkerTechnique: Number(minimumWorkerTechnique),
-                    });
-                    if (requestId !== hiringSimulationRequestId.current) return;
-                    setHiringSimulationMessage(
-                      `Estimativa: ${number.format(hired)} pessoa(s) empregada(s).`,
-                    );
-                  } catch (error) {
-                    if (requestId !== hiringSimulationRequestId.current) return;
-                    setHiringSimulationMessage(
-                      error instanceof Error
-                        ? error.message
-                        : 'Não foi possível simular a contratação com os dados atuais.',
-                    );
-                  } finally {
-                    if (requestId === hiringSimulationRequestId.current) {
-                      setIsSimulatingHiring(false);
-                    }
-                  }
+                disabled={isSaving}
+                onClick={() => {
+                  const hired = onSimulateHiring({
+                    wage: Number(wage),
+                    workHoursPerDay: Number(hours),
+                    desiredWorkers: Number(desired),
+                    minimumWorkerTechnique: Number(minimumWorkerTechnique),
+                  });
+                  setHiringSimulationMessage(`Estimativa: ${number.format(hired)} pessoa(s) empregada(s).`);
                 }}
               >
-                {isSimulatingHiring ? 'Simulando…' : 'Simular contratação'}
+                Simular contratação
               </button>
               {hiringSimulationMessage && <small role="status">{hiringSimulationMessage}</small>}
             </>

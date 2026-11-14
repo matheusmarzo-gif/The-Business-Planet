@@ -570,11 +570,8 @@ residência, comércios do mesmo tipo a até 60 tiles dela. Usa preços médios
 recentes da cidade, estoques, funcionários e capacidades atuais, além do preço,
 salário e carga horária informados no painel; não depende do cache local.
 **Simular contratação**, abaixo do salário,
-consulta `POST /api/residential-buildings/:id/simulate-hiring` e estima os
-empregados com base nas construções, moradores e atribuições atuais do servidor,
-com os valores digitados no formulário. A consulta usa um snapshot consistente e
-somente de leitura, valida que a construção pertence ao jogador e respeita as
-regras de contratação vigentes, sem alterar as atribuições persistidas.
+calcula localmente a estimativa de empregados usando as construções e moradores
+recebidos no mapa e os valores digitados no formulário.
 
 Nas construções artesanais, comerciais, fazendas, recursos, indústrias e obras
 em andamento, o dono também pode definir a **Técnica mínima necessária** para

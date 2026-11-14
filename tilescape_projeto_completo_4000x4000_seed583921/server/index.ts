@@ -5846,6 +5846,7 @@ async function start() {
            FROM production_history history
            JOIN all_buildings building ON building.id = history.building_id
            WHERE history.day BETWEEN $1::date - ($2::integer - 1) AND $1::date
+             AND history.produced > 0
            GROUP BY building.created_by, building.building_type`,
           [worldDay, periodDays],
         ),

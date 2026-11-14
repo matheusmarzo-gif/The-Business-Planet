@@ -177,7 +177,7 @@ export function getEmploymentSummary(workplaces: EmploymentSummaryWorkplace[]): 
 }
 
 /**
- * Prioriza bem-estar decrescente, depois apreço interno decrescente e, em empate,
+ * Prioriza apreço interno decrescente, depois bem-estar decrescente e, em empate,
  * id crescente. As vagas remanescentes são atualizadas para cada residência
  * seguinte; a maior sobra distribui os arredondamentos inteiros entre ofertas.
  */
@@ -197,8 +197,8 @@ export function allocateWorkers(
   const assignments: JobAssignment[] = [];
   const sortedResidences = [...residences].sort(
     (a, b) =>
-      b.wellbeing - a.wellbeing ||
       b.internalAppeal - a.internalAppeal ||
+      b.wellbeing - a.wellbeing ||
       a.id.localeCompare(b.id),
   );
   for (const residence of sortedResidences) {

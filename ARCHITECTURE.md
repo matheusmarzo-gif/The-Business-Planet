@@ -52,7 +52,7 @@ superior à média dos aluguéis das residências concluídas da cidade, um aume
 não pode exceder duas vezes o aluguel atual. A gravação do aluguel, da nova
 ocupação e do histórico `residence_relocation_log` é atômica.
 Na alocação diária de empregos, as residências concluídas com moradores são
-processadas por bem-estar decrescente; em empate, por apreço interno decrescente
+processadas por apreço interno decrescente; em empate, por bem-estar decrescente
 e, persistindo o empate, por ID crescente.
 O apreço é calculado com as rendas médias residenciais e a média salarial
 municipal ponderada pelos moradores, incluindo todas as residências concluídas

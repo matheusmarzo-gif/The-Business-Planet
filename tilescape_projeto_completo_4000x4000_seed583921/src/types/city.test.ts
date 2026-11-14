@@ -1987,7 +1987,7 @@ describe('work settings', () => {
     );
   });
 
-  it('allocates scarce vacancies by wellbeing, then internal appeal and residence id', () => {
+  it('allocates scarce vacancies by internal appeal, then wellbeing and residence id', () => {
     const homes = [
       {
         id: 'z-high-wellbeing',
@@ -2018,7 +2018,7 @@ describe('work settings', () => {
         x: 10,
         y: 10,
         occupants: 4,
-        wellbeing: 100,
+        wellbeing: 90,
         internalAppeal: 20,
         technique: 10,
       },
@@ -2033,12 +2033,24 @@ describe('work settings', () => {
         internalAppeal: 20,
         technique: 10,
       },
+      {
+        id: 'm-tied-appeal',
+        cityId: 'city-a',
+        type: 'house_poor1' as const,
+        x: 10,
+        y: 10,
+        occupants: 4,
+        wellbeing: 100,
+        internalAppeal: 20,
+        technique: 10,
+      },
     ];
     assert.deepEqual(
-      allocateWorkers(homes, [workplace('limited', 9, 10, 8)]),
+      allocateWorkers(homes, [workplace('limited', 9, 10, 12)]),
       [
+        { workplaceId: 'limited', residenceId: 'b-lower-wellbeing', count: 4 },
         { workplaceId: 'limited', residenceId: 'a-tied-appeal', count: 4 },
-        { workplaceId: 'limited', residenceId: 'z-tied-appeal', count: 4 },
+        { workplaceId: 'limited', residenceId: 'm-tied-appeal', count: 4 },
       ],
     );
   });

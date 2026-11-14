@@ -239,10 +239,12 @@ O nível inicial é 1; cada nível aumenta a capacidade em mais 100% da capacida
 original, até o nível 4. O dono pode usar ↑ para fazer upgrade ou ↓ para
 reduzir o nível. O upgrade para os níveis 2, 3 e 4 custa, respectivamente, 10%,
 40% e 100% do custo esperado da construção. Esse custo soma os materiais pelo
-preço médio das ofertas de venda ativas em armazéns/silos concluídos e a mão de
-obra, calculada como 100 Work Points por salário médio municipal. O botão mostra
-o custo ao passar o mouse; se faltar preço de algum material, o upgrade fica
-indisponível. O downgrade é gratuito, mas só pode ser feito quando o estoque
+preço estimado dos materiais na aba **Contábil → Produto**, com fallback para
+preços médios das ofertas de venda ativas em armazéns/silos concluídos, e a mão
+de obra, calculada como 100 Work Points por salário médio municipal. O botão
+mostra o custo ao passar o mouse; se faltar preço estimado e anunciado de algum
+material, o upgrade fica indisponível. O downgrade não devolve dinheiro, mas
+reduz o investimento líquido registrado; só pode ser feito quando o estoque
 couber na capacidade reduzida. Os níveis e as capacidades são validados e
 persistidos pelo servidor; armazéns e silos mantêm seus limites próprios em m³.
 
@@ -990,10 +992,11 @@ detalhadas. O resumo permite consultar a semana atual ou qualquer uma das quatro
 semanas anteriores. O lucro/prejuízo inclui receitas das lojas, aluguéis e
 vendas de armazéns, menos compras de armazéns, despesas de produtos e salários.
 Também mostra o número atual de funcionários empregados e os valores estimados
-da empresa e do estoque. A empresa é avaliada pelo custo de materiais de cada
-construção aos preços médios atuais de venda configurados nos armazéns; o estoque
-usa os mesmos preços e inclui armazéns, produtos principais e insumos das
-construções. Produtos sem preço anunciado ficam fora do valor estimado.
+da empresa e do estoque. A empresa é avaliada pelos custos unitários estimados
+dos materiais de cada construção na aba **Produto**, com fallback para preços
+médios de venda anunciados nos armazéns; o estoque continua usando esses preços
+médios e inclui armazéns, produtos principais e insumos das construções.
+Produtos sem custo estimado nem preço anunciado contribuem com valor zero.
 **Lojas comerciais**
 lista todas as lojas do jogador e soma salários pagos, receita e unidades vendidas
 e perdidas no período selecionado (último dia ou últimos 7 ou 30 dias). A receita
@@ -1032,16 +1035,18 @@ O botão **Ranking**, na barra superior, abre classificações globais por valor
 estimado da empresa, expansão territorial (soma de `largura × altura` de todas
 as construções, inclusive em andamento), vendas e produção por produto, lucro e
 investimento. O valor da empresa estima o custo de reposição das construções
-pelos preços médios atuais de venda dos armazéns. Vendas por produto combinam
+pelos custos unitários estimados do jogador, com fallback para preços médios de
+venda anunciados. Vendas por produto combinam
 lojas e comércio entre jogadores; produção usa o histórico de produção. Os
 rankings de vendas, produção e finanças podem ser vistos nos últimos 30 ou 365
 dias. Cada lista mostra os 30 primeiros jogadores e também a posição do jogador
 atual quando ele estiver fora do top 30.
 O lucro considera vendas, aluguéis e comércio entre jogadores, descontando
 compras de produtos e folha salarial. O investimento considera materiais de
-construção e upgrades de estoque pagos; o valor dos materiais é estimado pelos
-custos registrados para o jogador, com fallback para preços médios anunciados;
-se não houver estimativa nem preço, o material contribui com valor zero.
+construção e upgrades de estoque, subtraindo demolições e downgrades. O valor
+dos materiais é estimado pelos custos registrados para o jogador, com fallback
+para preços médios anunciados; se não houver estimativa nem preço, o material
+contribui com valor zero.
 O histórico de investimentos começa quando esta funcionalidade é implantada;
 não é possível reconstruir valores de períodos anteriores, e a cobertura de 365
 dias aumenta gradualmente.

@@ -167,7 +167,8 @@ export default function AccountingPanel({
             <>
               <p className="accounting-history-note">
                 Semana do jogo: {formatDay(weeklySummary.startDay)} a {formatDay(weeklySummary.endDay)}.
-                As avaliações de empresa e estoque usam os preços de venda atuais configurados nos armazéns.
+                A empresa usa custos estimados dos materiais, com fallback para preços de venda dos armazéns;
+                o estoque usa esses preços de venda.
               </p>
               <div className="accounting-summary-grid">
                 <article>
@@ -185,7 +186,7 @@ export default function AccountingPanel({
                 <article>
                   <span>Valor estimado da empresa</span>
                   <strong>{formatMoney(weeklySummary.companyValue)}</strong>
-                  <small>Custo dos materiais de construção a preços médios atuais</small>
+                  <small>Custo estimado dos materiais de construção</small>
                 </article>
                 <article>
                   <span>Produtos em estoque</span>

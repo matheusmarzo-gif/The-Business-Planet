@@ -40,6 +40,21 @@ test('rejects invalid levels and prices construction labor at one city salary pe
   assert.equal(getExpectedConstructionCost(definition, new Map([['wood', 2]]), 10), null);
 });
 
+test('accepts zero unit-cost estimates for construction materials', () => {
+  const definition = RESIDENCES.sand_pit;
+  assert.equal(
+    getExpectedConstructionCost(
+      definition,
+      new Map([
+        ['wood', 0],
+        ['stone', 0],
+      ]),
+      10,
+    ),
+    (definition.workPoints / 100) * 10,
+  );
+});
+
 test('charges the configured construction-cost fraction for each target level', () => {
   assert.equal(getStockUpgradeCost(1000, 2), 100);
   assert.equal(getStockUpgradeCost(1000, 3), 400);

@@ -118,7 +118,7 @@ export default function RankingPanel({
           ? `${productMetric === 'sales' ? 'Quem mais vende' : 'Quem mais produz'} · ${selectedProduct?.name ?? 'Produto'}`
           : financeMetric === 'profit'
             ? 'Maior lucro'
-            : 'Maior investimento';
+              : 'Maior investimento líquido';
 
   const tabs: { id: RankingTab; label: string; icon: typeof Building2 }[] = [
     { id: 'company', label: 'Empresa', icon: Building2 },
@@ -257,7 +257,12 @@ export default function RankingPanel({
       )}
       {activeTab === 'finance' && financeMetric === 'investment' && (
         <p className="ranking-note">
-          Materiais de construção valorizados pelo custo estimado do jogador ou preço médio anunciado; inclui upgrades de estoque pagos.
+          Materiais de construção e upgrades aumentam o total; demolições e downgrades são subtraídos. Custos usam estimativas do jogador, com fallback para preços médios anunciados.
+        </p>
+      )}
+      {activeTab === 'company' && (
+        <p className="ranking-note">
+          Materiais avaliados pelo custo estimado do jogador, com fallback para o preço médio anunciado.
         </p>
       )}
       {activeTab === 'expansion' && (

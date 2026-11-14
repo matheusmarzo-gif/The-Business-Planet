@@ -1,4 +1,4 @@
-import { RESIDENCES, type ResidenceType } from './residence.js';
+import { RESIDENCES, type ResidenceCost, type ResidenceType } from './residence.js';
 import { roundCurrency } from './currency.js';
 
 export const ACCOUNTING_PERIOD_DAYS = [1, 7, 30] as const;
@@ -127,6 +127,31 @@ export function getShopProductUnitCostEstimate(
 ): number | null {
   const productId = RESIDENCES[shopType].stockProductId;
   return productId ? productUnitCosts.get(productId) ?? null : null;
+}
+
+export function estimateConstructionMaterialValue(
+  cost: ResidenceCost,
+  productUnitCosts: ReadonlyMap<string, number>,
+  fallbackMarketPrices: ReadonlyMap<string, number>,
+): number {
+  let total = 0;
+  for (const productId of ['wood', 'stone', 'iron', 'steel'] as const) {
+    const quantity = cost[productId] ?? 0;
+    const unitCost =
+      productUnitCosts.get(productId) ??
+      fallbackMarketPrices.get(productId) ??
+      0;
+    if (
+      !Number.isInteger(quantity) ||
+      quantity < 0 ||
+      !Number.isFinite(unitCost) ||
+      unitCost < 0
+    ) {
+      throw new RangeError('O custo estimado dos materiais de construção é inválido.');
+    }
+    total += quantity * unitCost;
+  }
+  return roundCurrency(total);
 }
 
 export interface AccountingSummary {

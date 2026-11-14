@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   calculateDailyRentRevenue,
   calculateEstimatedShopNetRevenue,
+  estimateConstructionMaterialValue,
   estimateBlendedUnitCost,
   estimateProductionUnitCost,
   getShopProductUnitCostEstimate,
@@ -53,6 +54,33 @@ test('uses the product tab unit-cost estimate to calculate shop net revenue', ()
 
 test('returns no shop product cost when the product has no estimate', () => {
   assert.equal(getShopProductUnitCostEstimate('shop_rice', new Map()), null);
+});
+
+test('values construction materials by player cost estimates before market fallbacks', () => {
+  assert.equal(
+    estimateConstructionMaterialValue(
+      { wood: 10, stone: 4, iron: 2, steel: 1 },
+      new Map([
+        ['wood', 2],
+        ['iron', 0],
+      ]),
+      new Map([
+        ['wood', 9],
+        ['stone', 3],
+        ['iron', 4],
+        ['steel', 6],
+      ]),
+    ),
+    38,
+  );
+  assert.equal(
+    estimateConstructionMaterialValue(
+      { wood: 2, stone: 1 },
+      new Map(),
+      new Map([['wood', 1.25]]),
+    ),
+    2.5,
+  );
 });
 
 test('rejects invalid inputs for estimated shop net revenue', () => {

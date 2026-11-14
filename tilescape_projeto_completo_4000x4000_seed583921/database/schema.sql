@@ -345,9 +345,12 @@ CREATE TABLE IF NOT EXISTS player_investment_history (
   id BIGSERIAL PRIMARY KEY,
   user_id TEXT NOT NULL,
   day DATE NOT NULL,
-  amount NUMERIC(14, 2) NOT NULL CHECK (amount >= 0),
+  amount NUMERIC(14, 2) NOT NULL,
   category TEXT NOT NULL CHECK (category IN ('construction', 'stock_upgrade'))
 );
+
+ALTER TABLE player_investment_history
+  DROP CONSTRAINT IF EXISTS player_investment_history_amount_check;
 
 CREATE TABLE IF NOT EXISTS leaderboard_history_metadata (
   id SMALLINT PRIMARY KEY CHECK (id = 1),

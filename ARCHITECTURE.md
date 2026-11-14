@@ -93,7 +93,9 @@ quando fora dele. Os rankings financeiros usam períodos de 30 e 365 dias;
 históricos anuais indisponíveis antes desta implantação crescem gradualmente.
 Lucro agrega vendas, aluguéis e comércio entre jogadores, menos compras de
 produtos e folha salarial. Investimento agrega materiais de construções e
-upgrades de estoque pagos.
+upgrades de estoque; demolições e downgrades são subtraídos. A avaliação
+empresarial e os upgrades priorizam os custos unitários estimados do jogador,
+usando preços médios anunciados como fallback.
 O schema aplicado na inicialização mantém a constraint
 `all_buildings_building_type_check` sincronizada com todos os tipos do
 catálogo, inclusive em bancos existentes; um teste de domínio verifica essa
@@ -994,7 +996,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo), estoque e preço médio local ponderado por oferta acima do mínimo; espaço ocupado é calculado no cliente. |
 | `GET /api/residential-buildings/:id/warehouse-transfer-quote?destinationId=&productId=` | Dono do armazém | Calcula o limite atual da transferência considerando estoque mínimo de origem, capacidade/estoque desejável do destino, distância e Work Points restantes do dia. |
 | `POST /api/residential-buildings/:id/warehouse-transfer` | Dono do armazém | Transfere `{ destinationId, productId, quantity }` para construção concluída do mesmo dono em até 60 tiles; recalcula e valida todos os limites no servidor, grava o histórico e publica os estoques atualizados. Erros técnicos retornam `{ error, failureStage, reason, failureReference }`; a referência pode ser localizada nos logs do servidor. |
-| `GET /api/residential-buildings/:id/stock-upgrades` | Dono da construção concluída | Retorna os níveis, capacidades e custos de upgrade por compartimento; os custos usam a média de ofertas de venda ativas de materiais em armazéns/silos e o salário médio municipal. |
+| `GET /api/residential-buildings/:id/stock-upgrades` | Dono da construção concluída | Retorna os níveis, capacidades, custos de upgrade e valores de downgrade por compartimento; materiais usam custos estimados do jogador com fallback para ofertas de venda em armazéns/silos, mais o salário médio municipal. |
 | `PATCH /api/residential-buildings/:id/stock-upgrades` | Dono da construção concluída | Recebe `{ stockKey, direction: "upgrade" \| "downgrade" }`; valida os limites e a propriedade no servidor, cobra o upgrade atomicamente ou impede downgrade que descarte estoque, e publica a capacidade atualizada. |
 | `POST /api/residential-buildings/:id/warehouse/suppliers` | Dono do armazém | Executa compras imediatas do armazém especificado pelo mesmo planejador das rodadas automáticas. |
 | `GET /api/residential-buildings/:id/production-history` | Autenticado | Retorna `{ days: [{ day, workPoints, produced, transported, efficiency }] }` dos últimos 30 dias (tabela `production_history`, gravada às 00:00 pelas etapas de produção, fazendas e transporte; `transported` conta só envios ao armazém). |
@@ -1067,8 +1069,9 @@ de sucesso.
   ou 30 dias, incluindo o dia corrente). O resumo usa semanas de sete dias
   ancoradas no dia atual do jogo e mantém até 365 dias de históricos financeiros,
   quando os dados históricos estão disponíveis.
-  Valor empresarial e estoque usam preços médios atuais de venda anunciados nos
-  armazéns; produtos sem preço anunciado não entram na estimativa.
+  Valor empresarial usa os custos unitários estimados atuais do jogador em
+  `player_product_costs`, com fallback para preços médios anunciados; o valor do
+  estoque continua usando preços médios atuais de venda nos armazéns.
 - `production_input_history` registra os produtos efetivamente consumidos por
   construções produtivas e alimenta o consumo industrial da aba **Produto**.
   Essa aba também agrega `commerce_history.units_sold` e `units_lost` por
@@ -1086,10 +1089,12 @@ de sucesso.
   `player_rank_metrics` mantém o total por jogador. Na inicialização, o servidor
   preenche o catálogo, recalcula os totais sob lock de `all_buildings` e só então
   instala o trigger de inserção/remoção que mantém esses totais atualizados.
-  `player_investment_history` registra os valores de construções e upgrades de
-  estoque pagos, e `leaderboard_history_metadata` marca quando começou o
-  rastreamento de investimentos. Os registros financeiros são retidos por até
-  365 dias; períodos anteriores ao início dos históricos não são reconstruíveis.
+  `player_investment_history` registra valores assinados de construções e
+  upgrades de estoque; demolições e downgrades reduzem o total. A migração remove
+  a antiga constraint de valor não negativo. `leaderboard_history_metadata`
+  marca quando começou o rastreamento de investimentos. Os registros financeiros
+  são retidos por até 365 dias; períodos anteriores ao início dos históricos não
+  são reconstruíveis.
 - A tabela `neon_auth."user"` é gerenciada pelo Neon Auth, não pelo esquema do
   jogo.
 

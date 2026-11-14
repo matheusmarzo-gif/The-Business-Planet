@@ -73,6 +73,7 @@ import { roundCurrency } from '../src/types/currency.js';
 import {
   calculateDailyRentRevenue,
   calculateEstimatedShopNetRevenue,
+  estimateConstructionMaterialValue,
   estimateBlendedUnitCost,
   estimateProductionUnitCost,
   getShopProductUnitCostEstimate,
@@ -222,6 +223,7 @@ const PERFORMANCE_LOGS_KEY = 'valdora:world:performance-logs';
 const PERFORMANCE_LOG_LIMIT = 100;
 const PERFORMANCE_LOG_TTL_SECONDS = 7 * 24 * 60 * 60;
 const LEADERBOARD_HISTORY_DAYS = 365;
+const CONSTRUCTION_MATERIAL_PRODUCT_IDS = ['wood', 'stone', 'iron', 'steel'] as const;
 const WEBSOCKET_TRAFFIC_KEY_PREFIX = 'valdora:world:websocket-traffic:';
 const WEBSOCKET_TRAFFIC_TTL_SECONDS = 8 * 24 * 60 * 60;
 const WEBSOCKET_TRAFFIC_WINDOW_HOURS = 24;
@@ -824,13 +826,11 @@ function getStockQuantityForKey(
   return building.input_stocks[key.slice('input:'.length)] ?? 0;
 }
 
-async function getStockCapacityUpgradeQuotes(
+async function getEstimatedMaterialUnitCosts(
   client: PoolClient,
-  building: ResidentialBuildingRow,
-): Promise<StockCapacityUpgradeQuote[]> {
-  const definition = getResidenceDefinition(building.building_type);
-  if (!definition) throw new Error(`Tipo de construção inválido: ${building.building_type}`);
-  const { rows: priceRows } = await client.query<{
+  userId: string,
+): Promise<Map<string, number>> {
+  const { rows: marketPriceRows } = await client.query<{
     product_id: string;
     average_price: number;
   }>(
@@ -843,11 +843,58 @@ async function getStockCapacityUpgradeQuotes(
        AND settings.price > 0
        AND settings.product_id = ANY($1::text[])
      GROUP BY settings.product_id`,
-    [['wood', 'stone', 'iron', 'steel']],
+    [CONSTRUCTION_MATERIAL_PRODUCT_IDS],
   );
-  const warehousePrices = new Map(
-    priceRows.map((row) => [row.product_id, row.average_price]),
+  const unitCosts = new Map(
+    marketPriceRows.map((row) => [row.product_id, row.average_price]),
   );
+  const { rows: estimatedCostRows } = await client.query<{
+    product_id: string;
+    unit_cost: string;
+  }>(
+    `SELECT product_id, unit_cost::text
+     FROM player_product_costs
+     WHERE user_id = $1 AND product_id = ANY($2::text[])`,
+    [userId, CONSTRUCTION_MATERIAL_PRODUCT_IDS],
+  );
+  for (const row of estimatedCostRows) {
+    unitCosts.set(row.product_id, Number(row.unit_cost));
+  }
+  return unitCosts;
+}
+
+async function getCurrentWorldDay(client: PoolClient): Promise<string> {
+  const { rows } = await client.query<{ day: string }>(
+    `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
+     FROM world_state WHERE id = 1`,
+  );
+  if (!rows[0]) throw new Error('O relógio do mundo não está disponível para registrar o investimento.');
+  return rows[0].day;
+}
+
+async function recordPlayerInvestment(
+  client: PoolClient,
+  userId: string,
+  amount: number,
+  category: 'construction' | 'stock_upgrade',
+  day?: string,
+): Promise<void> {
+  const investmentDay = day ?? await getCurrentWorldDay(client);
+  await client.query(
+    `INSERT INTO player_investment_history (user_id, day, amount, category)
+     VALUES ($1, $2::date, $3, $4)`,
+    [userId, investmentDay, amount, category],
+  );
+}
+
+async function getStockCapacityUpgradeQuotes(
+  client: PoolClient,
+  building: ResidentialBuildingRow,
+  userId: string,
+): Promise<StockCapacityUpgradeQuote[]> {
+  const definition = getResidenceDefinition(building.building_type);
+  if (!definition) throw new Error(`Tipo de construção inválido: ${building.building_type}`);
+  const productUnitCosts = await getEstimatedMaterialUnitCosts(client, userId);
   const { rows: salaryRows } = await client.query<{ average_salary: number }>(
     `SELECT COALESCE(
               (SELECT SUM(assignment.count * workplace.wage)
@@ -864,7 +911,7 @@ async function getStockCapacityUpgradeQuotes(
   if (!salaryRows[0]) throw new Error(`A cidade ${building.city_id} não foi encontrada.`);
   const expectedConstructionCost = getExpectedConstructionCost(
     definition,
-    warehousePrices,
+    productUnitCosts,
     salaryRows[0].average_salary,
   );
   return getStockCapacitySlots(definition, building.selected_input_product_id).map(({ key }) => {
@@ -888,6 +935,9 @@ async function getStockCapacityUpgradeQuotes(
         ? null
         : getStockUpgradeCost(expectedConstructionCost, nextLevel),
       previousCapacity,
+      downgradeValue: level <= 1 || expectedConstructionCost === null
+        ? null
+        : getStockUpgradeCost(expectedConstructionCost, level),
       canDowngrade: previousCapacity !== null && currentStock <= previousCapacity,
     };
   });
@@ -5331,8 +5381,12 @@ async function createResidentialBuilding(
       return { building: null, error: 'outside_municipality' };
     }
 
-    let constructionInvestment = 0;
-    let constructionMaterialsWithdrawn = false;
+    const constructionUnitCosts = await getEstimatedMaterialUnitCosts(client, userId);
+    const constructionInvestment = estimateConstructionMaterialValue(
+      definition.cost,
+      constructionUnitCosts,
+      new Map(),
+    );
     if (!isFirstWarehouse && !isMaster) {
       const constructionCenterX = position.x + definition.width / 2;
       const constructionCenterY = position.y + definition.height / 2;
@@ -5372,44 +5426,6 @@ async function createResidentialBuilding(
         await client.query('ROLLBACK');
         return { building: null, error: 'insufficient_materials' };
       }
-      constructionMaterialsWithdrawn = withdrawals.length > 0;
-      const { rows: productCostRows } = await client.query<{
-        product_id: string;
-        unit_cost: string;
-      }>(
-        `SELECT product_id, unit_cost::text
-         FROM player_product_costs
-         WHERE user_id = $1 AND product_id = ANY($2::text[])`,
-        [userId, ['wood', 'stone', 'iron', 'steel']],
-      );
-      const { rows: marketPriceRows } = await client.query<{
-        product_id: string;
-        average_price: string;
-      }>(
-        `SELECT product_id, AVG(price)::text AS average_price
-         FROM warehouse_product_settings
-         WHERE mode = 'sell' AND price > 0
-           AND product_id = ANY($1::text[])
-         GROUP BY product_id`,
-        [['wood', 'stone', 'iron', 'steel']],
-      );
-      const productCosts = new Map(
-        productCostRows.map((row) => [row.product_id, Number(row.unit_cost)]),
-      );
-      const marketPrices = new Map(
-        marketPriceRows.map((row) => [row.product_id, Number(row.average_price)]),
-      );
-      constructionInvestment = roundCurrency(
-        withdrawals.reduce(
-          (total, withdrawal) =>
-            total +
-            withdrawal.quantity *
-              (productCosts.get(withdrawal.productId) ??
-                marketPrices.get(withdrawal.productId) ??
-                0),
-          0,
-        ),
-      );
       for (const withdrawal of withdrawals) {
         const { rowCount } = await client.query(
           `UPDATE warehouse_stock
@@ -5460,18 +5476,7 @@ async function createResidentialBuilding(
         city.minimumWage,
       ],
     );
-    if (constructionMaterialsWithdrawn) {
-      const { rows: dayRows } = await client.query<{ day: string }>(
-        `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
-         FROM world_state WHERE id = 1`,
-      );
-      if (!dayRows[0]) throw new Error('O relógio do mundo não está disponível para registrar o investimento.');
-      await client.query(
-        `INSERT INTO player_investment_history (user_id, day, amount, category)
-         VALUES ($1, $2::date, $3, 'construction')`,
-        [userId, dayRows[0].day, constructionInvestment],
-      );
-    }
+    await recordPlayerInvestment(client, userId, constructionInvestment, 'construction');
     await client.query('COMMIT');
     return { building: mapResidentialBuilding(rows[0]), error: null };
   } catch (error) {
@@ -5785,6 +5790,7 @@ async function start() {
       const [
         playerResult,
         marketPriceResult,
+        productCostResult,
         buildingResult,
         buildingTilesResult,
         activityResult,
@@ -5802,6 +5808,10 @@ async function start() {
            FROM warehouse_product_settings
            WHERE mode = 'sell' AND price > 0
            GROUP BY product_id`,
+        ),
+        pool.query<{ player_id: string; product_id: string; unit_cost: string }>(
+          `SELECT user_id AS player_id, product_id, unit_cost::text
+           FROM player_product_costs`,
         ),
         pool.query<{ player_id: string; building_type: string }>(
           `SELECT created_by AS player_id, building_type
@@ -5964,18 +5974,23 @@ async function start() {
       const marketPrices = new Map(
         marketPriceResult.rows.map((row) => [row.product_id, Number(row.average_price)]),
       );
+      const productCostsByPlayer = new Map<string, Map<string, number>>();
+      for (const row of productCostResult.rows) {
+        const productCosts = productCostsByPlayer.get(row.player_id) ?? new Map<string, number>();
+        productCosts.set(row.product_id, Number(row.unit_cost));
+        productCostsByPlayer.set(row.player_id, productCosts);
+      }
       const companyValueByPlayer = new Map<string, number>();
       for (const row of buildingResult.rows) {
         const definition = getResidenceDefinition(row.building_type);
         if (!definition) {
           throw new Error(`Tipo de construção inválido no ranking: ${row.building_type}`);
         }
-        const constructionCost = definition.cost;
-        const value =
-          constructionCost.wood * (marketPrices.get('wood') ?? 0) +
-          constructionCost.stone * (marketPrices.get('stone') ?? 0) +
-          (constructionCost.iron ?? 0) * (marketPrices.get('iron') ?? 0) +
-          (constructionCost.steel ?? 0) * (marketPrices.get('steel') ?? 0);
+        const value = estimateConstructionMaterialValue(
+          definition.cost,
+          productCostsByPlayer.get(row.player_id) ?? new Map<string, number>(),
+          marketPrices,
+        );
         companyValueByPlayer.set(
           row.player_id,
           (companyValueByPlayer.get(row.player_id) ?? 0) + value,
@@ -6419,14 +6434,16 @@ async function start() {
         addInventory('charcoal', row.charcoal_stock);
         addInventory('sugarcane', row.sugarcane_stock);
       }
+      const productCosts = new Map(
+        productCostResult.rows.map((row) => [row.product_id, Number(row.unit_cost)]),
+      );
       const companyValue = roundCurrency(
         assetBuildingsResult.rows.reduce((total, row) => {
-          const cost = RESIDENCES[row.building_type].cost;
-          return total +
-            cost.wood * (marketPrices.get('wood') ?? 0) +
-            cost.stone * (marketPrices.get('stone') ?? 0) +
-            (cost.iron ?? 0) * (marketPrices.get('iron') ?? 0) +
-            (cost.steel ?? 0) * (marketPrices.get('steel') ?? 0);
+          return total + estimateConstructionMaterialValue(
+            RESIDENCES[row.building_type].cost,
+            productCosts,
+            marketPrices,
+          );
         }, 0),
       );
       const inventoryValue = roundCurrency(
@@ -6439,9 +6456,6 @@ async function start() {
       const weeklyExpenses = Number(weeklyFinanceResult.rows[0]?.expenses ?? 0);
       const productFlows = new Map(
         productFlowResult.rows.map((row) => [row.product_id, row]),
-      );
-      const productCosts = new Map(
-        productCostResult.rows.map((row) => [row.product_id, Number(row.unit_cost)]),
       );
       const shopSalesAndLoss = getShopSalesAndLossByProduct(
         shopResult.rows.map((row) => ({
@@ -8148,7 +8162,7 @@ async function start() {
           return;
         }
         response.json({
-          quotes: await getStockCapacityUpgradeQuotes(client, building),
+          quotes: await getStockCapacityUpgradeQuotes(client, building, userId),
         });
       } finally {
         client.release();
@@ -8232,9 +8246,9 @@ async function start() {
           response.status(409).json({ error: 'stock_downgrade_requires_emptying' });
           return;
         }
+        const quotes = await getStockCapacityUpgradeQuotes(client, building, userId);
+        const quote = quotes.find((item) => item.key === slot.key);
         if (direction === 'upgrade') {
-          const quotes = await getStockCapacityUpgradeQuotes(client, building);
-          const quote = quotes.find((item) => item.key === slot.key);
           if (!quote || quote.upgradeCost === null) {
             await client.query('ROLLBACK');
             response.status(409).json({ error: 'stock_upgrade_price_unavailable' });
@@ -8254,6 +8268,8 @@ async function start() {
           }
           walletBalance = walletRows[0].balance;
           investmentAmount = quote.upgradeCost;
+        } else {
+          investmentAmount = -(quote?.downgradeValue ?? 0);
         }
         const { rows: updated } = await client.query<ResidentialBuildingRow>(
           `UPDATE all_buildings
@@ -8268,18 +8284,7 @@ async function start() {
           [building.id, slot.key, targetLevel],
         );
         if (!updated[0]) throw new Error(`O estoque da construção ${building.id} não foi atualizado.`);
-        if (investmentAmount > 0) {
-          const { rows: dayRows } = await client.query<{ day: string }>(
-            `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
-             FROM world_state WHERE id = 1`,
-          );
-          if (!dayRows[0]) throw new Error('O relógio do mundo não está disponível para registrar o investimento.');
-          await client.query(
-            `INSERT INTO player_investment_history (user_id, day, amount, category)
-             VALUES ($1, $2::date, $3, 'stock_upgrade')`,
-            [userId, dayRows[0].day, investmentAmount],
-          );
-        }
+        await recordPlayerInvestment(client, userId, investmentAmount, 'stock_upgrade');
         await client.query('COMMIT');
         response.json({
           building: mapResidentialBuilding(updated[0]),
@@ -8960,34 +8965,68 @@ async function start() {
       return;
     }
 
-    void pool
-      .query<{ id: string }>(
-        `DELETE FROM all_buildings
-         WHERE id = $1 AND created_by = $2
-         RETURNING id`,
-        [request.params.id, userId],
-      )
-      .then(async ({ rows }) => {
-        if (!rows[0]) {
-          const existing = await pool.query(
-            'SELECT 1 FROM all_buildings WHERE id = $1',
-            [request.params.id],
-          );
-          response
-            .status(existing.rowCount ? 403 : 404)
-            .json({ error: existing.rowCount ? 'residence_not_owned' : 'residence_not_found' });
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const { rows } = await client.query<{
+          id: string;
+          building_type: ResidenceType;
+          created_by: string;
+        }>(
+          `SELECT id, building_type, created_by
+           FROM all_buildings WHERE id = $1 FOR UPDATE`,
+          [request.params.id],
+        );
+        const building = rows[0];
+        if (!building) {
+          await client.query('ROLLBACK');
+          response.status(404).json({ error: 'residence_not_found' });
           return;
         }
+        if (building.created_by !== userId) {
+          await client.query('ROLLBACK');
+          response.status(403).json({ error: 'residence_not_owned' });
+          return;
+        }
+        const definition = getResidenceDefinition(building.building_type);
+        if (!definition) throw new Error(`Tipo de construção inválido: ${building.building_type}`);
+        const unitCosts = await getEstimatedMaterialUnitCosts(client, userId);
+        const demolitionValue = estimateConstructionMaterialValue(
+          definition.cost,
+          unitCosts,
+          new Map(),
+        );
+        const day = await getCurrentWorldDay(client);
+        const { rows: deletedBuildings } = await client.query<{ id: string }>(
+          `DELETE FROM all_buildings
+           WHERE id = $1 AND created_by = $2
+           RETURNING id`,
+          [building.id, userId],
+        );
+        if (!deletedBuildings[0]) {
+          throw new Error(`A construção ${building.id} não foi removida.`);
+        }
+        await recordPlayerInvestment(client, userId, -demolitionValue, 'construction', day);
+        await client.query('COMMIT');
 
-        response.json(rows[0]);
+        response.json({ id: building.id });
         void publishCities().catch((error: unknown) => {
           console.error('A residência foi demolida, mas a atualização do mundo falhou:', error);
         });
-      })
-      .catch((error: unknown) => {
-        console.error('Não foi possível demolir a residência:', error);
-        response.status(503).json({ error: 'residence_demolition_unavailable' });
-      });
+      } catch (error: unknown) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter a demolição da residência:', rollbackError);
+        });
+        throw error;
+      } finally {
+        client.release();
+      }
+    })().catch((error: unknown) => {
+      console.error('Não foi possível demolir a residência:', error);
+      response.status(503).json({ error: 'residence_demolition_unavailable' });
+    });
   });
   app.post('/api/cities', requireAuth, requireMasterAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);
@@ -9315,34 +9354,89 @@ async function start() {
       return;
     }
 
-    void pool
-      .query<{ id: string }>(
-        `DELETE FROM city_assemblies
-         WHERE id = $1 AND created_by = $2
-         RETURNING id`,
-        [request.params.id, userId],
-      )
-      .then(async ({ rows }) => {
-        if (!rows[0]) {
-          const existing = await pool.query(
-            'SELECT 1 FROM city_assemblies WHERE id = $1',
-            [request.params.id],
-          );
-          response
-            .status(existing.rowCount ? 403 : 404)
-            .json({ error: existing.rowCount ? 'city_not_owned' : 'city_not_found' });
+    void (async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+        const { rows: cityRows } = await client.query<{ id: string; created_by: string }>(
+          'SELECT id, created_by FROM city_assemblies WHERE id = $1 FOR UPDATE',
+          [request.params.id],
+        );
+        const city = cityRows[0];
+        if (!city) {
+          await client.query('ROLLBACK');
+          response.status(404).json({ error: 'city_not_found' });
           return;
         }
+        if (city.created_by !== userId) {
+          await client.query('ROLLBACK');
+          response.status(403).json({ error: 'city_not_owned' });
+          return;
+        }
+        const { rows: buildings } = await client.query<{
+          building_type: ResidenceType;
+          created_by: string;
+        }>(
+          `SELECT building_type, created_by
+           FROM all_buildings
+           WHERE city_id = $1
+           FOR UPDATE`,
+          [city.id],
+        );
+        const costsByPlayer = new Map<string, Map<string, number>>();
+        const demolitionValues = new Map<string, number>();
+        for (const building of buildings) {
+          const definition = getResidenceDefinition(building.building_type);
+          if (!definition) {
+            throw new Error(`Tipo de construção inválido: ${building.building_type}`);
+          }
+          let unitCosts = costsByPlayer.get(building.created_by);
+          if (!unitCosts) {
+            unitCosts = await getEstimatedMaterialUnitCosts(client, building.created_by);
+            costsByPlayer.set(building.created_by, unitCosts);
+          }
+          demolitionValues.set(
+            building.created_by,
+            (demolitionValues.get(building.created_by) ?? 0) +
+              estimateConstructionMaterialValue(definition.cost, unitCosts, new Map()),
+          );
+        }
+        const day = buildings.length > 0 ? await getCurrentWorldDay(client) : undefined;
+        for (const [buildingOwner, value] of demolitionValues) {
+          await recordPlayerInvestment(
+            client,
+            buildingOwner,
+            -value,
+            'construction',
+            day,
+          );
+        }
+        const { rows: deletedCities } = await client.query<{ id: string }>(
+          `DELETE FROM city_assemblies
+           WHERE id = $1 AND created_by = $2
+           RETURNING id`,
+          [city.id, userId],
+        );
+        if (!deletedCities[0]) throw new Error(`A cidade ${city.id} não foi removida.`);
+        await client.query('COMMIT');
 
-        response.json(rows[0]);
+        response.json(deletedCities[0]);
         void publishCities().catch((error: unknown) => {
           console.error('A construção foi demolida, mas a atualização das cidades falhou:', error);
         });
-      })
-      .catch((error: unknown) => {
-        console.error('Não foi possível demolir a construção:', error);
-        response.status(503).json({ error: 'city_demolition_unavailable' });
-      });
+      } catch (error: unknown) {
+        await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+          console.error('Não foi possível reverter a demolição da cidade:', rollbackError);
+        });
+        throw error;
+      } finally {
+        client.release();
+      }
+    })().catch((error: unknown) => {
+      console.error('Não foi possível demolir a construção:', error);
+      response.status(503).json({ error: 'city_demolition_unavailable' });
+    });
   });
   app.get('/api/master/online-players', requireAuth, requireMasterAuth, (_request, response) => {
     void (async () => {

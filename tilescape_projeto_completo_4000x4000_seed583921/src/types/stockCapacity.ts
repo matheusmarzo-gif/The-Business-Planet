@@ -26,6 +26,7 @@ export interface StockCapacityUpgradeQuote {
   nextCapacity: number | null;
   upgradeCost: number | null;
   previousCapacity: number | null;
+  downgradeValue: number | null;
   canDowngrade: boolean;
 }
 
@@ -91,7 +92,7 @@ export function getStockCapacitySlots(
 
 export function getExpectedConstructionCost(
   definition: ResidenceDefinition,
-  warehousePrices: ReadonlyMap<string, number>,
+  productUnitCosts: ReadonlyMap<string, number>,
   averageCitySalary: number,
 ): number | null {
   if (!Number.isFinite(averageCitySalary) || averageCitySalary < 0) {
@@ -101,9 +102,9 @@ export function getExpectedConstructionCost(
   for (const productId of ['wood', 'stone', 'iron', 'steel'] as const) {
     const quantity = definition.cost[productId] ?? 0;
     if (quantity === 0) continue;
-    const price = warehousePrices.get(productId);
-    if (price === undefined || !Number.isFinite(price) || price <= 0) return null;
-    materialCost += quantity * price;
+    const unitCost = productUnitCosts.get(productId);
+    if (unitCost === undefined || !Number.isFinite(unitCost) || unitCost < 0) return null;
+    materialCost += quantity * unitCost;
   }
   return roundCurrency(materialCost + (definition.workPoints / 100) * averageCitySalary);
 }

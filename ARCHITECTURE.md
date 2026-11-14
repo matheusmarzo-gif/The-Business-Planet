@@ -74,6 +74,13 @@ concorrentes do mesmo tipo de construção a até 60 tiles dela, usando estoques
 preços e empregos atuais, além dos parâmetros editados no painel. A rota valida
 a propriedade da loja e lê um snapshot consistente sem persistir alterações; a
 simulação não depende do cache local de diagnósticos.
+**Simular contratação** também consulta dados do servidor pelo endpoint
+`POST /api/residential-buildings/:id/simulate-hiring`. A rota verifica a
+propriedade da construção e lê construções, moradores e atribuições de emprego
+da cidade em uma transação consistente somente de leitura. Com os parâmetros
+editados no painel, aplica os mesmos cálculos de apreço e alocação da rotina
+diária, sem gravar alterações; construções de outras cidades não participam da
+simulação.
 O relatório contábil de produção inclui toda construção com regra de produção,
 inclusive indústrias, e ordena os edifícios alfabeticamente por nome. Clique
 simples em qualquer construção abre seu painel; a conta Master pode arrastar
@@ -738,15 +745,14 @@ mapeamento e verificar todas as curvas.
   antes/depois, quantidade comprada e resultado da tentativa por loja candidata)
   ficam em `commerce_history.diagnostics` e são consultados sob demanda pela API
   autenticada ao abrir o histórico da loja. O cache local, atualizado após essa
-  consulta, permanece como fallback para dias anteriores à migração e alimenta
-  a simulação de venda no navegador.
+  consulta, permanece como fallback para dias anteriores à migração.
   Receita e lucro/prejuízo são calculados dos dados financeiros.
   Como o abastecimento pelo armazém do mesmo dono é uma transferência interna
   sem cobrança, esse movimento registra C$ 0 de gasto com produto. O histórico
   financeiro conserva no mínimo 35 dias para os cinco períodos semanais e só o dono consulta pela rota de histórico do
-  comércio. O cache local legado de diagnósticos conserva até 30 dias e alimenta
-  a simulação de venda no navegador; a simulação de contratação também usa o snapshot local,
-  sem novas consultas ao servidor. A coluna
+  comércio. O cache local legado de diagnósticos conserva até 30 dias como
+  fallback histórico. A contratação é estimada pelo endpoint do servidor a
+  partir de um snapshot atual e somente de leitura. A coluna
   `transaction_details` de instalações anteriores não é mais lida ou atualizada;
   os registros existentes expiram junto com o histórico financeiro.
 - Produção das fazendas agrícolas (`src/types/farming.ts`): `POST

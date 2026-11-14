@@ -66,19 +66,11 @@ import type {
   StockCapacityKey,
   StockCapacityUpgradeQuote,
 } from './types/stockCapacity';
-import {
-  allocateWorkers,
-  getDailyWorkPoints,
-  getMaxDesiredWorkers,
-} from './types/employment';
+import { getDailyWorkPoints } from './types/employment';
 import { PRODUCTS } from './types/product';
-import { getWorkerTechnique } from './types/wellbeing';
 import type { PerformanceLogRecord } from './types/performanceLog';
 import type { WebSocketTrafficSnapshot } from './types/websocketTraffic';
-import {
-  calculateResidenceAppealsFromIncome,
-  type ResidenceBenefitCalculation,
-} from './types/residence-relocation';
+import type { ResidenceBenefitCalculation } from './types/residence-relocation';
 import { loadCommerceDiagnostics, saveCommerceDiagnostics } from './utils/commerceDiagnosticsStorage';
 import { applyEntityDelta } from './types/worldSync';
 import { createMapGenerator } from './utils/mapGenerator';
@@ -202,9 +194,13 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'road_not_found') {
           error = 'Essa estrada não existe mais.';
         } else if (body.error === 'residence_not_owned') {
-          error = 'Você só pode demolir residências que construiu.';
+          error = path.endsWith('/simulate-hiring')
+            ? 'Você só pode simular a contratação de construções que possui.'
+            : 'Você só pode demolir residências que construiu.';
         } else if (body.error === 'residence_not_found') {
           error = 'Essa residência não existe mais.';
+        } else if (body.error === 'invalid_hiring_simulation_settings') {
+          error = 'Informe salário, carga horária, funcionários desejados e técnica mínima válidos para simular a contratação.';
         } else if (body.error === 'stock_upgrade_price_unavailable') {
           error = 'Não há preços de Madeira, Pedra, Ferro ou Aço nos armazéns para calcular o custo do upgrade.';
         } else if (body.error === 'stock_upgrade_level_limit') {
@@ -257,6 +253,8 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'A simulação só está disponível para lojas concluídas.';
         } else if (body.error === 'sale_simulation_unavailable') {
           error = 'Não foi possível carregar os dados atuais para a simulação de vendas.';
+        } else if (body.error === 'hiring_simulation_unavailable') {
+          error = 'Não foi possível carregar os dados atuais para a simulação de contratação.';
         } else if (body.error === 'invalid_rent') {
           error = 'O aluguel deve ser de C$ 0,01 a C$ 100.000, com até 2 casas decimais.';
         } else if (body.error === 'rent_increase_step_limit') {
@@ -2143,96 +2141,15 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                 },
               )
             }
-            onSimulateHiring={(settings) => {
-              const completedResidences = residentialBuildings.filter((building) =>
-                RESIDENCES[building.type].kind === 'residence' &&
-                building.status === 'completed',
-              );
-              const workplaces = residentialBuildings
-                .filter((building) =>
-                  RESIDENCES[building.type].kind !== 'residence' ||
-                  building.status === 'under_construction',
-                )
-                .map((building) => ({
-                  id: building.id,
-                  cityId: building.cityId,
-                  type: building.type,
-                  x: building.x,
-                  y: building.y,
-                  wage: building.id === selectedResidence.id ? settings.wage : building.wage,
-                  workHoursPerDay:
-                    building.id === selectedResidence.id
-                      ? settings.workHoursPerDay
-                      : building.workHoursPerDay,
-                  desiredWorkers:
-                    building.id === selectedResidence.id
-                      ? settings.desiredWorkers
-                      : building.desiredWorkers,
-                  employed: building.employed,
-                  minimumWorkerTechnique:
-                    building.id === selectedResidence.id
-                      ? settings.minimumWorkerTechnique
-                      : building.minimumWorkerTechnique,
-                  status: building.status,
-                }));
-              const employmentOffers = workplaces.flatMap((workplace) => {
-                const vacancies = Math.max(
-                  0,
-                  Math.min(
-                    workplace.desiredWorkers,
-                    getMaxDesiredWorkers(workplace.type, workplace.status),
-                  ) - workplace.employed,
-                );
-                return vacancies > 0
-                  ? [{
-                      cityId: workplace.cityId,
-                      type: workplace.type,
-                      x: workplace.x,
-                      y: workplace.y,
-                      wage: workplace.wage,
-                      vacancies,
-                    }]
-                  : [];
-              });
-              const residenceAppeals = calculateResidenceAppealsFromIncome(
-                completedResidences.map((building) => ({
-                  id: building.id,
-                  cityId: building.cityId,
-                  type: building.type,
-                  x: building.x + RESIDENCES[building.type].width / 2,
-                  y: building.y + RESIDENCES[building.type].height / 2,
-                  salaryAverage: building.averageIncome,
-                  occupants: building.occupants,
-                  employed: building.employed,
-                  capacity: RESIDENCES[building.type].capacity,
-                  constructionAppeal: RESIDENCES[building.type].localAppeal,
-                })),
-                employmentOffers,
-              );
-              const residences = completedResidences
-                .filter((building) => building.occupants > 0)
-                .map((building) => {
-                  const appeal = residenceAppeals.get(building.id);
-                  if (!appeal) {
-                    throw new Error(
-                      `Não foi possível calcular o apreço interno da residência ${building.id}.`,
-                    );
-                  }
-                  return {
-                    id: building.id,
-                    cityId: building.cityId,
-                    type: building.type,
-                    x: building.x,
-                    y: building.y,
-                    occupants: building.occupants,
-                    internalAppeal: appeal.internalAppeal,
-                    technique: getWorkerTechnique(building.wellbeing),
-                  };
-                });
-              return allocateWorkers(residences, workplaces)
-                .filter((assignment) => assignment.workplaceId === selectedResidence.id)
-                .reduce((total, assignment) => total + assignment.count, 0);
-            }}
+            onSimulateHiring={(settings) =>
+              cityRequest<{ hired: number }>(
+                `/api/residential-buildings/${selectedResidence.id}/simulate-hiring`,
+                {
+                  method: 'POST',
+                  body: JSON.stringify(settings),
+                },
+              ).then(({ hired }) => hired)
+            }
             onSaveInputProduct={(productId) =>
               void saveInputProduct(selectedResidence.id, productId)
             }

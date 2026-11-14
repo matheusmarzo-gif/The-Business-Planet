@@ -1,6 +1,7 @@
 import {
-  isWithinWorkerSearchRadius,
+  RESIDENCES,
   type ResidenceType,
+  WORKER_SEARCH_RADIUS,
 } from './residence.js';
 
 export const RESIDENCE_APPEAL_RADIUS = 10;
@@ -129,31 +130,40 @@ function getResidenceEmployabilitySalary(
   employmentOffers: readonly ResidenceEmploymentOffer[],
 ): number {
   if (
-    residence.occupants > 0 &&
+    residence.occupants > 2 &&
     residence.employed * 2 >= residence.occupants
   ) {
     return residence.salaryAverage;
   }
 
+  const residenceDefinition = RESIDENCES[residence.type];
+  const residenceCenterX = residence.x + residenceDefinition.width / 2;
+  const residenceCenterY = residence.y + residenceDefinition.height / 2;
   let vacancies = 0;
+  let weightedVacancies = 0;
   let weightedWage = 0;
   for (const offer of employmentOffers) {
+    const offerDefinition = RESIDENCES[offer.type];
+    const distance = Math.hypot(
+      offer.x + offerDefinition.width / 2 - residenceCenterX,
+      offer.y + offerDefinition.height / 2 - residenceCenterY,
+    );
     if (
       offer.cityId !== residence.cityId ||
       offer.vacancies <= 0 ||
-      !isWithinWorkerSearchRadius(
-        { type: residence.type, x: residence.x, y: residence.y },
-        { type: offer.type, x: offer.x, y: offer.y },
-      )
+      distance > WORKER_SEARCH_RADIUS
     ) {
       continue;
     }
+    const distanceWeight = distance <= 10 ? 2 : distance <= 30 ? 1.5 : 1;
+    const offerWeight = offer.vacancies * distanceWeight;
     vacancies += offer.vacancies;
-    weightedWage += offer.wage * offer.vacancies;
+    weightedVacancies += offerWeight;
+    weightedWage += offer.wage * offerWeight;
   }
 
   return vacancies >= residence.capacity && vacancies > 0
-    ? weightedWage / vacancies
+    ? weightedWage / weightedVacancies
     : residence.salaryAverage;
 }
 

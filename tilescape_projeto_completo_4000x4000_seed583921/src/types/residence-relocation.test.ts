@@ -7,6 +7,7 @@ import {
   getResidenceBenefitIncome,
   planResidenceRelocations,
 } from './residence-relocation.js';
+import { RESIDENCES } from './residence.js';
 
 const residence = (overrides: Partial<Parameters<typeof planResidenceRelocations>[0][number]>) => ({
   id: 'source',
@@ -20,6 +21,19 @@ const residence = (overrides: Partial<Parameters<typeof planResidenceRelocations
   internalAppeal: 50,
   ...overrides,
 });
+
+function offerAtDistance(distance: number, wage: number, vacancies: number) {
+  const home = RESIDENCES.house_poor1;
+  const workplace = RESIDENCES.shop_rice;
+  return {
+    cityId: 'city',
+    type: 'shop_rice' as const,
+    x: home.width / 2 + distance - workplace.width / 2,
+    y: home.height / 2 - workplace.height / 2,
+    wage,
+    vacancies,
+  };
+}
 
 test('calculates employability and regional appeal from completed homes in the same city and radius', () => {
   const appeals = calculateResidenceAppeals([
@@ -158,8 +172,8 @@ test('uses the vacancy-weighted local wage when less than half the home is emplo
       id: 'home',
       cityId: 'city',
       type: 'house_poor1',
-      x: 0,
-      y: 0,
+      x: RESIDENCES.house_poor1.width / 2,
+      y: RESIDENCES.house_poor1.height / 2,
       occupants: 4,
       employed: 1,
       capacity: 10,
@@ -168,10 +182,10 @@ test('uses the vacancy-weighted local wage when less than half the home is emplo
       constructionAppeal: 10,
     },
   ], [
-    { cityId: 'city', type: 'shop_rice', x: 0, y: 0, wage: 20, vacancies: 2 },
-    { cityId: 'city', type: 'shop_rice', x: 50, y: 0, wage: 60, vacancies: 8 },
+    offerAtDistance(5, 20, 2),
+    offerAtDistance(5, 60, 8),
     { cityId: 'city', type: 'shop_rice', x: 200, y: 0, wage: 100, vacancies: 100 },
-    { cityId: 'other-city', type: 'shop_rice', x: 0, y: 0, wage: 200, vacancies: 100 },
+    { ...offerAtDistance(5, 200, 100), cityId: 'other-city' },
   ]);
 
   assert.equal(appeals.get('home')?.employabilityAppeal, 2);
@@ -197,6 +211,50 @@ test('falls back to the home salary when local vacancies do not cover capacity',
   ]).values();
 
   assert.equal(appeal.employabilityAppeal, 0.5);
+});
+
+test('uses local job offers for homes with two or fewer residents', () => {
+  const [appeal] = calculateResidenceAppeals([
+    {
+      id: 'home',
+      cityId: 'city',
+      type: 'house_poor1',
+      x: RESIDENCES.house_poor1.width / 2,
+      y: RESIDENCES.house_poor1.height / 2,
+      occupants: 2,
+      employed: 2,
+      capacity: 10,
+      salaryAverage: 20,
+      cityAverageSalary: 20,
+      constructionAppeal: 10,
+    },
+  ], [offerAtDistance(5, 80, 10)]).values();
+
+  assert.equal(appeal.employabilityAppeal, 4);
+});
+
+test('weights offered wages by vacancies and distance bands through 60 tiles', () => {
+  const [appeal] = calculateResidenceAppeals([
+    {
+      id: 'home',
+      cityId: 'city',
+      type: 'house_poor1',
+      x: RESIDENCES.house_poor1.width / 2,
+      y: RESIDENCES.house_poor1.height / 2,
+      occupants: 3,
+      employed: 0,
+      capacity: 10,
+      salaryAverage: 5,
+      cityAverageSalary: 1,
+      constructionAppeal: 10,
+    },
+  ], [
+    offerAtDistance(10, 10, 4),
+    offerAtDistance(30, 20, 4),
+    offerAtDistance(60, 40, 4),
+  ]).values();
+
+  assert.equal(appeal.employabilityAppeal, 20);
 });
 
 test('moves the calculated percentage and respects destination capacity', () => {

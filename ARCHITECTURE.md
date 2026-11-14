@@ -99,11 +99,12 @@ construção e interno, `benefício erro`, `benefício ideal` e o benefício
 associado usando consumo dos últimos 30 dias, aluguel e salário médio dos
 empregados da residência.
 O salário médio da cidade é ponderado pelo número de empregados. O apreço de
-empregabilidade usa o salário médio da residência quando ao menos metade de seus
-moradores está empregada. Caso contrário, considera as vagas na mesma cidade e
-num raio de 60 tiles: se o total de vagas alcança a capacidade máxima da
-residência, usa o salário médio ofertado ponderado pelo número de vagas; se não,
-usa o salário médio da residência. O apreço da região é a média dos apreços de
+empregabilidade usa o salário médio da residência quando há mais de dois
+moradores e ao menos metade está empregada. Nos demais casos, considera as vagas
+na mesma cidade e num raio de 60 tiles: se o total de vagas alcança a capacidade
+máxima da residência, usa o salário médio ofertado ponderado pelo número de
+vagas e pela distância (peso 2 até 10 tiles, 1,5 acima de 10 até 30 tiles e 1
+acima de 30 até 60 tiles); se não, usa o salário médio da residência. O apreço da região é a média dos apreços de
 empregabilidade das residências concluídas da mesma cidade num raio de 10 tiles,
 incluindo a própria residência. O apreço interno é o maior
 entre 10 e o produto dos apreços da construção e da região. A média diária de cada produto usa a

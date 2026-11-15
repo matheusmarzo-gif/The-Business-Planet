@@ -1,0 +1,517 @@
+TUTORIAL SIMPLES: RODAR VALDORA NO SEU PC COM DOCKER
+====================================================
+
+Este tutorial explica como levar o servidor do jogo do Render para o seu PC,
+publicá-lo com Cloudflare Tunnel e preparar a cópia do PostgreSQL sem perder o
+progresso.
+
+IMPORTANTE: o repositório já tem docker-compose.yml com PostgreSQL e Redis,
+mas ainda não tem Dockerfile nem serviço Node.js no Compose. Além disso, o jogo
+usa Neon Auth para login e consulta a tabela neon_auth."user". Portanto, há duas
+etapas diferentes:
+
+  ETAPA A: executar Node.js e Redis no seu PC, mantendo temporariamente o
+           PostgreSQL e o Neon Auth no Neon. É a forma mais simples de trocar
+           o Render sem mexer nos logins nem arriscar o banco.
+
+  ETAPA B: transferir o banco do Neon para o PostgreSQL do Docker e remover
+           completamente o Neon. Essa etapa exige também mudar a autenticação
+           do código. Não faça apenas a cópia do banco e desligue o Neon:
+           importar tabelas de Neon Auth não transforma o serviço gerenciado
+           em um servidor de autenticação local.
+
+Este tutorial não desliga nem apaga seus serviços. Faça a migração final em
+uma janela de manutenção e mantenha Neon e Render disponíveis para recuperação
+até confirmar que o jogo local funciona.
+
+
+1. ENTENDA O QUE CADA PROGRAMA FAZ
+----------------------------------
+
+GitHub guarda os arquivos do projeto, não o progresso do jogo.
+Node.js executa o servidor do jogo.
+Docker executa os contêineres do servidor, PostgreSQL e Redis.
+PostgreSQL guarda cidades, construções, estradas, carteiras e o relógio do jogo.
+Redis coordena presença e mensagens em tempo real. Ele não é o banco principal.
+Cloudflare Tunnel cria um caminho seguro do seu PC até um endereço público.
+Neon Auth é o login que o código usa hoje. Ele continua no Neon até ser
+substituído por uma autenticação própria e testada.
+
+O caminho público ficará assim:
+
+  Navegador dos jogadores
+          |
+          v
+  Cloudflare (seu domínio)
+          |
+          v
+  cloudflared no seu PC
+          |
+          v
+  servidor Valdora / Node.js (porta interna 3001)
+       |                         |
+       v                         v
+  PostgreSQL                 Redis
+
+Na Etapa A, o PostgreSQL desse desenho ainda é o Neon. O Redis pode ser local.
+Na Etapa B, o PostgreSQL passa para o Docker, depois que a autenticação também
+estiver preparada.
+
+Cloudflare Tunnel não é hospedagem mágica: o seu PC precisa ficar ligado,
+conectado à internet, sem dormir e com o Docker Desktop funcionando. Se o PC
+desligar ou a internet cair, o jogo ficará fora do ar. O Tunnel evita abrir
+portas de entrada no roteador; não torna o PC tão disponível quanto um serviço
+em nuvem.
+
+
+2. FAÇA UMA CÓPIA DE SEGURANÇA ANTES DE MEXER
+--------------------------------------------
+
+2.1. Crie uma pasta de backup fora do repositório. Exemplo:
+
+  C:\ValdoraBackups
+
+Não guarde arquivos .dump dentro da pasta do GitHub. Eles contêm dados do jogo
+e podem conter dados de autenticação.
+
+2.2. Confira a versão do PostgreSQL no Neon. No SQL Editor do Neon, execute:
+
+  SHOW server_version;
+
+Use a mesma versão principal do PostgreSQL no contêiner local. Por exemplo,
+se o Neon indicar 16.x, use postgres:16-alpine; se indicar 17.x, use
+postgres:17-alpine. Não tente restaurar um dump mais novo em um PostgreSQL
+mais antigo.
+
+2.3. Obtenha uma cópia completa do Neon com pg_dump.
+
+No Neon Console, abra Connect e selecione a conexão DIRECT (sem "-pooler" no
+host). A conexão direta é a indicada para pg_dump/pg_restore. Você vai precisar
+do host, usuário, nome do banco e senha. Não publique a senha nem a URL de
+conexão.
+
+Se não tiver pg_dump instalado no Windows, o Docker pode executá-lo. Abra o
+PowerShell e rode o comando abaixo, trocando apenas HOST_DIRETO, USUARIO e
+BANCO pelos valores mostrados no Neon. A senha será solicitada no terminal.
+Troque também o número 16 pela versão principal conferida no passo 2.2.
+
+  $backup = 'C:\ValdoraBackups'
+  New-Item -ItemType Directory -Force $backup | Out-Null
+  docker run --rm -it --mount "type=bind,source=$backup,target=/backup" `
+    -e PGSSLMODE=require postgres:16-alpine `
+    pg_dump -h HOST_DIRETO -p 5432 -U USUARIO -d BANCO `
+    --password --format=custom --no-owner --no-acl `
+    --file=/backup/valdora-neon-completo.dump
+
+Quando aparecer a solicitação Password, digite a senha do banco. O que você
+digita não aparece na tela. Não cole a senha no comando.
+
+O comando acima cria um arquivo completo de backup para guardar e usar em uma
+restauração de teste. Se o Neon recusar a leitura de algum schema gerenciado,
+não ignore o erro nem considere esse arquivo completo. Guarde a mensagem sem
+compartilhar senhas; faça também um backup somente dos dados do jogo, conforme
+o passo seguinte.
+
+2.4. Faça também um arquivo somente do schema public, onde ficam as tabelas do
+jogo. Rode o comando completo abaixo. Reutilize a pasta $backup e os mesmos
+valores de HOST_DIRETO, USUARIO e BANCO do passo anterior; troque 16 se sua
+versão principal do PostgreSQL for diferente:
+
+  docker run --rm -it --mount "type=bind,source=$backup,target=/backup" `
+    -e PGSSLMODE=require postgres:16-alpine `
+    pg_dump -h HOST_DIRETO -p 5432 -U USUARIO -d BANCO `
+    --password --format=custom --no-owner --no-acl `
+    --schema=public --file=/backup/valdora-jogo-public.dump
+
+Esse arquivo preserva as tabelas do jogo, mas NÃO migra o serviço Neon Auth.
+Ele é útil para levar o progresso do jogo ao PostgreSQL local depois que a
+autenticação do código estiver preparada.
+
+2.5. Confira se os arquivos existem e registre seus hashes:
+
+  Get-ChildItem C:\ValdoraBackups
+  Get-FileHash C:\ValdoraBackups\valdora-neon-completo.dump -Algorithm SHA256
+  Get-FileHash C:\ValdoraBackups\valdora-jogo-public.dump -Algorithm SHA256
+
+Guarde uma cópia adicional em outro disco, de preferência criptografada. Não
+envie esses arquivos para o GitHub, Discord ou conversas públicas.
+
+
+3. ATUALIZE O CÓDIGO COM O GITHUB DESKTOP
+-----------------------------------------
+
+1. Abra GitHub Desktop e selecione o repositório
+   matheusmarzo-gif/The-Business-Planet.
+2. Clique em Fetch origin e depois em Pull origin, se aparecer.
+3. Abra a pasta:
+
+   tilescape_projeto_completo_4000x4000_seed583921
+
+4. No VS Code, abra um terminal nessa pasta. Não execute os comandos npm na
+   pasta externa do repositório.
+
+O GitHub traz código e documentação. Ele não baixa nem atualiza o banco de
+dados. Nunca faça commit de .env.local, .env.docker, senhas, tokens Cloudflare
+ou arquivos .dump.
+
+
+4. PRIMEIRO COLOQUE O SERVIDOR NODE NO DOCKER (ETAPA A)
+------------------------------------------------------
+
+Nesta etapa, não use ainda o PostgreSQL local como banco ativo. O jogo continua
+usando o PostgreSQL Neon e o Neon Auth atuais; assim os IDs dos jogadores e os
+logins continuam iguais. O Redis será local.
+
+4.1. Crie um arquivo chamado Dockerfile na pasta do aplicativo, ao lado de
+package.json:
+
+  FROM node:22-bookworm-slim
+  WORKDIR /app
+  COPY package.json package-lock.json ./
+  RUN npm ci
+  COPY . .
+  ARG NEON_AUTH_BASE_URL
+  ENV NEON_AUTH_BASE_URL=$NEON_AUTH_BASE_URL
+  RUN npm run build
+  EXPOSE 3001
+  CMD ["npm", "start"]
+
+Este projeto precisa do pacote tsx para iniciar server/index.ts. Por isso,
+este exemplo mantém também as dependências de desenvolvimento instaladas na
+imagem. Não coloque "npm ci --omit=dev" aqui.
+
+4.2. Crie .dockerignore na mesma pasta:
+
+  node_modules
+  dist
+  .git
+  .env
+  .env.*
+  !.env.example
+  *.dump
+  backups
+
+Isso impede que arquivos locais, backups e segredos sejam copiados para a
+imagem Docker.
+
+4.3. Crie .env.docker na pasta do aplicativo. Gere uma senha local nova e
+aleatória, por exemplo com "[guid]::NewGuid().ToString('N')" no PowerShell.
+Este comando mostra um valor; copie-o para POSTGRES_PASSWORD. Este arquivo é
+privado e não deve ser enviado ao GitHub:
+
+  POSTGRES_PASSWORD=COLOQUE_A_SENHA_LOCAL_AQUI
+  DATABASE_URL=COLE_AQUI_A_URL_DA_APLICACAO_NEON
+  NEON_AUTH_BASE_URL=COLE_AQUI_A_URL_BASE_DO_NEON_AUTH
+  NEON_AUTH_JWKS_URL=COLE_AQUI_A_URL_JWKS_DO_NEON_AUTH
+  MASTER_EMAIL=SEU_EMAIL_DA_CONTA_MASTER
+
+Para DATABASE_URL, use a URL de aplicação do Neon, normalmente a conexão com
+pooler. Para backup use a conexão direta, sem pooler, como explicado no passo 2.
+O URL base do Neon Auth é usado durante a compilação do navegador e no servidor.
+
+Antes de iniciar o Compose, altere no serviço postgres a linha
+POSTGRES_PASSWORD para:
+
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+
+Remova as seções "ports:" atuais dos serviços postgres e redis. O app e o
+cloudflared não precisam de portas públicas para esses serviços; eles continuam
+acessíveis entre contêineres pelo nome do serviço. Se você já iniciou esse
+PostgreSQL e criou um volume, mudar POSTGRES_PASSWORD no arquivo não troca a
+senha gravada no banco; faça a rotação dentro do PostgreSQL ou consulte alguém
+com experiência antes de continuar.
+
+4.4. No docker-compose.yml que já existe, mantenha os serviços postgres e redis
+e acrescente este serviço dentro de "services:":
+
+  game:
+    build:
+      context: .
+      args:
+        NEON_AUTH_BASE_URL: ${NEON_AUTH_BASE_URL}
+    environment:
+      PORT: "3001"
+      DATABASE_URL: ${DATABASE_URL}
+      NEON_AUTH_BASE_URL: ${NEON_AUTH_BASE_URL}
+      NEON_AUTH_JWKS_URL: ${NEON_AUTH_JWKS_URL}
+      MASTER_EMAIL: ${MASTER_EMAIL}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+
+O Compose lê os valores de .env.docker por causa de "--env-file". O serviço
+game recebe somente as variáveis listadas em "environment" e conecta ao banco
+Neon. O nome "redis" é o endereço interno do serviço Redis no Docker. Dentro
+de um contêiner, "localhost" significa o próprio contêiner, não outro serviço.
+
+O Compose atual também tem PostgreSQL, mas ele não será usado pelo jogo nessa
+etapa. Para iniciar somente o jogo e Redis, execute no PowerShell, dentro da
+pasta do aplicativo:
+
+  docker compose --env-file .env.docker up -d --build redis game
+
+Na primeira vez, o Docker pode levar alguns minutos para baixar a imagem e
+compilar o jogo. Confira:
+
+  docker compose ps
+  docker compose logs --tail 100 game
+
+O servidor aplica database/schema.sql na inicialização. Como DATABASE_URL
+ainda aponta para Neon, ele seguirá usando o banco atual. Não execute este
+servidor e o Render ao mesmo tempo contra o banco de produção: os dois podem
+processar o relógio e os ciclos do mundo. Para testes sem risco, use uma cópia
+isolada do banco ou uma branch de teste do Neon; para a troca final, pare o
+Render antes de iniciar o servidor local.
+
+Abra localmente:
+
+  http://localhost:3001
+
+Verifique também:
+
+  http://localhost:3001/api/health
+
+A resposta esperada da rota de saúde é {"status":"ok"}. Faça login, confira o
+mapa, uma cidade, uma construção e uma atualização em tempo real antes de
+publicar o endereço para os jogadores.
+
+
+5. PUBLIQUE O JOGO PELO CLOUDFLARE TUNNEL
+-----------------------------------------
+
+Use Cloudflare Tunnel, não encaminhamento de portas no roteador. O Tunnel é
+uma conexão iniciada pelo seu PC para a Cloudflare; a Cloudflare encaminha o
+tráfego do domínio para o serviço local.
+
+1. Tenha um domínio configurado na sua conta Cloudflare.
+2. No painel Cloudflare, abra Networking > Tunnels e crie um Tunnel.
+3. Escolha Windows e siga o comando de instalação exibido pelo próprio painel.
+   O comando contém um token secreto. Não o publique, não o salve no repositório
+   e não envie captura de tela com o token.
+4. Crie uma rota Published application para um subdomínio seu, por exemplo
+   jogo.seudominio.com.
+5. Para Service URL, use:
+
+   http://localhost:3001
+
+   O serviço game publica a porta 3001 somente no loopback do Windows. O
+   cloudflared instalado no Windows consegue acessar essa porta.
+6. Aguarde o Tunnel aparecer como Healthy e abra o domínio no celular usando a
+   rede móvel, não o Wi-Fi do PC.
+7. Como o login ainda é Neon Auth na Etapa A, adicione o novo domínio HTTPS à
+   lista de domínios confiáveis do Neon Auth. Use o domínio sem barra final,
+   por exemplo https://jogo.seudominio.com.
+
+O jogo usa HTTP, API e WebSocket no mesmo servidor Node, então encaminhe o
+domínio para a porta 3001; não crie uma rota separada para /api ou /ws.
+Cloudflare Tunnel não precisa de portas de entrada abertas no roteador.
+Não encaminhe as portas 5432 (PostgreSQL) ou 6379 (Redis) para a internet.
+
+O domínio publicado é acessível a qualquer pessoa na internet. O jogo exige
+login Neon Auth. Cloudflare Access é uma proteção adicional para aplicativos
+privados, não substitui o login do jogo; não o ative na frente do jogo público
+sem configurar acesso para todos os jogadores e testar login, API e WebSocket.
+
+Para parar e reiniciar o jogo:
+
+  docker compose stop game
+  docker compose --env-file .env.docker up -d game
+
+Para ver os logs:
+
+  docker compose logs -f game
+
+Configure o Docker Desktop para iniciar junto com o Windows e confira que o
+PC não entra em suspensão. O serviço Cloudflare Tunnel e os contêineres também
+precisam iniciar após uma reinicialização.
+
+
+6. TRANSFIRA O BANCO PARA O POSTGRESQL LOCAL (ETAPA B)
+-----------------------------------------------------
+
+Leia esta seção inteira antes de executá-la. A cópia dos dados e a migração do
+login são tarefas diferentes.
+
+6.1. O que será copiado
+
+O banco PostgreSQL guarda o progresso persistente. O Redis não é a fonte de
+verdade de cidades, construções, estradas ou relógio. Ao iniciar um Redis novo,
+a presença e as mensagens em tempo real começam vazias e são reconstruídas
+durante o funcionamento do jogo.
+
+O dump do schema public preserva os dados das tabelas do jogo, como
+city_assemblies, all_buildings, road_tiles, world_state, carteiras, estoques,
+históricos, configurações e índices/triggers do schema.
+
+6.2. Limite obrigatório: autenticação
+
+O código atual usa @neon/auth no navegador, valida tokens pelas URLs
+NEON_AUTH_BASE_URL e NEON_AUTH_JWKS_URL e consulta neon_auth."user" para nomes,
+contas online e permissão Master. A autenticação gerenciada do Neon não é
+substituída por copiar tabelas com pg_dump.
+
+Para retirar Neon completamente, antes é necessário alterar e testar o código
+para usar um servidor de autenticação próprio ou outro provedor. Isso inclui:
+
+  - trocar o cliente @neon/auth no navegador;
+  - trocar a validação de JWT do servidor e configurar emissor/JWKS novos;
+  - substituir as consultas a neon_auth."user" por uma tabela/perfil compatível;
+  - manter a verificação de Master no servidor, nunca só na interface;
+  - testar cadastro, login, logout, sessões, recuperação de senha e WebSocket;
+  - decidir como preservar o ID de cada jogador.
+
+As tabelas de jogo guardam IDs de usuário em campos como created_by e user_id.
+Se o novo provedor gerar outros IDs, será necessário criar um mapa entre IDs
+antigos e novos e atualizá-los em todas as tabelas relacionadas. Não mude esses
+IDs manualmente no banco sem um script de migração revisado.
+
+Não prometa que as senhas, sessões ou logins sociais atuais continuarão iguais
+ao trocar o provedor. Não há uma importação universal documentada que transforme
+o Neon Auth gerenciado em Better Auth auto-hospedado. Planeje uma estratégia
+específica de autenticação com os jogadores antes da troca. Até esse trabalho
+estar pronto, mantenha Neon Auth ativo.
+
+6.3. Restaure primeiro em uma cópia de teste
+
+O docker-compose.yml já contém o serviço postgres. Confira que a versão da
+imagem corresponde à versão principal do banco Neon. Inicie somente o banco:
+
+  docker compose up -d postgres
+  docker compose ps
+
+Crie um banco separado para o ensaio. Assim você não sobrescreve por acidente
+um banco local que já possa existir:
+
+  docker compose exec -T postgres createdb -U valdora valdora_migracao
+
+Copie o dump de jogo para o contêiner:
+
+  docker compose cp C:\ValdoraBackups\valdora-jogo-public.dump postgres:/tmp/valdora-jogo-public.dump
+
+Restaure o arquivo em um banco local recém-criado:
+
+  docker compose exec -T postgres pg_restore --no-owner --no-acl `
+    -U valdora -d valdora_migracao /tmp/valdora-jogo-public.dump
+
+Este comando restaura o schema public, mas não migra o login. Não inicie o
+servidor atual contra esse banco esperando que o Neon Auth funcione: o código
+atual consulta neon_auth."user", que não faz parte do dump public.
+
+Para restaurar o arquivo completo de backup, use o arquivo
+valdora-neon-completo.dump em vez de valdora-jogo-public.dump. Isso pode copiar
+objetos e registros de schemas gerenciados, mas não cria nem mantém o serviço
+Neon Auth no PC e não garante que o login funcione. Use esse restore apenas em
+uma cópia de teste; nunca apague o banco Neon por causa de um restore que apenas
+terminou sem erro.
+
+6.4. Compare os dados antes de mudar o tráfego
+
+No PostgreSQL local, conte cidades, construções e estradas:
+
+  docker compose exec -T postgres psql -U valdora -d valdora_migracao -c "SELECT (SELECT count(*) FROM city_assemblies) AS cities, (SELECT count(*) FROM all_buildings) AS buildings, (SELECT count(*) FROM road_tiles) AS roads;"
+
+Compare com os resultados do Neon. Confira também o relógio mundial, carteiras,
+uma construção de cada tipo importante e um histórico conhecido. Teste os
+índices e as migrations ao iniciar o servidor em uma cópia de teste.
+
+6.5. Corte final, somente depois da autenticação estar pronta
+
+Quando o código e a restauração forem testados:
+
+1. Avise os jogadores e escolha um horário de manutenção.
+2. Pare o Web Service do Render para impedir novas alterações no Neon.
+3. Gere outro dump; este será o backup final com o progresso mais recente.
+4. Restaure-o em um banco Docker vazio e repita as comparações.
+5. Configure DATABASE_URL para apontar ao serviço Docker. Dentro do Compose,
+   o host é "postgres", não "localhost". Um formato local é:
+
+   postgres://valdora:SENHA_LOCAL@postgres:5432/valdora_migracao
+
+   Se a senha tiver caracteres especiais usados em URLs, ela precisa estar
+   codificada para URL. Use uma senha aleatória forte e mantenha-a privada.
+6. Configure REDIS_URL como redis://redis:6379.
+7. Configure as variáveis do novo provedor de login conforme a implementação
+   final. Não reutilize URLs JWKS do Neon para validar tokens de outro provedor.
+8. Suba os serviços e teste login, mapa, leitura e gravação de uma alteração,
+   conexão WebSocket, conta Master, reinício do contêiner e restauração.
+9. Só depois de um período estável considere cancelar Neon e Render. Mantenha
+   backups e recursos antigos até ter certeza de que pode recuperar o estado.
+
+Não deixe Render e o servidor local ativos ao mesmo tempo contra bancos
+diferentes como se ambos fossem o mundo oficial. Isso divide o progresso entre
+duas cópias. Depois do corte, um rollback também precisa levar em conta as
+alterações feitas no banco local desde a troca.
+
+
+7. CUIDADOS PARA NÃO APAGAR O PROGRESSO
+---------------------------------------
+
+- "docker compose down" para os contêineres, mas normalmente preserva volumes.
+- NUNCA use "docker compose down -v" para uma parada normal: "-v" apaga os
+  volumes, inclusive o volume do PostgreSQL.
+- Não remova o volume valdora-postgres no Docker Desktop.
+- Não use "docker system prune --volumes" sem entender cada volume.
+- Faça backups periódicos do PostgreSQL local e guarde cópias fora do PC.
+- O backup do PostgreSQL é mais importante que a persistência do Redis.
+- Não armazene a senha do Neon, a senha local ou o token Cloudflare no GitHub.
+- Não exponha PostgreSQL ou Redis pelo Tunnel, por encaminhamento no roteador,
+  nem por uma porta pública.
+- A configuração docker-compose.yml existente é de desenvolvimento. Antes de
+  usar com dados reais, troque a senha de exemplo por segredo local e remova as
+  publicações de porta desnecessárias. Se precisar acessar uma porta do banco
+  pelo próprio Windows, limite-a ao endereço 127.0.0.1.
+- Docker em um único PC não substitui backup: defeito do disco, roubo,
+  ransomware ou falta de energia podem interromper o serviço. Considere no-break
+  e cópia de segurança criptografada em outro local.
+
+Para fazer uma cópia manual do PostgreSQL local depois do corte, rode no
+PowerShell dentro da pasta do aplicativo:
+
+  $stamp = Get-Date -Format 'yyyyMMdd-HHmm'
+  docker compose exec -T postgres pg_dump -U valdora -d valdora_migracao `
+    --format=custom --no-owner --no-acl --file="/tmp/valdora-$stamp.dump"
+  docker compose cp "postgres:/tmp/valdora-$stamp.dump" `
+    "C:\ValdoraBackups\valdora-$stamp.dump"
+  Get-FileHash "C:\ValdoraBackups\valdora-$stamp.dump" -Algorithm SHA256
+
+Confirme que o arquivo e o hash apareceram. Faça uma restauração de teste
+regularmente. Só depois de confirmar esse procedimento, configure uma tarefa
+agendada no Windows para repeti-lo. Uma cópia no mesmo disco do PC não é backup
+suficiente.
+
+
+8. CHECKLIST FINAL
+------------------
+
+[ ] Tenho um dump completo do Neon e outro do schema public.
+[ ] Verifiquei o tamanho e SHA256 dos arquivos de backup.
+[ ] Não coloquei dump, .env ou token no GitHub.
+[ ] Sei que GitHub guarda código; o progresso está no PostgreSQL.
+[ ] Testei Docker sem desligar o banco original.
+[ ] O servidor responde em /api/health e o login foi testado.
+[ ] Cloudflare Tunnel aparece como Healthy e o endereço abre por rede móvel.
+[ ] Neon Auth continua ativo enquanto o código depender dele.
+[ ] PostgreSQL e Redis não estão expostos à internet.
+[ ] Sei que o PC precisa ficar ligado e não pode suspender.
+[ ] Fiz uma restauração de teste antes da migração final.
+[ ] Não apaguei Neon, Render, volumes Docker ou backups antigos.
+
+
+DOCUMENTAÇÃO OFICIAL
+--------------------
+
+Cloudflare Tunnel — criar e publicar um serviço:
+https://developers.cloudflare.com/tunnel/get-started/
+
+Cloudflare Tunnel — roteamento para aplicações:
+https://developers.cloudflare.com/tunnel/concepts/routing/
+
+Neon — use a conexão direta (sem pooler) para pg_dump/pg_restore:
+https://neon.com/docs/connect/connection-pooling.md
+
+Docker Compose:
+https://docs.docker.com/compose/

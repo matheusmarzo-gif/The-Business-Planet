@@ -3,6 +3,12 @@
 Primeira etapa do jogo de simulação medieval: mapa mundial compartilhado,
 navegável no navegador, relógio contínuo e presença online.
 
+Para um guia passo a passo de execução no Docker, publicação do PC pelo
+Cloudflare Tunnel e migração segura dos dados, consulte
+[TUTORIAL_DOCKER_PC.txt](./TUTORIAL_DOCKER_PC.txt). O guia também explica a
+dependência atual do Neon Auth e por que a troca completa exige uma etapa
+separada de autenticação.
+
 ## Publicar online com GitHub, Render e Neon
 
 Esta opção não exige instalar o Docker Desktop no computador. O GitHub guarda o

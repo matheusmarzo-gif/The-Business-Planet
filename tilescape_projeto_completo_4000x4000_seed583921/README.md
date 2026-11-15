@@ -139,8 +139,13 @@ das últimas 24 horas com mensagens WebSocket por categoria, bytes de payload,
 conexões/reconexões, pico simultâneo observado e horas de conexão. A medição de
 bytes considera o conteúdo UTF-8 das mensagens e não inclui o overhead de
 WebSocket, TLS ou transporte; conexões anteriores à implantação não são
-incluídas. Cada aba conta como um socket e o pico é amostrado a cada 10 segundos.
-Compare os horários UTC do painel com o período selecionado no Render.
+incluídas. O painel também mostra as consultas SQL com maior volume estimado
+por identificador, com o total de chamadas e uma estimativa do tamanho JSON das
+linhas retornadas ao servidor. Essa estimativa não inclui o protocolo PostgreSQL
+nem equivale aos bytes cobrados pelo Neon; os valores dos parâmetros não são
+armazenados. A coleta começa após a implantação. Cada aba conta como um socket
+e o pico é amostrado a cada 10 segundos. Compare os horários UTC do painel com
+o período selecionado no Render e no Neon.
 Cada tipo de construção de um jogador recebe numeração romana individual
 (por exemplo, Loja de Arroz I e Loja de Arroz II). O nome aparece no painel de
 detalhes. A etiqueta sobre a construção mostra o nome do jogador somente para
@@ -1077,3 +1082,10 @@ Os registros são compartilhados entre instâncias pelo Redis e ficam limitados
 aos 100 mais recentes, com expiração após sete dias. A rota é acessível somente
 a usuários autenticados. As medições aparecem quando cada etapa é executada;
 use **Atualizar** no painel para consultar os registros novamente.
+
+O painel também agrega, por hora e por identificador SQL, as chamadas e o
+tamanho estimado em JSON das linhas retornadas ao servidor. A lista destaca as
+25 consultas com maior volume estimado nas últimas 24 horas. O identificador
+usa o formato parametrizado da instrução; valores dos parâmetros não são
+guardados. A estimativa não inclui o protocolo PostgreSQL nem representa
+diretamente o egress faturado pelo Neon.

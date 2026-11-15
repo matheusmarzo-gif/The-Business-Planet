@@ -165,14 +165,15 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/components/CommerceHistoryPanel.tsx` | Histórico diário de despesas, vendas e resultado dos comércios. |
 | `src/components/AccountingPanel.tsx` | Relatórios agregados de lojas comerciais, armazéns, residências, produção e produtos do jogador autenticado. |
 | `src/types/accounting.ts` | Tipos da resposta contábil e estimadores de custo unitário de produção e aquisição. |
-| `src/components/PerformanceLogPanel.tsx` | Exibição das medições recentes das etapas do processamento diário. |
+| `src/components/PerformanceLogPanel.tsx` | Exibição das etapas do processamento, métricas WebSocket e volume estimado de respostas SQL. |
 | `src/types/performanceLog.ts` | Tipos dos registros de desempenho retornados pela API. |
 | `src/components/CityZoneEditor.tsx` | Editor master das regiões urbanas e rurais de uma cidade. |
 | `src/types/map.ts` | Tipos de configuração do mundo, terrenos, tiles e informações de mapa. |
 | `src/utils/worldConfig.ts` | Configuração única do mapa usada pelo cliente e pelo servidor. |
 | `src/utils/mapGenerator.ts`, `src/utils/perlin.ts` | Geração procedural determinística do terreno. |
 | `src/utils/tileAssets.ts` | Catálogo de água/terra usado pelo gerador. |
-| `server/index.ts` | API Express, autenticação de tokens, banco, Redis, relógio e WebSocket. |
+| `server/index.ts` | API Express, autenticação de tokens, banco, Redis, relógio, WebSocket e telemetria de consultas SQL. |
+| `server/database-query-traffic.ts` | Identificadores estáveis de consultas e estimativa em UTF-8 do JSON retornado pelo PostgreSQL. |
 | `database/schema.sql` | DDL aplicado pelo servidor durante a inicialização. |
 | `config/demanda_basica.txt` | Multiplicadores de demanda residencial por produto, carregados na inicialização do servidor. |
 | `config/construcoes/*.txt` | Dados editáveis das 58 construções, um JSON por arquivo. |
@@ -1158,9 +1159,13 @@ online. `src/game/worldClient.ts` valida mensagens e reconecta com atraso
 exponencial limitado; `src/GameApp.tsx` aplica os deltas ao estado local. A URL
 marca conexões aceitas após a primeira como reconexões para a telemetria, sem
 registrar tokens ou IDs de jogadores. O painel **Log** mostra contagens e bytes
-estimados por tipo, conexões simultâneas e horas-socket por hora UTC. Cada aba
-é uma conexão; reconexões registradas são as que completaram a autenticação e
-o handshake. Conexões e tráfego são agregados no Redis entre instâncias.
+estimados por tipo, conexões simultâneas e horas-socket por hora UTC. Também
+agrupa consultas PostgreSQL por identificador derivado do SQL parametrizado,
+mostra frequência e estima o tamanho JSON das linhas retornadas em uma janela
+de 24 horas. A estimativa exclui o protocolo PostgreSQL; valores de parâmetros
+não são armazenados. Cada aba é uma conexão; reconexões registradas são as que
+completaram a autenticação e o handshake. Conexões e tráfego são agregados no
+Redis entre instâncias.
 Depois das 00:30 UTC do relógio do jogo, o líder publica uma sincronização
 completa desse estado para todos os jogadores conectados, permitindo reparar
 estado e reiniciar a sequência de revisões diariamente. `last_full_world_sync_day`

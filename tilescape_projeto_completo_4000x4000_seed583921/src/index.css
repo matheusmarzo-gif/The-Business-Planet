@@ -156,6 +156,7 @@ button { color: inherit; }
 .performance-log-heading strong { display: inline-flex; align-items: center; gap: 5px; color: #ead9a6; font-size: 12px; }
 .performance-log-metrics { margin-top: 8px; color: #a6a897; }
 .performance-log-metrics strong { margin-left: 4px; color: #eee7d6; font-weight: 600; }
+.performance-query-statement { display: block; margin-top: 8px; color: #c8c0ab; font-size: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ranking-panel { width: min(840px, calc(100vw - 32px)); }
 .ranking-panel-title { display: flex; align-items: center; justify-content: space-between; }
 .ranking-heading { display: flex; align-items: center; gap: 12px; }

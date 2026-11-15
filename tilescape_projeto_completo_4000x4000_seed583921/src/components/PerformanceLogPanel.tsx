@@ -1,10 +1,14 @@
 import { Activity, RefreshCw } from 'lucide-react';
-import type { PerformanceLogRecord } from '../types/performanceLog';
+import type {
+  DatabaseQueryTrafficSnapshot,
+  PerformanceLogRecord,
+} from '../types/performanceLog';
 import type { WebSocketTrafficSnapshot } from '../types/websocketTraffic';
 
 interface PerformanceLogPanelProps {
   logs: PerformanceLogRecord[];
   websocketTraffic: WebSocketTrafficSnapshot | null;
+  databaseQueryTraffic: DatabaseQueryTrafficSnapshot | null;
   isLoading: boolean;
   error: string;
   onRefresh: () => void;
@@ -42,6 +46,7 @@ function formatBytes(bytes: number): string {
 export default function PerformanceLogPanel({
   logs,
   websocketTraffic,
+  databaseQueryTraffic,
   isLoading,
   error,
   onRefresh,
@@ -119,6 +124,35 @@ export default function PerformanceLogPanel({
             </article>
           ))}
         </div>
+      </section>
+      <section className="websocket-traffic" aria-label="Tráfego de respostas do banco de dados">
+        <h2>Respostas SQL · últimas {databaseQueryTraffic?.windowHours ?? 24} horas</h2>
+        <p className="warehouse-summary">
+          Estimativa do tamanho JSON das linhas retornadas ao servidor; não inclui protocolo PostgreSQL.
+          Os identificadores representam a consulta parametrizada, sem armazenar valores dos parâmetros.
+          A coleta começa após esta versão entrar em produção.
+        </p>
+        <div className="performance-log-metrics">
+          <span>Chamadas SQL <strong>{integer.format(databaseQueryTraffic?.totalCalls ?? 0)}</strong></span>
+          <span>Resposta estimada <strong>{formatBytes(databaseQueryTraffic?.totalResponseBytes ?? 0)}</strong></span>
+        </div>
+        {!databaseQueryTraffic?.queries.length ? (
+          <p className="warehouse-empty">Ainda não há respostas SQL medidas nesta janela.</p>
+        ) : (
+          <div className="warehouse-list performance-log-list">
+            {databaseQueryTraffic.queries.map((query) => (
+              <article className="performance-log-entry" key={query.id}>
+                <div className="performance-log-heading">
+                  <strong>{query.id}</strong>
+                  <span>{integer.format(query.calls)} chamadas</span>
+                  <span>{formatBytes(query.responseBytes)} recebidos</span>
+                  <span>{formatBytes(query.averageResponseBytes)} por consulta</span>
+                </div>
+                <code className="performance-query-statement">{query.statement}</code>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
       {!isLoading && !error && logs.length === 0 && (
         <p className="warehouse-empty">

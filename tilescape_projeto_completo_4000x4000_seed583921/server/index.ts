@@ -54,6 +54,15 @@ import type {
   WebSocketTrafficHour,
   WebSocketTrafficSnapshot,
 } from '../src/types/websocketTraffic.js';
+import type {
+  DatabaseQueryTrafficEntry,
+  DatabaseQueryTrafficSnapshot,
+} from '../src/types/performanceLog.js';
+import {
+  estimateDatabaseResponseBytes,
+  identifyDatabaseQuery,
+  type DatabaseQueryIdentity,
+} from './database-query-traffic.js';
 import {
   getExpectedConstructionCost,
   getStockCapacity,
@@ -228,6 +237,10 @@ const CONSTRUCTION_MATERIAL_PRODUCT_IDS = ['wood', 'stone', 'iron', 'steel'] as 
 const WEBSOCKET_TRAFFIC_KEY_PREFIX = 'valdora:world:websocket-traffic:';
 const WEBSOCKET_TRAFFIC_TTL_SECONDS = 8 * 24 * 60 * 60;
 const WEBSOCKET_TRAFFIC_WINDOW_HOURS = 24;
+const DATABASE_QUERY_TRAFFIC_KEY_PREFIX = 'valdora:world:database-query-traffic:';
+const DATABASE_QUERY_LABELS_KEY = 'valdora:world:database-query-labels';
+const DATABASE_QUERY_TRAFFIC_TTL_SECONDS = 8 * 24 * 60 * 60;
+const DATABASE_QUERY_TRAFFIC_WINDOW_HOURS = 24;
 const INSTANCE_ID = randomUUID();
 const PRESENCE_TTL_MS = 35_000;
 types.setTypeParser(types.builtins.NUMERIC, (value) => Number(value));
@@ -256,15 +269,82 @@ interface PerformanceLogRecord {
 
 const performanceMetricsContext = new AsyncLocalStorage<PerformanceLogRecord>();
 
+interface PendingDatabaseQueryTraffic {
+  hour: string;
+  queryId: string;
+  statement: string;
+  calls: number;
+  responseBytes: number;
+}
+
+const pendingDatabaseQueryTraffic = new Map<string, PendingDatabaseQueryTraffic>();
+
+function getDatabaseQueryHourKey(timestamp: number): string {
+  return new Date(timestamp).toISOString().slice(0, 13);
+}
+
+function getDatabaseQueryIdentity(argument: unknown): DatabaseQueryIdentity | null {
+  if (typeof argument === 'string') return identifyDatabaseQuery(argument);
+  if (
+    typeof argument === 'object' &&
+    argument !== null &&
+    'text' in argument &&
+    typeof argument.text === 'string'
+  ) {
+    return identifyDatabaseQuery(argument.text);
+  }
+  return null;
+}
+
+function recordDatabaseQueryTraffic(
+  identity: DatabaseQueryIdentity,
+  responseBytes: number,
+  timestamp = Date.now(),
+): void {
+  const hour = getDatabaseQueryHourKey(timestamp);
+  const key = `${hour}:${identity.id}`;
+  const pending = pendingDatabaseQueryTraffic.get(key);
+  if (pending) {
+    pending.calls += 1;
+    pending.responseBytes += responseBytes;
+    return;
+  }
+  pendingDatabaseQueryTraffic.set(key, {
+    hour,
+    queryId: identity.id,
+    statement: identity.statement,
+    calls: 1,
+    responseBytes,
+  });
+}
+
 function trackDatabaseQuery(method: Function, target: object, args: unknown[]): unknown {
   const metrics = performanceMetricsContext.getStore();
-  if (!metrics || args.some((argument) => typeof argument === 'function')) {
+  if (args.some((argument) => typeof argument === 'function')) {
     return Reflect.apply(method, target, args);
   }
-  metrics.queryCount += 1;
+  const identity = getDatabaseQueryIdentity(args[0]);
+  if (!metrics && !identity) return Reflect.apply(method, target, args);
+  if (metrics) metrics.queryCount += 1;
   const startedAt = performance.now();
-  const finish = () => {
-    metrics.databaseMs += performance.now() - startedAt;
+  const finish = (result?: unknown) => {
+    if (metrics) metrics.databaseMs += performance.now() - startedAt;
+    if (identity) {
+      let responseBytes = 0;
+      try {
+        if (
+          typeof result === 'object' &&
+          result !== null &&
+          'rows' in result &&
+          Array.isArray(result.rows)
+        ) {
+          responseBytes = estimateDatabaseResponseBytes(result.rows);
+        }
+      } catch (error) {
+        console.error(`Não foi possível estimar a resposta SQL ${identity.id}:`, error);
+      }
+      recordDatabaseQueryTraffic(identity, responseBytes);
+    }
   };
   try {
     const result = Reflect.apply(method, target, args);
@@ -276,7 +356,7 @@ function trackDatabaseQuery(method: Function, target: object, args: unknown[]): 
     ) {
       return Reflect.apply(Reflect.get(result, 'then'), result, [
         (value: unknown) => {
-          finish();
+          finish(value);
           return value;
         },
         (error: unknown) => {
@@ -285,7 +365,7 @@ function trackDatabaseQuery(method: Function, target: object, args: unknown[]): 
         },
       ]);
     }
-    finish();
+    finish(result);
     return result;
   } catch (error) {
     finish();
@@ -524,6 +604,100 @@ async function getWebSocketTrafficSnapshot(): Promise<WebSocketTrafficSnapshot> 
     }),
   };
 }
+
+async function flushDatabaseQueryTraffic(): Promise<void> {
+  const pending = [...pendingDatabaseQueryTraffic.entries()];
+  if (pending.length === 0) return;
+  pendingDatabaseQueryTraffic.clear();
+
+  const byHour = new Map<string, PendingDatabaseQueryTraffic[]>();
+  for (const [, metric] of pending) {
+    const bucket = byHour.get(metric.hour) ?? [];
+    bucket.push(metric);
+    byHour.set(metric.hour, bucket);
+  }
+
+  try {
+    const transaction = redis.multi();
+    for (const [hour, metrics] of byHour) {
+      const key = `${DATABASE_QUERY_TRAFFIC_KEY_PREFIX}${hour}`;
+      for (const metric of metrics) {
+        transaction
+          .hIncrBy(key, `${metric.queryId}:calls`, metric.calls)
+          .hIncrBy(key, `${metric.queryId}:responseBytes`, metric.responseBytes)
+          .hSet(DATABASE_QUERY_LABELS_KEY, metric.queryId, metric.statement);
+      }
+      transaction.expire(key, DATABASE_QUERY_TRAFFIC_TTL_SECONDS);
+    }
+    transaction.expire(DATABASE_QUERY_LABELS_KEY, DATABASE_QUERY_TRAFFIC_TTL_SECONDS);
+    await transaction.exec();
+  } catch (error) {
+    for (const [key, metric] of pending) {
+      const current = pendingDatabaseQueryTraffic.get(key);
+      if (current) {
+        current.calls += metric.calls;
+        current.responseBytes += metric.responseBytes;
+      } else {
+        pendingDatabaseQueryTraffic.set(key, metric);
+      }
+    }
+    console.error('Não foi possível persistir as métricas de respostas SQL:', error);
+  }
+}
+
+async function getDatabaseQueryTrafficSnapshot(): Promise<DatabaseQueryTrafficSnapshot> {
+  const now = Date.now();
+  const hours = Array.from({ length: DATABASE_QUERY_TRAFFIC_WINDOW_HOURS }, (_, index) => {
+    const timestamp = now - index * 60 * 60 * 1000;
+    return {
+      hour: getDatabaseQueryHourKey(timestamp),
+      key: `${DATABASE_QUERY_TRAFFIC_KEY_PREFIX}${getDatabaseQueryHourKey(timestamp)}`,
+    };
+  }).reverse();
+  const [storedMetrics, labels] = await Promise.all([
+    Promise.all(hours.map(({ key }) => redis.hGetAll(key))),
+    redis.hGetAll(DATABASE_QUERY_LABELS_KEY),
+  ]);
+  const totals = new Map<string, { calls: number; responseBytes: number }>();
+  for (const bucket of storedMetrics) {
+    for (const [field, value] of Object.entries(bucket)) {
+      const separator = field.lastIndexOf(':');
+      if (separator < 0) continue;
+      const queryId = field.slice(0, separator);
+      const counter = field.slice(separator + 1);
+      const total = totals.get(queryId) ?? { calls: 0, responseBytes: 0 };
+      if (counter === 'calls') total.calls += Number(value);
+      if (counter === 'responseBytes') total.responseBytes += Number(value);
+      totals.set(queryId, total);
+    }
+  }
+  const totalCalls = [...totals.values()].reduce((sum, metric) => sum + metric.calls, 0);
+  const totalResponseBytes = [...totals.values()].reduce(
+    (sum, metric) => sum + metric.responseBytes,
+    0,
+  );
+  const queries: DatabaseQueryTrafficEntry[] = [...totals.entries()]
+    .map(([id, metric]) => ({
+      id,
+      statement: labels[id] ?? 'Consulta sem texto disponível',
+      ...metric,
+      averageResponseBytes:
+        metric.calls > 0 ? Math.round(metric.responseBytes / metric.calls) : 0,
+    }))
+    .sort((left, right) => right.responseBytes - left.responseBytes)
+    .slice(0, 25);
+
+  return {
+    windowHours: DATABASE_QUERY_TRAFFIC_WINDOW_HOURS,
+    totalCalls,
+    totalResponseBytes,
+    queries,
+  };
+}
+
+const databaseQueryTrafficTimer = setInterval(() => {
+  void flushDatabaseQueryTraffic();
+}, 10_000);
 
 const websocketTrafficTimer = setInterval(() => {
   const now = Date.now();
@@ -6650,13 +6824,17 @@ async function start() {
       response.status(401).json({ error: 'unauthorized' });
       return;
     }
-    void Promise.all([
-      redis.lRange(PERFORMANCE_LOGS_KEY, 0, PERFORMANCE_LOG_LIMIT - 1),
-      getWebSocketTrafficSnapshot(),
-    ])
-      .then(([entries, websocketTraffic]) => {
+    void flushDatabaseQueryTraffic()
+      .then(() =>
+        Promise.all([
+          redis.lRange(PERFORMANCE_LOGS_KEY, 0, PERFORMANCE_LOG_LIMIT - 1),
+          getWebSocketTrafficSnapshot(),
+          getDatabaseQueryTrafficSnapshot(),
+        ]),
+      )
+      .then(([entries, websocketTraffic, databaseQueryTraffic]) => {
         const logs = entries.map((entry) => JSON.parse(entry) as PerformanceLogRecord);
-        response.json({ logs, websocketTraffic });
+        response.json({ logs, websocketTraffic, databaseQueryTraffic });
       })
       .catch((error: unknown) => {
         console.error('Não foi possível consultar logs e métricas WebSocket:', error);

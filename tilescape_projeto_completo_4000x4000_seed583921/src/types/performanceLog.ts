@@ -19,3 +19,18 @@ export interface PerformanceLogRecord {
   counts: PerformanceEntityCounts;
   status: 'ok' | 'error';
 }
+
+export interface DatabaseQueryTrafficEntry {
+  id: string;
+  statement: string;
+  calls: number;
+  responseBytes: number;
+  averageResponseBytes: number;
+}
+
+export interface DatabaseQueryTrafficSnapshot {
+  windowHours: number;
+  totalCalls: number;
+  totalResponseBytes: number;
+  queries: DatabaseQueryTrafficEntry[];
+}

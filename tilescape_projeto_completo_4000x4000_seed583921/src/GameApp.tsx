@@ -79,7 +79,10 @@ import {
 } from './types/employment';
 import { PRODUCTS } from './types/product';
 import { getWorkerTechnique } from './types/wellbeing';
-import type { PerformanceLogRecord } from './types/performanceLog';
+import type {
+  DatabaseQueryTrafficSnapshot,
+  PerformanceLogRecord,
+} from './types/performanceLog';
 import type { WebSocketTrafficSnapshot } from './types/websocketTraffic';
 import {
   calculateResidenceAppealsFromIncome,
@@ -464,6 +467,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isPerformanceLogLoading, setIsPerformanceLogLoading] = useState(false);
   const [performanceLogError, setPerformanceLogError] = useState('');
   const [performanceLogs, setPerformanceLogs] = useState<PerformanceLogRecord[]>([]);
+  const [databaseQueryTraffic, setDatabaseQueryTraffic] =
+    useState<DatabaseQueryTrafficSnapshot | null>(null);
   const [websocketTraffic, setWebsocketTraffic] = useState<WebSocketTrafficSnapshot | null>(null);
   const [isConsumptionLoading, setIsConsumptionLoading] = useState(false);
   const [consumptionError, setConsumptionError] = useState('');
@@ -901,9 +906,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       const result = await cityRequest<{
         logs: PerformanceLogRecord[];
         websocketTraffic: WebSocketTrafficSnapshot;
+        databaseQueryTraffic: DatabaseQueryTrafficSnapshot;
       }>('/api/performance-logs');
       setPerformanceLogs(result.logs);
       setWebsocketTraffic(result.websocketTraffic);
+      setDatabaseQueryTraffic(result.databaseQueryTraffic);
     } catch (error) {
       setPerformanceLogError(error instanceof Error ? error.message : 'Não foi possível carregar os logs.');
     } finally {
@@ -2381,6 +2388,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           <PerformanceLogPanel
             logs={performanceLogs}
             websocketTraffic={websocketTraffic}
+            databaseQueryTraffic={databaseQueryTraffic}
             isLoading={isPerformanceLogLoading}
             error={performanceLogError}
             onRefresh={() => void loadPerformanceLogs()}

@@ -135,9 +135,10 @@ Para verificar a conexão com PostgreSQL e Redis, abra
 `{"status":"ok"}`. O mapa e o WebSocket `/ws` exigem uma sessão Neon Auth
 válida; as rotas do mundo verificam os tokens no servidor.
 O painel **Log** apresenta também, a partir da versão implantada, uma janela
-das últimas 24 horas com mensagens WebSocket por categoria, bytes de payload,
-conexões/reconexões, pico simultâneo observado e horas de conexão. A medição de
-bytes considera o conteúdo UTF-8 das mensagens e não inclui o overhead de
+das últimas 24 horas com mensagens WebSocket por categoria (incluindo
+sincronizações de estradas), bytes de payload, conexões/reconexões, pico
+simultâneo observado e horas de conexão. A medição de bytes considera o
+conteúdo UTF-8 das mensagens e não inclui o overhead de
 WebSocket, TLS ou transporte; conexões anteriores à implantação não são
 incluídas. O painel também mostra as consultas SQL com maior volume estimado
 por identificador, com o total de chamadas e uma estimativa do tamanho JSON das
@@ -156,12 +157,16 @@ mapa na construção e abre seus detalhes.
 Cada push para a branch conectada ao Render pode iniciar uma nova publicação.
 O relógio global e sua persistência ficam no PostgreSQL; o Redis gerencia a
 presença e a distribuição das atualizações em tempo real. Ao conectar, cada
-jogador recebe o estado completo de cidades, estradas e construções. Depois,
-clientes atualizados recebem apenas as entidades alteradas ou removidas; se
-uma atualização ficar fora de sequência, a conexão é refeita para baixar o
-estado completo. O servidor também envia uma sincronização completa diária
-após 00:30 no relógio do jogo, sem recarregar a página. Clientes antigos seguem
-recebendo atualizações completas até serem atualizados.
+jogador recebe cidades e construções; as estradas são carregadas apenas para a
+cidade indicada pelo centro da câmera. A primeira visita carrega essa cidade
+completa. Ao sair e voltar, o cliente recebe somente as alterações acumuladas,
+incluindo demolições; enquanto a cidade está em exibição, recebe apenas os
+tiles modificados nela. As estradas de outras cidades já visitadas permanecem
+no estado local. Essa revisão é mantida durante a sessão do navegador; após
+recarregar a página, a cidade inicial é baixada novamente. A sincronização
+completa diária continua atualizando cidades e construções sem recarregar a
+página. Clientes antigos, ainda sem sincronização por cidade, recebem snapshots
+compatíveis até recarregarem a versão atualizada.
 
 As imagens do jogo são entregues no formato JPEG XL (`.jxl`) para reduzir a
 transferência. Use um navegador com suporte a JPEG XL; em navegadores sem esse
@@ -333,8 +338,9 @@ a cada faixa adicional de 100 estradas. O servidor calcula e debita o custo na
 mesma transação da construção, considerando somente tiles novos. A conta Master
 constrói gratuitamente. Estradas se conectam normalmente mesmo quando os tiles
 adjacentes pertencem a jogadores diferentes. Os traçados são salvos e
-sincronizados com o mundo. As junções em T e cruzamentos de quatro vias também
-se ajustam às conexões vizinhas. O traçado aparece
+sincronizados por cidade: jogadores que a visualizam recebem as alterações, e
+os demais as recebem ao entrar nela. As junções em T e cruzamentos de quatro
+vias também se ajustam às conexões vizinhas. O traçado aparece
 imediatamente enquanto o servidor salva e some com uma mensagem caso a
 operação seja rejeitada. Cada tile pode ser demolido individualmente e sua
 remoção é sincronizada com os demais jogadores.

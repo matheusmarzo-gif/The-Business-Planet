@@ -729,3 +729,24 @@ CREATE TABLE IF NOT EXISTS road_tiles (
 
 CREATE INDEX IF NOT EXISTS road_tiles_city_id_idx ON road_tiles (city_id);
 CREATE INDEX IF NOT EXISTS road_tiles_created_by_idx ON road_tiles (created_by);
+
+CREATE TABLE IF NOT EXISTS road_city_revisions (
+  city_id UUID PRIMARY KEY REFERENCES city_assemblies (id) ON DELETE CASCADE,
+  revision BIGINT NOT NULL DEFAULT 0 CHECK (revision >= 0)
+);
+
+INSERT INTO road_city_revisions (city_id, revision)
+SELECT id, 0 FROM city_assemblies
+ON CONFLICT (city_id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS road_tile_changes (
+  city_id UUID NOT NULL REFERENCES city_assemblies (id) ON DELETE CASCADE,
+  revision BIGINT NOT NULL CHECK (revision > 0),
+  tile_x INTEGER NOT NULL CHECK (tile_x BETWEEN 0 AND 3999),
+  tile_y INTEGER NOT NULL CHECK (tile_y BETWEEN 0 AND 3999),
+  operation TEXT NOT NULL CHECK (operation IN ('upsert', 'remove')),
+  PRIMARY KEY (city_id, revision, tile_x, tile_y)
+);
+
+CREATE INDEX IF NOT EXISTS road_tile_changes_city_revision_idx
+  ON road_tile_changes (city_id, revision DESC);

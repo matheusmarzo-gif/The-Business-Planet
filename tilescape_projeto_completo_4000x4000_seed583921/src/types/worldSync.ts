@@ -21,6 +21,30 @@ export interface WorldDelta<Building extends { id: string }> {
   buildings?: EntityDelta<Building, string>;
 }
 
+export interface RoadViewPosition extends RoadPosition {
+  cityId: string;
+}
+
+export type CityRoadUpdate =
+  | {
+      type: 'city_roads';
+      cityId: string;
+      revision: number;
+      sync: boolean;
+      full: true;
+      roads: RoadTile[];
+    }
+  | {
+      type: 'city_roads';
+      cityId: string;
+      revision: number;
+      sync: boolean;
+      baseRevision: number;
+      full: false;
+      upsert: RoadTile[];
+      removed: RoadPosition[];
+    };
+
 export function createEntityDelta<Entity, RemovedKey>(
   previous: readonly Entity[],
   current: readonly Entity[],

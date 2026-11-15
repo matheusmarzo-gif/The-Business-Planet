@@ -56,6 +56,23 @@ export interface CityAssembly {
   zones: CityZone[];
 }
 
+export function getCityAtPosition(
+  cities: Pick<CityAssembly, 'id' | 'centerX' | 'centerY'>[],
+  position: { x: number; y: number },
+): Pick<CityAssembly, 'id' | 'centerX' | 'centerY'> | null {
+  let selected: Pick<CityAssembly, 'id' | 'centerX' | 'centerY'> | null = null;
+  for (const city of cities) {
+    if (
+      Math.abs(city.centerX - position.x) <= MUNICIPAL_AREA_RADIUS &&
+      Math.abs(city.centerY - position.y) <= MUNICIPAL_AREA_RADIUS &&
+      (selected === null || city.id.localeCompare(selected.id) < 0)
+    ) {
+      selected = city;
+    }
+  }
+  return selected;
+}
+
 export function isValidCityWellbeing(value: unknown): value is number {
   return (
     typeof value === 'number' &&

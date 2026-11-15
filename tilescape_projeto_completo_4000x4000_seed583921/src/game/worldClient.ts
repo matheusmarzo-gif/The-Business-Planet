@@ -4,7 +4,12 @@ import type { CityZone } from '../types/city';
 import type { RoadTile } from '../types/road';
 import { getResidenceDefinition, type ResidentialBuilding } from '../types/residence';
 import { isCurrencyAmount } from '../types/currency';
-import type { EntityDelta, WorldDelta } from '../types/worldSync';
+import type {
+  CityRoadUpdate,
+  EntityDelta,
+  RoadViewPosition,
+  WorldDelta,
+} from '../types/worldSync';
 
 export interface WorldSnapshot {
   worldTime: string;
@@ -63,6 +68,42 @@ function isRoadTile(value: unknown): value is RoadTile {
     Number.isInteger(road.x) &&
     Number.isInteger(road.y) &&
     typeof road.cityId === 'string'
+  );
+}
+
+function isRoadPosition(value: unknown): value is { x: number; y: number } {
+  if (typeof value !== 'object' || value === null) return false;
+  const position = value as Record<string, unknown>;
+  return Number.isInteger(position.x) && Number.isInteger(position.y);
+}
+
+function isCityRoadUpdate(value: unknown): value is CityRoadUpdate {
+  if (typeof value !== 'object' || value === null) return false;
+  const update = value as Record<string, unknown>;
+  if (
+    update.type !== 'city_roads' ||
+    typeof update.cityId !== 'string' ||
+    typeof update.sync !== 'boolean' ||
+    !Number.isSafeInteger(update.revision) ||
+    Number(update.revision) < 0
+  ) {
+    return false;
+  }
+  if (update.full === true) {
+    return (
+      Array.isArray(update.roads) &&
+      update.roads.every((road) => isRoadTile(road) && road.cityId === update.cityId)
+    );
+  }
+  return (
+    update.full === false &&
+    Number.isSafeInteger(update.baseRevision) &&
+    Number(update.baseRevision) >= 0 &&
+    Number(update.baseRevision) <= Number(update.revision) &&
+    Array.isArray(update.upsert) &&
+    update.upsert.every((road) => isRoadTile(road) && road.cityId === update.cityId) &&
+    Array.isArray(update.removed) &&
+    update.removed.every(isRoadPosition)
   );
 }
 
@@ -179,13 +220,88 @@ export function connectToWorld(
   onRoadsChange: (roads: RoadTile[]) => void,
   onResidentialBuildingsChange: (buildings: ResidentialBuilding[]) => void,
   onWorldDelta: (delta: WorldDelta<ResidentialBuilding>) => void,
-): () => void {
+  onCityRoadsChange: (update: CityRoadUpdate) => void,
+): { setRoadView: (position: RoadViewPosition | null) => void; close: () => void } {
   let socket: WebSocket | null = null;
   let reconnectTimer: number | undefined;
   let stopped = false;
   let retryDelay = 1000;
   let hasConnected = false;
   let worldRevision: number | null = null;
+  let roadView: RoadViewPosition | null = null;
+  let roadViewRequestId = 0;
+  const roadRevisions = new Map<string, number>();
+  const pendingRoadUpdates = new Map<string, CityRoadUpdate[]>();
+  const roadResyncRequested = new Set<string>();
+
+  const transmitRoadView = (position: RoadViewPosition | null) => {
+    if (!position || socket?.readyState !== WebSocket.OPEN) return;
+    socket.send(
+      JSON.stringify({
+        type: 'road_view',
+        requestId: ++roadViewRequestId,
+        position,
+        sinceRevision: roadRevisions.get(position.cityId) ?? null,
+      }),
+    );
+  };
+
+  const requestRoadResync = (cityId: string) => {
+    if (roadResyncRequested.has(cityId) || roadView?.cityId !== cityId) return;
+    roadResyncRequested.add(cityId);
+    transmitRoadView(roadView);
+  };
+
+  const applyRoadUpdate = (update: CityRoadUpdate) => {
+    if (update.full) {
+      const currentRevision = roadRevisions.get(update.cityId);
+      if (currentRevision !== undefined && currentRevision > update.revision) return;
+      onCityRoadsChange(update);
+      roadRevisions.set(update.cityId, update.revision);
+      roadResyncRequested.delete(update.cityId);
+      return;
+    }
+
+    const currentRevision = roadRevisions.get(update.cityId);
+    if (currentRevision === undefined) {
+      const pending = pendingRoadUpdates.get(update.cityId) ?? [];
+      if (!pending.some((candidate) => candidate.revision === update.revision)) {
+        pending.push(update);
+        pendingRoadUpdates.set(update.cityId, pending);
+      }
+      return;
+    }
+    if (update.revision <= currentRevision) return;
+    if (currentRevision < update.baseRevision) {
+      const pending = pendingRoadUpdates.get(update.cityId) ?? [];
+      if (!pending.some((candidate) => candidate.revision === update.revision)) {
+        pending.push(update);
+        pendingRoadUpdates.set(update.cityId, pending);
+      }
+      requestRoadResync(update.cityId);
+      return;
+    }
+    onCityRoadsChange(update);
+    roadRevisions.set(update.cityId, update.revision);
+  };
+
+  const flushPendingRoadUpdates = (cityId: string) => {
+    const pending = pendingRoadUpdates.get(cityId);
+    if (!pending || pending.length === 0) return;
+    pending.sort((first, second) => first.revision - second.revision);
+    for (const update of pending) {
+      if (update.revision > (roadRevisions.get(cityId) ?? -1)) {
+        applyRoadUpdate(update);
+      }
+    }
+    const currentRevision = roadRevisions.get(cityId);
+    if (currentRevision !== undefined) {
+      pendingRoadUpdates.set(
+        cityId,
+        pending.filter((update) => update.revision > currentRevision),
+      );
+    }
+  };
 
   const scheduleReconnect = () => {
     if (stopped) return;
@@ -207,6 +323,7 @@ export function connectToWorld(
       url.searchParams.set('token', token);
       url.searchParams.set('reconnect', hasConnected ? '1' : '0');
       url.searchParams.set('worldUpdates', 'delta-v1');
+      url.searchParams.set('roadSync', 'city-v1');
       socket = new WebSocket(url);
     } catch (error) {
       console.error('Não foi possível autenticar a conexão com o mundo:', error);
@@ -219,10 +336,33 @@ export function connectToWorld(
       hasConnected = true;
       retryDelay = 1000;
       onConnectionChange(true);
+      transmitRoadView(roadView);
     });
     socket.addEventListener('message', (event) => {
       try {
         const message: unknown = JSON.parse(String(event.data));
+        if (typeof message === 'object' && message !== null && 'type' in message) {
+          if (message.type === 'city_roads') {
+            if (!isCityRoadUpdate(message)) {
+              console.error('O servidor enviou uma sincronização de estradas inválida.');
+              return;
+            }
+            if (message.cityId !== roadView?.cityId) return;
+            if (message.sync) roadResyncRequested.delete(message.cityId);
+            applyRoadUpdate(message);
+            flushPendingRoadUpdates(message.cityId);
+            return;
+          }
+          if (message.type === 'road_sync_error') {
+            console.error(
+              'Não foi possível sincronizar as estradas:',
+              'message' in message && typeof message.message === 'string'
+                ? message.message
+                : 'erro desconhecido',
+            );
+            return;
+          }
+        }
         if (typeof message === 'object' && message !== null && 'type' in message &&
           message.type === 'world_delta') {
           if (!isWorldDelta(message)) {
@@ -246,9 +386,8 @@ export function connectToWorld(
           'cities' in message &&
           Array.isArray(message.cities) &&
           message.cities.every(isCityAssembly) &&
-          'roads' in message &&
-          Array.isArray(message.roads) &&
-          message.roads.every(isRoadTile) &&
+          (!('roads' in message) ||
+            (Array.isArray(message.roads) && message.roads.every(isRoadTile))) &&
           (!('buildings' in message) ||
             (Array.isArray(message.buildings) && message.buildings.every(isResidentialBuilding)))
         ) {
@@ -265,7 +404,9 @@ export function connectToWorld(
               zones: city.zones ?? [],
             })),
           );
-          onRoadsChange(message.roads);
+          if ('roads' in message && Array.isArray(message.roads)) {
+            onRoadsChange(message.roads);
+          }
           onResidentialBuildingsChange(
             'buildings' in message && Array.isArray(message.buildings)
               ? message.buildings
@@ -297,9 +438,32 @@ export function connectToWorld(
 
   void connect();
 
-  return () => {
-    stopped = true;
-    window.clearTimeout(reconnectTimer);
-    socket?.close();
+  return {
+    setRoadView: (position) => {
+      const previousCityId = roadView?.cityId ?? null;
+      const nextCityId = position?.cityId ?? null;
+      roadView = position;
+      if (previousCityId === nextCityId) return;
+      if (previousCityId !== null) {
+        pendingRoadUpdates.delete(previousCityId);
+        roadResyncRequested.delete(previousCityId);
+      }
+      if (position) transmitRoadView(position);
+      else if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(
+          JSON.stringify({
+            type: 'road_view',
+            requestId: ++roadViewRequestId,
+            position: null,
+            sinceRevision: null,
+          }),
+        );
+      }
+    },
+    close: () => {
+      stopped = true;
+      window.clearTimeout(reconnectTimer);
+      socket?.close();
+    },
   };
 }

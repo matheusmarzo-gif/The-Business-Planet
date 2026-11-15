@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   calculateCityEconomy,
+  getCityAtPosition,
   getCityZonePlacementError,
   getRequiredCityZone,
   isValidCityWellbeing,
@@ -44,6 +45,7 @@ import {
   toRomanNumeral,
 } from './residence';
 import {
+  createRoadTileDeltaSince,
   getNextRoadTileCost,
   getRoadConstructionCost,
   getRoadPlacementError,
@@ -101,6 +103,59 @@ import { getDairyFarmEfficiency } from './dairy';
 import { GOODS_BASKET_PRODUCT_IDS, parseBasicDemandConfig } from './commerceDemand';
 
 const city = { centerX: 1000, centerY: 1000 };
+
+describe('city road synchronization', () => {
+  it('selects only the municipal area containing the viewpoint', () => {
+    const cities = [
+      { id: 'city-b', centerX: 1000, centerY: 1000 },
+      { id: 'city-a', centerX: 300, centerY: 300 },
+    ];
+
+    assert.equal(getCityAtPosition(cities, { x: 300, y: 300 })?.id, 'city-a');
+    assert.equal(getCityAtPosition(cities, { x: 1000, y: 1000 })?.id, 'city-b');
+    assert.equal(getCityAtPosition(cities, { x: 700, y: 700 }), null);
+  });
+
+  it('folds missed road changes to the latest state of each tile', () => {
+    const delta = createRoadTileDeltaSince(
+      'city-a',
+      [
+        { revision: 2, x: 10, y: 11, operation: 'upsert' },
+        { revision: 3, x: 10, y: 11, operation: 'remove' },
+        { revision: 3, x: 12, y: 13, operation: 'upsert' },
+        { revision: 4, x: 10, y: 11, operation: 'upsert' },
+        { revision: 1, x: 20, y: 21, operation: 'remove' },
+      ],
+      1,
+      4,
+    );
+
+    assert.deepEqual(delta, {
+      upsert: [
+        { x: 10, y: 11, cityId: 'city-a' },
+        { x: 12, y: 13, cityId: 'city-a' },
+      ],
+      removed: [],
+    });
+  });
+
+  it('keeps removals and ignores changes outside the requested revision window', () => {
+    const delta = createRoadTileDeltaSince(
+      'city-a',
+      [
+        { revision: 2, x: 10, y: 11, operation: 'remove' },
+        { revision: 5, x: 12, y: 13, operation: 'upsert' },
+      ],
+      1,
+      3,
+    );
+
+    assert.deepEqual(delta, {
+      upsert: [],
+      removed: [{ x: 10, y: 11 }],
+    });
+  });
+});
 
 describe('city economy', () => {
   it('compares monthly residential spending with the monthly wage mass and floors the result', () => {

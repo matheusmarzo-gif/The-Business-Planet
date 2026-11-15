@@ -18,6 +18,7 @@ import {
   type CityZoneType,
   type CityPlacementError,
   calculateCityEconomy,
+  getCityAtPosition,
   getCityZonePlacementError,
   getCityPlacementError,
   parseCityMinimumWage,
@@ -25,13 +26,16 @@ import {
   MUNICIPAL_AREA_RADIUS,
 } from '../src/types/city.js';
 import {
+  createRoadTileDeltaSince,
   getRoadConstructionCost,
   getRoadPlacementError,
   MAX_ROAD_PATH_TILES,
   type RoadPlacementError,
   type RoadPosition,
   type RoadTile,
+  type RoadTileRevisionChange,
 } from '../src/types/road.js';
+import type { CityRoadUpdate, RoadViewPosition } from '../src/types/worldSync.js';
 import {
   getResidenceDefinition,
   getResidencePlacementError,
@@ -201,6 +205,7 @@ loadDotEnv({
 const PORT = Number(process.env.PORT ?? 3001);
 const websocketUsers = new WeakMap<object, string>();
 const websocketWorldDeltaSupport = new WeakMap<WebSocket, boolean>();
+const websocketCityRoadSyncSupport = new WeakMap<WebSocket, boolean>();
 const MAP = {
   width: WORLD_CONFIG.width,
   height: WORLD_CONFIG.height,
@@ -225,6 +230,7 @@ const CLOCK_LEADER_KEY = 'valdora:clock:leader';
 const PRESENCE_KEY = 'valdora:presence';
 const SNAPSHOT_CHANNEL = 'valdora:world:snapshots';
 const CITIES_CHANNEL = 'valdora:world:cities';
+const ROAD_CHANGES_CHANNEL = 'valdora:world:road-changes';
 const WORLD_SYNC_STATE_KEY = 'valdora:world:sync-state';
 const WORLD_SYNC_LOCK_KEY = 'valdora:world:sync-lock';
 const WORLD_SYNC_LOCK_LEASE_SECONDS = 60;
@@ -418,6 +424,8 @@ const clients = new Set<WebSocket>();
 const websocketReconnects = new WeakMap<WebSocket, boolean>();
 const websocketWorldInitialized = new WeakMap<WebSocket, boolean>();
 const websocketTrafficLastAccountedAt = new WeakMap<WebSocket, number>();
+const websocketRoadCity = new WeakMap<WebSocket, string>();
+const websocketRoadViewRequestId = new WeakMap<WebSocket, number>();
 type WebSocketTrafficCounter =
   | 'connections'
   | 'reconnections'
@@ -426,6 +434,8 @@ type WebSocketTrafficCounter =
   | 'snapshotPayloadBytes'
   | 'worldUpdateMessages'
   | 'worldUpdatePayloadBytes'
+  | 'cityRoadUpdateMessages'
+  | 'cityRoadUpdatePayloadBytes'
   | 'commerceDiagnosticsMessages'
   | 'commerceDiagnosticsPayloadBytes';
 interface PendingWebSocketTraffic {
@@ -461,13 +471,14 @@ function recordWebSocketTrafficCounter(
 }
 
 function recordWebSocketMessage(
-  messageType: 'snapshot' | 'worldUpdate' | 'commerceDiagnostics',
+  messageType: 'snapshot' | 'worldUpdate' | 'cityRoadUpdate' | 'commerceDiagnostics',
   payload: string,
 ): void {
   const bytes = Buffer.byteLength(payload, 'utf8');
   const fields = {
     snapshot: ['snapshotMessages', 'snapshotPayloadBytes'],
     worldUpdate: ['worldUpdateMessages', 'worldUpdatePayloadBytes'],
+    cityRoadUpdate: ['cityRoadUpdateMessages', 'cityRoadUpdatePayloadBytes'],
     commerceDiagnostics: ['commerceDiagnosticsMessages', 'commerceDiagnosticsPayloadBytes'],
   } as const;
   const [messageCounter, byteCounter] = fields[messageType];
@@ -595,6 +606,10 @@ async function getWebSocketTrafficSnapshot(): Promise<WebSocketTrafficSnapshot> 
         worldUpdates: {
           messages: Number(metrics.worldUpdateMessages ?? 0),
           payloadBytes: Number(metrics.worldUpdatePayloadBytes ?? 0),
+        },
+        cityRoadUpdates: {
+          messages: Number(metrics.cityRoadUpdateMessages ?? 0),
+          payloadBytes: Number(metrics.cityRoadUpdatePayloadBytes ?? 0),
         },
         commerceDiagnostics: {
           messages: Number(metrics.commerceDiagnosticsMessages ?? 0),
@@ -1308,7 +1323,7 @@ type FullWorldUpdate = {
   type: 'cities';
   revision?: number;
   cities: CityAssembly[];
-  roads: RoadTile[];
+  roads?: RoadTile[];
   buildings: WorldResidentialBuilding[];
 };
 type WorldPublication = {
@@ -1365,8 +1380,8 @@ function isFullWorldUpdate(value: unknown): value is FullWorldUpdate {
     value.type === 'cities' &&
     'cities' in value &&
     Array.isArray(value.cities) &&
-    'roads' in value &&
-    Array.isArray(value.roads) &&
+    (!('roads' in value) ||
+      (Array.isArray(value.roads) && value.roads.every(isRoadTile))) &&
     'buildings' in value &&
     Array.isArray(value.buildings) &&
     value.buildings.every(
@@ -1379,7 +1394,80 @@ function isFullWorldUpdate(value: unknown): value is FullWorldUpdate {
   );
 }
 
-function deliverCities(message: string) {
+type RoadViewRequest = {
+  type: 'road_view';
+  requestId: number;
+  position: RoadViewPosition | null;
+  sinceRevision: number | null;
+};
+
+function isRoadViewRequest(value: unknown): value is RoadViewRequest {
+  if (typeof value !== 'object' || value === null) return false;
+  const request = value as Record<string, unknown>;
+  if (
+    request.type !== 'road_view' ||
+    !Number.isSafeInteger(request.requestId) ||
+    Number(request.requestId) < 1 ||
+    (request.sinceRevision !== null &&
+      (!Number.isSafeInteger(request.sinceRevision) || Number(request.sinceRevision) < 0))
+  ) {
+    return false;
+  }
+  if (request.position === null) return true;
+  if (typeof request.position !== 'object' || request.position === null) return false;
+  const position = request.position as Record<string, unknown>;
+  return (
+    typeof position.cityId === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      position.cityId,
+    ) &&
+    Number.isInteger(position.x) &&
+    Number(position.x) >= 0 &&
+    Number(position.x) < MAP.width &&
+    Number.isInteger(position.y) &&
+    Number(position.y) >= 0 &&
+    Number(position.y) < MAP.height
+  );
+}
+
+function isCityRoadUpdate(value: unknown): value is CityRoadUpdate {
+  if (typeof value !== 'object' || value === null) return false;
+  const update = value as Record<string, unknown>;
+  if (
+    update.type !== 'city_roads' ||
+    typeof update.cityId !== 'string' ||
+    typeof update.sync !== 'boolean' ||
+    !Number.isSafeInteger(update.revision) ||
+    Number(update.revision) < 0
+  ) {
+    return false;
+  }
+  if (update.full === true) {
+    return Array.isArray(update.roads) && update.roads.every(
+      (road) => isRoadTile(road) && road.cityId === update.cityId,
+    );
+  }
+  return (
+    update.full === false &&
+    Number.isSafeInteger(update.baseRevision) &&
+    Number(update.baseRevision) >= 0 &&
+    Number(update.baseRevision) <= Number(update.revision) &&
+    Array.isArray(update.upsert) &&
+    update.upsert.every((road) => isRoadTile(road) && road.cityId === update.cityId) &&
+    Array.isArray(update.removed) &&
+    update.removed.every(
+      (position) =>
+        typeof position === 'object' &&
+        position !== null &&
+        'x' in position &&
+        Number.isInteger(position.x) &&
+        'y' in position &&
+        Number.isInteger(position.y),
+    )
+  );
+}
+
+async function deliverCities(message: string): Promise<void> {
   let update: unknown;
   try {
     update = JSON.parse(message);
@@ -1410,6 +1498,18 @@ function deliverCities(message: string) {
     }
 
     const publication = update as WorldPublication;
+    const needsLegacyRoads = [...clients].some(
+      (client) =>
+        client.readyState === WebSocket.OPEN &&
+        !websocketCityRoadSyncSupport.get(client) &&
+        !(
+          websocketWorldDeltaSupport.get(client) &&
+          websocketWorldInitialized.get(client) &&
+          publication.delta
+        ) &&
+        publication.full.roads === undefined,
+    );
+    const legacyRoads = needsLegacyRoads ? await getAllRoadTiles() : undefined;
     for (const client of clients) {
       if (client.readyState !== WebSocket.OPEN) continue;
       const sendDelta = Boolean(
@@ -1420,10 +1520,16 @@ function deliverCities(message: string) {
       const payload = JSON.stringify(
         sendDelta && publication.delta
           ? createPlayerWorldDelta(publication.delta, websocketUsers.get(client))
-          : createPlayerWorldUpdate(publication.full, websocketUsers.get(client)),
+          : createPlayerWorldUpdate(
+              !websocketCityRoadSyncSupport.get(client) &&
+                publication.full.roads === undefined
+                ? { ...publication.full, roads: legacyRoads ?? [] }
+                : publication.full,
+              websocketUsers.get(client),
+            ),
       );
       client.send(payload);
-      recordWebSocketMessage('worldUpdate', payload);
+      recordWebSocketMessage('cityRoadUpdate', payload);
       if (!sendDelta) websocketWorldInitialized.set(client, true);
     }
     return;
@@ -1434,15 +1540,85 @@ function deliverCities(message: string) {
     return;
   }
 
+  const legacyRoads = [...clients].some(
+    (client) =>
+      client.readyState === WebSocket.OPEN &&
+      !websocketCityRoadSyncSupport.get(client) &&
+      update.roads === undefined,
+  )
+    ? await getAllRoadTiles()
+    : undefined;
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN) {
       const payload = JSON.stringify(
-        createPlayerWorldUpdate(update, websocketUsers.get(client)),
+        createPlayerWorldUpdate(
+          !websocketCityRoadSyncSupport.get(client) && update.roads === undefined
+            ? { ...update, roads: legacyRoads ?? [] }
+            : update,
+          websocketUsers.get(client),
+        ),
       );
       client.send(payload);
       recordWebSocketMessage('worldUpdate', payload);
       websocketWorldInitialized.set(client, false);
     }
+  }
+}
+
+async function deliverRoadChanges(message: string): Promise<void> {
+  let update: unknown;
+  try {
+    update = JSON.parse(message);
+  } catch (error) {
+    console.error('Não foi possível interpretar as mudanças de estradas do Redis:', error);
+    return;
+  }
+  if (!isCityRoadUpdate(update) || update.full) {
+    console.error('O Redis publicou uma mudança de estradas inválida.');
+    return;
+  }
+
+  const payload = JSON.stringify(update);
+  for (const client of clients) {
+    if (
+      client.readyState === WebSocket.OPEN &&
+      websocketCityRoadSyncSupport.get(client) &&
+      websocketRoadCity.get(client) === update.cityId
+    ) {
+      client.send(payload);
+      recordWebSocketMessage('worldUpdate', payload);
+    }
+  }
+
+  const legacyClients = [...clients].filter(
+    (client) =>
+      client.readyState === WebSocket.OPEN &&
+      !websocketCityRoadSyncSupport.get(client),
+  );
+  if (legacyClients.length === 0) return;
+
+  const [world, roads, cachedState] = await Promise.all([
+    getWorldEntities(),
+    getAllRoadTiles(),
+    redis.get(WORLD_SYNC_STATE_KEY),
+  ]);
+  let revision = 0;
+  if (cachedState !== null) {
+    try {
+      const parsed: unknown = JSON.parse(cachedState);
+      if (isWorldSyncState(parsed)) revision = parsed.revision;
+    } catch (error) {
+      console.error('Não foi possível ler a revisão para o cliente WebSocket legado:', error);
+    }
+  }
+  const full: FullWorldUpdate = { type: 'cities', revision, ...world, roads };
+  for (const client of legacyClients) {
+    const legacyPayload = JSON.stringify(
+      createPlayerWorldUpdate(full, websocketUsers.get(client)),
+    );
+    client.send(legacyPayload);
+    recordWebSocketMessage('worldUpdate', legacyPayload);
+    websocketWorldInitialized.set(client, true);
   }
 }
 
@@ -1627,7 +1803,17 @@ async function getCities(): Promise<CityAssembly[]> {
   });
 }
 
-async function getRoadTiles(): Promise<RoadTile[]> {
+function isRoadTile(value: unknown): value is RoadTile {
+  if (typeof value !== 'object' || value === null) return false;
+  const road = value as Record<string, unknown>;
+  return (
+    Number.isInteger(road.x) &&
+    Number.isInteger(road.y) &&
+    typeof road.cityId === 'string'
+  );
+}
+
+async function getAllRoadTiles(): Promise<RoadTile[]> {
   const { rows } = await pool.query<{ tile_x: number; tile_y: number; city_id: string }>(
     `SELECT tile_x, tile_y, city_id FROM road_tiles ORDER BY tile_y, tile_x`,
   );
@@ -1653,12 +1839,210 @@ async function getResidentialBuildings(): Promise<WorldResidentialBuilding[]> {
 }
 
 async function getWorldEntities(): Promise<WorldEntities<WorldResidentialBuilding>> {
-  const [cities, roads, buildings] = await Promise.all([
+  const [cities, buildings] = await Promise.all([
     getCities(),
-    getRoadTiles(),
     getResidentialBuildings(),
   ]);
-  return { cities, roads, buildings };
+  return { cities, roads: [], buildings };
+}
+
+async function recordRoadTileChanges(
+  client: PoolClient,
+  changesByCity: ReadonlyMap<string, readonly Omit<RoadTileRevisionChange, 'revision'>[]>,
+): Promise<CityRoadUpdate[]> {
+  const updates: CityRoadUpdate[] = [];
+  for (const [cityId, changes] of [...changesByCity].sort(([first], [second]) =>
+    first.localeCompare(second),
+  )) {
+    if (changes.length === 0) continue;
+
+    const { rows: revisionRows } = await client.query<{ revision: string }>(
+      `INSERT INTO road_city_revisions (city_id, revision)
+       VALUES ($1, 1)
+       ON CONFLICT (city_id)
+       DO UPDATE SET revision = road_city_revisions.revision + 1
+       RETURNING revision::text`,
+      [cityId],
+    );
+    const revision = Number(revisionRows[0]?.revision);
+    if (!Number.isSafeInteger(revision) || revision < 1) {
+      throw new Error(`A revisão das estradas da cidade ${cityId} é inválida.`);
+    }
+
+    await client.query(
+      `INSERT INTO road_tile_changes (city_id, revision, tile_x, tile_y, operation)
+       SELECT $1, $2, change.tile_x, change.tile_y, change.operation
+       FROM UNNEST($3::integer[], $4::integer[], $5::text[])
+         AS change(tile_x, tile_y, operation)`,
+      [
+        cityId,
+        revision,
+        changes.map(({ x }) => x),
+        changes.map(({ y }) => y),
+        changes.map(({ operation }) => operation),
+      ],
+    );
+
+    const delta = createRoadTileDeltaSince(
+      cityId,
+      changes.map((change) => ({ ...change, revision })),
+      revision - 1,
+      revision,
+    );
+    updates.push({
+      type: 'city_roads',
+      cityId,
+      revision,
+      sync: false,
+      baseRevision: revision - 1,
+      full: false,
+      ...delta,
+    });
+  }
+  return updates;
+}
+
+async function publishRoadUpdates(updates: readonly CityRoadUpdate[]): Promise<void> {
+  for (const update of updates) {
+    await redis.publish(ROAD_CHANGES_CHANNEL, JSON.stringify(update));
+  }
+}
+
+async function getCityRoadSyncUpdate(
+  cityId: string,
+  sinceRevision: number | null,
+): Promise<CityRoadUpdate> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const { rows: revisionRows } = await client.query<{ revision: string }>(
+      'SELECT revision::text FROM road_city_revisions WHERE city_id = $1',
+      [cityId],
+    );
+    const revision = Number(revisionRows[0]?.revision ?? 0);
+    if (!Number.isSafeInteger(revision) || revision < 0) {
+      throw new Error(`A revisão das estradas da cidade ${cityId} é inválida.`);
+    }
+
+    if (sinceRevision === null || sinceRevision > revision) {
+      const { rows } = await client.query<{
+        tile_x: number;
+        tile_y: number;
+        city_id: string;
+      }>(
+        `SELECT tile_x, tile_y, city_id
+         FROM road_tiles
+         WHERE city_id = $1
+         ORDER BY tile_y, tile_x`,
+        [cityId],
+      );
+      await client.query('COMMIT');
+      return {
+        type: 'city_roads',
+        cityId,
+        revision,
+        sync: true,
+        full: true,
+        roads: rows.map((row) => ({
+          x: row.tile_x,
+          y: row.tile_y,
+          cityId: row.city_id,
+        })),
+      };
+    }
+
+    const { rows: changeRows } = await client.query<{
+      revision: string;
+      tile_x: number;
+      tile_y: number;
+      operation: 'upsert' | 'remove';
+    }>(
+      `SELECT DISTINCT ON (tile_x, tile_y)
+              revision::text, tile_x, tile_y, operation
+       FROM road_tile_changes
+       WHERE city_id = $1 AND revision > $2 AND revision <= $3
+       ORDER BY tile_x, tile_y, revision DESC`,
+      [cityId, sinceRevision, revision],
+    );
+    const delta = createRoadTileDeltaSince(
+      cityId,
+      changeRows.map((change) => ({
+        revision: Number(change.revision),
+        x: change.tile_x,
+        y: change.tile_y,
+        operation: change.operation,
+      })),
+      sinceRevision,
+      revision,
+    );
+    await client.query('COMMIT');
+    return {
+      type: 'city_roads',
+      cityId,
+      revision,
+      sync: true,
+      baseRevision: sinceRevision,
+      full: false,
+      ...delta,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter a sincronização das estradas:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function handleRoadViewRequest(
+  websocket: WebSocket,
+  request: RoadViewRequest,
+): Promise<void> {
+  if (request.position === null) {
+    websocketRoadCity.delete(websocket);
+    return;
+  }
+
+  const { position, requestId } = request;
+  const { rows } = await pool.query<{
+    id: string;
+    center_x: number;
+    center_y: number;
+  }>(
+    'SELECT id, center_x, center_y FROM city_assemblies WHERE id = $1',
+    [position.cityId],
+  );
+  if (websocketRoadViewRequestId.get(websocket) !== requestId) return;
+  const city = rows[0]
+    ? getCityAtPosition(
+        [{ id: rows[0].id, centerX: rows[0].center_x, centerY: rows[0].center_y }],
+        position,
+      )
+    : null;
+  if (!city) {
+    websocketRoadCity.delete(websocket);
+    const errorPayload = JSON.stringify({
+      type: 'road_sync_error',
+      message: 'A cidade solicitada não contém o viewpoint informado.',
+    });
+    websocket.send(errorPayload);
+    recordWebSocketMessage('cityRoadUpdate', errorPayload);
+    return;
+  }
+
+  websocketRoadCity.set(websocket, city.id);
+  const update = await getCityRoadSyncUpdate(city.id, request.sinceRevision);
+  if (
+    websocket.readyState !== WebSocket.OPEN ||
+    websocketRoadViewRequestId.get(websocket) !== requestId ||
+    websocketRoadCity.get(websocket) !== city.id
+  ) {
+    return;
+  }
+  const payload = JSON.stringify(update);
+  websocket.send(payload);
+  recordWebSocketMessage('cityRoadUpdate', payload);
 }
 
 async function withWorldSyncLock<Result>(
@@ -1806,7 +2190,11 @@ async function publishCities(forceFull = false): Promise<PerformanceEntityCounts
     }
 
     const delta = previousState
-      ? createWorldDelta(previousState.entities, current, previousState.revision + 1)
+      ? createWorldDelta(
+          { ...previousState.entities, roads: [] },
+          current,
+          previousState.revision + 1,
+        )
       : null;
     const revision = previousState
       ? previousState.revision + (delta ? 1 : 0)
@@ -1818,7 +2206,12 @@ async function publishCities(forceFull = false): Promise<PerformanceEntityCounts
 
     const publication: WorldPublication = {
       type: 'world_publication',
-      full: { type: 'cities', revision, ...current },
+      full: {
+        type: 'cities',
+        revision,
+        cities: current.cities,
+        buildings: current.buildings,
+      },
       delta: sendFull ? null : delta,
     };
     assertOwned();
@@ -5222,6 +5615,7 @@ async function createRoadPath(
 ): Promise<
   | {
       roads: RoadTile[];
+      roadUpdates: CityRoadUpdate[];
       error: null;
       balance: number | null;
       constructionCost: number;
@@ -5259,6 +5653,8 @@ async function createRoadPath(
 
     let roadsBuilt = 0;
     let constructionCost = 0;
+    const createdRoads: RoadTile[] = [];
+    const changesByCity = new Map<string, Omit<RoadTileRevisionChange, 'revision'>[]>();
     for (const position of path) {
       const placementError = getRoadPlacementError(
         position,
@@ -5271,22 +5667,32 @@ async function createRoadPath(
         return { roads: null, error: placementError };
       }
 
-      const city = cities.find(
-        (candidate) =>
-          Math.abs(candidate.centerX - position.x) <= MUNICIPAL_AREA_RADIUS &&
-          Math.abs(candidate.centerY - position.y) <= MUNICIPAL_AREA_RADIUS,
-      );
+      const city = getCityAtPosition(cities, position);
       if (!city) {
         await client.query('ROLLBACK');
         return { roads: null, error: 'outside_municipality' };
       }
-      const { rowCount } = await client.query(
+      const { rows } = await client.query<{
+        tile_x: number;
+        tile_y: number;
+        city_id: string;
+      }>(
         `INSERT INTO road_tiles (tile_x, tile_y, city_id, created_by)
          VALUES ($1, $2, $3, $4)
-         ON CONFLICT (tile_x, tile_y) DO NOTHING`,
+         ON CONFLICT (tile_x, tile_y) DO NOTHING
+         RETURNING tile_x, tile_y, city_id`,
         [position.x, position.y, city.id, userId],
       );
-      if (rowCount === 1) {
+      if (rows[0]) {
+        const road = {
+          x: rows[0].tile_x,
+          y: rows[0].tile_y,
+          cityId: rows[0].city_id,
+        };
+        createdRoads.push(road);
+        const cityChanges = changesByCity.get(city.id) ?? [];
+        cityChanges.push({ x: road.x, y: road.y, operation: 'upsert' });
+        changesByCity.set(city.id, cityChanges);
         roadsBuilt += 1;
         if (!isMaster) {
           const totalCost = getRoadConstructionCost(ownedRoadCount, roadsBuilt);
@@ -5333,18 +5739,11 @@ async function createRoadPath(
       }
     }
 
-    const { rows: roadRows } = await client.query<{
-      tile_x: number;
-      tile_y: number;
-      city_id: string;
-    }>(`SELECT tile_x, tile_y, city_id FROM road_tiles ORDER BY tile_y, tile_x`);
+    const roadUpdates = await recordRoadTileChanges(client, changesByCity);
     await client.query('COMMIT');
     return {
-      roads: roadRows.map((road) => ({
-        x: road.tile_x,
-        y: road.tile_y,
-        cityId: road.city_id,
-      })),
+      roads: createdRoads,
+      roadUpdates,
       error: null,
       balance,
       constructionCost,
@@ -5952,7 +6351,16 @@ async function start() {
   );
   await Promise.all([
     subscriber.subscribe(SNAPSHOT_CHANNEL, (message) => broadcast(message)),
-    subscriber.subscribe(CITIES_CHANNEL, deliverCities),
+    subscriber.subscribe(CITIES_CHANNEL, (message) => {
+      void deliverCities(message).catch((error: unknown) => {
+        console.error('Não foi possível distribuir a atualização das cidades:', error);
+      });
+    }),
+    subscriber.subscribe(ROAD_CHANGES_CHANNEL, (message) => {
+      void deliverRoadChanges(message).catch((error: unknown) => {
+        console.error('Não foi possível distribuir as mudanças de estradas:', error);
+      });
+    }),
   ]);
 
   app.use(express.json({ limit: '16kb' }));
@@ -9366,16 +9774,21 @@ async function start() {
 
     void isMasterUser(userId)
       .then((isMaster) => createRoadPath(path, userId, isMaster))
-      .then(({ roads, error: placementError, ...result }) => {
-        if (!roads) {
+      .then((result) => {
+        if (result.roads === null) {
           response.status(
-            placementError === 'insufficient_road_funds' ? 402 : 409,
-          ).json({ error: placementError });
+            result.error === 'insufficient_road_funds' ? 402 : 409,
+          ).json({ error: result.error });
           return;
         }
-        response.status(201).json({ roads, ...result });
-        void publishCities().catch((publishError: unknown) => {
-          console.error('A estrada foi construída, mas a atualização do mundo falhou:', publishError);
+        response.status(201).json({
+          roads: result.roads,
+          balance: result.balance,
+          constructionCost: result.constructionCost,
+          roadsBuilt: result.roadsBuilt,
+        });
+        void publishRoadUpdates(result.roadUpdates).catch((publishError: unknown) => {
+          console.error('A estrada foi construída, mas a sincronização das estradas falhou:', publishError);
         });
       })
       .catch((creationError: unknown) => {
@@ -9400,14 +9813,25 @@ async function start() {
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
         const removed: RoadPosition[] = [];
+        const changesByCity = new Map<string, Omit<RoadTileRevisionChange, 'revision'>[]>();
         for (const position of path) {
-          const { rows } = await client.query<{ tile_x: number; tile_y: number }>(
+          const { rows } = await client.query<{
+            tile_x: number;
+            tile_y: number;
+            city_id: string;
+          }>(
             `DELETE FROM road_tiles
              WHERE tile_x = $1 AND tile_y = $2 AND created_by = $3
-             RETURNING tile_x, tile_y`,
+             RETURNING tile_x, tile_y, city_id`,
             [position.x, position.y, userId],
           );
-          if (rows[0]) removed.push({ x: rows[0].tile_x, y: rows[0].tile_y });
+          if (rows[0]) {
+            const roadPosition = { x: rows[0].tile_x, y: rows[0].tile_y };
+            removed.push(roadPosition);
+            const cityChanges = changesByCity.get(rows[0].city_id) ?? [];
+            cityChanges.push({ ...roadPosition, operation: 'remove' });
+            changesByCity.set(rows[0].city_id, cityChanges);
+          }
         }
 
         if (removed.length === 0) {
@@ -9426,10 +9850,11 @@ async function start() {
           return;
         }
 
+        const roadUpdates = await recordRoadTileChanges(client, changesByCity);
         await client.query('COMMIT');
         response.json({ removed });
-        void publishCities().catch((publishError: unknown) => {
-          console.error('As estradas foram demolidas, mas a atualização do mundo falhou:', publishError);
+        void publishRoadUpdates(roadUpdates).catch((publishError: unknown) => {
+          console.error('As estradas foram demolidas, mas a sincronização falhou:', publishError);
         });
       } catch (demolitionError) {
         await client.query('ROLLBACK').catch((rollbackError: unknown) => {
@@ -9473,10 +9898,14 @@ async function start() {
       try {
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
-        const { rows } = await client.query<{ tile_x: number; tile_y: number }>(
+        const { rows } = await client.query<{
+          tile_x: number;
+          tile_y: number;
+          city_id: string;
+        }>(
           `DELETE FROM road_tiles
            WHERE tile_x = $1 AND tile_y = $2 AND created_by = $3
-           RETURNING tile_x, tile_y`,
+           RETURNING tile_x, tile_y, city_id`,
           [tileX, tileY, userId],
         );
         if (!rows[0]) {
@@ -9491,10 +9920,19 @@ async function start() {
           return;
         }
 
+        const roadUpdates = await recordRoadTileChanges(
+          client,
+          new Map([
+            [
+              rows[0].city_id,
+              [{ x: rows[0].tile_x, y: rows[0].tile_y, operation: 'remove' as const }],
+            ],
+          ]),
+        );
         await client.query('COMMIT');
         response.json({ x: rows[0].tile_x, y: rows[0].tile_y });
-        void publishCities().catch((error: unknown) => {
-          console.error('A estrada foi demolida, mas a atualização do mundo falhou:', error);
+        void publishRoadUpdates(roadUpdates).catch((error: unknown) => {
+          console.error('A estrada foi demolida, mas a sincronização falhou:', error);
         });
       } catch (error) {
         await client.query('ROLLBACK').catch((rollbackError: unknown) => {
@@ -9825,6 +10263,10 @@ async function start() {
           websocket,
           url.searchParams.get('worldUpdates') === 'delta-v1',
         );
+        websocketCityRoadSyncSupport.set(
+          websocket,
+          url.searchParams.get('roadSync') === 'city-v1',
+        );
         websocketServer.emit('connection', websocket, request);
       });
     })().catch((error: unknown) => {
@@ -9844,6 +10286,32 @@ async function start() {
     }
     const presenceId = `${websocketUsers.get(websocket) ?? 'unknown'}|${randomUUID()}`;
     let presenceTimer: NodeJS.Timeout;
+
+    websocket.on('message', (data) => {
+      let message: unknown;
+      try {
+        message = JSON.parse(data.toString());
+      } catch (error) {
+        console.error('Não foi possível interpretar uma mensagem WebSocket do jogador:', error);
+        return;
+      }
+      if (!isRoadViewRequest(message)) {
+        console.error('O jogador enviou uma solicitação de viewpoint de estradas inválida.');
+        return;
+      }
+      websocketRoadViewRequestId.set(websocket, message.requestId);
+      void handleRoadViewRequest(websocket, message).catch((error: unknown) => {
+        console.error('Não foi possível sincronizar as estradas do viewpoint:', error);
+        if (websocket.readyState === WebSocket.OPEN) {
+          const errorPayload = JSON.stringify({
+            type: 'road_sync_error',
+            message: 'Não foi possível sincronizar as estradas da cidade.',
+          });
+          websocket.send(errorPayload);
+          recordWebSocketMessage('cityRoadUpdate', errorPayload);
+        }
+      });
+    });
 
     const registerPresence = async () => {
       await redis.zAdd(PRESENCE_KEY, {
@@ -9872,9 +10340,18 @@ async function start() {
             }
           }
           assertOwned();
+          const initialWorld: FullWorldUpdate = {
+            type: 'cities',
+            revision,
+            cities: world.cities,
+            buildings: world.buildings,
+            ...(!websocketCityRoadSyncSupport.get(websocket)
+              ? { roads: await getAllRoadTiles() }
+              : {}),
+          };
           const worldPayload = JSON.stringify(
             createPlayerWorldUpdate(
-              { type: 'cities', revision, ...world },
+              initialWorld,
               websocketUsers.get(websocket),
             ),
           );

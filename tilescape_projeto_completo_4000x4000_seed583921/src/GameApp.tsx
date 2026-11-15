@@ -31,6 +31,7 @@ import {
   CityPlacementError,
   CityZoneBounds,
   CityZoneType,
+  getCityAtPosition,
   getCityZonePlacementError,
   getRequiredCityZone,
   MAX_CITY_ZONES,
@@ -373,6 +374,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [snapshot, setSnapshot] = useState<WorldSnapshot | null>(null);
   const [isOnline, setIsOnline] = useState(false);
   const [cities, setCities] = useState<CityAssembly[]>([]);
+  const synchronizedCitiesRef = useRef<CityAssembly[]>([]);
+  const lastRoadViewCityIdRef = useRef<string | null | undefined>(undefined);
+  const worldConnectionRef = useRef<ReturnType<typeof connectToWorld> | null>(null);
+  const currentRoadViewRef = useRef<{ cityId: string; x: number; y: number } | null>(null);
   const [roads, setRoads] = useState<RoadTile[]>([]);
   const [residentialBuildings, setResidentialBuildings] = useState<ResidentialBuilding[]>([]);
   const [pendingResidentialBuildings, setPendingResidentialBuildings] = useState<ResidentialBuilding[]>([]);
@@ -582,29 +587,49 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   }, []);
 
   useEffect(() => {
-    return connectToWorld(
+    const connection = connectToWorld(
       setSnapshot,
       setIsOnline,
-      setCities,
+      (nextCities) => {
+        const normalized = nextCities.map((city) => ({
+          ...city,
+          zones: city.zones ?? [],
+        }));
+        const nextCityIds = new Set(normalized.map((city) => city.id));
+        const removedCityIds = new Set(
+          synchronizedCitiesRef.current
+            .filter((city) => !nextCityIds.has(city.id))
+            .map((city) => city.id),
+        );
+        synchronizedCitiesRef.current = normalized;
+        if (removedCityIds.size > 0) {
+          setRoads((current) => current.filter((road) => !removedCityIds.has(road.cityId)));
+        }
+        setCities(normalized);
+      },
       setRoads,
       setResidentialBuildings,
       (delta) => {
         const cityDelta = delta.cities;
         if (cityDelta) {
-          setCities((current) =>
-            applyEntityDelta(
-              current,
-              {
-                ...cityDelta,
-                upsert: cityDelta.upsert.map((city) => ({
-                  ...city,
-                  zones: city.zones ?? [],
-                })),
-              },
-              (city) => city.id,
-              (cityId) => cityId,
-            ),
+          const nextCities = applyEntityDelta(
+            synchronizedCitiesRef.current,
+            {
+              ...cityDelta,
+              upsert: cityDelta.upsert.map((city) => ({
+                ...city,
+                zones: city.zones ?? [],
+              })),
+            },
+            (city) => city.id,
+            (cityId) => cityId,
           );
+          synchronizedCitiesRef.current = nextCities;
+          const removedCityIds = new Set(cityDelta.removed);
+          if (removedCityIds.size > 0) {
+            setRoads((current) => current.filter((road) => !removedCityIds.has(road.cityId)));
+          }
+          setCities(nextCities);
         }
         const roadDelta = delta.roads;
         if (roadDelta) {
@@ -629,8 +654,48 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           );
         }
       },
+      (update) => {
+        if (update.full) {
+          setRoads((current) => [
+            ...current.filter((road) => road.cityId !== update.cityId),
+            ...update.roads,
+          ]);
+          return;
+        }
+        setRoads((current) =>
+          applyEntityDelta(
+            current,
+            { upsert: update.upsert, removed: update.removed },
+            (road) => `${road.x},${road.y}`,
+            ({ x, y }) => `${x},${y}`,
+          ),
+        );
+      },
     );
+    worldConnectionRef.current = connection;
+    connection.setRoadView(currentRoadViewRef.current);
+    return () => {
+      if (worldConnectionRef.current === connection) worldConnectionRef.current = null;
+      connection.close();
+    };
   }, [user.email]);
+
+  useEffect(() => {
+    const stage = worldStageRef.current;
+    const width = stage?.clientWidth ?? viewport.width;
+    const height = stage?.clientHeight ?? viewport.height;
+    const scale = BASE_TILE_SIZE * camera.zoom;
+    const position = {
+      x: Math.max(0, Math.min(WORLD_CONFIG.width - 1, Math.floor((width / 2 - camera.x) / scale))),
+      y: Math.max(0, Math.min(WORLD_CONFIG.height - 1, Math.floor((height / 2 - camera.y) / scale))),
+    };
+    const city = getCityAtPosition(cities, position);
+    const cityId = city?.id ?? null;
+    currentRoadViewRef.current = city ? { ...position, cityId: city.id } : null;
+    if (lastRoadViewCityIdRef.current === cityId) return;
+    lastRoadViewCityIdRef.current = cityId;
+    worldConnectionRef.current?.setRoadView(currentRoadViewRef.current);
+  }, [camera, cities, viewport]);
 
   const visibleCities = useMemo(() => {
     const byPosition = new Map(
@@ -1693,7 +1758,14 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         method: 'POST',
         body: JSON.stringify({ path }),
       });
-      setRoads(result.roads);
+      setRoads((current) =>
+        applyEntityDelta(
+          current,
+          { upsert: result.roads, removed: [] },
+          (road) => `${road.x},${road.y}`,
+          ({ x, y }) => `${x},${y}`,
+        ),
+      );
       if (result.balance !== null) setBalance(result.balance);
       setPendingRoads((current) =>
         current.filter(

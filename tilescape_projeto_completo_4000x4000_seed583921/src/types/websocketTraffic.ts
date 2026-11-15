@@ -11,6 +11,7 @@ export interface WebSocketTrafficHour {
   peakConcurrentConnections: number;
   snapshots: WebSocketMessageTraffic;
   worldUpdates: WebSocketMessageTraffic;
+  cityRoadUpdates: WebSocketMessageTraffic;
   commerceDiagnostics: WebSocketMessageTraffic;
 }
 

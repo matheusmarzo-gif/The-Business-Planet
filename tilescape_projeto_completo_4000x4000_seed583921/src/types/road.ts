@@ -47,6 +47,55 @@ export interface RoadPosition {
   y: number;
 }
 
+export interface RoadTileRevisionChange extends RoadPosition {
+  revision: number;
+  operation: 'upsert' | 'remove';
+}
+
+export function createRoadTileDeltaSince(
+  cityId: string,
+  changes: readonly RoadTileRevisionChange[],
+  sinceRevision: number,
+  throughRevision: number,
+): { upsert: RoadTile[]; removed: RoadPosition[] } {
+  if (
+    !Number.isSafeInteger(sinceRevision) ||
+    sinceRevision < 0 ||
+    !Number.isSafeInteger(throughRevision) ||
+    throughRevision < sinceRevision
+  ) {
+    throw new RangeError('A revisão das estradas da cidade é inválida.');
+  }
+
+  const latestByPosition = new Map<string, RoadTileRevisionChange>();
+  for (const change of changes) {
+    if (
+      !Number.isSafeInteger(change.revision) ||
+      change.revision <= sinceRevision ||
+      change.revision > throughRevision
+    ) {
+      continue;
+    }
+    const key = `${change.x},${change.y}`;
+    const previous = latestByPosition.get(key);
+    if (!previous || change.revision > previous.revision) {
+      latestByPosition.set(key, change);
+    }
+  }
+
+  const latest = [...latestByPosition.values()].sort(
+    (first, second) => first.y - second.y || first.x - second.x,
+  );
+  return {
+    upsert: latest
+      .filter((change) => change.operation === 'upsert')
+      .map(({ x, y }) => ({ x, y, cityId })),
+    removed: latest
+      .filter((change) => change.operation === 'remove')
+      .map(({ x, y }) => ({ x, y })),
+  };
+}
+
 export type RoadPlacementError =
   | 'outside_municipality'
   | 'water'

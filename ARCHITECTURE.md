@@ -1021,9 +1021,9 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `PATCH /api/cities/:id` | Master | Altera o nome de uma cidade. |
 | `PUT /api/cities/:id/zones` | Master | Valida e substitui as regiões urbanas/rurais da cidade. |
 | `DELETE /api/cities/:id` | Criador da cidade | Demole a Assembleia e remove as estradas da área. |
-| `POST /api/roads` | Autenticado | Valida e grava até 600 tiles, debitando atomicamente a tarifa progressiva de não-Masters; Master é gratuito. |
-| `DELETE /api/roads/:x/:y` | Criador do tile | Demole um tile de estrada sem confirmação; publica o novo estado. |
-| `DELETE /api/roads` | Autenticado | Demole os tiles próprios de um caminho de até 600 tiles e publica o novo estado. |
+| `POST /api/roads` | Autenticado | Valida e grava até 600 tiles, registra revisões por cidade e publica deltas aos sockets inscritos; tarifa progressiva de não-Masters é debitada atomicamente, Master é gratuito. |
+| `DELETE /api/roads/:x/:y` | Criador do tile | Demole um tile de estrada sem confirmação; grava a revisão da cidade e publica o delta aos jogadores que a visualizam. |
+| `DELETE /api/roads` | Autenticado | Demole os tiles próprios de um caminho de até 600 tiles e publica deltas por cidade. |
 | `POST /api/residential-buildings` | Autenticado | Valida o estoque e desconta atomicamente Madeira, Pedra e Ferro quando exigido pela configuração (exceto para Master); o primeiro armazém do jogador é concluído e gratuito. |
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
@@ -1046,6 +1046,9 @@ de sucesso.
   salários menores em `all_buildings` na mesma transação.
 - `city_zones` guarda os retângulos municipais, com cascata ao excluir a cidade.
 - `road_tiles` guarda uma linha por tile, referência à cidade e autoria.
+  `road_city_revisions` e `road_tile_changes` preservam uma revisão por cidade
+  e o histórico transacional de inclusões/remoções para sincronizar clientes
+  que retornam a uma cidade sem reenviar o snapshot inteiro.
 - `player_wallets` guarda o saldo (`balance`, NUMERIC(14,2), pode ficar negativo) por `user_id` (`sub`
   do Neon Auth). A carteira é criada com `STARTING_BALANCE` (`src/types/wallet.ts`)
   na primeira chamada a `GET /api/wallet`; o saldo aparece na barra superior
@@ -1122,18 +1125,20 @@ Redis exerce três funções:
    jogadores online.
 2. Uma chave curta com `SET NX` e expiração elege a instância que avança o
    relógio, evitando que cada processo de servidor o incremente em duplicidade.
-3. Canais Pub/Sub distribuem snapshots e atualizações de cidades, estradas e
-   residências entre processos; cada processo retransmite as mensagens a seus
-   próprios sockets.
+3. Canais Pub/Sub distribuem snapshots, atualizações de cidades/construções e
+   mudanças de estradas entre processos; cada processo retransmite as mensagens
+   a seus próprios sockets. Os deltas de estrada são publicados somente aos
+   sockets inscritos na cidade corrente do viewpoint.
 4. A lista `valdora:world:performance-logs` mantém até 100 medições globais,
    com expiração de sete dias, acessível ao botão **Log** por usuários
    autenticados. Os registros incluem duração, tempo acumulado das consultas
    PostgreSQL, espera por lock, quantidade de consultas, contagens de entidades
    e sucesso/falha; não incluem SQL nem dados pessoais.
 5. Hashes Redis por hora registram mensagens WebSocket entregues por categoria
-   (snapshot, atualização completa do mundo e diagnósticos comerciais), bytes
-   UTF-8 do payload, conexões aceitas, reconexões concluídas, tempo acumulado de
-   socket e pico simultâneo amostrado a cada dez segundos. Expiram após oito dias; o endpoint
+   (snapshot, atualização do mundo, sincronização de estradas por cidade e
+   diagnósticos comerciais), bytes UTF-8 do payload, conexões aceitas,
+   reconexões concluídas, tempo acumulado de socket e pico simultâneo amostrado
+   a cada dez segundos. Expiram após oito dias; o endpoint
    autenticado `/api/performance-logs` retorna as últimas 24 horas junto dos
    logs existentes. As métricas contam payloads de aplicação, não overhead de
    WebSocket/TLS ou bytes medidos pelo provedor.
@@ -1144,15 +1149,26 @@ medido como duração observada no cliente PostgreSQL; o tempo restante é uma
 diferença aproximada e pode incluir cálculo e outras esperas, não somente CPU.
 
 O WebSocket `/ws` exige JWT. Ao conectar, o servidor envia o snapshot e o
-estado completo atual de cidades, estradas e residências. Depois dessa carga
-inicial, clientes compatíveis recebem deltas `{ type: "world_delta", revision,
-cities?, roads?, buildings? }` com entidades inseridas/alteradas e chaves
-removidas; clientes antigos continuam recebendo atualizações completas
-`{ type: "cities", cities, roads, buildings }`. A revisão é sequencial e
-compartilhada via Redis entre instâncias. Se o cliente detectar uma lacuna,
-reconecta para receber um novo estado completo. O servidor usa um lock Redis
-para serializar publicações e cargas iniciais, e não publica deltas quando o
-estado persistido não mudou.
+estado completo de cidades e construções. O cliente envia `road_view` com o
+tile central da câmera e a cidade municipal que o contém. Na primeira visita,
+o servidor consulta e envia somente as estradas dessa cidade. `road_city_revisions`
+e `road_tile_changes` guardam cada alteração na mesma transação que modifica
+`road_tiles`; ao revisitar ou reconectar na mesma sessão, o servidor envia as
+mudanças desde a revisão conhecida. Novas alterações são distribuídas por
+Pub/Sub apenas aos sockets que estão vendo aquela cidade. O cliente mantém as
+estradas de cidades visitadas em memória, aplica inclusões e remoções por tile
+e solicita nova sincronização se detectar uma lacuna de revisão. Uma recarga
+da página começa sem cache local e recebe um snapshot da cidade inicial.
+
+Para cidades e construções, clientes compatíveis recebem deltas
+`{ type: "world_delta", revision, cities?, buildings? }` com entidades
+inseridas/alteradas e chaves removidas; clientes antigos continuam recebendo
+atualizações completas `{ type: "cities", cities, roads?, buildings }`. A
+revisão global é sequencial e compartilhada via Redis entre instâncias. O
+servidor usa um lock Redis para serializar publicações e cargas iniciais, e não
+publica deltas quando o estado persistido não mudou. Clientes antigos que ainda
+não anunciam `roadSync=city-v1` recebem snapshots globais de estradas até
+recarregarem a versão atualizada.
 
 Snapshots contêm hora do jogo, hora do servidor, velocidade, mapa e jogadores
 online. `src/game/worldClient.ts` valida mensagens e reconecta com atraso
@@ -1167,8 +1183,10 @@ não são armazenados. Cada aba é uma conexão; reconexões registradas são as
 completaram a autenticação e o handshake. Conexões e tráfego são agregados no
 Redis entre instâncias.
 Depois das 00:30 UTC do relógio do jogo, o líder publica uma sincronização
-completa desse estado para todos os jogadores conectados, permitindo reparar
-estado e reiniciar a sequência de revisões diariamente. `last_full_world_sync_day`
+completa de cidades e construções para todos os jogadores conectados,
+permitindo reparar o estado local sem reiniciar a sequência de revisões.
+As estradas usam revisões por cidade e não fazem parte dessa publicação.
+`last_full_world_sync_day`
 em `world_state` registra a publicação por dia; o lock transacional da linha
 evita duplicatas entre instâncias e a marcação só é gravada após o Pub/Sub ter
 aceitado a mensagem.
@@ -1235,4 +1253,4 @@ atualizado.
 
 - Obras e economia diária: às 00:00 o progresso das obras usa `advanceConstruction` (employment.ts; conclui quando Work Points >= necessários, para todos os tipos). Vendas, produção, fazendas e transporte rodam, cada etapa, sob seu próprio SAVEPOINT (`runStage`): se uma falhar, as demais, a folha e as obras do dia são preservadas e o erro é registrado com o nome da etapa. As etapas agrupam leituras e gravações de construções com arrays PostgreSQL, preservando o cálculo e as transações; o transporte continua isolando falhas por armazém.
 - Métricas do processamento diário: as etapas de economia, alocação, imigração, mudanças de residência, crescimento populacional e publicação registram duração, consultas PostgreSQL, espera pelo lock, contagens globais de residências/locais de trabalho/lojas/armazéns e status; a lista Redis tem limite de 100 registros e expira após sete dias.
-- Sincronização diária: a partir de 00:30 UTC do relógio do jogo, uma mensagem completa de cidades, estradas e construções é publicada pelo Redis para os jogadores conectados, no máximo uma vez por dia. A atualização não recarrega a página; `worldClient.ts` aplica o estado recebido.
+- Sincronização diária: a partir de 00:30 UTC do relógio do jogo, uma mensagem completa de cidades e construções é publicada pelo Redis para os jogadores conectados, no máximo uma vez por dia. As estradas não fazem parte dessa mensagem; usam revisões e deltas por cidade. A atualização não recarrega a página; `worldClient.ts` aplica o estado recebido.

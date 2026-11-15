@@ -58,6 +58,7 @@ export default function PerformanceLogPanel({
       total +
       hour.snapshots.payloadBytes +
       hour.worldUpdates.payloadBytes +
+      hour.cityRoadUpdates.payloadBytes +
       hour.commerceDiagnostics.payloadBytes,
     0,
   );
@@ -126,6 +127,7 @@ export default function PerformanceLogPanel({
                 <div className="performance-log-metrics">
                   <span>Snapshots <strong>{integer.format(hour.snapshots.messages)} · {formatBytes(hour.snapshots.payloadBytes)}</strong></span>
                   <span>Mundo <strong>{integer.format(hour.worldUpdates.messages)} · {formatBytes(hour.worldUpdates.payloadBytes)}</strong></span>
+                  <span>Estradas <strong>{integer.format(hour.cityRoadUpdates.messages)} · {formatBytes(hour.cityRoadUpdates.payloadBytes)}</strong></span>
                   <span>Diagnósticos <strong>{integer.format(hour.commerceDiagnostics.messages)} · {formatBytes(hour.commerceDiagnostics.payloadBytes)}</strong></span>
                 </div>
               </article>

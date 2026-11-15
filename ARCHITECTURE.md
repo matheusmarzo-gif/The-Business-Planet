@@ -150,7 +150,8 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/auth/` | Neon Auth, recuperação de senha, confirmação de e-mail e restauração de sessão. |
 | `src/GameApp.tsx` | Tela ativa do mundo, interface, estado de interação e chamadas da API. |
 | `src/game/GameMap.tsx` | Renderização PixiJS, câmera, seleção de tiles, prévias e interação com cidades, estradas e residências. Usa camadas separadas para terreno, estradas, construções e etiquetas; construções fora do viewport não são anexadas à camada visível, sprites são reutilizados por ID e texturas são cacheadas por asset. |
-| `src/game/worldClient.ts` | Autentica o WebSocket, valida mensagens recebidas e atualiza o estado compartilhado. |
+| `src/game/worldClient.ts` | Autentica o WebSocket, valida mensagens recebidas e atualiza o estado compartilhado, incluindo estradas e construções da cidade atual. |
+| `src/components/BuildingSummaryPanel.tsx` | Exibe os dados públicos básicos de uma construção que pertence a outro jogador. |
 | `src/components/ConstructionBar.tsx` | Barra inferior de categorias; a seleção abre o catálogo de construções no painel lateral direito. |
 | `src/components/CityAssemblyModal.tsx` | Informações da cidade, inclusive salário mínimo; edição do piso restrita à conta master. |
 | `src/components/WarehousePanel.tsx` | Produtos e estoque de armazéns e silos; tooltip nos ícones mostra peso e volume unitários e totais. |
@@ -774,8 +775,9 @@ mapeamento e verificar todas as curvas.
   financeiro conserva até 365 dias para os rankings anuais, quando disponível,
   além dos cinco períodos semanais; só o dono consulta pela rota de histórico do
   comércio. O cache local legado de diagnósticos conserva até 30 dias e alimenta
-  a simulação de venda no navegador; a simulação de contratação também usa o snapshot local,
-  sem novas consultas ao servidor. A coluna
+  a simulação de venda no navegador; a simulação de contratação consulta o
+  servidor autenticado, que restringe a leitura ao dono e calcula com dados
+  completos da cidade sem enviá-los ao navegador. A coluna
   `transaction_details` de instalações anteriores não é mais lida ou atualizada;
   os registros existentes expiram junto com o histórico financeiro.
 - Produção das fazendas agrícolas (`src/types/farming.ts`): `POST
@@ -1029,6 +1031,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |
 | `PATCH /api/residential-buildings/:id/work-settings` | Criador; obras e construções não residenciais concluídas | Valida funcionários desejados (0–100 em obras ou 0–máximo após concluídas), salário diário (até duas casas decimais), carga horária (4–14 h) e técnica mínima necessária (10–40); reduz empregados excedentes. |
+| `POST /api/residential-buildings/:id/simulate-hiring` | Dono da construção | Calcula uma prévia de contratação com os dados da cidade no servidor, sem expor ao navegador dados privados de outras construções. |
 | `PATCH /api/residential-buildings/:id/rent` | Criador | Valida e grava o aluguel por pessoa (≥ C$ 0,01, até duas casas decimais). |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |
 
@@ -1148,9 +1151,20 @@ produção, fazendas, transporte, imigração e publicação. O tempo de consult
 medido como duração observada no cliente PostgreSQL; o tempo restante é uma
 diferença aproximada e pode incluir cálculo e outras esperas, não somente CPU.
 
-O WebSocket `/ws` exige JWT. Ao conectar, o servidor envia o snapshot e o
-estado completo de cidades e construções. O cliente envia `road_view` com o
-tile central da câmera e a cidade municipal que o contém. Na primeira visita,
+O WebSocket `/ws` exige JWT. Ao conectar, o servidor envia o snapshot e as
+cidades; construções são sincronizadas depois que o cliente envia `road_view`
+com o tile central da câmera e a cidade municipal que o contém. O servidor
+consulta somente as construções dessa cidade para a resposta ao jogador:
+outros proprietários recebem resumos públicos (tipo, número, posição,
+proprietário e situação), enquanto cada jogador recebe os dados completos
+somente das próprias construções. Alterações posteriores são enviadas como
+deltas da cidade visível; ao mudar de cidade, o cliente descarta a lista anterior.
+Para detectar mudanças em dados privados sem transferi-los ao servidor de
+aplicação, a consulta global de sincronização retorna os campos públicos e um
+hash calculado no PostgreSQL; os campos completos são consultados separadamente
+apenas para o dono, na cidade atual ou para IDs alterados.
+
+Na primeira visita,
 o servidor consulta e envia somente as estradas dessa cidade. `road_city_revisions`
 e `road_tile_changes` guardam cada alteração na mesma transação que modifica
 `road_tiles`; ao revisitar ou reconectar na mesma sessão, o servidor envia as

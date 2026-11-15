@@ -157,10 +157,16 @@ mapa na construção e abre seus detalhes.
 Cada push para a branch conectada ao Render pode iniciar uma nova publicação.
 O relógio global e sua persistência ficam no PostgreSQL; o Redis gerencia a
 presença e a distribuição das atualizações em tempo real. Ao conectar, cada
-jogador recebe cidades e construções; as estradas são carregadas apenas para a
-cidade indicada pelo centro da câmera. A primeira visita carrega essa cidade
-completa. Ao sair e voltar, o cliente recebe somente as alterações acumuladas,
-incluindo demolições; enquanto a cidade está em exibição, recebe apenas os
+jogador recebe as cidades; estradas e construções são sincronizadas depois
+que o centro da câmera identifica a cidade atual. Para outros jogadores, cada
+construção mostra apenas o tipo, número, posição, proprietário e situação;
+detalhes completos são enviados somente ao dono e apenas enquanto sua cidade
+está em exibição. Alterações posteriores chegam como deltas da cidade visível,
+e os dados da cidade anterior são descartados ao trocar de viewpoint. As
+estradas são carregadas apenas para a cidade indicada pelo centro da câmera.
+A primeira visita carrega essa cidade completa. Ao sair e voltar, o cliente
+recebe somente as alterações acumuladas, incluindo demolições; enquanto a
+cidade está em exibição, recebe apenas os
 tiles modificados nela. As estradas de outras cidades já visitadas permanecem
 no estado local. Essa revisão é mantida durante a sessão do navegador; após
 recarregar a página, a cidade inicial é baixada novamente. A sincronização
@@ -589,8 +595,8 @@ residência, comércios do mesmo tipo a até 60 tiles dela. Usa preços médios
 recentes da cidade, estoques, funcionários e capacidades atuais, além do preço,
 salário e carga horária informados no painel; não depende do cache local.
 **Simular contratação**, abaixo do salário,
-calcula localmente a estimativa de empregados usando as construções e moradores
-recebidos no mapa e os valores digitados no formulário.
+consulta o servidor autenticado, que calcula a estimativa com os dados completos
+da cidade sem enviar ao navegador informações privadas de outras construções.
 
 Nas construções artesanais, comerciais, fazendas, recursos, indústrias e obras
 em andamento, o dono também pode definir a **Técnica mínima necessária** para

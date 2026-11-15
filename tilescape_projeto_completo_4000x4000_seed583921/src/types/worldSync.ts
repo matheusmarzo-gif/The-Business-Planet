@@ -1,6 +1,9 @@
 import type { CityAssembly } from './city.js';
 import type { RoadPosition, RoadTile } from './road.js';
-import type { ResidentialBuilding } from './residence.js';
+import {
+  isResidentialBuildingSummary,
+  type WorldBuilding,
+} from './residence.js';
 
 export interface WorldEntities<Building extends { id: string }> {
   cities: CityAssembly[];
@@ -20,6 +23,23 @@ export interface WorldDelta<Building extends { id: string }> {
   roads?: EntityDelta<RoadTile, RoadPosition>;
   buildings?: EntityDelta<Building, string>;
 }
+
+export type CityBuildingsUpdate =
+  | {
+      type: 'city_buildings';
+      cityId: string;
+      revision: number;
+      full: true;
+      buildings: WorldBuilding[];
+    }
+  | {
+      type: 'city_buildings';
+      cityId: string;
+      revision: number;
+      full: false;
+      upsert: WorldBuilding[];
+      removed: string[];
+    };
 
 export interface RoadViewPosition extends RoadPosition {
   cityId: string;
@@ -114,4 +134,44 @@ export function applyEntityDelta<Entity, RemovedKey>(
     entities.set(getKey(entity), entity);
   }
   return [...entities.values()];
+}
+
+export function applyWorldBuildingDelta(
+  current: readonly WorldBuilding[],
+  delta: EntityDelta<WorldBuilding, string>,
+): WorldBuilding[] {
+  const removedIds = new Set(delta.removed);
+  const buildings = new Map(
+    current
+      .filter((building) => !removedIds.has(building.id))
+      .map((building) => [building.id, building]),
+  );
+  for (const update of delta.upsert) {
+    const previous = buildings.get(update.id);
+    if (
+      previous &&
+      !isResidentialBuildingSummary(previous) &&
+      isResidentialBuildingSummary(update) &&
+      previous.isOwnedByCurrentUser === true &&
+      update.isOwnedByCurrentUser
+    ) {
+      buildings.set(update.id, {
+        ...previous,
+        id: update.id,
+        ownerName: update.ownerName,
+        isOwnedByCurrentUser: update.isOwnedByCurrentUser,
+        type: update.type,
+        buildingNumber: update.buildingNumber,
+        x: update.x,
+        y: update.y,
+        cityId: update.cityId,
+        status: update.status,
+        startedAt: update.startedAt,
+        completedAt: update.completedAt,
+      });
+    } else {
+      buildings.set(update.id, update);
+    }
+  }
+  return [...buildings.values()];
 }

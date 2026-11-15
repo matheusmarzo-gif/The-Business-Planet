@@ -22,6 +22,7 @@ import ProductionHistoryPanel, { type ProductionDay } from './components/Product
 import CommerceHistoryPanel, { type CommerceDay } from './components/CommerceHistoryPanel';
 import WarehouseLogPanel, { type WarehouseLogDay, type WarehouseLogEvent } from './components/WarehouseLogPanel';
 import PerformanceLogPanel from './components/PerformanceLogPanel';
+import BuildingSummaryPanel from './components/BuildingSummaryPanel';
 import type { WarehouseDemand, WarehouseProductSetting } from './types/warehouse';
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
@@ -60,11 +61,12 @@ import {
   getConstructionMenuDefinitions,
   getResidentialBuildingName,
   isStorageBuilding,
-  RESIDENCE_STATS,
   KIND_CATEGORY,
   ResidentialBuilding,
+  isResidentialBuildingSummary,
   ResidencePlacementError,
   ResidenceType,
+  WorldBuilding,
 } from './types/residence';
 import type { RoadPlacementError, RoadPosition, RoadTile } from './types/road';
 import { TileInfo } from './types/map';
@@ -73,24 +75,15 @@ import type {
   StockCapacityKey,
   StockCapacityUpgradeQuote,
 } from './types/stockCapacity';
-import {
-  allocateWorkers,
-  getDailyWorkPoints,
-  getMaxDesiredWorkers,
-} from './types/employment';
 import { PRODUCTS } from './types/product';
-import { getWorkerTechnique } from './types/wellbeing';
 import type {
   DatabaseQueryTrafficSnapshot,
   PerformanceLogRecord,
 } from './types/performanceLog';
 import type { WebSocketTrafficSnapshot } from './types/websocketTraffic';
-import {
-  calculateResidenceAppealsFromIncome,
-  type ResidenceBenefitCalculation,
-} from './types/residence-relocation';
+import type { ResidenceBenefitCalculation } from './types/residence-relocation';
 import { loadCommerceDiagnostics, saveCommerceDiagnostics } from './utils/commerceDiagnosticsStorage';
-import { applyEntityDelta } from './types/worldSync';
+import { applyEntityDelta, applyWorldBuildingDelta } from './types/worldSync';
 import { createMapGenerator } from './utils/mapGenerator';
 import { DEFAULT_TILE_LIST } from './utils/tileAssets';
 import { WORLD_CONFIG } from './utils/worldConfig';
@@ -379,7 +372,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const worldConnectionRef = useRef<ReturnType<typeof connectToWorld> | null>(null);
   const currentRoadViewRef = useRef<{ cityId: string; x: number; y: number } | null>(null);
   const [roads, setRoads] = useState<RoadTile[]>([]);
-  const [residentialBuildings, setResidentialBuildings] = useState<ResidentialBuilding[]>([]);
+  const [residentialBuildings, setResidentialBuildings] = useState<WorldBuilding[]>([]);
   const [pendingResidentialBuildings, setPendingResidentialBuildings] = useState<ResidentialBuilding[]>([]);
   const [pendingResidentialDemolitionIds, setPendingResidentialDemolitionIds] = useState<string[]>([]);
   const [pendingCities, setPendingCities] = useState<CityAssembly[]>([]);
@@ -645,12 +638,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         const buildingDelta = delta.buildings;
         if (buildingDelta) {
           setResidentialBuildings((current) =>
-            applyEntityDelta(
-              current,
-              buildingDelta,
-              (building) => building.id,
-              (buildingId) => buildingId,
-            ),
+            applyWorldBuildingDelta(current, buildingDelta),
           );
         }
       },
@@ -671,6 +659,19 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           ),
         );
       },
+      (update) => {
+        if (update.full) {
+          setResidentialBuildings(update.buildings);
+          return;
+        }
+        setResidentialBuildings((current) =>
+          applyWorldBuildingDelta(current, {
+            upsert: update.upsert,
+            removed: update.removed,
+          }),
+        );
+      },
+      () => setResidentialBuildings([]),
     );
     worldConnectionRef.current = connection;
     connection.setRoadView(currentRoadViewRef.current);
@@ -746,9 +747,17 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   }, [pendingResidentialBuildings, pendingResidentialDemolitionIds, residentialBuildings]);
 
   const mapPosition = useMemo(() => selectedTile ?? hoveredTile, [selectedTile, hoveredTile]);
-  const selectedResidence = selectedResidenceId
+  const selectedWorldBuilding = selectedResidenceId
     ? visibleResidentialBuildings.find((building) => building.id === selectedResidenceId) ?? null
     : null;
+  const selectedResidence =
+    selectedWorldBuilding && !isResidentialBuildingSummary(selectedWorldBuilding)
+      ? selectedWorldBuilding
+      : null;
+  const selectedBuildingSummary =
+    selectedWorldBuilding && isResidentialBuildingSummary(selectedWorldBuilding)
+      ? selectedWorldBuilding
+      : null;
   const selectedResidenceMinimumWage = selectedResidence
     ? cities.find((city) => city.id === selectedResidence.cityId)?.minimumWage ?? 1
     : 1;
@@ -1361,7 +1370,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
-  const handleResidenceSelect = (building: ResidentialBuilding) => {
+  const handleResidenceSelect = (building: WorldBuilding) => {
     if (warehouseTransfer) {
       if (warehouseTransfer.destination) return;
       if (building.id === warehouseTransfer.sourceId) {
@@ -1371,7 +1380,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         });
         return;
       }
-      if (!building.isOwnedByCurrentUser) {
+      if (
+        isResidentialBuildingSummary(building) ||
+        !building.isOwnedByCurrentUser
+      ) {
         setWarehouseTransfer({
           ...warehouseTransfer,
           error: 'O destino precisa ser uma construção sua.',
@@ -2125,7 +2137,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     }
   };
 
-  const demolishResidence = async (building: ResidentialBuilding) => {
+  const demolishResidence = async (building: WorldBuilding) => {
     setPendingResidentialDemolitionIds((current) =>
       current.includes(building.id) ? current : [...current, building.id],
     );
@@ -2286,6 +2298,13 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           </div>
         </div>
 
+        {selectedBuildingSummary && (
+          <BuildingSummaryPanel
+            building={selectedBuildingSummary}
+            cityName={cities.find((city) => city.id === selectedBuildingSummary.cityId)?.name ?? '—'}
+            onClose={() => setSelectedResidenceId(null)}
+          />
+        )}
         {selectedResidence && (
           <ResidencePanel
             building={selectedResidence}
@@ -2306,96 +2325,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
                 },
               )
             }
-            onSimulateHiring={(settings) => {
-              const completedResidences = residentialBuildings.filter((building) =>
-                RESIDENCES[building.type].kind === 'residence' &&
-                building.status === 'completed',
+            onSimulateHiring={async (settings) => {
+              const result = await cityRequest<{ hired: number }>(
+                `/api/residential-buildings/${selectedResidence.id}/simulate-hiring`,
+                { method: 'POST', body: JSON.stringify(settings) },
               );
-              const workplaces = residentialBuildings
-                .filter((building) =>
-                  RESIDENCES[building.type].kind !== 'residence' ||
-                  building.status === 'under_construction',
-                )
-                .map((building) => ({
-                  id: building.id,
-                  cityId: building.cityId,
-                  type: building.type,
-                  x: building.x,
-                  y: building.y,
-                  wage: building.id === selectedResidence.id ? settings.wage : building.wage,
-                  workHoursPerDay:
-                    building.id === selectedResidence.id
-                      ? settings.workHoursPerDay
-                      : building.workHoursPerDay,
-                  desiredWorkers:
-                    building.id === selectedResidence.id
-                      ? settings.desiredWorkers
-                      : building.desiredWorkers,
-                  employed: building.employed,
-                  minimumWorkerTechnique:
-                    building.id === selectedResidence.id
-                      ? settings.minimumWorkerTechnique
-                      : building.minimumWorkerTechnique,
-                  status: building.status,
-                }));
-              const employmentOffers = workplaces.flatMap((workplace) => {
-                const vacancies = Math.max(
-                  0,
-                  Math.min(
-                    workplace.desiredWorkers,
-                    getMaxDesiredWorkers(workplace.type, workplace.status),
-                  ) - workplace.employed,
-                );
-                return vacancies > 0
-                  ? [{
-                      cityId: workplace.cityId,
-                      type: workplace.type,
-                      x: workplace.x,
-                      y: workplace.y,
-                      wage: workplace.wage,
-                      vacancies,
-                    }]
-                  : [];
-              });
-              const residenceAppeals = calculateResidenceAppealsFromIncome(
-                completedResidences.map((building) => ({
-                  id: building.id,
-                  cityId: building.cityId,
-                  type: building.type,
-                  x: building.x + RESIDENCES[building.type].width / 2,
-                  y: building.y + RESIDENCES[building.type].height / 2,
-                  salaryAverage: building.averageIncome,
-                  occupants: building.occupants,
-                  employed: building.employed,
-                  capacity: RESIDENCES[building.type].capacity,
-                  constructionAppeal: RESIDENCES[building.type].localAppeal,
-                })),
-                employmentOffers,
-              );
-              const residences = completedResidences
-                .filter((building) => building.occupants > 0)
-                .map((building) => {
-                  const appeal = residenceAppeals.get(building.id);
-                  if (!appeal) {
-                    throw new Error(
-                      `Não foi possível calcular o apreço interno da residência ${building.id}.`,
-                    );
-                  }
-                  return {
-                    id: building.id,
-                    cityId: building.cityId,
-                    type: building.type,
-                    x: building.x,
-                    y: building.y,
-                    occupants: building.occupants,
-                    wellbeing: building.wellbeing,
-                    internalAppeal: appeal.internalAppeal,
-                    technique: getWorkerTechnique(building.wellbeing),
-                  };
-                });
-              return allocateWorkers(residences, workplaces)
-                .filter((assignment) => assignment.workplaceId === selectedResidence.id)
-                .reduce((total, assignment) => total + assignment.count, 0);
+              return result.hired;
             }}
             onSaveInputProduct={(productId) =>
               void saveInputProduct(selectedResidence.id, productId)

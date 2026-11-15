@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   applyEntityDelta,
+  applyWorldBuildingDelta,
   createWorldDelta,
   type WorldEntities,
 } from './worldSync.js';
+import type { ResidentialBuilding, ResidentialBuildingSummary } from './residence.js';
 
 type Building = { id: string; stock: number };
 
@@ -92,4 +94,76 @@ test('applies entity updates and removals by stable entity key', () => {
     { x: 10, y: 11, cityId: 'city-a' },
     { x: 14, y: 15, cityId: 'city-b' },
   ]);
+});
+
+test('preserves owned building details when its public summary is updated', () => {
+  const ownedBuilding: ResidentialBuilding = {
+    id: 'owned-farm',
+    ownerName: 'Player',
+    isOwnedByCurrentUser: true,
+    type: 'farm_rice',
+    buildingNumber: 1,
+    x: 10,
+    y: 20,
+    cityId: 'city-a',
+    status: 'completed',
+    startedAt: '2026-01-01T00:00:00.000Z',
+    completedAt: '2026-01-02T00:00:00.000Z',
+    wage: 25,
+    workHoursPerDay: 8,
+    minimumWorkerTechnique: 10,
+    rent: 10,
+    occupants: 0,
+    wellbeing: 0,
+    desiredWorkers: 4,
+    workPointsDone: 0,
+    price: 10,
+    stock: 7,
+    stockLevels: {},
+    warehouseIds: [],
+    toolStock: 1,
+    woodStock: 0,
+    ironStock: 0,
+    charcoalStock: 0,
+    sugarcaneStock: 0,
+    inputStocks: {},
+    selectedInputProductId: null,
+    efficiencyPenalty: 0,
+    farmAutomation: {
+      enabled: false,
+      plantingMonths: [],
+      plantingWorkers: 0,
+      harvestWorkers: 0,
+    },
+    crop: null,
+    employed: 3,
+    averageIncome: 0,
+    averageWorkerTechnique: null,
+  };
+  const summary: ResidentialBuildingSummary = {
+    dataLevel: 'summary',
+    id: ownedBuilding.id,
+    ownerName: 'Player',
+    isOwnedByCurrentUser: true,
+    type: ownedBuilding.type,
+    buildingNumber: ownedBuilding.buildingNumber ?? 1,
+    x: 11,
+    y: ownedBuilding.y,
+    cityId: ownedBuilding.cityId,
+    status: ownedBuilding.status,
+    startedAt: ownedBuilding.startedAt,
+    completedAt: ownedBuilding.completedAt,
+  };
+
+  const [updated] = applyWorldBuildingDelta(
+    [ownedBuilding],
+    { upsert: [summary], removed: [] },
+  );
+
+  assert.ok(updated);
+  assert.equal('dataLevel' in updated, false);
+  if ('dataLevel' in updated) return;
+  assert.equal(updated.stock, 7);
+  assert.equal(updated.wage, 25);
+  assert.equal(updated.x, 11);
 });

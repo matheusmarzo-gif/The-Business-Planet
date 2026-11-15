@@ -25,11 +25,12 @@ import {
   getResidencePlacementError,
   isTileInResidenceFootprint,
   RESIDENCES,
-  ResidentialBuilding,
   ResidencePlacementError,
   ResidenceType,
   UNDER_CONSTRUCTION_ASSET,
+  WorldBuilding,
   WORKER_SEARCH_RADIUS,
+  isResidentialBuildingSummary,
 } from '../types/residence';
 import { isWithinLinkRadius } from '../types/logistics';
 
@@ -54,14 +55,19 @@ function getCachedTexture(asset: string): PIXI.Texture {
 }
 
 function areBuildingLinksInRange(
-  building: ResidentialBuilding,
+  building: WorldBuilding,
   position: RoadPosition,
-  buildings: ResidentialBuilding[],
+  buildings: WorldBuilding[],
 ): boolean {
+  const buildingWarehouseIds = isResidentialBuildingSummary(building)
+    ? []
+    : building.warehouseIds;
   const linkedBuildings = buildings.filter(
     (candidate) =>
       candidate.id !== building.id &&
-      (building.warehouseIds.includes(candidate.id) || candidate.warehouseIds.includes(building.id)),
+      (buildingWarehouseIds.includes(candidate.id) ||
+        (!isResidentialBuildingSummary(candidate) &&
+          candidate.warehouseIds.includes(building.id))),
   );
   return linkedBuildings.every((linkedBuilding) =>
     isWithinLinkRadius(
@@ -155,10 +161,10 @@ interface GameMapProps {
   zoneOverlay: CityZoneType | 'all' | null;
   zoneEditorCityId: string | null;
   zoneDrawingType: CityZoneType | null;
-  residentialBuildings: ResidentialBuilding[];
+  residentialBuildings: WorldBuilding[];
   residencePlacementType: ResidenceType | null;
   isMaster: boolean;
-  influenceBuilding: ResidentialBuilding | null;
+  influenceBuilding: WorldBuilding | null;
   onCitySelect: (city: CityAssembly) => void;
   onCityPlace: (center: { x: number; y: number }) => void;
   onInvalidCityPlacement: (reason: CityPlacementError) => void;
@@ -168,10 +174,10 @@ interface GameMapProps {
   onCityDemolish: (city: CityAssembly) => void;
   onCityZoneDraw: (bounds: CityZoneBounds) => void;
   onResidencePlace: (type: ResidenceType, position: RoadPosition) => void;
-  onResidenceDemolish: (building: ResidentialBuilding) => void;
+  onResidenceDemolish: (building: WorldBuilding) => void;
   onInvalidResidencePlacement: (reason: ResidencePlacementError) => void;
   onResidenceComplete: (buildingId: string) => void;
-  onResidenceSelect: (building: ResidentialBuilding) => void;
+  onResidenceSelect: (building: WorldBuilding) => void;
   onResidenceMove: (buildingId: string, position: RoadPosition) => void;
 }
 

@@ -2,10 +2,16 @@ import { getAccessToken } from '../auth/authClient';
 import { isValidCityWellbeing, type CityAssembly } from '../types/city';
 import type { CityZone } from '../types/city';
 import type { RoadTile } from '../types/road';
-import { getResidenceDefinition, type ResidentialBuilding } from '../types/residence';
+import {
+  getResidenceDefinition,
+  type ResidentialBuilding,
+  type ResidentialBuildingSummary,
+  type WorldBuilding,
+} from '../types/residence';
 import { isCurrencyAmount } from '../types/currency';
 import type {
   CityRoadUpdate,
+  CityBuildingsUpdate,
   EntityDelta,
   RoadViewPosition,
   WorldDelta,
@@ -122,7 +128,7 @@ function isEntityDelta<Entity, RemovedKey>(
   );
 }
 
-function isWorldDelta(value: unknown): value is WorldDelta<ResidentialBuilding> {
+function isWorldDelta(value: unknown): value is WorldDelta<WorldBuilding> {
   if (typeof value !== 'object' || value === null) return false;
   const delta = value as Record<string, unknown>;
   if (delta.type !== 'world_delta') return false;
@@ -151,10 +157,34 @@ function isWorldDelta(value: unknown): value is WorldDelta<ResidentialBuilding> 
     (!hasBuildings ||
       isEntityDelta(
         delta.buildings,
-        isResidentialBuilding,
+        isWorldBuilding,
         (key): key is string => typeof key === 'string',
       ))
   );
+}
+
+function isResidentialBuildingSummary(value: unknown): value is ResidentialBuildingSummary {
+  if (typeof value !== 'object' || value === null) return false;
+  const building = value as Record<string, unknown>;
+  return (
+    building.dataLevel === 'summary' &&
+    typeof building.id === 'string' &&
+    typeof building.ownerName === 'string' &&
+    typeof building.isOwnedByCurrentUser === 'boolean' &&
+    typeof building.type === 'string' &&
+    getResidenceDefinition(building.type) !== null &&
+    Number.isInteger(building.buildingNumber) &&
+    Number.isInteger(building.x) &&
+    Number.isInteger(building.y) &&
+    typeof building.cityId === 'string' &&
+    (building.status === 'under_construction' || building.status === 'completed') &&
+    typeof building.startedAt === 'string' &&
+    (building.completedAt === null || typeof building.completedAt === 'string')
+  );
+}
+
+function isWorldBuilding(value: unknown): value is WorldBuilding {
+  return isResidentialBuildingSummary(value) || isResidentialBuilding(value);
 }
 
 function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
@@ -213,14 +243,39 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
   );
 }
 
+function isCityBuildingsUpdate(value: unknown): value is CityBuildingsUpdate {
+  if (typeof value !== 'object' || value === null) return false;
+  const update = value as Record<string, unknown>;
+  if (
+    update.type !== 'city_buildings' ||
+    typeof update.cityId !== 'string' ||
+    !Number.isSafeInteger(update.revision) ||
+    Number(update.revision) < 0
+  ) {
+    return false;
+  }
+  if (update.full === true) {
+    return Array.isArray(update.buildings) && update.buildings.every(isWorldBuilding);
+  }
+  return (
+    update.full === false &&
+    Array.isArray(update.upsert) &&
+    update.upsert.every(isWorldBuilding) &&
+    Array.isArray(update.removed) &&
+    update.removed.every((buildingId) => typeof buildingId === 'string')
+  );
+}
+
 export function connectToWorld(
   onSnapshot: (snapshot: WorldSnapshot) => void,
   onConnectionChange: (connected: boolean) => void,
   onCitiesChange: (cities: CityAssembly[]) => void,
   onRoadsChange: (roads: RoadTile[]) => void,
-  onResidentialBuildingsChange: (buildings: ResidentialBuilding[]) => void,
-  onWorldDelta: (delta: WorldDelta<ResidentialBuilding>) => void,
+  onResidentialBuildingsChange: (buildings: WorldBuilding[]) => void,
+  onWorldDelta: (delta: WorldDelta<WorldBuilding>) => void,
   onCityRoadsChange: (update: CityRoadUpdate) => void,
+  onCityBuildingsChange: (update: CityBuildingsUpdate) => void,
+  onCityBuildingsCleared: () => void,
 ): { setRoadView: (position: RoadViewPosition | null) => void; close: () => void } {
   let socket: WebSocket | null = null;
   let reconnectTimer: number | undefined;
@@ -233,17 +288,44 @@ export function connectToWorld(
   const roadRevisions = new Map<string, number>();
   const pendingRoadUpdates = new Map<string, CityRoadUpdate[]>();
   const roadResyncRequested = new Set<string>();
+  let buildingRevision: number | null = null;
+  let pendingBuildingUpdates: CityBuildingsUpdate[] = [];
 
   const transmitRoadView = (position: RoadViewPosition | null) => {
-    if (!position || socket?.readyState !== WebSocket.OPEN) return;
+    if (socket?.readyState !== WebSocket.OPEN) return;
     socket.send(
       JSON.stringify({
         type: 'road_view',
         requestId: ++roadViewRequestId,
         position,
-        sinceRevision: roadRevisions.get(position.cityId) ?? null,
+        sinceRevision: position ? roadRevisions.get(position.cityId) ?? null : null,
       }),
     );
+  };
+
+  const applyCityBuildingsUpdate = (update: CityBuildingsUpdate) => {
+    if (update.cityId !== roadView?.cityId) return;
+    if (update.full) {
+      if (buildingRevision !== null && update.revision < buildingRevision) return;
+      onCityBuildingsChange(update);
+      buildingRevision = update.revision;
+      pendingBuildingUpdates.sort((first, second) => first.revision - second.revision);
+      const pending = pendingBuildingUpdates;
+      pendingBuildingUpdates = [];
+      for (const candidate of pending) {
+        if (candidate.revision > (buildingRevision ?? -1)) {
+          applyCityBuildingsUpdate(candidate);
+        }
+      }
+      return;
+    }
+    if (buildingRevision === null) {
+      pendingBuildingUpdates.push(update);
+      return;
+    }
+    if (update.revision <= buildingRevision) return;
+    onCityBuildingsChange(update);
+    buildingRevision = update.revision;
   };
 
   const requestRoadResync = (cityId: string) => {
@@ -324,6 +406,7 @@ export function connectToWorld(
       url.searchParams.set('reconnect', hasConnected ? '1' : '0');
       url.searchParams.set('worldUpdates', 'delta-v1');
       url.searchParams.set('roadSync', 'city-v1');
+      url.searchParams.set('buildingSync', 'city-v1');
       socket = new WebSocket(url);
     } catch (error) {
       console.error('Não foi possível autenticar a conexão com o mundo:', error);
@@ -336,12 +419,23 @@ export function connectToWorld(
       hasConnected = true;
       retryDelay = 1000;
       onConnectionChange(true);
+      buildingRevision = null;
+      pendingBuildingUpdates = [];
+      onCityBuildingsCleared();
       transmitRoadView(roadView);
     });
     socket.addEventListener('message', (event) => {
       try {
         const message: unknown = JSON.parse(String(event.data));
         if (typeof message === 'object' && message !== null && 'type' in message) {
+          if (message.type === 'city_buildings') {
+            if (!isCityBuildingsUpdate(message)) {
+              console.error('O servidor enviou uma sincronização de construções inválida.');
+              return;
+            }
+            applyCityBuildingsUpdate(message);
+            return;
+          }
           if (message.type === 'city_roads') {
             if (!isCityRoadUpdate(message)) {
               console.error('O servidor enviou uma sincronização de estradas inválida.');
@@ -389,7 +483,7 @@ export function connectToWorld(
           (!('roads' in message) ||
             (Array.isArray(message.roads) && message.roads.every(isRoadTile))) &&
           (!('buildings' in message) ||
-            (Array.isArray(message.buildings) && message.buildings.every(isResidentialBuilding)))
+            (Array.isArray(message.buildings) && message.buildings.every(isWorldBuilding)))
         ) {
           worldRevision =
             'revision' in message &&
@@ -448,17 +542,10 @@ export function connectToWorld(
         pendingRoadUpdates.delete(previousCityId);
         roadResyncRequested.delete(previousCityId);
       }
-      if (position) transmitRoadView(position);
-      else if (socket?.readyState === WebSocket.OPEN) {
-        socket.send(
-          JSON.stringify({
-            type: 'road_view',
-            requestId: ++roadViewRequestId,
-            position: null,
-            sinceRevision: null,
-          }),
-        );
-      }
+      buildingRevision = null;
+      pendingBuildingUpdates = [];
+      onCityBuildingsCleared();
+      transmitRoadView(position);
     },
     close: () => {
       stopped = true;

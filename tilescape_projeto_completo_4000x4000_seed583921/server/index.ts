@@ -35,7 +35,11 @@ import {
   type RoadTile,
   type RoadTileRevisionChange,
 } from '../src/types/road.js';
-import type { CityRoadUpdate, RoadViewPosition } from '../src/types/worldSync.js';
+import type {
+  CityBuildingsUpdate,
+  CityRoadUpdate,
+  RoadViewPosition,
+} from '../src/types/worldSync.js';
 import {
   getResidenceDefinition,
   getResidencePlacementError,
@@ -51,7 +55,9 @@ import {
   RESIDENCE_STATS,
   SHOP_TYPES,
   type ResidentialBuilding,
+  type ResidentialBuildingSummary,
   type ResidenceType,
+  type WorldBuilding,
   type ResidencePlacementError,
 } from '../src/types/residence.js';
 import type {
@@ -206,6 +212,7 @@ const PORT = Number(process.env.PORT ?? 3001);
 const websocketUsers = new WeakMap<object, string>();
 const websocketWorldDeltaSupport = new WeakMap<WebSocket, boolean>();
 const websocketCityRoadSyncSupport = new WeakMap<WebSocket, boolean>();
+const websocketCityBuildingSyncSupport = new WeakMap<WebSocket, boolean>();
 const MAP = {
   width: WORLD_CONFIG.width,
   height: WORLD_CONFIG.height,
@@ -426,6 +433,8 @@ const websocketWorldInitialized = new WeakMap<WebSocket, boolean>();
 const websocketTrafficLastAccountedAt = new WeakMap<WebSocket, number>();
 const websocketRoadCity = new WeakMap<WebSocket, string>();
 const websocketRoadViewRequestId = new WeakMap<WebSocket, number>();
+const websocketVisibleBuildingIds = new WeakMap<WebSocket, Set<string>>();
+const websocketWorldRevision = new WeakMap<WebSocket, number>();
 type WebSocketTrafficCounter =
   | 'connections'
   | 'reconnections'
@@ -742,7 +751,9 @@ function getPerformanceEntityCounts(
   }, emptyPerformanceCounts());
 }
 
-function getWorldPerformanceEntityCounts(buildings: ResidentialBuilding[]): PerformanceEntityCounts {
+function getWorldPerformanceEntityCounts(
+  buildings: Pick<ResidentialBuilding, 'type' | 'desiredWorkers' | 'status'>[],
+): PerformanceEntityCounts {
   return buildings.reduce((counts, building) => {
     const definition = getResidenceDefinition(building.type);
     if (definition?.kind === 'residence') counts.residences += 1;
@@ -1318,17 +1329,28 @@ function broadcast(payload: string) {
   }
 }
 
-type WorldResidentialBuilding = ResidentialBuilding & { ownerId: string };
+type WorldResidentialBuilding = Omit<ResidentialBuildingSummary, 'isOwnedByCurrentUser'> & {
+  ownerId: string;
+  syncHash?: string;
+  desiredWorkers: number;
+};
+type LegacyWorldResidentialBuilding = ResidentialBuilding & { ownerId: string };
 type FullWorldUpdate = {
   type: 'cities';
   revision?: number;
   cities: CityAssembly[];
   roads?: RoadTile[];
-  buildings: WorldResidentialBuilding[];
+  buildings: (WorldResidentialBuilding | LegacyWorldResidentialBuilding)[];
 };
 type WorldPublication = {
   type: 'world_publication';
-  full: FullWorldUpdate;
+  full: {
+    type: 'cities';
+    revision?: number;
+    cities: CityAssembly[];
+    roads?: RoadTile[];
+    buildings: WorldResidentialBuilding[];
+  };
   delta: WorldDelta<WorldResidentialBuilding> | null;
 };
 type WorldSyncState = {
@@ -1342,17 +1364,72 @@ function createPlayerWorldUpdate(
 ) {
   return {
     ...update,
-    buildings: update.buildings.map(({ ownerId, ...building }) => ({
-      ...building,
-      isOwnedByCurrentUser: ownerId === userId,
-    })),
+    buildings: update.buildings.map((building) => createPlayerBuilding(building, userId)),
+  };
+}
+
+function createPlayerBuilding(
+  building: WorldResidentialBuilding,
+  userId: string | undefined,
+): ResidentialBuildingSummary;
+function createPlayerBuilding(
+  building: LegacyWorldResidentialBuilding,
+  userId: string | undefined,
+): ResidentialBuilding;
+function createPlayerBuilding(
+  building: WorldResidentialBuilding | LegacyWorldResidentialBuilding,
+  userId: string | undefined,
+): WorldBuilding;
+function createPlayerBuilding(
+  building: WorldResidentialBuilding | LegacyWorldResidentialBuilding,
+  userId: string | undefined,
+): WorldBuilding {
+  const { ownerId, ...playerBuilding } = building;
+  const isOwnedByCurrentUser = ownerId === userId;
+  if ('dataLevel' in playerBuilding && playerBuilding.dataLevel === 'summary') {
+    return {
+      dataLevel: 'summary',
+      id: playerBuilding.id,
+      ownerName: playerBuilding.ownerName,
+      isOwnedByCurrentUser,
+      type: playerBuilding.type,
+      buildingNumber: playerBuilding.buildingNumber,
+      x: playerBuilding.x,
+      y: playerBuilding.y,
+      cityId: playerBuilding.cityId,
+      status: playerBuilding.status,
+      startedAt: playerBuilding.startedAt,
+      completedAt: playerBuilding.completedAt,
+    };
+  }
+  return { ...playerBuilding, isOwnedByCurrentUser };
+}
+
+function toWorldBuildingSummary(
+  building: WorldResidentialBuilding | LegacyWorldResidentialBuilding,
+): WorldResidentialBuilding {
+  if ('syncHash' in building) return building;
+  return {
+    dataLevel: 'summary',
+    id: building.id,
+    ownerName: building.ownerName ?? 'Jogador',
+    type: building.type,
+    buildingNumber: building.buildingNumber ?? 1,
+    x: building.x,
+    y: building.y,
+    cityId: building.cityId,
+    status: building.status,
+    startedAt: building.startedAt,
+    completedAt: building.completedAt,
+    ownerId: building.ownerId,
+    desiredWorkers: building.desiredWorkers,
   };
 }
 
 function createPlayerWorldDelta(
   delta: WorldDelta<WorldResidentialBuilding>,
   userId: string | undefined,
-): WorldDelta<ResidentialBuilding> {
+): WorldDelta<ResidentialBuildingSummary> {
   return {
     type: 'world_delta',
     revision: delta.revision,
@@ -1362,13 +1439,51 @@ function createPlayerWorldDelta(
       ? {
           buildings: {
             ...delta.buildings,
-            upsert: delta.buildings.upsert.map(({ ownerId, ...building }) => ({
-              ...building,
-              isOwnedByCurrentUser: ownerId === userId,
-            })),
+            upsert: delta.buildings.upsert.map((building) => createPlayerBuilding(building, userId)),
           },
         }
       : {}),
+  };
+}
+
+function createCityScopedWorldDelta(
+  delta: WorldDelta<WorldResidentialBuilding>,
+  userId: string | undefined,
+): WorldDelta<ResidentialBuildingSummary> {
+  const playerDelta = createPlayerWorldDelta(delta, userId);
+  return {
+    ...playerDelta,
+    buildings: { upsert: [], removed: [] },
+  };
+}
+
+function createLegacyWorldDelta(
+  delta: WorldDelta<WorldResidentialBuilding>,
+  buildingsById: ReadonlyMap<string, LegacyWorldResidentialBuilding>,
+  userId: string | undefined,
+): WorldDelta<ResidentialBuilding> {
+  const buildings = delta.buildings
+    ? {
+        upsert: delta.buildings.upsert.flatMap((building) => {
+          const fullBuilding = buildingsById.get(building.id);
+          if (!fullBuilding) return [];
+          const { ownerId, ...playerBuilding } = fullBuilding;
+          return [{ ...playerBuilding, isOwnedByCurrentUser: ownerId === userId }];
+        }),
+        removed: [
+          ...delta.buildings.removed,
+          ...delta.buildings.upsert
+            .filter((building) => !buildingsById.has(building.id))
+            .map((building) => building.id),
+        ],
+      }
+    : undefined;
+  return {
+    type: 'world_delta',
+    revision: delta.revision,
+    ...(delta.cities ? { cities: delta.cities } : {}),
+    ...(delta.roads ? { roads: delta.roads } : {}),
+    ...(buildings ? { buildings } : {}),
   };
 }
 
@@ -1467,6 +1582,145 @@ function isCityRoadUpdate(value: unknown): value is CityRoadUpdate {
   );
 }
 
+function createCityBuildingsSnapshot(
+  cityId: string,
+  revision: number,
+  summaries: readonly WorldResidentialBuilding[],
+  ownedBuildings: readonly LegacyWorldResidentialBuilding[],
+  userId: string | undefined,
+): CityBuildingsUpdate {
+  const ownedById = new Map(ownedBuildings.map((building) => [building.id, building]));
+  return {
+    type: 'city_buildings',
+    cityId,
+    revision,
+    full: true,
+    buildings: summaries
+      .filter((building) => building.cityId === cityId)
+      .map((building) => {
+        const ownedBuilding =
+          building.ownerId === userId ? ownedById.get(building.id) : undefined;
+        return createPlayerBuilding(ownedBuilding ?? building, userId);
+      }),
+  };
+}
+
+function sendCityBuildingsUpdate(websocket: WebSocket, update: CityBuildingsUpdate): void {
+  const payload = JSON.stringify(update);
+  websocket.send(payload);
+  recordWebSocketMessage('worldUpdate', payload);
+  if (update.full) {
+    websocketVisibleBuildingIds.set(
+      websocket,
+      new Set(update.buildings.map((building) => building.id)),
+    );
+  } else {
+    const visibleIds = websocketVisibleBuildingIds.get(websocket) ?? new Set<string>();
+    for (const building of update.upsert) visibleIds.add(building.id);
+    for (const buildingId of update.removed) visibleIds.delete(buildingId);
+    websocketVisibleBuildingIds.set(websocket, visibleIds);
+  }
+}
+
+async function deliverCityBuildingSnapshot(
+  websocket: WebSocket,
+  cityId: string,
+  revision: number,
+  summaries: readonly WorldResidentialBuilding[],
+): Promise<void> {
+  const userId = websocketUsers.get(websocket);
+  const [citySummaries, ownedBuildings] = await Promise.all([
+    Promise.resolve(summaries.filter((building) => building.cityId === cityId)),
+    getOwnedResidentialBuildings(cityId, userId ?? ''),
+  ]);
+  if (
+    websocket.readyState !== WebSocket.OPEN ||
+    websocketRoadCity.get(websocket) !== cityId
+  ) {
+    return;
+  }
+  sendCityBuildingsUpdate(
+    websocket,
+    createCityBuildingsSnapshot(
+      cityId,
+      revision,
+      citySummaries,
+      ownedBuildings,
+      userId,
+    ),
+  );
+}
+
+async function deliverCityBuildingDelta(
+  delta: WorldDelta<WorldResidentialBuilding>,
+): Promise<void> {
+  if (!delta.buildings) return;
+  const groups = new Map<string, { cityId: string; userId: string; clients: WebSocket[] }>();
+  for (const client of clients) {
+    const cityId = websocketRoadCity.get(client);
+    const userId = websocketUsers.get(client);
+    if (
+      client.readyState !== WebSocket.OPEN ||
+      !websocketCityBuildingSyncSupport.get(client) ||
+      !cityId ||
+      !userId
+    ) {
+      continue;
+    }
+    const key = `${cityId}\u0000${userId}`;
+    const group = groups.get(key) ?? { cityId, userId, clients: [] };
+    group.clients.push(client);
+    groups.set(key, group);
+  }
+
+  for (const group of groups.values()) {
+    const changedOwnedIds = delta.buildings.upsert
+      .filter(
+        (building) => building.cityId === group.cityId && building.ownerId === group.userId,
+      )
+      .map((building) => building.id);
+    const ownedBuildings = await getOwnedResidentialBuildingsByIds(
+      group.cityId,
+      group.userId,
+      changedOwnedIds,
+    );
+    const ownedById = new Map(ownedBuildings.map((building) => [building.id, building]));
+
+    for (const client of group.clients) {
+      if (
+        client.readyState !== WebSocket.OPEN ||
+        websocketRoadCity.get(client) !== group.cityId
+      ) {
+        continue;
+      }
+      const visibleIds = websocketVisibleBuildingIds.get(client) ?? new Set<string>();
+      const upsert: WorldBuilding[] = [];
+      const removed: string[] = [];
+      for (const building of delta.buildings.upsert) {
+        if (building.cityId === group.cityId) {
+          const fullBuilding =
+            building.ownerId === group.userId ? ownedById.get(building.id) : undefined;
+          upsert.push(createPlayerBuilding(fullBuilding ?? building, group.userId));
+        } else if (visibleIds.has(building.id)) {
+          removed.push(building.id);
+        }
+      }
+      for (const buildingId of delta.buildings.removed) {
+        if (visibleIds.has(buildingId)) removed.push(buildingId);
+      }
+      if (upsert.length === 0 && removed.length === 0) continue;
+      sendCityBuildingsUpdate(client, {
+        type: 'city_buildings',
+        cityId: group.cityId,
+        revision: delta.revision,
+        full: false,
+        upsert,
+        removed: [...new Set(removed)],
+      });
+    }
+  }
+}
+
 async function deliverCities(message: string): Promise<void> {
   let update: unknown;
   try {
@@ -1498,6 +1752,18 @@ async function deliverCities(message: string): Promise<void> {
     }
 
     const publication = update as WorldPublication;
+    const activeClients = [...clients].filter(
+      (client) => client.readyState === WebSocket.OPEN,
+    );
+    const needsLegacySnapshot = activeClients.some(
+      (client) =>
+        !websocketCityBuildingSyncSupport.get(client) &&
+        !(
+          websocketWorldDeltaSupport.get(client) &&
+          websocketWorldInitialized.get(client) &&
+          publication.delta
+        ),
+    );
     const needsLegacyRoads = [...clients].some(
       (client) =>
         client.readyState === WebSocket.OPEN &&
@@ -1509,29 +1775,92 @@ async function deliverCities(message: string): Promise<void> {
         ) &&
         publication.full.roads === undefined,
     );
-    const legacyRoads = needsLegacyRoads ? await getAllRoadTiles() : undefined;
-    for (const client of clients) {
-      if (client.readyState !== WebSocket.OPEN) continue;
+    const changedLegacyIds = activeClients.some(
+      (client) =>
+        !websocketCityBuildingSyncSupport.get(client) &&
+        websocketWorldDeltaSupport.get(client) &&
+        websocketWorldInitialized.get(client) &&
+        publication.delta,
+    )
+      ? publication.delta?.buildings?.upsert.map((building) => building.id) ?? []
+      : [];
+    const [legacyRoads, legacySnapshotBuildings, changedLegacyBuildings] = await Promise.all([
+      needsLegacyRoads ? getAllRoadTiles() : Promise.resolve(undefined),
+      needsLegacySnapshot ? getLegacyResidentialBuildings() : Promise.resolve(undefined),
+      getLegacyResidentialBuildingsByIds(changedLegacyIds),
+    ]);
+    const changedLegacyBuildingsById = new Map(
+      changedLegacyBuildings.map((building) => [building.id, building]),
+    );
+    for (const client of activeClients) {
       const sendDelta = Boolean(
         websocketWorldDeltaSupport.get(client) &&
           websocketWorldInitialized.get(client) &&
           publication.delta,
       );
-      const payload = JSON.stringify(
-        sendDelta && publication.delta
-          ? createPlayerWorldDelta(publication.delta, websocketUsers.get(client))
-          : createPlayerWorldUpdate(
-              !websocketCityRoadSyncSupport.get(client) &&
-                publication.full.roads === undefined
-                ? { ...publication.full, roads: legacyRoads ?? [] }
-                : publication.full,
-              websocketUsers.get(client),
-            ),
-      );
+      const userId = websocketUsers.get(client);
+      if (websocketCityBuildingSyncSupport.get(client)) {
+        if (sendDelta && publication.delta) {
+          const payload = JSON.stringify(
+            createCityScopedWorldDelta(publication.delta, userId),
+          );
+          client.send(payload);
+          recordWebSocketMessage('worldUpdate', payload);
+          websocketWorldRevision.set(client, publication.delta.revision);
+          continue;
+        }
+
+        const fullUpdate: FullWorldUpdate = {
+          ...publication.full,
+          buildings: [],
+          ...(!websocketCityRoadSyncSupport.get(client) &&
+          publication.full.roads === undefined
+            ? { roads: legacyRoads ?? [] }
+            : {}),
+        };
+        const payload = JSON.stringify(createPlayerWorldUpdate(fullUpdate, userId));
+        client.send(payload);
+        recordWebSocketMessage('worldUpdate', payload);
+        websocketWorldInitialized.set(client, true);
+        websocketWorldRevision.set(client, publication.full.revision ?? 0);
+        websocketVisibleBuildingIds.set(client, new Set());
+        const cityId = websocketRoadCity.get(client);
+        if (cityId) {
+          await deliverCityBuildingSnapshot(
+            client,
+            cityId,
+            publication.full.revision ?? 0,
+            publication.full.buildings,
+          );
+        }
+        continue;
+      }
+
+      if (sendDelta && publication.delta) {
+        const payload = JSON.stringify(
+          createLegacyWorldDelta(publication.delta, changedLegacyBuildingsById, userId),
+        );
+        client.send(payload);
+        recordWebSocketMessage('worldUpdate', payload);
+        websocketWorldRevision.set(client, publication.delta.revision);
+        continue;
+      }
+
+      const fullUpdate: FullWorldUpdate = {
+        ...publication.full,
+        buildings: legacySnapshotBuildings ?? [],
+        ...(!websocketCityRoadSyncSupport.get(client) &&
+        publication.full.roads === undefined
+          ? { roads: legacyRoads ?? [] }
+          : {}),
+      };
+      const payload = JSON.stringify(createPlayerWorldUpdate(fullUpdate, userId));
       client.send(payload);
-      recordWebSocketMessage('cityRoadUpdate', payload);
-      if (!sendDelta) websocketWorldInitialized.set(client, true);
+      recordWebSocketMessage('worldUpdate', payload);
+      websocketWorldInitialized.set(client, true);
+      websocketWorldRevision.set(client, publication.full.revision ?? 0);
     }
+    if (publication.delta) await deliverCityBuildingDelta(publication.delta);
     return;
   }
 
@@ -1543,6 +1872,7 @@ async function deliverCities(message: string): Promise<void> {
   const legacyRoads = [...clients].some(
     (client) =>
       client.readyState === WebSocket.OPEN &&
+      !websocketCityBuildingSyncSupport.get(client) &&
       !websocketCityRoadSyncSupport.get(client) &&
       update.roads === undefined,
   )
@@ -1550,6 +1880,33 @@ async function deliverCities(message: string): Promise<void> {
     : undefined;
   for (const client of clients) {
     if (client.readyState === WebSocket.OPEN) {
+      const userId = websocketUsers.get(client);
+      if (websocketCityBuildingSyncSupport.get(client)) {
+        const fullUpdate: FullWorldUpdate = {
+          ...update,
+          buildings: [],
+          ...(!websocketCityRoadSyncSupport.get(client) && update.roads === undefined
+            ? { roads: legacyRoads ?? [] }
+            : {}),
+        };
+        const payload = JSON.stringify(createPlayerWorldUpdate(fullUpdate, userId));
+        client.send(payload);
+        recordWebSocketMessage('worldUpdate', payload);
+        websocketWorldInitialized.set(client, false);
+        websocketWorldRevision.set(client, update.revision ?? 0);
+        websocketVisibleBuildingIds.set(client, new Set());
+        const cityId = websocketRoadCity.get(client);
+        if (cityId) {
+          const summaries = update.buildings.map(toWorldBuildingSummary);
+          await deliverCityBuildingSnapshot(
+            client,
+            cityId,
+            update.revision ?? 0,
+            summaries,
+          );
+        }
+        continue;
+      }
       const payload = JSON.stringify(
         createPlayerWorldUpdate(
           !websocketCityRoadSyncSupport.get(client) && update.roads === undefined
@@ -1561,6 +1918,7 @@ async function deliverCities(message: string): Promise<void> {
       client.send(payload);
       recordWebSocketMessage('worldUpdate', payload);
       websocketWorldInitialized.set(client, false);
+      websocketWorldRevision.set(client, update.revision ?? 0);
     }
   }
 }
@@ -1824,7 +2182,7 @@ async function getAllRoadTiles(): Promise<RoadTile[]> {
   }));
 }
 
-async function getResidentialBuildings(): Promise<WorldResidentialBuilding[]> {
+async function getLegacyResidentialBuildings(): Promise<LegacyWorldResidentialBuilding[]> {
   const { rows } = await pool.query<ResidentialBuildingRow & { created_by: string }>(
     `SELECT ${ALL_BUILDING_COLUMNS}, created_by,
             (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
@@ -1838,10 +2196,124 @@ async function getResidentialBuildings(): Promise<WorldResidentialBuilding[]> {
   }));
 }
 
+async function getWorldResidentialBuildings(cityId?: string): Promise<WorldResidentialBuilding[]> {
+  const whereClause = cityId ? 'WHERE all_buildings.city_id = $1' : '';
+  const values = cityId ? [cityId] : [];
+  const { rows } = await pool.query<{
+    id: string;
+    building_type: ResidenceType;
+    building_number: number;
+    tile_x: number;
+    tile_y: number;
+    city_id: string;
+    status: ResidentialBuilding['status'];
+    desired_workers: number;
+    started_at: Date;
+    completed_at: Date | null;
+    owner_name: string;
+    created_by: string;
+    sync_hash: string;
+  }>(
+    `WITH building_sync_rows AS MATERIALIZED (
+       SELECT ${ALL_BUILDING_COLUMNS}, all_buildings.created_by,
+              (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
+               FROM neon_auth."user" player
+               WHERE player.id::text = all_buildings.created_by) AS owner_name
+       FROM all_buildings
+       ${whereClause}
+     )
+     SELECT id, building_type, building_number, tile_x, tile_y, city_id, status,
+            desired_workers,
+            started_at, completed_at, owner_name, created_by,
+            md5(to_jsonb(building_sync_rows)::text) AS sync_hash
+     FROM building_sync_rows
+     ORDER BY started_at, id`,
+    values,
+  );
+  return rows.map((row) => ({
+    dataLevel: 'summary',
+    id: row.id,
+    ownerName: row.owner_name,
+    type: row.building_type,
+    buildingNumber: row.building_number,
+    x: row.tile_x,
+    y: row.tile_y,
+    cityId: row.city_id,
+    status: row.status,
+    startedAt: row.started_at.toISOString(),
+    completedAt: row.completed_at?.toISOString() ?? null,
+    ownerId: row.created_by,
+    syncHash: row.sync_hash,
+    desiredWorkers: row.desired_workers,
+  }));
+}
+
+async function getOwnedResidentialBuildings(
+  cityId: string,
+  ownerId: string,
+): Promise<LegacyWorldResidentialBuilding[]> {
+  const { rows } = await pool.query<ResidentialBuildingRow & { created_by: string }>(
+    `SELECT ${ALL_BUILDING_COLUMNS}, created_by,
+            (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
+             FROM neon_auth."user" player
+             WHERE player.id::text = all_buildings.created_by) AS owner_name
+     FROM all_buildings
+     WHERE city_id = $1 AND created_by = $2
+     ORDER BY started_at, id`,
+    [cityId, ownerId],
+  );
+  return rows.map((row) => ({
+    ...mapResidentialBuilding(row),
+    ownerId: row.created_by,
+  }));
+}
+
+async function getOwnedResidentialBuildingsByIds(
+  cityId: string,
+  ownerId: string,
+  ids: readonly string[],
+): Promise<LegacyWorldResidentialBuilding[]> {
+  if (ids.length === 0) return [];
+  const { rows } = await pool.query<ResidentialBuildingRow & { created_by: string }>(
+    `SELECT ${ALL_BUILDING_COLUMNS}, created_by,
+            (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
+             FROM neon_auth."user" player
+             WHERE player.id::text = all_buildings.created_by) AS owner_name
+     FROM all_buildings
+     WHERE city_id = $1 AND created_by = $2 AND id = ANY($3::uuid[])
+     ORDER BY started_at, id`,
+    [cityId, ownerId, ids],
+  );
+  return rows.map((row) => ({
+    ...mapResidentialBuilding(row),
+    ownerId: row.created_by,
+  }));
+}
+
+async function getLegacyResidentialBuildingsByIds(
+  ids: readonly string[],
+): Promise<LegacyWorldResidentialBuilding[]> {
+  if (ids.length === 0) return [];
+  const { rows } = await pool.query<ResidentialBuildingRow & { created_by: string }>(
+    `SELECT ${ALL_BUILDING_COLUMNS}, created_by,
+            (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
+             FROM neon_auth."user" player
+             WHERE player.id::text = all_buildings.created_by) AS owner_name
+     FROM all_buildings
+     WHERE id = ANY($1::uuid[])
+     ORDER BY started_at, id`,
+    [ids],
+  );
+  return rows.map((row) => ({
+    ...mapResidentialBuilding(row),
+    ownerId: row.created_by,
+  }));
+}
+
 async function getWorldEntities(): Promise<WorldEntities<WorldResidentialBuilding>> {
   const [cities, buildings] = await Promise.all([
     getCities(),
-    getResidentialBuildings(),
+    getWorldResidentialBuildings(),
   ]);
   return { cities, roads: [], buildings };
 }
@@ -2001,6 +2473,7 @@ async function handleRoadViewRequest(
 ): Promise<void> {
   if (request.position === null) {
     websocketRoadCity.delete(websocket);
+    websocketVisibleBuildingIds.delete(websocket);
     return;
   }
 
@@ -2032,7 +2505,25 @@ async function handleRoadViewRequest(
   }
 
   websocketRoadCity.set(websocket, city.id);
-  const update = await getCityRoadSyncUpdate(city.id, request.sinceRevision);
+  const worldSyncState = await redis.get(WORLD_SYNC_STATE_KEY);
+  let worldRevision = 0;
+  if (worldSyncState !== null) {
+    try {
+      const parsed: unknown = JSON.parse(worldSyncState);
+      if (isWorldSyncState(parsed)) worldRevision = parsed.revision;
+    } catch (error) {
+      console.error('Não foi possível ler a revisão para a sincronização de construções:', error);
+    }
+  }
+  const [update, buildingSummaries, ownedBuildings] = await Promise.all([
+    getCityRoadSyncUpdate(city.id, request.sinceRevision),
+    websocketCityBuildingSyncSupport.get(websocket)
+      ? getWorldResidentialBuildings(city.id)
+      : Promise.resolve([]),
+    websocketCityBuildingSyncSupport.get(websocket)
+      ? getOwnedResidentialBuildings(city.id, websocketUsers.get(websocket) ?? '')
+      : Promise.resolve([]),
+  ]);
   if (
     websocket.readyState !== WebSocket.OPEN ||
     websocketRoadViewRequestId.get(websocket) !== requestId ||
@@ -2043,6 +2534,19 @@ async function handleRoadViewRequest(
   const payload = JSON.stringify(update);
   websocket.send(payload);
   recordWebSocketMessage('cityRoadUpdate', payload);
+
+  if (websocketCityBuildingSyncSupport.get(websocket)) {
+    sendCityBuildingsUpdate(
+      websocket,
+      createCityBuildingsSnapshot(
+        city.id,
+        worldRevision,
+        buildingSummaries,
+        ownedBuildings,
+        websocketUsers.get(websocket),
+      ),
+    );
+  }
 }
 
 async function withWorldSyncLock<Result>(
@@ -8973,6 +9477,163 @@ async function start() {
     });
   });
 
+  app.post(
+    '/api/residential-buildings/:id/simulate-hiring',
+    requireAuth,
+    (request, response) => {
+      const userId = authenticatedUserIds.get(request);
+      const settings = parseWorkSettings(request.body);
+      if (!residenceIdPattern.test(request.params.id) || !settings) {
+        response.status(400).json({ error: 'invalid_work_settings' });
+        return;
+      }
+      if (!userId) {
+        response.status(401).json({ error: 'unauthorized' });
+        return;
+      }
+
+      void (async () => {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+          const { rows: selectedRows } = await client.query<{
+            city_id: string;
+            created_by: string;
+            city_minimum_wage: number;
+            building_type: ResidenceType;
+            status: ResidentialBuilding['status'];
+          }>(
+            `SELECT building.city_id, building.created_by, city.minimum_wage AS city_minimum_wage,
+                    building.building_type, building.status
+             FROM all_buildings AS building
+             JOIN city_assemblies AS city ON city.id = building.city_id
+             WHERE building.id = $1`,
+            [request.params.id],
+          );
+          const selected = selectedRows[0];
+          if (!selected) {
+            await client.query('ROLLBACK');
+            response.status(404).json({ error: 'residence_not_found' });
+            return;
+          }
+          if (selected.created_by !== userId) {
+            await client.query('ROLLBACK');
+            response.status(403).json({ error: 'residence_not_owned' });
+            return;
+          }
+          const definition = getResidenceDefinition(selected.building_type);
+          if (
+            !definition ||
+            settings.wage < selected.city_minimum_wage ||
+            (definition.kind === 'residence' && selected.status !== 'under_construction') ||
+            settings.desiredWorkers > getMaxDesiredWorkers(selected.building_type, selected.status)
+          ) {
+            await client.query('ROLLBACK');
+            response.status(400).json({ error: 'invalid_work_settings' });
+            return;
+          }
+
+          const { rows } = await client.query<ResidentialBuildingRow>(
+            `SELECT ${ALL_BUILDING_COLUMNS}
+             FROM all_buildings
+             WHERE city_id = $1`,
+            [selected.city_id],
+          );
+          await client.query('COMMIT');
+
+          const buildings = rows.map((row) => {
+            const building = mapResidentialBuilding(row);
+            return building.id === request.params.id
+              ? { ...building, ...settings }
+              : building;
+          });
+          const completedResidences = buildings.filter(
+            (building) =>
+              building.status === 'completed' &&
+              getResidenceDefinition(building.type)?.kind === 'residence',
+          );
+          const employmentOffers: ResidenceEmploymentOffer[] = buildings.flatMap((building) => {
+            if (
+              getResidenceDefinition(building.type)?.kind === 'residence' &&
+              building.status !== 'under_construction'
+            ) {
+              return [];
+            }
+            const desiredWorkers = Math.min(
+              building.desiredWorkers,
+              getMaxDesiredWorkers(building.type, building.status),
+            );
+            const vacancies = Math.max(0, desiredWorkers - building.employed);
+            return vacancies > 0
+              ? [{
+                  cityId: building.cityId,
+                  type: building.type,
+                  x: building.x,
+                  y: building.y,
+                  wage: building.wage,
+                  vacancies,
+                }]
+              : [];
+          });
+          const residenceAppeals = calculateResidenceAppealsFromIncome(
+            completedResidences.map((building) => {
+              const residenceDefinition = RESIDENCES[building.type];
+              return {
+                id: building.id,
+                cityId: building.cityId,
+                type: building.type,
+                x: building.x + residenceDefinition.width / 2,
+                y: building.y + residenceDefinition.height / 2,
+                salaryAverage: building.averageIncome,
+                employed: building.employed,
+                occupants: building.occupants,
+                capacity: residenceDefinition.capacity,
+                constructionAppeal: residenceDefinition.localAppeal,
+              };
+            }),
+            employmentOffers,
+          );
+          const residences = completedResidences
+            .filter((building) => building.occupants > 0)
+            .map((building) => {
+              const appeal = residenceAppeals.get(building.id);
+              if (!appeal) {
+                throw new Error(
+                  `Não foi possível calcular o apreço interno da residência ${building.id}.`,
+                );
+              }
+              return {
+                id: building.id,
+                cityId: building.cityId,
+                type: building.type,
+                x: building.x,
+                y: building.y,
+                occupants: building.occupants,
+                wellbeing: building.wellbeing,
+                internalAppeal: appeal.internalAppeal,
+                technique: getWorkerTechnique(building.wellbeing),
+              };
+            });
+          const workplaces = buildings.filter(
+            (building) =>
+              building.desiredWorkers > 0 &&
+              (getResidenceDefinition(building.type)?.kind !== 'residence' ||
+                building.status === 'under_construction'),
+          );
+          const hired = allocateWorkers(residences, workplaces)
+            .filter((assignment) => assignment.workplaceId === request.params.id)
+            .reduce((total, assignment) => total + assignment.count, 0);
+          response.json({ hired });
+        } finally {
+          client.release();
+        }
+      })().catch((error: unknown) => {
+        console.error('Não foi possível simular a contratação:', error);
+        response.status(503).json({ error: 'hiring_simulation_unavailable' });
+      });
+    },
+  );
+
   app.patch('/api/residential-buildings/:id/work-settings', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);
     const settings = parseWorkSettings(request.body);
@@ -10267,6 +10928,10 @@ async function start() {
           websocket,
           url.searchParams.get('roadSync') === 'city-v1',
         );
+        websocketCityBuildingSyncSupport.set(
+          websocket,
+          url.searchParams.get('buildingSync') === 'city-v1',
+        );
         websocketServer.emit('connection', websocket, request);
       });
     })().catch((error: unknown) => {
@@ -10278,6 +10943,7 @@ async function start() {
   websocketServer.on('connection', (websocket) => {
     clients.add(websocket);
     websocketWorldInitialized.set(websocket, false);
+    websocketVisibleBuildingIds.set(websocket, new Set());
     const connectedAt = Date.now();
     websocketTrafficLastAccountedAt.set(websocket, connectedAt);
     recordWebSocketTrafficCounter(connectedAt, 'connections', 1);
@@ -10296,7 +10962,7 @@ async function start() {
         return;
       }
       if (!isRoadViewRequest(message)) {
-        console.error('O jogador enviou uma solicitação de viewpoint de estradas inválida.');
+        console.error('O jogador enviou uma solicitação de viewpoint inválida.');
         return;
       }
       websocketRoadViewRequestId.set(websocket, message.requestId);
@@ -10344,7 +11010,9 @@ async function start() {
             type: 'cities',
             revision,
             cities: world.cities,
-            buildings: world.buildings,
+            buildings: websocketCityBuildingSyncSupport.get(websocket)
+              ? []
+              : await getLegacyResidentialBuildings(),
             ...(!websocketCityRoadSyncSupport.get(websocket)
               ? { roads: await getAllRoadTiles() }
               : {}),
@@ -10357,6 +11025,7 @@ async function start() {
           );
           websocket.send(worldPayload);
           recordWebSocketMessage('worldUpdate', worldPayload);
+          websocketWorldRevision.set(websocket, revision);
           websocketWorldInitialized.set(websocket, true);
         });
         await publishSnapshot();

@@ -65,7 +65,7 @@ interface ResidencePanelProps {
     workHoursPerDay: number;
     desiredWorkers: number;
     minimumWorkerTechnique: number;
-  }) => number;
+  }) => Promise<number>;
   onSaveInputProduct: (productId: string) => void;
   onOpenWarehouse: () => void;
   warehouseStock: ReadonlyMap<string, number>;
@@ -230,6 +230,7 @@ export default function ResidencePanel({
   const [isSimulatingSale, setIsSimulatingSale] = useState(false);
   const saleSimulationRequestId = useRef(0);
   const [hiringSimulationMessage, setHiringSimulationMessage] = useState('');
+  const [isSimulatingHiring, setIsSimulatingHiring] = useState(false);
   const [inputProductId, setInputProductId] = useState(
     building.selectedInputProductId ?? definition.defaultInputProductId ?? '',
   );
@@ -777,18 +778,32 @@ export default function ResidencePanel({
             <>
               <button
                 type="button"
-                disabled={isSaving}
+                disabled={isSaving || isSimulatingHiring}
                 onClick={() => {
-                  const hired = onSimulateHiring({
+                  setIsSimulatingHiring(true);
+                  setHiringSimulationMessage('');
+                  void onSimulateHiring({
                     wage: Number(wage),
                     workHoursPerDay: Number(hours),
                     desiredWorkers: Number(desired),
                     minimumWorkerTechnique: Number(minimumWorkerTechnique),
-                  });
-                  setHiringSimulationMessage(`Estimativa: ${number.format(hired)} pessoa(s) empregada(s).`);
+                  })
+                    .then((hired) => {
+                      setHiringSimulationMessage(
+                        `Estimativa: ${number.format(hired)} pessoa(s) empregada(s).`,
+                      );
+                    })
+                    .catch((error: unknown) => {
+                      setHiringSimulationMessage(
+                        error instanceof Error
+                          ? error.message
+                          : 'Não foi possível simular a contratação.',
+                      );
+                    })
+                    .finally(() => setIsSimulatingHiring(false));
                 }}
               >
-                Simular contratação
+                {isSimulatingHiring ? 'Simulando…' : 'Simular contratação'}
               </button>
               {hiringSimulationMessage && <small role="status">{hiringSimulationMessage}</small>}
             </>

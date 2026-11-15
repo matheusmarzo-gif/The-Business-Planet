@@ -388,6 +388,29 @@ export interface ResidentialBuilding {
   averageWorkerTechnique: number | null;
 }
 
+export interface ResidentialBuildingSummary {
+  dataLevel: 'summary';
+  id: string;
+  ownerName: string;
+  isOwnedByCurrentUser: boolean;
+  type: ResidenceType;
+  buildingNumber: number;
+  x: number;
+  y: number;
+  cityId: string;
+  status: ResidentialBuildingStatus;
+  startedAt: string;
+  completedAt: string | null;
+}
+
+export type WorldBuilding = ResidentialBuilding | ResidentialBuildingSummary;
+
+export function isResidentialBuildingSummary(
+  building: WorldBuilding,
+): building is ResidentialBuildingSummary {
+  return 'dataLevel' in building && building.dataLevel === 'summary';
+}
+
 const ROMAN_NUMERALS: readonly [number, string][] = [
   [1000, 'M'],
   [900, 'CM'],

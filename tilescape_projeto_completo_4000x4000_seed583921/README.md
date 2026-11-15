@@ -1089,3 +1089,5 @@ tamanho estimado em JSON das linhas retornadas ao servidor. A lista destaca as
 usa o formato parametrizado da instrução; valores dos parâmetros não são
 guardados. A estimativa não inclui o protocolo PostgreSQL nem representa
 diretamente o egress faturado pelo Neon.
+O conteúdo do painel é rolável por mouse, toque ou teclado; o cabeçalho com os
+controles de atualização e fechamento permanece visível.

@@ -147,6 +147,11 @@ button { color: inherit; }
 .accounting-payroll strong { color: #ead9a6; }
 .accounting-history-note { margin: 5px 0 10px; color: #8f9687; font-size: 10px; line-height: 1.5; }
 .performance-log-panel { width: min(940px, calc(100vw - 32px)); }
+.performance-log-scroll { min-height: 0; flex: 1 1 auto; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding-right: 4px; scrollbar-color: rgba(212,189,134,.55) rgba(255,255,255,.06); scrollbar-width: thin; scrollbar-gutter: stable; }
+.performance-log-scroll:focus-visible { outline: 2px solid #d4bd86; outline-offset: -2px; }
+.performance-log-scroll::-webkit-scrollbar { width: 8px; }
+.performance-log-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,.06); border-radius: 8px; }
+.performance-log-scroll::-webkit-scrollbar-thumb { background: rgba(212,189,134,.55); border-radius: 8px; }
 .performance-log-actions { display: flex; align-items: center; gap: 8px; }
 .performance-log-actions .accounting-view-button { display: inline-flex; align-items: center; gap: 5px; }
 .performance-log-list { gap: 7px; }

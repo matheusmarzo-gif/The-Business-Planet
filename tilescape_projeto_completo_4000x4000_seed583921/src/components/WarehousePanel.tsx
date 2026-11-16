@@ -10,6 +10,7 @@ import {
   type WarehouseDemand,
   type WarehouseProductSetting,
   type WarehouseTradeMode,
+  supportsWarehouseSupplier,
 } from '../types/warehouse';
 
 interface WarehousePanelProps {
@@ -142,7 +143,7 @@ export default function WarehousePanel({
             <small>Recolhe produção excedente das suas construções dentro do raio, após os vínculos normais.</small>
           </span>
         </label>
-        {building.type === 'warehouse' && (
+        {supportsWarehouseSupplier(building.type) && (
           <label className="warehouse-automation-option">
             <input
               type="checkbox"

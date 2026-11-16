@@ -181,6 +181,7 @@ import {
 import {
   parseWarehouseAutomationSettings,
   parseWarehouseSetting,
+  supportsWarehouseSupplier,
 } from '../src/types/warehouse.js';
 import { GAME_RULES } from '../src/generated/gameConfig.js';
 import { planDailySpoilage, PRODUCTS, type ProductDefinition } from '../src/types/product.js';
@@ -5169,7 +5170,7 @@ async function runDailyEmployment(): Promise<boolean> {
       const activeWarehouseIds = warehouseRows
         .filter((warehouse) =>
           warehouse.collector_active ||
-          (warehouse.building_type === 'warehouse' && warehouse.supplier_active),
+          (supportsWarehouseSupplier(warehouse.building_type) && warehouse.supplier_active),
         )
         .map((warehouse) => warehouse.id);
       const activeTransportBuildingTypes = Object.entries(RESIDENCES)
@@ -5643,7 +5644,7 @@ async function runDailyEmployment(): Promise<boolean> {
         }
       }
       for (const warehouse of warehouseRows) {
-        if (warehouse.building_type !== 'warehouse' || !warehouse.supplier_active) continue;
+        if (!supportsWarehouseSupplier(warehouse.building_type) || !warehouse.supplier_active) continue;
         try {
           runWarehouseAutomation(warehouse, {
             collectProduction: false,
@@ -9374,7 +9375,7 @@ async function start() {
           automation: {
             collectorActive: automation.rows[0]?.collector_active ?? false,
             supplierActive:
-              rows[0].building_type === 'warehouse' &&
+              supportsWarehouseSupplier(rows[0].building_type) &&
               (automation.rows[0]?.supplier_active ?? false),
           },
           stock: stockRows.rows.map((row) => ({ productId: row.product_id, quantity: row.quantity })),
@@ -9572,8 +9573,8 @@ async function start() {
           response.status(403).json({ error: 'residence_not_owned' });
           return;
         }
-        if (building.building_type === 'silo' && automation.supplierActive) {
-          response.status(400).json({ error: 'supplier_not_available_for_silo' });
+        if (automation.supplierActive && !supportsWarehouseSupplier(building.building_type)) {
+          response.status(400).json({ error: 'supplier_not_available_for_building' });
           return;
         }
         await pool.query(

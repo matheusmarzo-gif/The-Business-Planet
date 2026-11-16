@@ -37,6 +37,10 @@ export const DEFAULT_WAREHOUSE_AUTOMATION_SETTINGS: WarehouseAutomationSettings 
   supplierActive: false,
 };
 
+export function supportsWarehouseSupplier(buildingType: string): boolean {
+  return buildingType === 'warehouse' || buildingType === 'silo';
+}
+
 const PRODUCT_IDS = new Set(PRODUCTS.map((product) => product.id));
 
 export function parseWarehouseAutomationSettings(

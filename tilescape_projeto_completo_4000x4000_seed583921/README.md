@@ -257,7 +257,8 @@ A ordem dos cartões é definida por categoria: Comerciais lista primeiro as
 lojas de arroz, trigo, cevada, batata e milho, depois Peixaria, Leitaria e
 Açougue; em seguida lojas de açúcar, especiarias, vegetais e sal, Padaria,
 Queijaria, Frutaria, Chocolateria, lojas de roupas e móveis, loja de utilitários
-e Vidraçaria. Fazendas lista arroz, trigo, cevada,
+e Vidraçaria, Loja de Azeite, Loja de Tabaco, Bar e Loja de Vinhos. Fazendas
+lista arroz, trigo, cevada,
 batata, milho, leiteira, bovina, cana, vegetais, especiarias, cacau e frutas.
 Fazenda de Ovelha e Fazenda de Algodão também aparecem em Fazendas.
 Construções Artesanais lista Pesqueiro, Ferramentaria, Carvoaria, Casa de
@@ -622,7 +623,7 @@ armazém ligado:
 
 | Lojas | Estoque | Funcionários | WP por unidade vendida | Custo de construção | Obra |
 |---|---:|---:|---:|---|---:|
-| Azeite, Tabaco, Álcool e Vinho | 20 | 12 | 420 | 40 madeira, pedra, ferro e aço | 260.000 |
+| Loja de Azeite, Loja de Tabaco, Bar e Loja de Vinhos | 20 | 12 | 420 | 40 madeira, pedra, ferro e aço | 260.000 |
 | Tintura, Tapetes e Porcelanas | 40 | 16 | 120 | 40 madeira, pedra, ferro e aço | 260.000 |
 | Casa de Artes e Joalheria | 20 | 16 | 600 | 60 madeira, pedra e ferro; 40 aço | 350.000 |
 | Raridades | 10 | 30 | 2.100 | 30 madeira, pedra e ferro; 20 aço | 250.000 |

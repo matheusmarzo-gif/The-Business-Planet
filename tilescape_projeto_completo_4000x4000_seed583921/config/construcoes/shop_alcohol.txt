@@ -3,7 +3,7 @@
   "kind": "shop",
   "requiredZone": "urban",
   "requiresRoad": true,
-  "name": "Destilaria",
+  "name": "Bar",
   "asset": "/buildings/commerce/pub.jxl",
   "width": 2,
   "height": 2,

@@ -239,6 +239,8 @@ test('orders construction menus and applies the requested costs', () => {
 });
 
 test('defines the requested shops and their per-unit sales rates', () => {
+  assert.equal(RESIDENCES.shop_alcohol.name, 'Bar');
+  assert.equal(RESIDENCES.alcohol_distillery.name, 'Destilaria');
   const shops = [
     ['shop_olive_oil', 'olive_oil', 20, 12, 420],
     ['shop_tobacco', 'tobacco', 20, 12, 420],

@@ -56,9 +56,15 @@ O projeto Neon já está configurado para o projeto `gentle-tooth-49930425`, bra
    `DATABASE_URL_UNPOOLED`, `NEON_AUTH_BASE_URL` e `NEON_AUTH_JWKS_URL`.
    Mantenha esse arquivo privado; ele é ignorado pelo Git.
 
-O servidor Node usa `pg` com `DATABASE_URL` para as consultas normais. Neon
-Auth usa `NEON_AUTH_BASE_URL` no cliente e `NEON_AUTH_JWKS_URL` para validar as
-sessões no servidor.
+O servidor Node usa `pg` com `DATABASE_URL` para os dados do jogo. Neon Auth
+usa `NEON_AUTH_BASE_URL` no cliente e `NEON_AUTH_JWKS_URL` para validar as
+sessões no servidor. As consultas de perfil e permissão leem
+`neon_auth."user"` pela variável opcional `AUTH_DATABASE_URL`; se ela não for
+definida, o servidor usa `DATABASE_URL`, como no deploy normal com Neon.
+Na configuração híbrida Docker, `DATABASE_URL` aponta para o PostgreSQL local e
+`AUTH_DATABASE_URL` continua apontando para o Neon. Assim, os dados do jogo
+ficam locais, mas login, perfis e permissões ainda dependem do Neon e da
+internet.
 
 O servidor cria a tabela necessária (`world_state`) automaticamente ao iniciar.
 
@@ -83,6 +89,7 @@ O servidor cria a tabela necessária (`world_state`) automaticamente ao iniciar.
    | Nome | Valor |
    | --- | --- |
    | `DATABASE_URL` | Connection string do Neon |
+   | `AUTH_DATABASE_URL` | Opcional; conexão PostgreSQL que contém `neon_auth."user"`. Se omitida, usa `DATABASE_URL`. |
    | `NEON_AUTH_BASE_URL` | URL base do Neon Auth |
    | `NEON_AUTH_JWKS_URL` | URL JWKS do Neon Auth |
    | `MASTER_EMAIL` | E-mail da conta Neon Auth que terá acesso à Prefeitura |
@@ -186,17 +193,22 @@ suporte, as imagens do mapa e dos produtos podem não aparecer.
 
 ## Executar localmente (opcional)
 
-O Neon fornece o PostgreSQL e o Neon Auth do ambiente local por meio de
-`.env.local`. Para Redis local, o Docker Compose inicia Redis e PostgreSQL. Se
-preferir, instale o Docker Desktop para Windows em
+O fluxo `npm run dev` usa as variáveis de `.env.local`; nele, `DATABASE_URL`
+pode apontar para o Neon. O Docker Compose na raiz do repositório inicia
+PostgreSQL e Redis locais. Para executar o jogo híbrido dentro do Docker, com
+`DATABASE_URL` local e `AUTH_DATABASE_URL` no Neon, siga
+[TUTORIAL_DOCKER_PC.txt](./TUTORIAL_DOCKER_PC.txt). Se preferir, instale o
+Docker Desktop para Windows em
 [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/)
 e, se solicitado, habilite o WSL 2.
 
-Abra um PowerShell na pasta do projeto:
+Inicie os contêineres em um PowerShell na raiz do repositório e depois execute
+o servidor de desenvolvimento na pasta do aplicativo:
 
 ```powershell
-cd "C:\Users\MATHEUS\Desktop\matheus - the business planet\tilescape_projeto_completo_4000x4000_seed583921"
-docker compose up -d
+cd "C:\Valdora\The-Business-Planet"
+docker compose --env-file .\tilescape_projeto_completo_4000x4000_seed583921\.env.docker up -d postgres redis
+cd .\tilescape_projeto_completo_4000x4000_seed583921
 npm.cmd install
 npm.cmd run dev
 ```
@@ -206,10 +218,13 @@ conta existente. Mantenha o terminal aberto enquanto estiver jogando; `Ctrl+C`
 encerra o jogo. Confira o servidor em **http://localhost:3000/api/health**; a
 resposta esperada é `{"status":"ok"}`.
 
-Para parar os contêineres, use `docker compose stop`; para iniciá-los novamente,
-use `docker compose up -d`. `docker compose down` remove os contêineres, mas
-preserva os dados. **Não use `docker compose down -v` para parar o jogo:** essa
-opção apaga os volumes, incluindo o banco e o estado persistente do mundo.
+Para parar os contêineres, volte à raiz do repositório e use
+`docker compose --env-file .\tilescape_projeto_completo_4000x4000_seed583921\.env.docker stop`;
+para iniciá-los novamente, use o mesmo comando com `up -d postgres redis`.
+`docker compose --env-file .\tilescape_projeto_completo_4000x4000_seed583921\.env.docker down`
+remove os contêineres, mas preserva os dados. **Não use `down -v` para parar o
+jogo:** essa opção apaga os volumes, incluindo o banco e o estado persistente
+do mundo.
 
 ## Construções e cidades
 

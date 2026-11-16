@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -398,33 +398,44 @@ function instrumentPoolClient(client: PoolClient): PoolClient {
   });
 }
 
-const rawPool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ?? 'postgres://valdora:valdora_dev_password@localhost:5432/valdora',
-});
-const pool = new Proxy(rawPool, {
-  get(target, property) {
-    const value = Reflect.get(target, property, target);
-    if (property === 'query' && typeof value === 'function') {
-      return (...args: unknown[]) => trackDatabaseQuery(value, target, args);
-    }
-    if (property === 'connect' && typeof value === 'function') {
-      return (...args: unknown[]) => {
-        const result = Reflect.apply(value, target, args);
-        if (result !== null && typeof result === 'object' && 'then' in result) {
-          const then = Reflect.get(result, 'then');
-          if (typeof then === 'function') {
-            return Reflect.apply(then, result, [
-              (client: PoolClient) => instrumentPoolClient(client),
-            ]);
+function instrumentPool(target: Pool): Pool {
+  return new Proxy(target, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (property === 'query' && typeof value === 'function') {
+        return (...args: unknown[]) => trackDatabaseQuery(value, target, args);
+      }
+      if (property === 'connect' && typeof value === 'function') {
+        return (...args: unknown[]) => {
+          const result = Reflect.apply(value, target, args);
+          if (result !== null && typeof result === 'object' && 'then' in result) {
+            const then = Reflect.get(result, 'then');
+            if (typeof then === 'function') {
+              return Reflect.apply(then, result, [
+                (client: PoolClient) => instrumentPoolClient(client),
+              ]);
+            }
           }
-        }
-        return result;
-      };
-    }
-    return typeof value === 'function' ? value.bind(target) : value;
-  },
-});
+          return result;
+        };
+      }
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
+const defaultDatabaseUrl = 'postgres://valdora:valdora_dev_password@localhost:5432/valdora';
+const databaseUrl = process.env.DATABASE_URL ?? defaultDatabaseUrl;
+const pool = instrumentPool(
+  new Pool({
+    connectionString: databaseUrl,
+  }),
+);
+const authDatabaseUrl = process.env.AUTH_DATABASE_URL;
+const authPool =
+  authDatabaseUrl && authDatabaseUrl !== databaseUrl
+    ? instrumentPool(new Pool({ connectionString: authDatabaseUrl, max: 4 }))
+    : pool;
 const redis = createClient({ url: process.env.REDIS_URL ?? 'redis://localhost:6379' });
 const subscriber = redis.duplicate();
 const clients = new Set<WebSocket>();
@@ -2182,16 +2193,31 @@ async function getAllRoadTiles(): Promise<RoadTile[]> {
   }));
 }
 
+async function getPlayerNames(userIds: readonly string[]): Promise<Map<string, string>> {
+  const uniqueIds = [...new Set(userIds)];
+  if (uniqueIds.length === 0) return new Map();
+
+  const { rows } = await authPool.query<{ id: string; name: string | null }>(
+    `SELECT id, name
+     FROM neon_auth."user"
+     WHERE id = ANY($1::text[])`,
+    [uniqueIds],
+  );
+  return new Map(rows.map((row) => [row.id, row.name?.trim() || 'Jogador']));
+}
+
 async function getLegacyResidentialBuildings(): Promise<LegacyWorldResidentialBuilding[]> {
   const { rows } = await pool.query<ResidentialBuildingRow & { created_by: string }>(
-    `SELECT ${ALL_BUILDING_COLUMNS}, created_by,
-            (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
-             FROM neon_auth."user" player WHERE player.id::text = all_buildings.created_by) AS owner_name
+    `SELECT ${ALL_BUILDING_COLUMNS}, created_by
      FROM all_buildings
      ORDER BY started_at, id`,
   );
+  const playerNames = await getPlayerNames(rows.map((row) => row.created_by));
   return rows.map((row) => ({
-    ...mapResidentialBuilding(row),
+    ...mapResidentialBuilding({
+      ...row,
+      owner_name: playerNames.get(row.created_by) ?? null,
+    }),
     ownerId: row.created_by,
   }));
 }
@@ -2210,42 +2236,44 @@ async function getWorldResidentialBuildings(cityId?: string): Promise<WorldResid
     desired_workers: number;
     started_at: Date;
     completed_at: Date | null;
-    owner_name: string;
     created_by: string;
     sync_hash: string;
   }>(
     `WITH building_sync_rows AS MATERIALIZED (
-       SELECT ${ALL_BUILDING_COLUMNS}, all_buildings.created_by,
-              (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
-               FROM neon_auth."user" player
-               WHERE player.id::text = all_buildings.created_by) AS owner_name
+       SELECT ${ALL_BUILDING_COLUMNS}, all_buildings.created_by
        FROM all_buildings
        ${whereClause}
      )
      SELECT id, building_type, building_number, tile_x, tile_y, city_id, status,
-            desired_workers,
-            started_at, completed_at, owner_name, created_by,
+            desired_workers, started_at, completed_at, created_by,
             md5(to_jsonb(building_sync_rows)::text) AS sync_hash
      FROM building_sync_rows
      ORDER BY started_at, id`,
     values,
   );
-  return rows.map((row) => ({
-    dataLevel: 'summary',
-    id: row.id,
-    ownerName: row.owner_name,
-    type: row.building_type,
-    buildingNumber: row.building_number,
-    x: row.tile_x,
-    y: row.tile_y,
-    cityId: row.city_id,
-    status: row.status,
-    startedAt: row.started_at.toISOString(),
-    completedAt: row.completed_at?.toISOString() ?? null,
-    ownerId: row.created_by,
-    syncHash: row.sync_hash,
-    desiredWorkers: row.desired_workers,
-  }));
+  const playerNames = await getPlayerNames(rows.map((row) => row.created_by));
+  return rows.map((row) => {
+    const ownerName = playerNames.get(row.created_by) ?? null;
+    const syncHash = createHash('md5')
+      .update(JSON.stringify([row.sync_hash, ownerName]))
+      .digest('hex');
+    return {
+      dataLevel: 'summary',
+      id: row.id,
+      ownerName: ownerName ?? 'Jogador',
+      type: row.building_type,
+      buildingNumber: row.building_number,
+      x: row.tile_x,
+      y: row.tile_y,
+      cityId: row.city_id,
+      status: row.status,
+      startedAt: row.started_at.toISOString(),
+      completedAt: row.completed_at?.toISOString() ?? null,
+      ownerId: row.created_by,
+      syncHash,
+      desiredWorkers: row.desired_workers,
+    };
+  });
 }
 
 async function getOwnedResidentialBuildings(
@@ -2253,17 +2281,18 @@ async function getOwnedResidentialBuildings(
   ownerId: string,
 ): Promise<LegacyWorldResidentialBuilding[]> {
   const { rows } = await pool.query<ResidentialBuildingRow & { created_by: string }>(
-    `SELECT ${ALL_BUILDING_COLUMNS}, created_by,
-            (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
-             FROM neon_auth."user" player
-             WHERE player.id::text = all_buildings.created_by) AS owner_name
+    `SELECT ${ALL_BUILDING_COLUMNS}, created_by
      FROM all_buildings
      WHERE city_id = $1 AND created_by = $2
      ORDER BY started_at, id`,
     [cityId, ownerId],
   );
+  const playerNames = await getPlayerNames(rows.map((row) => row.created_by));
   return rows.map((row) => ({
-    ...mapResidentialBuilding(row),
+    ...mapResidentialBuilding({
+      ...row,
+      owner_name: playerNames.get(row.created_by) ?? null,
+    }),
     ownerId: row.created_by,
   }));
 }
@@ -2275,17 +2304,18 @@ async function getOwnedResidentialBuildingsByIds(
 ): Promise<LegacyWorldResidentialBuilding[]> {
   if (ids.length === 0) return [];
   const { rows } = await pool.query<ResidentialBuildingRow & { created_by: string }>(
-    `SELECT ${ALL_BUILDING_COLUMNS}, created_by,
-            (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
-             FROM neon_auth."user" player
-             WHERE player.id::text = all_buildings.created_by) AS owner_name
+    `SELECT ${ALL_BUILDING_COLUMNS}, created_by
      FROM all_buildings
      WHERE city_id = $1 AND created_by = $2 AND id = ANY($3::uuid[])
      ORDER BY started_at, id`,
     [cityId, ownerId, ids],
   );
+  const playerNames = await getPlayerNames(rows.map((row) => row.created_by));
   return rows.map((row) => ({
-    ...mapResidentialBuilding(row),
+    ...mapResidentialBuilding({
+      ...row,
+      owner_name: playerNames.get(row.created_by) ?? null,
+    }),
     ownerId: row.created_by,
   }));
 }
@@ -2295,17 +2325,18 @@ async function getLegacyResidentialBuildingsByIds(
 ): Promise<LegacyWorldResidentialBuilding[]> {
   if (ids.length === 0) return [];
   const { rows } = await pool.query<ResidentialBuildingRow & { created_by: string }>(
-    `SELECT ${ALL_BUILDING_COLUMNS}, created_by,
-            (SELECT COALESCE(NULLIF(BTRIM(player.name), ''), 'Jogador')
-             FROM neon_auth."user" player
-             WHERE player.id::text = all_buildings.created_by) AS owner_name
+    `SELECT ${ALL_BUILDING_COLUMNS}, created_by
      FROM all_buildings
      WHERE id = ANY($1::uuid[])
      ORDER BY started_at, id`,
     [ids],
   );
+  const playerNames = await getPlayerNames(rows.map((row) => row.created_by));
   return rows.map((row) => ({
-    ...mapResidentialBuilding(row),
+    ...mapResidentialBuilding({
+      ...row,
+      owner_name: playerNames.get(row.created_by) ?? null,
+    }),
     ownerId: row.created_by,
   }));
 }
@@ -5976,7 +6007,7 @@ async function isMasterUser(userId: string): Promise<boolean> {
   const masterEmail = process.env.MASTER_EMAIL?.trim().toLowerCase();
   if (!masterEmail) throw new Error('MASTER_EMAIL não foi configurada.');
 
-  const { rows } = await pool.query<{ is_master: boolean }>(
+  const { rows } = await authPool.query<{ is_master: boolean }>(
     `SELECT EXISTS (
        SELECT 1
        FROM neon_auth."user"
@@ -6793,6 +6824,7 @@ async function start() {
   const auth = getAuthConfig();
   const requireAuth = requireAuthentication(auth);
   const requireMasterAuth = requireMaster();
+  await authPool.query('SELECT id FROM neon_auth."user" LIMIT 0');
   await Promise.all([redis.connect(), subscriber.connect()]);
   const schema = await readFile(
     fileURLToPath(new URL('../database/schema.sql', import.meta.url)),
@@ -6869,7 +6901,11 @@ async function start() {
 
   app.use(express.json({ limit: '16kb' }));
   app.get('/api/health', (_request, response) => {
-    void Promise.all([pool.query('SELECT 1'), redis.ping()])
+    void Promise.all([
+      pool.query('SELECT 1'),
+      authPool.query('SELECT id FROM neon_auth."user" LIMIT 0'),
+      redis.ping(),
+    ])
       .then(() => response.json({ status: 'ok' }))
       .catch((error: unknown) => {
         console.error('Verificação de saúde do mundo falhou:', error);
@@ -6955,7 +6991,7 @@ async function start() {
         roadTilesResult,
         trackingResult,
       ] = await Promise.all([
-        pool.query<{ id: string; name: string | null }>(
+        authPool.query<{ id: string; name: string | null }>(
           `SELECT id, name
            FROM neon_auth."user"
            ORDER BY name, id`,
@@ -10808,7 +10844,7 @@ async function start() {
         if (id && id !== 'unknown') connections.set(id, (connections.get(id) ?? 0) + 1);
       }
       const { rows } = connections.size
-        ? await pool.query<{ id: string; name: string | null; email: string | null }>(
+        ? await authPool.query<{ id: string; name: string | null; email: string | null }>(
             'SELECT id, name, email FROM neon_auth."user" WHERE id = ANY($1::text[])',
             [[...connections.keys()]],
           )
@@ -11090,7 +11126,10 @@ async function start() {
     void flushWebSocketTraffic().finally(() => {
       websocketServer.close();
       server.close(() => {
-        void Promise.all([redis.quit(), subscriber.quit(), pool.end()]).then(() => {
+        const poolShutdowns = [...new Set([pool, authPool])].map((databasePool) =>
+          databasePool.end(),
+        );
+        void Promise.all([redis.quit(), subscriber.quit(), ...poolShutdowns]).then(() => {
           process.exit(0);
         });
       });
@@ -11102,6 +11141,9 @@ async function start() {
 
 start().catch(async (error: unknown) => {
   console.error('Não foi possível iniciar o servidor do mundo:', error);
-  await Promise.allSettled([redis.quit(), subscriber.quit(), pool.end()]);
+  const poolShutdowns = [...new Set([pool, authPool])].map((databasePool) =>
+    databasePool.end(),
+  );
+  await Promise.allSettled([redis.quit(), subscriber.quit(), ...poolShutdowns]);
   process.exitCode = 1;
 });

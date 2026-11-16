@@ -204,10 +204,12 @@ devem ser confundidos com as funcionalidades ativas do jogo.
 
 ### Desenvolvimento local
 
-O `docker-compose.yml` inicia PostgreSQL e Redis locais. Neon Auth continua
-configurado por meio das variáveis locais. Em desenvolvimento, `npm run dev`
-inicia o servidor de API/WebSocket na porta 3001 e o Vite na porta 3000;
-`vite.config.ts` encaminha `/api` e `/ws` para o servidor.
+O `docker-compose.yml` fica na raiz do repositório e inicia PostgreSQL e Redis.
+Na configuração híbrida, `DATABASE_URL` usa o PostgreSQL local e
+`AUTH_DATABASE_URL` mantém as consultas a `neon_auth."user"` no Neon. Em
+desenvolvimento, `npm run dev` inicia o servidor de API/WebSocket na porta 3001
+e o Vite na porta 3000; `vite.config.ts` encaminha `/api` e `/ws` para o
+servidor.
 
 ### Produção
 
@@ -229,8 +231,15 @@ Service.
 3. O cliente consulta `/api/me` para descobrir se a sessão tem acesso master.
 4. O servidor obtém o token do cabeçalho `Authorization: Bearer ...`, valida
    assinatura e issuer com o JWKS do Neon Auth e usa o `sub` como ID do usuário.
-5. Operações administrativas verificam também, no PostgreSQL, se o usuário
-   corresponde ao e-mail configurado em `MASTER_EMAIL`.
+5. O servidor consulta `neon_auth."user"` por `AUTH_DATABASE_URL` para obter
+   nomes e e-mails e verificar se o usuário corresponde ao e-mail configurado
+   em `MASTER_EMAIL`. Se `AUTH_DATABASE_URL` não estiver definida, usa
+   `DATABASE_URL`, preservando a configuração de banco único.
+
+Na configuração híbrida local, `DATABASE_URL` aponta para o PostgreSQL Docker
+com os dados do jogo, enquanto `AUTH_DATABASE_URL` aponta para o PostgreSQL do
+Neon que contém `neon_auth."user"`. O login, a validação do JWT e as consultas
+de identidade continuam dependendo do Neon e da internet.
 
 A aba Prefeitura é visível a todos, mas a permissão para criar ou editar
 Assembleias é validada pelo servidor. Nunca aceite `isMaster`, IDs de usuário
@@ -1115,7 +1124,8 @@ de sucesso.
   são retidos por até 365 dias; períodos anteriores ao início dos históricos não
   são reconstruíveis.
 - A tabela `neon_auth."user"` é gerenciada pelo Neon Auth, não pelo esquema do
-  jogo.
+  jogo. O servidor a consulta pelo `AUTH_DATABASE_URL`; ela não é copiada pelo
+  dump do schema `public`.
 
 As transações que alteram geometria usam o advisory lock do mundo
 (`583921303`) para serializar validações que dependem do estado atual. O lock
@@ -1226,6 +1236,7 @@ Não documente valores, tokens ou URLs privadas aqui.
 | Variável | Uso |
 | --- | --- |
 | `DATABASE_URL` | Conexão do servidor com PostgreSQL/Neon. |
+| `AUTH_DATABASE_URL` | Conexão com o PostgreSQL que contém `neon_auth."user"`; por padrão usa `DATABASE_URL`. Na configuração híbrida, aponta para o Neon. |
 | `REDIS_URL` | Conexão com Redis/Render Key Value. |
 | `NEON_AUTH_BASE_URL` | Configuração de autenticação e issuer esperado. |
 | `NEON_AUTH_JWKS_URL` | Chaves usadas pelo servidor para validar JWTs. |

@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: valdora
+      POSTGRES_USER: valdora
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - valdora-postgres18:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U valdora -d valdora"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  game:
+    build:
+      context: ./tilescape_projeto_completo_4000x4000_seed583921
+      args:
+        NEON_AUTH_BASE_URL: ${NEON_AUTH_BASE_URL}
+    environment:
+      PORT: "3001"
+      DATABASE_URL: ${DATABASE_URL}
+      AUTH_DATABASE_URL: ${AUTH_DATABASE_URL:-}
+      NEON_AUTH_BASE_URL: ${NEON_AUTH_BASE_URL}
+      NEON_AUTH_JWKS_URL: ${NEON_AUTH_JWKS_URL}
+      MASTER_EMAIL: ${MASTER_EMAIL}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - valdora-redis:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  valdora-postgres18:
+  valdora-redis:

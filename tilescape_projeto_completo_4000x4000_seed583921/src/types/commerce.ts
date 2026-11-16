@@ -85,6 +85,7 @@ export interface ShopTransactionCandidate {
   referenceBasketCost?: number;
   intermediateBasketCost?: number;
   advancedBasketCost?: number;
+  goodsBasketCost?: number;
   calculationBasketCost?: number;
   productAveragePrice?: number;
   pf?: number;
@@ -119,6 +120,7 @@ export interface ShopResidenceTransaction {
   referenceBasketCost?: number;
   intermediateBasketCost?: number;
   advancedBasketCost?: number;
+  goodsBasketCost?: number;
   calculationBasketCost?: number;
   basketBreakdown?: BasketProductBreakdown[];
   productAveragePrice?: number;
@@ -270,6 +272,8 @@ export function isShopResidenceTransaction(value: unknown): value is ShopResiden
       !isNonNegativeNumber(transaction.intermediateBasketCost)) ||
     (transaction.advancedBasketCost !== undefined &&
       !isNonNegativeNumber(transaction.advancedBasketCost)) ||
+    (transaction.goodsBasketCost !== undefined &&
+      !isNonNegativeNumber(transaction.goodsBasketCost)) ||
     (transaction.calculationBasketCost !== undefined &&
       !isNonNegativeNumber(transaction.calculationBasketCost)) ||
     (transaction.basketBreakdown !== undefined &&
@@ -308,6 +312,8 @@ export function isShopResidenceTransaction(value: unknown): value is ShopResiden
       isNonNegativeNumber(candidate.intermediateBasketCost)) &&
     (candidate.advancedBasketCost === undefined ||
       isNonNegativeNumber(candidate.advancedBasketCost)) &&
+    (candidate.goodsBasketCost === undefined ||
+      isNonNegativeNumber(candidate.goodsBasketCost)) &&
     (candidate.calculationBasketCost === undefined ||
       isNonNegativeNumber(candidate.calculationBasketCost)) &&
     (candidate.productAveragePrice === undefined ||
@@ -780,6 +786,7 @@ export function getPurchaseBenefitCalculation(
     basketType?: BasketType;
     intermediateBasketCost?: number;
     advancedBasketCost?: number;
+    goodsBasketCost?: number;
   } = {},
 ): PurchaseBenefitCalculation {
   if (
@@ -804,12 +811,16 @@ export function getPurchaseBenefitCalculation(
     const formula = GAME_RULES.consumption.goods;
     const intermediateBasketCost = options.intermediateBasketCost ?? 0;
     const advancedBasketCost = options.advancedBasketCost ?? 0;
-    const combinedBasketCost = referenceBasketCost + intermediateBasketCost + advancedBasketCost;
+    const goodsBasketCost = options.goodsBasketCost ?? 0;
+    const combinedBasketCost =
+      referenceBasketCost + intermediateBasketCost + advancedBasketCost + goodsBasketCost;
     if (
       !Number.isFinite(intermediateBasketCost) ||
       intermediateBasketCost < 0 ||
       !Number.isFinite(advancedBasketCost) ||
       advancedBasketCost < 0 ||
+      !Number.isFinite(goodsBasketCost) ||
+      goodsBasketCost < 0 ||
       !Number.isFinite(combinedBasketCost)
     ) {
       throw new RangeError('O custo total das cestas básicas é inválido.');
@@ -1168,6 +1179,11 @@ export function planShopSalesDetailed(
           total + (item.basketType === 'advanced' ? item.basketContribution ?? 0 : 0),
         0,
       );
+      const goodsBasketCost = basketBreakdown.reduce(
+        (total, item) =>
+          total + (item.basketType === 'goods' ? item.basketContribution ?? 0 : 0),
+        0,
+      );
       const basketType: BasketType = (GOODS_BASKET_PRODUCT_IDS as readonly string[]).includes(productId)
         ? 'goods'
         : (ADVANCED_BASKET_PRODUCT_IDS as readonly string[]).includes(productId)
@@ -1176,11 +1192,16 @@ export function planShopSalesDetailed(
             ? 'intermediate'
             : 'basic';
       const calculationBasketCost =
-        basketType === 'goods' || basketType === 'advanced'
-          ? referenceBasketCost + intermediateBasketCost + advancedBasketCost
-          : basketType === 'intermediate'
-            ? referenceBasketCost + intermediateBasketCost
-          : referenceBasketCost;
+        basketType === 'goods'
+          ? referenceBasketCost +
+            intermediateBasketCost +
+            advancedBasketCost +
+            goodsBasketCost
+          : basketType === 'advanced'
+            ? referenceBasketCost + intermediateBasketCost + advancedBasketCost
+            : basketType === 'intermediate'
+              ? referenceBasketCost + intermediateBasketCost
+              : referenceBasketCost;
       const productAveragePrice =
         averagePrices.get(getCityProductKey(residence.cityId, productId)) ?? 0;
       const candidates = nearby.map((shop) => {
@@ -1191,7 +1212,7 @@ export function planShopSalesDetailed(
           basicNeedPerPerson,
           referenceBasketCost,
           distance,
-          { basketType, intermediateBasketCost, advancedBasketCost },
+          { basketType, intermediateBasketCost, advancedBasketCost, goodsBasketCost },
         );
         return { shop, distance, calculation, resultShare: 0, allocatedResidents: 0 };
       });
@@ -1320,6 +1341,7 @@ export function planShopSalesDetailed(
           referenceBasketCost,
           intermediateBasketCost,
           advancedBasketCost,
+          goodsBasketCost,
           calculationBasketCost,
           basketBreakdown,
           productAveragePrice,
@@ -1341,6 +1363,7 @@ export function planShopSalesDetailed(
             referenceBasketCost,
             intermediateBasketCost,
             advancedBasketCost,
+            goodsBasketCost,
             calculationBasketCost,
             productAveragePrice,
             pf: candidate.calculation.pf,

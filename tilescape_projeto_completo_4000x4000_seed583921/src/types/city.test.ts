@@ -1143,15 +1143,16 @@ describe('shop sales', () => {
     assert.equal(transaction.candidate.calculationBasketCost, 1.32);
   });
 
-  it('uses the goods-basket formula with RR plus RR2 plus RR3', () => {
+  it('uses the goods-basket formula with RR plus RR2 plus RR3 plus RB1', () => {
     const income = 6;
     const price = 60;
     const need = 0.01;
     const rr = 2;
     const rr2 = 1;
     const rr3 = 0.5;
+    const rb1 = 0.25;
     const distance = 15;
-    const total = rr + rr2 + rr3;
+    const total = rr + rr2 + rr3 + rb1;
     const pf = price * need;
     const w = (1 - pf / total) ** 3;
     const q = (0.8 ** w - 1) * income;
@@ -1168,6 +1169,7 @@ describe('shop sales', () => {
         basketType: 'goods',
         intermediateBasketCost: rr2,
         advancedBasketCost: rr3,
+        goodsBasketCost: rb1,
       },
     );
     assert.equal(calculation.pf, pf);
@@ -1183,6 +1185,7 @@ describe('shop sales', () => {
         basketType: 'goods',
         intermediateBasketCost: rr2,
         advancedBasketCost: rr3,
+        goodsBasketCost: rb1,
       }).errorBenefit,
       0,
     );
@@ -1262,6 +1265,11 @@ describe('shop sales', () => {
         .flat()
         .every((transaction) => transaction.basketType === 'goods'),
     );
+    const transaction = plan.transactionsByShop.get('clothing')?.[0];
+    assert.ok(transaction);
+    assert.equal(transaction.goodsBasketCost, 0.04);
+    assert.ok(Math.abs((transaction.calculationBasketCost ?? 0) - 2.505) < 1e-12);
+    assert.ok(Math.abs((transaction.candidate.calculationBasketCost ?? 0) - 2.505) < 1e-12);
   });
 
   it('sells advanced products using RR plus RR2 plus RR3', () => {

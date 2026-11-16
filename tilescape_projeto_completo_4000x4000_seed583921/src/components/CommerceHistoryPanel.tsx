@@ -118,7 +118,11 @@ export default function CommerceHistoryPanel({
                       renda média {formatMoney(transaction.averageIncome)} · RR básica{' '}
                       {formatMoney(transaction.referenceBasketCost ?? transaction.areaAveragePrice)} · RR2 intermediária{' '}
                       {formatMoney(transaction.intermediateBasketCost ?? 0)} · RR3 avançada{' '}
-                      {formatMoney(transaction.advancedBasketCost ?? 0)} · base da fórmula{' '}
+                      {formatMoney(transaction.advancedBasketCost ?? 0)}
+                      {transaction.basketType === 'goods' ? (
+                        <> · RB1 bens {formatMoney(transaction.goodsBasketCost ?? 0)}</>
+                      ) : null}
+                      {' '}· base da fórmula{' '}
                       {formatMoney(transaction.calculationBasketCost ?? transaction.referenceBasketCost ?? transaction.areaAveragePrice)} · preço médio do produto{' '}
                       {formatMoney(transaction.productAveragePrice ?? transaction.areaAveragePrice)} · necessidade diária{' '}
                       {decimal.format(transaction.expectedDemand)} · quantidade desejada total{' '}
@@ -130,8 +134,8 @@ export default function CommerceHistoryPanel({
                         <p>
                           Cada contribuição é consumo diário configurado × preço médio municipal.
                           Produtos básicos compõem RR, intermediários RR2 e avançados RR3; a cesta
-                          de bens usa a soma RR + RR2 + RR3. Os subtotais são somados sem
-                          arredondamento intermediário.
+                          de bens compõe RB1, usado junto com RR + RR2 + RR3. Os
+                          subtotais são somados sem arredondamento intermediário.
                         </p>
                         {transaction.basketBreakdown.map((item) => {
                           const product = PRODUCTS.find(({ id }) => id === item.productId);
@@ -191,6 +195,15 @@ export default function CommerceHistoryPanel({
                                   : 0),
                               0,
                             ),
+                          )} · RB1 bens calculado: {formatPreciseMoney(
+                            transaction.basketBreakdown.reduce(
+                              (total, item) =>
+                                total +
+                                (item.basketType === 'goods'
+                                  ? item.basketContribution ?? 0
+                                  : 0),
+                              0,
+                            ),
                           )}
                         </strong>
                       </details>
@@ -199,7 +212,7 @@ export default function CommerceHistoryPanel({
                     )}
                     {transaction.basketType === 'goods' ? (
                       <p>
-                        Cesta básica de bens: RR_total = RR + RR2 + RR3; w = (1 − Pf / RR_total)
+                        Cesta básica de bens: RR_total = RR + RR2 + RR3 + RB1; w = (1 − Pf / RR_total)
                         <sup>{consumptionRules.goods.wExponent}</sup>; q = (
                         {preciseDecimal.format(consumptionRules.goods.discountBase)}<sup>w</sup> − 1) × Rf;
                         benefício de erro = 0 se Rf ≤ RR_total /

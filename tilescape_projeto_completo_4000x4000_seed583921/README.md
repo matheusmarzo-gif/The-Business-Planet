@@ -694,8 +694,10 @@ usa-se `w = (1 − Pf/(RR + RR2 + RR3))^2` e o mesmo `q`; o benefício de erro �
 `((Rf − 1/6)/(RR + RR2 + RR3) − 1/180)^2`. O benefício associado permanece
 `(benefício de erro / benefício ideal)^4`. `Rf` é a renda média
 por morador e `Dᵢ = √(60/(60 + distância))`. A demanda efetiva ainda depende da
-distribuição de moradores entre lojas, estoque e capacidade de venda. A cesta
-básica de bens usa `RR_total = RR + RR2 + RR3`,
+distribuição de moradores entre lojas, estoque e capacidade de venda. `RB1` é
+o custo diário por pessoa da própria cesta de bens, calculado por necessidade
+diária × preço médio municipal para roupas, móveis, utilitários e vidro.
+A cesta básica de bens usa `RR_total = RR + RR2 + RR3 + RB1`,
 `w = (1 − Pf/RR_total)^3` e `q = (0,8^w − 1) × Rf`. Seu benefício de erro é
 zero quando `Rf ≤ RR_total/2`; acima disso, é
 `Dᵢ × ((Rf − Pf − q)/RR_total)^3`. O benefício ideal é

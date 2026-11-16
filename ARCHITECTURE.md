@@ -685,9 +685,10 @@ mapeamento e verificar todas as curvas.
   por produto e cidade; se ainda não houve venda do produto, usa a média dos
   preços atuais anunciados na cidade. Produtos básicos sem preço disponível não
   contribuem em `RR`; os intermediários sem preço não contribuem em `RR2`;
-  produtos avançados sem preço não contribuem em `RR3`. `RR` é o custo diário
-  por pessoa da cesta básica, `RR2` o da cesta intermediária e `RR3` o da cesta
-  avançada. Para todos os produtos, `Pf = preço local × necessidade
+  produtos avançados sem preço não contribuem em `RR3`; os bens sem preço não
+  contribuem em `RB1`. `RR` é o custo diário por pessoa da cesta básica, `RR2`
+  o da cesta intermediária, `RR3` o da cesta avançada e `RB1` o da cesta de
+  bens. Para todos os produtos, `Pf = preço local × necessidade
   diária por pessoa`, `Dᵢ = √(60 / (60 + dᵢ))`, onde `dᵢ` é a distância entre
   residência e loja. Na cesta básica, com `Rf` como renda média por trabalhador
   empregado:
@@ -706,7 +707,7 @@ mapeamento e verificar todas as curvas.
   `((Rf − 1/6) / (RR + RR2 + RR3) − 1/180)^2`. Nas cestas básica,
   intermediária e avançada, `benefício_associado = (benefício_erro /
   benefício_ideal)^4`; se o ideal for zero, o associado também é zero. Na cesta
-  de bens, `RR_total = RR + RR2 + RR3`, `w = (1 − Pf/RR_total)^3` e
+  de bens, `RR_total = RR + RR2 + RR3 + RB1`, `w = (1 − Pf/RR_total)^3` e
   `q = (0,8^w − 1) × Rf`. O benefício de erro é zero se
   `Rf ≤ RR_total/2`; caso contrário, é
   `Dᵢ × ((Rf − Pf − q)/RR_total)^3`. O ideal é

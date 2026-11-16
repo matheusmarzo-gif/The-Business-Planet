@@ -1,0 +1,27 @@
+{
+  "type": "tincture_factory",
+  "kind": "industry",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fábrica de Tintas",
+  "asset": "/buildings/industrial/fabrica_tintura.jxl",
+  "width": 5,
+  "height": 5,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 1000, "stone": 500, "iron": 500, "steel": 500 },
+  "workPoints": 21000000,
+  "maxWorkers": 60,
+  "stockProduct": "Tintura",
+  "stockProductId": "tincture",
+  "stockCapacity": 1000,
+  "toolCapacity": 240,
+  "toolDemandPerWorker": 4,
+  "charcoalCapacity": 1000,
+  "production": {
+    "mode": "batch",
+    "workPointsPerUnit": 300,
+    "batchSize": 10,
+    "batchInputs": { "charcoal": 10 }
+  }
+}

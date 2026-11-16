@@ -36,6 +36,8 @@ crescem pela própria taxa de bem-estar; o crescimento destinado às casas vazia
 é calculado sobre os moradores das casas que estavam lotadas, com bem-estar
 médio ponderado pela população, e distribuído pelas casas vazias em ordem de ID
 até sua capacidade. As taxas mensais incluem 0,1% para bem-estar de 0 a 50.
+A escala máxima de bem-estar residencial é 200; entre 163 e 200 a regra
+populacional existente mantém a taxa de crescimento de 0,3%.
 A emigração pode ser recebida por uma cidade vizinha elegível a menos de 850
 tiles. O servidor persiste em
 `city_assemblies.population_change_last_month` a variação líquida de cada cidade
@@ -59,7 +61,7 @@ O apreço é calculado com as rendas médias residenciais e a média salarial
 municipal ponderada pelos moradores, incluindo todas as residências concluídas
 da cidade e considerando as residências desocupadas na média regional de 10
 tiles. Cada construção com trabalhadores (inclusive uma obra) persiste o nível
-mínimo de técnica exigido (10–40; padrão 10). Na alocação diária, cada residência
+mínimo de técnica exigido (10–80; padrão 10). Na alocação diária, cada residência
 só pode oferecer trabalhadores quando sua técnica, derivada do bem-estar, atinge
 o mínimo configurado pela construção. Tanto a distribuição diária quanto a prévia
 de contratação exigem que residência e local de trabalho pertençam à mesma
@@ -713,6 +715,18 @@ mapeamento e verificar todas as curvas.
   `Dᵢ × ((Rf − Pf − q)/RR_total)^3`. O ideal é
   `(Rf/RR_total − 1/(6 × RR_total) + 1/16)^3` e o associado é
   `(benefício_erro / benefício_ideal)^6`.
+  A cesta nobre contém azeite, tabaco, álcool e vinho; seu custo é `RR4` e
+  `B = RR + RR2 + RR3 + RR4`. Para ela, e para as três novas cestas de bens,
+  `w = (1 − Pf/B)^2`, `q = (0,8^w − 1) × Rf` e
+  `benefício_erro = Dᵢ × ((Rf − Pf − q)/B)^2`, sem os limites de renda das
+  fórmulas antigas. `benefício_ideal = (Rf/B − 3/B)^2` e expoente 8 no
+  associado da cesta nobre. A cesta intermediária de bens (tintura, tapete e
+  porcelana) custa `RB2`, usa `B = RR + RR2 + RR3 + RR4 + RB1 + RB2`,
+  ideal `(Rf/B − 1/(6B) + 1/13)^2` e expoente associado 8. A cesta avançada
+  de bens (artes e jóias) acrescenta `RB3` à base e usa o mesmo ideal, com
+  expoente associado 9. A cesta nobre de bens (raridades) acrescenta `RB4`,
+  usa ideal `(Rf/B − 1/(6B) + 1/14)^2` e expoente associado 12. A fórmula
+  existente de `RB1` continua com `B = RR + RR2 + RR3 + RB1`, sem `RR4`.
   Para cada produto, as residências são processadas por bem-estar decrescente;
   empates seguem ID crescente. Como estoque e capacidade remanescentes são
   atualizados a cada compra, as residências prioritárias podem consumir esses
@@ -720,8 +734,9 @@ mapeamento e verificar todas as curvas.
   Os moradores empregados são repartidos entre as lojas do produto em 60 tiles
   na proporção do benefício associado. O método dos maiores restos garante
   alocações inteiras cuja soma é a população empregada da residência quando há
-  benefício positivo; se o custo da cesta aplicável (`RR` para produtos básicos,
-  `RR + RR2` para intermediários, `RR + RR2 + RR3` para avançados) ou todos os benefícios forem zero, não há
+  benefício positivo; se a base cumulativa aplicável (`RR`, `RR + RR2`,
+  `RR + RR2 + RR3`, `RR + RR2 + RR3 + RB1`, `RR + RR2 + RR3 + RR4` ou as
+  somas correspondentes até `RB2`, `RB3` ou `RB4`) ou todos os benefícios forem zero, não há
   compra. A distância define a elegibilidade no raio de 60 tiles e também
   reduz o benefício por `Dᵢ`.   A quantidade desejada por loja é `trabalhadores
   alocados × necessidade diária por pessoa × benefício associado`, com
@@ -740,12 +755,18 @@ mapeamento e verificar todas as curvas.
   A capacidade de venda converte Work Points diários pelos limites
   `salesWorkPointsPerUnit` definidos por construção; `bread`, `cheese`, `fruit`
   e `chocolate` participam da cesta avançada; `clothing`, `furniture`,
-  `utilities` e `glass` participam da cesta de bens.
+  `utilities` e `glass` participam de `RB1`; azeite, tabaco, álcool e vinho
+  compõem `RR4`; tintura, tapete e porcelana compõem `RB2`; artes e jóias
+  compõem `RB3`; raridades compõem `RB4`.
   O bem-estar residencial (`src/types/wellbeing.ts`) soma a satisfação por
-  produto nos últimos 30 dias, limitada a 100% da necessidade: cada produto
-  básico vale até 12,5 pontos, intermediário e bem valem 6,25, e avançado vale
-  3 (máximo 162). O valor é persistido em `all_buildings.wellbeing`; a técnica
-  média exibida no painel segue a fórmula por faixas de Bn definida pelo domínio.
+  produto nos últimos 30 dias, limitada a 100% da necessidade: cada básico vale
+  12,5; cada intermediário e bem de `RB1`, 6,25; cada avançado ou nobre da
+  cesta de consumo, 3; cada bem de `RB2`, 5; cada bem de `RB3`, 4; e cada bem
+  de `RB4`, 3 (máximo 200). O valor é persistido em `all_buildings.wellbeing`,
+  cuja constraint permite 0–200 também em bancos já existentes. A técnica
+  residencial vai de 10 a 80 e segue as faixas de Bn definidas pelo domínio;
+  os limites de técnica mínima e o SQL que calcula a média dos trabalhadores
+  usam a mesma escala.
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
   preço unitário de venda e custo médio ponderado do produto nos armazéns da
@@ -758,7 +779,7 @@ mapeamento e verificar todas as curvas.
   estimado, o resultado fica indisponível. Os detalhes do diagnóstico (renda,
   moradores, produto, `RR`, `Pf`, `w`, `q`, benefícios de erro/ideal/associado,
   participação e moradores alocados, quantidade, estoque/capacidade, resultado
-  e decomposição de `RR`, `RR2` e `RR3` por produto (cesta, necessidade diária, preço
+  e decomposição de `RR`, `RR2`, `RR3`, `RR4` e `RB1`–`RB4` por produto (cesta, necessidade diária, preço
   médio, origem do preço, vendas/receita do período e contribuição) são
   persistidos em `commerce_history.diagnostics` junto com o resumo financeiro.
   A rota autenticada `GET /api/residential-buildings/:id/commerce-history`
@@ -769,7 +790,7 @@ mapeamento e verificar todas as curvas.
 
   ## Configuração editável das regras
 
-  Os 58 arquivos `config/construcoes/<tipo>.txt` são a fonte dos dados do catálogo:
+  Os 83 arquivos `config/construcoes/<tipo>.txt` são a fonte dos dados do catálogo:
   nome, imagem pública, categoria funcional, zona e requisitos de posicionamento,
   dimensões, custos, Work Points de obra, capacidade de trabalhadores, estoques
   de produtos/insumos, receitas, regras de produção e safras sazonais. Os arquivos
@@ -1069,7 +1090,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |
-| `PATCH /api/residential-buildings/:id/work-settings` | Criador; obras e construções não residenciais concluídas | Valida funcionários desejados (0–100 em obras ou 0–máximo após concluídas), salário diário (até duas casas decimais), carga horária (4–14 h) e técnica mínima necessária (10–40); reduz empregados excedentes. |
+| `PATCH /api/residential-buildings/:id/work-settings` | Criador; obras e construções não residenciais concluídas | Valida funcionários desejados (0–100 em obras ou 0–máximo após concluídas), salário diário (até duas casas decimais), carga horária (4–14 h) e técnica mínima necessária (10–80); reduz empregados excedentes. |
 | `POST /api/residential-buildings/:id/simulate-hiring` | Dono da construção | Calcula uma prévia de contratação com os dados da cidade no servidor, sem expor ao navegador dados privados de outras construções. |
 | `PATCH /api/residential-buildings/:id/rent` | Criador | Valida e grava o aluguel por pessoa (≥ C$ 0,01, até duas casas decimais). |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |

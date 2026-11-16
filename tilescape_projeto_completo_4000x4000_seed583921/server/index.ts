@@ -945,13 +945,21 @@ const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
    WHERE j.workplace_id = all_buildings.id OR j.residence_id = all_buildings.id) AS employed,
   (SELECT SUM(j.count * CASE
-             WHEN LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) <= 100
-               THEN 10 * (1 + LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) / 200)
-             WHEN LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) <= 125
-               THEN 10 * (1.5 + (LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) - 100) / 50)
-             WHEN LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) <= 150
-               THEN 10 * (2 + (LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) - 125) / 25)
-             ELSE 10 * (3 + (LEAST(162::float8, GREATEST(0::float8, home.wellbeing)) - 150) / 12)
+             WHEN LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) <= 100
+               THEN 10 * (1 + LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) / 200)
+             WHEN LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) <= 125
+               THEN 10 * (1.5 + (LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) - 100) / 50)
+             WHEN LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) <= 150
+               THEN 10 * (2 + (LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) - 125) / 25)
+             WHEN LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) <= 165
+               THEN 10 * (3 + (LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) - 150) / 15)
+             WHEN LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) <= 180
+               THEN 10 * (4 + (LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) - 165) / 15)
+             WHEN LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) <= 190
+               THEN 10 * (5 + (LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) - 180) / 10)
+             WHEN LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) <= 197
+               THEN 10 * (6 + (LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) - 190) / 7)
+             ELSE 10 * (7 + (LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) - 197) / 3)
            END) / NULLIF(SUM(j.count), 0)
    FROM job_assignments j
    JOIN all_buildings home ON home.id = j.residence_id

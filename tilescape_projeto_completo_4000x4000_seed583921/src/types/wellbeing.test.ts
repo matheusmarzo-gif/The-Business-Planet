@@ -39,6 +39,16 @@ const dailyNeeds = new Map([
   ['furniture', 0.01],
   ['utilities', 0.01],
   ['glass', 0.01],
+  ['olive_oil', 0.05],
+  ['tobacco', 0.05],
+  ['alcohol', 0.055],
+  ['wine', 0.04],
+  ['tincture', 0.1],
+  ['carpet', 0.1],
+  ['porcelain', 0.1],
+  ['artwork', 0.05],
+  ['jewelry', 0.05],
+  ['rarities', 0.05],
 ]);
 
 test('scores consumption proportionally, capped at each product need', () => {
@@ -54,14 +64,14 @@ test('scores consumption proportionally, capped at each product need', () => {
   assert.equal(score, 6.25 + 6.25 + 1.5 + 6.25);
 });
 
-test('scores the maximum of 162 and does not award points without consumers', () => {
+test('scores the maximum of 200 and does not award points without consumers', () => {
   const completeConsumption = [...dailyNeeds].map(([productId, quantity]) => ({
     productId,
     quantity,
     consumerDays: 1,
   }));
-  assert.equal(MAX_RESIDENCE_WELLBEING, 162);
-  assert.equal(calculateResidenceWellbeing(completeConsumption, dailyNeeds), 162);
+  assert.equal(MAX_RESIDENCE_WELLBEING, 200);
+  assert.equal(calculateResidenceWellbeing(completeConsumption, dailyNeeds), 200);
   assert.equal(
     calculateResidenceWellbeing(
       [{ productId: 'rice', quantity: 1, consumerDays: 0 }],
@@ -76,7 +86,11 @@ test('maps residence wellbeing to worker technique across every formula boundary
   assert.equal(getWorkerTechnique(100), 15);
   assert.equal(getWorkerTechnique(125), 20);
   assert.equal(getWorkerTechnique(150), 30);
-  assert.equal(getWorkerTechnique(162), 40);
+  assert.equal(getWorkerTechnique(162), 38);
+  assert.equal(getWorkerTechnique(165), 40);
+  assert.equal(getWorkerTechnique(180), 50);
+  assert.equal(getWorkerTechnique(190), 60);
+  assert.equal(getWorkerTechnique(197), 70);
   assert.equal(getWorkerTechnique(-1), 10);
-  assert.equal(getWorkerTechnique(200), 40);
+  assert.equal(getWorkerTechnique(200), 80);
 });

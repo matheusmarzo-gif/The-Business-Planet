@@ -177,9 +177,9 @@ describe('city minimum wage', () => {
   it('accepts fractional population-weighted wellbeing scores', () => {
     assert.equal(isValidCityWellbeing(62.5), true);
     assert.equal(isValidCityWellbeing(0), true);
-    assert.equal(isValidCityWellbeing(162), true);
+    assert.equal(isValidCityWellbeing(200), true);
     assert.equal(isValidCityWellbeing(Number.NaN), false);
-    assert.equal(isValidCityWellbeing(162.01), false);
+    assert.equal(isValidCityWellbeing(200.01), false);
   });
 
   it('accepts currency values from the default minimum through the maximum', () => {
@@ -723,6 +723,16 @@ describe('shop sales', () => {
     ['furniture', 0.01],
     ['utilities', 0.01],
     ['glass', 0.01],
+    ['olive_oil', 0.05],
+    ['tobacco', 0.05],
+    ['alcohol', 0.055],
+    ['wine', 0.04],
+    ['tincture', 0.1],
+    ['carpet', 0.1],
+    ['porcelain', 0.1],
+    ['artwork', 0.05],
+    ['jewelry', 0.05],
+    ['rarities', 0.05],
   ]);
   const cityPrices = (productId: string, price: number) =>
     new Map([[getCityProductKey('city-a', productId), price]]);
@@ -1023,7 +1033,7 @@ describe('shop sales', () => {
       basketShops,
       history,
     );
-    assert.equal(allBasketItems.length, 20);
+    assert.equal(allBasketItems.length, 30);
     assert.equal(
       getAdvancedBasketBreakdown('city-a', demandByProduct, prices, basketShops, history).length,
       4,
@@ -1046,6 +1056,13 @@ describe('shop sales', () => {
       allBasketItems.filter((item) => item.basketType === 'intermediate').length,
       4,
     );
+    assert.equal(allBasketItems.filter((item) => item.basketType === 'noble').length, 4);
+    assert.equal(
+      allBasketItems.filter((item) => item.basketType === 'goodsIntermediate').length,
+      3,
+    );
+    assert.equal(allBasketItems.filter((item) => item.basketType === 'goodsAdvanced').length, 2);
+    assert.equal(allBasketItems.filter((item) => item.basketType === 'goodsNoble').length, 1);
     assert.ok(
       breakdown
         .filter((item) => item.basketContribution !== null)
@@ -1189,6 +1206,84 @@ describe('shop sales', () => {
       }).errorBenefit,
       0,
     );
+  });
+
+  it('calculates noble and successive goods baskets with their own formulas', () => {
+    const income = 14;
+    const price = 20;
+    const need = 0.05;
+    const distance = 15;
+    const costs = {
+      intermediateBasketCost: 1,
+      advancedBasketCost: 0.5,
+      goodsBasketCost: 0.25,
+      nobleBasketCost: 0.4,
+      goodsIntermediateBasketCost: 0.3,
+      goodsAdvancedBasketCost: 0.2,
+      goodsNobleBasketCost: 0.1,
+    };
+    const rr = 2;
+    const rr2 = costs.intermediateBasketCost;
+    const rr3 = costs.advancedBasketCost;
+    const rr4 = costs.nobleBasketCost;
+    const rb1 = costs.goodsBasketCost;
+    const rb2 = costs.goodsIntermediateBasketCost;
+    const rb3 = costs.goodsAdvancedBasketCost;
+    const rb4 = costs.goodsNobleBasketCost;
+    const scenarios = [
+      {
+        basketType: 'noble' as const,
+        total: rr + rr2 + rr3 + rr4,
+        idealBase: (income - 3) / (rr + rr2 + rr3 + rr4),
+        exponent: 8,
+      },
+      {
+        basketType: 'goodsIntermediate' as const,
+        total: rr + rr2 + rr3 + rr4 + rb1 + rb2,
+        idealBase: income / (rr + rr2 + rr3 + rr4 + rb1 + rb2) -
+          1 / (6 * (rr + rr2 + rr3 + rr4 + rb1 + rb2)) + 1 / 13,
+        exponent: 8,
+      },
+      {
+        basketType: 'goodsAdvanced' as const,
+        total: rr + rr2 + rr3 + rr4 + rb1 + rb2 + rb3,
+        idealBase: income / (rr + rr2 + rr3 + rr4 + rb1 + rb2 + rb3) -
+          1 / (6 * (rr + rr2 + rr3 + rr4 + rb1 + rb2 + rb3)) + 1 / 13,
+        exponent: 9,
+      },
+      {
+        basketType: 'goodsNoble' as const,
+        total: rr + rr2 + rr3 + rr4 + rb1 + rb2 + rb3 + rb4,
+        idealBase: income / (rr + rr2 + rr3 + rr4 + rb1 + rb2 + rb3 + rb4) -
+          1 / (6 * (rr + rr2 + rr3 + rr4 + rb1 + rb2 + rb3 + rb4)) + 1 / 14,
+        exponent: 12,
+      },
+    ];
+
+    for (const scenario of scenarios) {
+      const pf = price * need;
+      const w = (1 - pf / scenario.total) ** 2;
+      const q = (0.8 ** w - 1) * income;
+      const distanceFactor = Math.sqrt(60 / (60 + distance));
+      const error = distanceFactor * ((income - pf - q) / scenario.total) ** 2;
+      const ideal = scenario.idealBase ** 2;
+      const calculation = getPurchaseBenefitCalculation(
+        income,
+        price,
+        need,
+        rr,
+        distance,
+        { basketType: scenario.basketType, ...costs },
+      );
+      assert.ok(Math.abs(calculation.w - w) < 1e-12, scenario.basketType);
+      assert.ok(Math.abs(calculation.q - q) < 1e-12, scenario.basketType);
+      assert.ok(Math.abs(calculation.errorBenefit - error) < 1e-12, scenario.basketType);
+      assert.ok(Math.abs(calculation.idealBenefit - ideal) < 1e-12, scenario.basketType);
+      assert.ok(
+        Math.abs(calculation.associatedBenefit - (error / ideal) ** scenario.exponent) < 1e-9,
+        scenario.basketType,
+      );
+    }
   });
 
   it('uses the advanced-basket formula, RR3, and its three income thresholds', () => {
@@ -1504,6 +1599,16 @@ describe('fazenda leiteira e demanda configurável', () => {
       'demanda_bens.furniture=0.01',
       'demanda_bens.utilities=0.01',
       'demanda_bens.glass=0.01',
+      'demanda_nobre.olive_oil=0.05',
+      'demanda_nobre.tobacco=0.05',
+      'demanda_nobre.alcohol=0.055',
+      'demanda_nobre.wine=0.04',
+      'demanda_bens_intermediarios.tincture=0.1',
+      'demanda_bens_intermediarios.carpet=0.1',
+      'demanda_bens_intermediarios.porcelain=0.1',
+      'demanda_bens_avancados.artwork=0.05',
+      'demanda_bens_avancados.jewelry=0.05',
+      'demanda_bens_nobres.rarities=0.05',
     ].join('\n'));
     assert.equal(multipliers.get('rice'), 0.03);
     assert.equal(multipliers.get('wheat'), 0.03);
@@ -1523,6 +1628,16 @@ describe('fazenda leiteira e demanda configurável', () => {
     assert.equal(multipliers.get('furniture'), 0.01);
     assert.equal(multipliers.get('utilities'), 0.01);
     assert.equal(multipliers.get('glass'), 0.01);
+    assert.equal(multipliers.get('olive_oil'), 0.05);
+    assert.equal(multipliers.get('tobacco'), 0.05);
+    assert.equal(multipliers.get('alcohol'), 0.055);
+    assert.equal(multipliers.get('wine'), 0.04);
+    assert.equal(multipliers.get('tincture'), 0.1);
+    assert.equal(multipliers.get('carpet'), 0.1);
+    assert.equal(multipliers.get('porcelain'), 0.1);
+    assert.equal(multipliers.get('artwork'), 0.05);
+    assert.equal(multipliers.get('jewelry'), 0.05);
+    assert.equal(multipliers.get('rarities'), 0.05);
     assert.equal(multipliers.get('red_meat'), 0.03);
     assert.equal(multipliers.get('milk'), 1);
     assert.throws(() => parseBasicDemandConfig('demanda_basica.milk=-1'), /linha 1/);
@@ -1553,6 +1668,16 @@ describe('fazenda leiteira e demanda configurável', () => {
           'demanda_bens.furniture=0.01',
           'demanda_bens.utilities=0.01',
           'demanda_bens.glass=0.01',
+          'demanda_nobre.olive_oil=0.05',
+          'demanda_nobre.tobacco=0.05',
+          'demanda_nobre.alcohol=0.055',
+          'demanda_nobre.wine=0.04',
+          'demanda_bens_intermediarios.tincture=0.1',
+          'demanda_bens_intermediarios.carpet=0.1',
+          'demanda_bens_intermediarios.porcelain=0.1',
+          'demanda_bens_avancados.artwork=0.05',
+          'demanda_bens_avancados.jewelry=0.05',
+          'demanda_bens_nobres.rarities=0.05',
         ].join('\n'),
       ),
       /categoria de demanda incorreta/,
@@ -1591,6 +1716,16 @@ describe('fazenda leiteira e demanda configurável', () => {
         ['furniture', 0.01],
         ['utilities', 0.01],
         ['glass', 0.01],
+        ['olive_oil', 0.05],
+        ['tobacco', 0.05],
+        ['alcohol', 0.055],
+        ['wine', 0.04],
+        ['tincture', 0.1],
+        ['carpet', 0.1],
+        ['porcelain', 0.1],
+        ['artwork', 0.05],
+        ['jewelry', 0.05],
+        ['rarities', 0.05],
       ],
     );
     assert.equal(
@@ -1850,13 +1985,13 @@ describe('work settings', () => {
         wage: 10,
         workHoursPerDay: 8,
         desiredWorkers: 0,
-        minimumWorkerTechnique: 40,
+        minimumWorkerTechnique: 80,
       }),
       {
         wage: 10,
         workHoursPerDay: 8,
         desiredWorkers: 0,
-        minimumWorkerTechnique: 40,
+        minimumWorkerTechnique: 80,
       },
     );
     assert.equal(
@@ -1864,7 +1999,7 @@ describe('work settings', () => {
         wage: 10,
         workHoursPerDay: 8,
         desiredWorkers: 0,
-        minimumWorkerTechnique: 20.5,
+        minimumWorkerTechnique: 81,
       }),
       null,
     );
@@ -1873,7 +2008,7 @@ describe('work settings', () => {
         wage: 10,
         workHoursPerDay: 8,
         desiredWorkers: 0,
-        minimumWorkerTechnique: 41,
+        minimumWorkerTechnique: 20.5,
       }),
       null,
     );
@@ -3113,6 +3248,42 @@ describe('recursos e ferramentaria', () => {
     }
   });
 
+  it('produces the new mines, factories, and artisanal goods with configured inputs', () => {
+    const recipes = [
+      ['gold_mine', 9000, 40, {}, 1, 90, 180, 2],
+      ['silver_mine', 9000, 40, {}, 2, 90, 180, 2],
+      ['tincture_factory', 300, 10, {}, 10, 60, 240, 4],
+      ['carpet_factory', 300, 4, { wool: 1 }, 10, 60, 240, 4],
+      ['porcelain_factory', 300, 4, { sand: 3 }, 10, 60, 240, 4],
+      ['olive_oil_factory', 600, 20, { olive: 6 }, 1, 30, 60, 2],
+      ['tobacco_factory', 600, 20, { tobacco_leaf: 4 }, 1, 30, 60, 2],
+      ['alcohol_distillery', 600, 20, { sugarcane: 80 }, 1, 30, 60, 2],
+      ['wine_factory', 600, 20, { grape: 5 }, 1, 30, 60, 2],
+      ['artist_workshop', 1000, 0, { tincture: 2, wood: 1 }, 4, 7, 70, 10],
+      ['jeweler_workshop', 1000, 0, { gold: 1, silver: 2 }, 60, 7, 70, 10],
+      ['craftsman_workshop', 1000, 4, { utilities: 1 }, 2, 7, 70, 10],
+    ] as const;
+    for (const [type, workPoints, charcoal, inputs, expectedUnits, workers, tools, toolDemand] of recipes) {
+      const definition = RESIDENCES[type];
+      const result = planProduction(definition.production!, {
+        progress: 0,
+        workPoints,
+        penalty: 0,
+        freeSpace: definition.stockCapacity!,
+        charcoal,
+        inputStocks: inputs,
+      });
+      assert.equal(result.units, expectedUnits, type);
+      assert.deepEqual(result.inputStocksUsed, {
+        ...inputs,
+        ...(charcoal > 0 ? { charcoal } : {}),
+      }, type);
+      assert.equal(definition.maxWorkers, workers, type);
+      assert.equal(definition.toolCapacity, tools, type);
+      assert.equal(definition.toolDemandPerWorker, toolDemand, type);
+    }
+  });
+
   it('routes furniture factory wood consumption to generic input stock only', () => {
     const definition = RESIDENCES.furniture_factory;
     const result = planProduction(definition.production!, {
@@ -3234,7 +3405,22 @@ describe('recursos e ferramentaria', () => {
   });
 
   it('defines the requested weights, volumes, and infinite shelf life for new products', () => {
-    const newProducts = ['sand', 'steel', 'clothing', 'furniture', 'utilities', 'glass'];
+    const newProducts = [
+      'sand',
+      'steel',
+      'clothing',
+      'furniture',
+      'utilities',
+      'glass',
+      'tincture',
+      'carpet',
+      'porcelain',
+      'artwork',
+      'jewelry',
+      'rarities',
+      'gold',
+      'silver',
+    ];
     assert.deepEqual(
       newProducts.map((id) => {
         const definition = PRODUCTS.find((product) => product.id === id);
@@ -3248,6 +3434,14 @@ describe('recursos e ferramentaria', () => {
         [50, 0.1, null],
         [5, 0.01, null],
         [300, 0.1, null],
+        [1, 0.001, 730],
+        [8, 0.15, 7300],
+        [5, 0.02, 18250],
+        [3, 0.05, 18250],
+        [0.5, 0.001, null],
+        [2, 0.01, null],
+        [1, 0.00006, null],
+        [1, 0.0001, null],
       ],
     );
   });

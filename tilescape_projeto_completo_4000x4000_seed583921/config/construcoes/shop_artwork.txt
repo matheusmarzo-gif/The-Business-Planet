@@ -1,0 +1,19 @@
+{
+  "type": "shop_artwork",
+  "kind": "shop",
+  "requiredZone": "urban",
+  "requiresRoad": true,
+  "name": "Casa de Artes",
+  "asset": "/buildings/commerce/casa_de_artes.jxl",
+  "width": 2,
+  "height": 2,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 60, "stone": 60, "iron": 60, "steel": 40 },
+  "workPoints": 350000,
+  "maxWorkers": 16,
+  "stockProduct": "Artes",
+  "stockProductId": "artwork",
+  "stockCapacity": 20,
+  "salesWorkPointsPerUnit": 600
+}

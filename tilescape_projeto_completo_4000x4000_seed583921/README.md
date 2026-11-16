@@ -453,8 +453,8 @@ No mesmo horário mensal, a população cresce ou decresce por residência
 concluída. O crescimento exige vaga na casa, ofertas de emprego na cidade e
 desemprego de no máximo 10% (desempregados ÷ população). As taxas mensais são
 0,1% para bem-estar de 0 a 50; 0,3% acima de 50 e abaixo de 100; 1,5% de 100
-a 124; 3% de 125 a 149; e 1,5% de 150 a 162. A faixa acima de 162 teria taxa
-de 0,3%, mas não é atingível com o limite atual de bem-estar. Casas parcialmente
+a 124; 3% de 125 a 149; e 1,5% de 150 a 162. Acima de 162 até o limite atual
+de 200, a taxa é 0,3%. Casas parcialmente
 ocupadas crescem pela própria taxa de bem-estar. Para as casas vazias, o jogo
 calcula uma única taxa sobre a população das casas que estavam lotadas, usando o
 bem-estar médio ponderado pelos moradores, e distribui esse crescimento pelas
@@ -564,6 +564,20 @@ produzem 8 utilitários. A **Fábrica de Vidros** tem o mesmo custo e Work Point
 cada 400 Work Points, 10 areias e 20 carvões produzem 8 vidros. As fábricas
 recebem insumos e ferramentas do armazém ligado e enviam a produção para ele.
 
+As novas fábricas industriais ocupam 5 × 5. As de tintura, tapetes e porcelana
+empregam 60 pessoas, custam 1.000 madeiras, 500 pedras, 500 ferros e 500 aços e
+exigem 21.000.000 Work Points. Cada lote usa 300 Work Points: 10 carvões
+produzem 10 tinturas; 1 lã e 4 carvões produzem 10 tapetes; 3 areias e 4
+carvões produzem 10 porcelanas. Cada uma guarda até 1.000 produtos e 240
+Ferramentas; a penalidade de ferramentas consome 4 por funcionário/dia. As
+fábricas de azeite, tabaco, álcool e vinho empregam 30 pessoas, custam 100
+madeiras, 50 pedras, 50 ferros e 50 aços e exigem 3.000.000 Work Points. Cada
+lote usa 600 Work Points e 20 carvões: 6 azeitonas produzem azeite, 4 fumos
+produzem tabaco, 80 canas produzem álcool e 5 uvas produzem vinho. Cada uma
+guarda até 10 unidades do produto, 60 Ferramentas e 200 carvões; também exige
+2 Ferramentas por funcionário/dia. Seus outros estoques máximos de insumos são
+60 azeitonas, 40 fumos, 800 canas ou 50 uvas, conforme a fábrica.
+
 ### Comércio
 
 Na categoria **Comerciais**, a **Loja de Arroz** (2 × 2 tiles, até 1 funcionário,
@@ -603,6 +617,16 @@ As novas **Lojas de Roupas, Móveis e Utilitários** e a **Vidraçaria** ocupam
 Seus estoques são abastecidos pelo armazém ligado, e esses quatro produtos
 participam da cesta básica de bens.
 
+As lojas das cestas nobres também ocupam 2 × 2 tiles e recebem estoque do
+armazém ligado:
+
+| Lojas | Estoque | Funcionários | WP por unidade vendida | Custo de construção | Obra |
+|---|---:|---:|---:|---|---:|
+| Azeite, Tabaco, Álcool e Vinho | 20 | 12 | 420 | 40 madeira, pedra, ferro e aço | 260.000 |
+| Tintura, Tapetes e Porcelanas | 40 | 16 | 120 | 40 madeira, pedra, ferro e aço | 260.000 |
+| Casa de Artes e Joalheria | 20 | 16 | 600 | 60 madeira, pedra e ferro; 40 aço | 350.000 |
+| Raridades | 10 | 30 | 2.100 | 30 madeira, pedra e ferro; 20 aço | 250.000 |
+
 Ao terminar a construção de um comércio, o preço inicial deixa de ser sempre
 C$ 10: primeiro é usada a média dos preços atuais de comércios concluídos do
 mesmo tipo pertencentes ao jogador. Se ele ainda não tiver um comércio desse
@@ -621,7 +645,7 @@ da cidade sem enviar ao navegador informações privadas de outras construções
 
 Nas construções artesanais, comerciais, fazendas, recursos, indústrias e obras
 em andamento, o dono também pode definir a **Técnica mínima necessária** para
-contratar, de 10 a 40 (padrão 10). Na distribuição diária de empregos, uma
+contratar, de 10 a 80 (padrão 10). Na distribuição diária de empregos, uma
 residência só concorre às vagas se a técnica de seus moradores, calculada a
 partir do bem-estar, alcançar esse mínimo. A simulação de contratação respeita
 o mesmo limite. O painel informa a técnica média dos trabalhadores atualmente
@@ -664,20 +688,38 @@ os limites e custos definidos na seção Comércio. Cada loja recebe seu produto
 do armazém ligado e vende por preço definido pelo dono.
 
 O consumo diário desejável por morador das **cestas básica, intermediária,
-avançada e básica de bens**
+avançada, nobre, básica de bens, intermediária de bens, avançada de bens e nobre de bens**
 pode ser ajustado em [`config/demanda_basica.txt`](./config/demanda_basica.txt).
 Na cesta básica: 0,03 de arroz, trigo, cevada, milho, batata, peixe e carne
 vermelha; e 1 litro de leite. Na cesta intermediária: 0,01 de açúcar, 0,05 de
 vegetais, 0,04 de sal e 0,01 de especiarias. Na cesta avançada: 1 pão, 0,1 queijo,
 0,02 frutas e 0,025 chocolate. Na cesta básica de bens, roupas, móveis,
-utilitários e vidros têm demanda de 0,01 cada por pessoa/dia. O servidor lê o
-arquivo ao iniciar; reinicie o serviço depois de alterá-lo.
+utilitários e vidros têm demanda de 0,01 cada por pessoa/dia. A cesta nobre
+inclui 0,05 azeite, 0,05 tabaco, 0,055 álcool e 0,04 vinho. A cesta
+intermediária de bens inclui 0,1 tintura, 0,1 tapete e 0,1 porcelana; a cesta
+avançada de bens inclui 0,05 artes e 0,05 jóias; a cesta nobre de bens inclui
+0,05 raridades. O servidor lê o arquivo ao iniciar; reinicie o serviço depois
+de alterá-lo.
+
+Os novos produtos usam os seguintes dados para transporte e validade:
+
+| Produto | Peso | Volume | Validade |
+|---|---:|---:|---:|
+| Tintura | 1 kg | 0,001 m³ | 2 anos |
+| Tapete | 8 kg | 0,15 m³ | 20 anos |
+| Porcelana | 5 kg | 0,02 m³ | 50 anos |
+| Artes | 3 kg | 0,05 m³ | 50 anos |
+| Jóias | 0,5 kg | 0,001 m³ | Permanente |
+| Raridades | 2 kg | 0,01 m³ | Permanente |
+| Ouro | 1 kg | 0,00006 m³ | Permanente |
+| Prata | 1 kg | 0,0001 m³ | Permanente |
 
 O preço médio de cada produto é ponderado pelas vendas do período definido em
 `config/formulas/consumo.txt` (30 dias por padrão) ou,
 na ausência de vendas, pela média dos preços anunciados na cidade. `RR` é a soma
 de necessidade diária × preço médio dos produtos básicos com preço disponível;
-`RR2` é a mesma soma para os produtos intermediários e `RR3` para os avançados.
+`RR2` é a mesma soma para os produtos intermediários, `RR3` para os avançados
+e `RR4` para os produtos da cesta nobre.
 
 As compras básicas usam a fórmula existente com `RR`: `Pf = preço local ×
 necessidade`, `w = (1 − Pf/RR)^4`, `q = (0,8^w − 1) × Rf`, benefício de erro
@@ -703,6 +745,17 @@ zero quando `Rf ≤ RR_total/2`; acima disso, é
 `Dᵢ × ((Rf − Pf − q)/RR_total)^3`. O benefício ideal é
 `(Rf/RR_total − 1/(6 × RR_total) + 1/16)^3` e o associado é
 `(benefício de erro / benefício ideal)^6`.
+Para os novos tiers, seja `B` a soma cumulativa indicada: a cesta nobre usa
+`B = RR + RR2 + RR3 + RR4`; a cesta intermediária de bens usa
+`B = RR + RR2 + RR3 + RR4 + RB1 + RB2`; a cesta avançada de bens acrescenta
+`RB3`; e a cesta nobre de bens acrescenta `RB4`. Nessas quatro cestas,
+`w = (1 − Pf/B)^2`, `q = (0,8^w − 1) × Rf` e o benefício de erro é
+`Dᵢ × ((Rf − Pf − q)/B)^2`. A cesta nobre usa benefício ideal
+`(Rf/B − 3/B)^2` e expoente 8 no benefício associado. RB2 usa
+`(Rf/B − 1/(6B) + 1/13)^2` e expoente 8; RB3 usa o mesmo ideal e expoente 9;
+RB4 usa `(Rf/B − 1/(6B) + 1/14)^2` e expoente 12. Se o benefício ideal for
+zero, o benefício associado é zero. A fórmula anterior de RB1 continua usando
+`RR + RR2 + RR3 + RB1`, sem RR4.
 As necessidades e os parâmetros dessas fórmulas, inclusive as eficiências
 usadas no benefício do trabalho e os Work Points por distância, estão nos
 arquivos de configuração indicados acima. O transporte usa
@@ -718,6 +771,8 @@ Na categoria **Recursos** (área rural, ao lado de estrada):
 | Madeireira | 2 × 2 | 10 | 30 madeiras, 5 Ferramentas | 20 madeira, 5 pedra | 35.000 | 1 madeira / 1000 WP |
 | Pedreira | 2 × 2 | 30 | 10 pedras, 5 Ferramentas | 60 madeira, 20 pedra | 120.000 | 1 pedra / 3000 WP |
 | Mina de Ferro | 3 × 3 | 30 | 5 ferro, 5 Ferramentas | 60 madeira, 20 pedra | 120.000 | 1 ferro / 3000 WP |
+| Mina de Ouro | 3 × 3 | 90 | 10 ouros, 180 Ferramentas, 40 carvões | 300 madeira, 300 pedra, 100 aço | 2.900.000 | 1 ouro / 9000 WP + 40 carvões |
+| Mina de Prata | 3 × 3 | 90 | 20 pratas, 180 Ferramentas, 40 carvões | 300 madeira, 300 pedra, 100 aço | 2.900.000 | 2 pratas / 9000 WP + 40 carvões |
 | Coleta de Sal | 2 × 2 | 40 | 100 sal, 5 Ferramentas | 100 madeira, 40 pedra, 40 ferro | 10.000 | 1 sal / 400 WP efetivos; fração é chance diária |
 
 Abaixo do mínimo de WP, a fração vira probabilidade de produzir 1 unidade. A
@@ -725,7 +780,8 @@ demanda de Ferramentas é 0,05 por funcionário/dia (0,15 na Mina) com a mesma
 penalidade do Pesqueiro, que reduz os WP efetivos. A Coleta de Sal deve ficar ao
 lado de uma estrada e de um tile de água; ela ocupa somente terra. Como o mapa
 ainda não diferencia rios de outros tiles aquáticos, qualquer água adjacente é
-aceita.
+aceita. As minas de ouro e prata consomem 2 Ferramentas por funcionário/dia; o
+limite de 40 carvões em cada mina permite manter ao menos uma receita completa.
 
 Na categoria **Artesanais** (área urbana, ao lado de estrada), a **Ferramentaria**
 (2 × 2, 30 funcionários, estoque máx. 100 Ferramentas, 30 carvões e 5 ferro)
@@ -748,6 +804,18 @@ efetivos e 1 madeira produzem 5 carvões. Ferramentas e madeira são recebidas
 pelo armazém ligado; a demanda de Ferramentas é 0,5 por funcionário/dia e
 segue a penalidade do Pesqueiro. O carvão pesa 5 kg, ocupa 0,015 m³ e tem
 validade infinita.
+
+As novas oficinas artesanais ocupam 2 × 2 tiles e empregam até 7 pessoas. A
+**Oficina do Artista** custa 200 madeiras e 100 de cada um dos demais materiais
+(pedra, ferro e aço), exige 4.200.000 Work Points e guarda 20 artes, 10 tinturas,
+5 madeiras e 70 Ferramentas; cada 1.000 Work Points, 2 tinturas e 1 madeira
+produzem 4 artes. A **Oficina do Joalheiro** custa 1.000 madeiras, 500 pedras,
+500 ferros e 500 aços, exige 21.000.000 Work Points e guarda 300 jóias, 5 ouros,
+10 pratas e 70 Ferramentas; cada 1.000 Work Points, 1 ouro e 2 pratas produzem
+60 jóias. A **Oficina do Artesão** custa 200 madeiras e 100 de cada pedra, ferro
+e aço, exige 4.200.000 Work Points e guarda 10 raridades, 5 utilitários, 20
+carvões e 70 Ferramentas; cada 1.000 Work Points, 1 utilitário e 4 carvões
+produzem 2 raridades. As três oficinas exigem 10 Ferramentas por funcionário/dia.
 
 ### Fazendas
 
@@ -776,6 +844,14 @@ lateral), mas sem moradores nem aluguel.
 | Vegetais | Vegetais | 20 % / 40 % / 100 % / 80 % | 2 meses | 5.000 / 10 | 1.500 |
 | Frutas | Fruta | 100 % / 80 % / 60 % / 40 % | 12 meses | 5.000 / 20 | 1.000 |
 | Cacau | Cacau | 100 % / 90 % / 70 % / 50 % | 12 meses | 2.000 / 62 | 400 |
+| Oliveira | Azeitona | 40 % / 30 % / 40 % / 100 % | 8 meses | 5.000 / 12,5 | 1.500 |
+| Fumo | Fumo | 80 % / 60 % / 100 % / 80 % | 6 meses | 5.000 / 50 | 800 |
+| Uva | Uva | 50 % / 60 % / 80 % / 100 % | 4 meses | 10.000 / 42 | 600 |
+
+As fazendas de Oliveira e Fumo empregam até 50 pessoas; a de Uva, até 100.
+Cada uma ocupa 4 × 4, custa 2.000 madeiras e 1.000 pedras e exige 1.200.000
+Work Points. Seus estoques máximos correspondem ao rendimento máximo exibido
+na tabela.
 
 O mês em que o plantio começa define a eficiência sazonal do ciclo. A média diária
 de `min(1, Work Points / requisito diário)` durante o crescimento também reduz
@@ -879,10 +955,14 @@ Cada residência concluída tem um bem-estar calculado pela média móvel dos
 consumida dividida pela necessidade diária multiplicada pelos dias-consumidor
 registrados; cada produto conta no máximo como 100% suprido. Os pesos são 12,5
 pontos para cada produto básico, 6,25 para cada produto intermediário e para
-cada bem, e 3 para cada produto avançado, totalizando até 162 pontos. O painel
-da residência mostra o bem-estar e a técnica média dos trabalhadores: 10 ×
-(1 + Bn/200) até Bn 100; 10 × (1,5 + (Bn−100)/50) até 125; 10 ×
-(2 + (Bn−125)/25) até 150; e 10 × (3 + (Bn−150)/12) até 162.
+cada bem básico, e 3 para cada produto avançado e da cesta nobre. Os bens
+intermediários valem 5 pontos cada, os bens avançados 4 e os bens nobres 3,
+totalizando até 200 pontos. O painel da residência mostra o bem-estar e a
+técnica média dos trabalhadores: 10 × (1 + Bn/200) até Bn 100; 10 ×
+(1,5 + (Bn−100)/50) até 125; 10 × (2 + (Bn−125)/25) até 150; 10 ×
+(3 + (Bn−150)/15) até 165; 10 × (4 + (Bn−165)/15) até 180; 10 ×
+(5 + (Bn−180)/10) até 190; 10 × (6 + (Bn−190)/7) até 197; e 10 ×
+(7 + (Bn−197)/3) até 200. A técnica máxima é 80.
 
 A loja vende somente o estoque que tiver (começa em 0; pode ser abastecida por
 um armazém ligado). No histórico do comércio, **Ver cálculo** mostra `RR` e

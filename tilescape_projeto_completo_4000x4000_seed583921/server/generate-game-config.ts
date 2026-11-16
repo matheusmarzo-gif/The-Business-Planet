@@ -24,17 +24,22 @@ const expectedBuildingIds = [
   'farm_corn',
   'farm_dairy',
   'farm_fruit',
+  'farm_grape',
+  'farm_olive',
   'farm_potato',
   'farm_rice',
   'farm_spices',
   'farm_vegetables',
   'farm_wheat',
+  'farm_tobacco',
   'flour_mill',
   'fishery',
   'house_poor1',
   'house_poor2',
   'house_poor3',
   'iron_mine',
+  'gold_mine',
+  'silver_mine',
   'lumber_mill',
   'quarry',
   'salt_gatherer',
@@ -59,6 +64,26 @@ const expectedBuildingIds = [
   'shop_vegetables',
   'shop_utilities',
   'shop_wheat',
+  'shop_olive_oil',
+  'shop_tobacco',
+  'shop_alcohol',
+  'shop_wine',
+  'shop_tincture',
+  'shop_carpet',
+  'shop_porcelain',
+  'shop_artwork',
+  'shop_jewelry',
+  'shop_rarities',
+  'tincture_factory',
+  'carpet_factory',
+  'porcelain_factory',
+  'olive_oil_factory',
+  'tobacco_factory',
+  'alcohol_distillery',
+  'wine_factory',
+  'artist_workshop',
+  'jeweler_workshop',
+  'craftsman_workshop',
   'steelworks',
   'sugar_mill',
   'textile_factory',
@@ -479,6 +504,10 @@ async function generateGameConfig(): Promise<void> {
       'intermediate',
       'advanced',
       'goods',
+      'noble',
+      'goodsIntermediate',
+      'goodsAdvanced',
+      'goodsNoble',
       'associatedBenefitExponent',
     ],
   );
@@ -549,6 +578,33 @@ async function generateGameConfig(): Promise<void> {
       'associatedBenefitExponent',
     ],
   );
+  validateKeys(
+    readRecord(formulas.consumption, 'noble'),
+    'config/formulas/consumo.txt:noble',
+    [
+      'discountBase',
+      'wExponent',
+      'errorExponent',
+      'idealIncomeOffset',
+      'idealExponent',
+      'associatedBenefitExponent',
+    ],
+  );
+  for (const basket of ['goodsIntermediate', 'goodsAdvanced', 'goodsNoble']) {
+    validateKeys(
+      readRecord(formulas.consumption, basket),
+      `config/formulas/consumo.txt:${basket}`,
+      [
+        'discountBase',
+        'wExponent',
+        'errorExponent',
+        'idealBasketIncomeOffsetDivisor',
+        'idealConstantOffset',
+        'idealExponent',
+        'associatedBenefitExponent',
+      ],
+    );
+  }
   validateKeys(
     formulas.work,
     'config/formulas/trabalho.txt',
@@ -652,6 +708,33 @@ async function generateGameConfig(): Promise<void> {
     'advanced.advancedBasketThresholdDivisor',
     'advanced.idealBasketDivisor',
     'advanced.idealExponent',
+    'noble.discountBase',
+    'noble.wExponent',
+    'noble.errorExponent',
+    'noble.idealIncomeOffset',
+    'noble.idealExponent',
+    'noble.associatedBenefitExponent',
+    'goodsIntermediate.discountBase',
+    'goodsIntermediate.wExponent',
+    'goodsIntermediate.errorExponent',
+    'goodsIntermediate.idealBasketIncomeOffsetDivisor',
+    'goodsIntermediate.idealConstantOffset',
+    'goodsIntermediate.idealExponent',
+    'goodsIntermediate.associatedBenefitExponent',
+    'goodsAdvanced.discountBase',
+    'goodsAdvanced.wExponent',
+    'goodsAdvanced.errorExponent',
+    'goodsAdvanced.idealBasketIncomeOffsetDivisor',
+    'goodsAdvanced.idealConstantOffset',
+    'goodsAdvanced.idealExponent',
+    'goodsAdvanced.associatedBenefitExponent',
+    'goodsNoble.discountBase',
+    'goodsNoble.wExponent',
+    'goodsNoble.errorExponent',
+    'goodsNoble.idealBasketIncomeOffsetDivisor',
+    'goodsNoble.idealConstantOffset',
+    'goodsNoble.idealExponent',
+    'goodsNoble.associatedBenefitExponent',
     'associatedBenefitExponent',
   ]);
   validateFormulaConfig(formulas.work, 'config/formulas/trabalho.txt', [
@@ -705,6 +788,25 @@ async function generateGameConfig(): Promise<void> {
     'consumption.goods.idealBasketIncomeOffsetDivisor',
     'consumption.goods.idealExponent',
     'consumption.goods.associatedBenefitExponent',
+    'consumption.noble.wExponent',
+    'consumption.noble.errorExponent',
+    'consumption.noble.idealExponent',
+    'consumption.noble.associatedBenefitExponent',
+    'consumption.goodsIntermediate.wExponent',
+    'consumption.goodsIntermediate.errorExponent',
+    'consumption.goodsIntermediate.idealBasketIncomeOffsetDivisor',
+    'consumption.goodsIntermediate.idealExponent',
+    'consumption.goodsIntermediate.associatedBenefitExponent',
+    'consumption.goodsAdvanced.wExponent',
+    'consumption.goodsAdvanced.errorExponent',
+    'consumption.goodsAdvanced.idealBasketIncomeOffsetDivisor',
+    'consumption.goodsAdvanced.idealExponent',
+    'consumption.goodsAdvanced.associatedBenefitExponent',
+    'consumption.goodsNoble.wExponent',
+    'consumption.goodsNoble.errorExponent',
+    'consumption.goodsNoble.idealBasketIncomeOffsetDivisor',
+    'consumption.goodsNoble.idealExponent',
+    'consumption.goodsNoble.associatedBenefitExponent',
     'consumption.associatedBenefitExponent',
     'work.hoursFactor.benefitExponent',
     'work.hours.minimum',
@@ -721,6 +823,18 @@ async function generateGameConfig(): Promise<void> {
   }
   if (readNumber(formulas, 'consumption.goods.associatedBenefitExponent') % 2 !== 0) {
     throw new Error('consumption.goods.associatedBenefitExponent precisa ser par.');
+  }
+  for (const basket of ['noble', 'goodsIntermediate', 'goodsAdvanced', 'goodsNoble']) {
+    for (const exponent of ['wExponent', 'errorExponent', 'idealExponent', 'associatedBenefitExponent']) {
+      if (!Number.isInteger(readNumber(formulas, `consumption.${basket}.${exponent}`))) {
+        throw new Error(`consumption.${basket}.${exponent} precisa ser um número inteiro.`);
+      }
+    }
+    for (const exponent of ['errorExponent', 'idealExponent']) {
+      if (readNumber(formulas, `consumption.${basket}.${exponent}`) % 2 !== 0) {
+        throw new Error(`consumption.${basket}.${exponent} precisa ser par.`);
+      }
+    }
   }
   for (const path of [
     'consumption.goods.wExponent',
@@ -754,6 +868,10 @@ async function generateGameConfig(): Promise<void> {
     'consumption.intermediate.discountBase',
     'consumption.advanced.discountBase',
     'consumption.goods.discountBase',
+    'consumption.noble.discountBase',
+    'consumption.goodsIntermediate.discountBase',
+    'consumption.goodsAdvanced.discountBase',
+    'consumption.goodsNoble.discountBase',
   ]) {
     const discountBase = readNumber(formulas, path);
     if (discountBase >= 1) throw new Error(`${path} precisa ser menor que 1.`);
@@ -763,6 +881,10 @@ async function generateGameConfig(): Promise<void> {
     'consumption.intermediate.idealIncomeOffset',
     'consumption.advanced.idealIncomeOffset',
     'consumption.goods.idealConstantOffset',
+    'consumption.noble.idealIncomeOffset',
+    'consumption.goodsIntermediate.idealConstantOffset',
+    'consumption.goodsAdvanced.idealConstantOffset',
+    'consumption.goodsNoble.idealConstantOffset',
     'work.hoursFactor.penalty',
     'work.wage.default',
     'work.rent.default',

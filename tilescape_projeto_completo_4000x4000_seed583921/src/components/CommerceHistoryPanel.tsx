@@ -119,9 +119,11 @@ export default function CommerceHistoryPanel({
                       {formatMoney(transaction.referenceBasketCost ?? transaction.areaAveragePrice)} · RR2 intermediária{' '}
                       {formatMoney(transaction.intermediateBasketCost ?? 0)} · RR3 avançada{' '}
                       {formatMoney(transaction.advancedBasketCost ?? 0)}
-                      {transaction.basketType === 'goods' ? (
-                        <> · RB1 bens {formatMoney(transaction.goodsBasketCost ?? 0)}</>
-                      ) : null}
+                      {' '}· RR4 nobre {formatMoney(transaction.nobleBasketCost ?? 0)} · RB1 bens{' '}
+                      {formatMoney(transaction.goodsBasketCost ?? 0)} · RB2 bens intermediários{' '}
+                      {formatMoney(transaction.goodsIntermediateBasketCost ?? 0)} · RB3 bens avançados{' '}
+                      {formatMoney(transaction.goodsAdvancedBasketCost ?? 0)} · RB4 bens nobres{' '}
+                      {formatMoney(transaction.goodsNobleBasketCost ?? 0)}
                       {' '}· base da fórmula{' '}
                       {formatMoney(transaction.calculationBasketCost ?? transaction.referenceBasketCost ?? transaction.areaAveragePrice)} · preço médio do produto{' '}
                       {formatMoney(transaction.productAveragePrice ?? transaction.areaAveragePrice)} · necessidade diária{' '}
@@ -133,9 +135,9 @@ export default function CommerceHistoryPanel({
                         <summary>Composição das cestas (soma diária por morador)</summary>
                         <p>
                           Cada contribuição é consumo diário configurado × preço médio municipal.
-                          Produtos básicos compõem RR, intermediários RR2 e avançados RR3; a cesta
-                          de bens compõe RB1, usado junto com RR + RR2 + RR3. Os
-                          subtotais são somados sem arredondamento intermediário.
+                          Produtos básicos compõem RR, intermediários RR2, avançados RR3 e nobres RR4.
+                          As cestas de bens compõem RB1 a RB4. Os subtotais são somados sem
+                          arredondamento intermediário.
                         </p>
                         {transaction.basketBreakdown.map((item) => {
                           const product = PRODUCTS.find(({ id }) => id === item.productId);
@@ -158,12 +160,20 @@ export default function CommerceHistoryPanel({
                                 ? 'não entra na cesta'
                                 : formatPreciseMoney(item.basketContribution)}{' '}
                               · {item.basketType === 'goods'
-                                ? 'cesta de bens'
-                                : item.basketType === 'advanced'
-                                ? 'RR3'
-                                : item.basketType === 'intermediate'
-                                  ? 'RR2'
-                                  : 'RR'} · {priceSource}
+                                ? 'RB1'
+                                : item.basketType === 'noble'
+                                  ? 'RR4'
+                                  : item.basketType === 'goodsIntermediate'
+                                    ? 'RB2'
+                                    : item.basketType === 'goodsAdvanced'
+                                      ? 'RB3'
+                                      : item.basketType === 'goodsNoble'
+                                        ? 'RB4'
+                                        : item.basketType === 'advanced'
+                                          ? 'RR3'
+                                          : item.basketType === 'intermediate'
+                                            ? 'RR2'
+                                            : 'RR'} · {priceSource}
                             </p>
                           );
                         })}
@@ -204,13 +214,81 @@ export default function CommerceHistoryPanel({
                                   : 0),
                               0,
                             ),
+                          )} · RR4 calculado: {formatPreciseMoney(
+                            transaction.basketBreakdown.reduce(
+                              (total, item) =>
+                                total +
+                                (item.basketType === 'noble'
+                                  ? item.basketContribution ?? 0
+                                  : 0),
+                              0,
+                            ),
+                          )} · RB2 calculado: {formatPreciseMoney(
+                            transaction.basketBreakdown.reduce(
+                              (total, item) =>
+                                total +
+                                (item.basketType === 'goodsIntermediate'
+                                  ? item.basketContribution ?? 0
+                                  : 0),
+                              0,
+                            ),
+                          )} · RB3 calculado: {formatPreciseMoney(
+                            transaction.basketBreakdown.reduce(
+                              (total, item) =>
+                                total +
+                                (item.basketType === 'goodsAdvanced'
+                                  ? item.basketContribution ?? 0
+                                  : 0),
+                              0,
+                            ),
+                          )} · RB4 calculado: {formatPreciseMoney(
+                            transaction.basketBreakdown.reduce(
+                              (total, item) =>
+                                total +
+                                (item.basketType === 'goodsNoble'
+                                  ? item.basketContribution ?? 0
+                                  : 0),
+                              0,
+                            ),
                           )}
                         </strong>
                       </details>
                     ) : (
                       <p>Composição detalhada das cestas não foi registrada neste diagnóstico.</p>
                     )}
-                    {transaction.basketType === 'goods' ? (
+                    {transaction.basketType === 'noble' ? (
+                      <p>
+                        Cesta nobre: B = RR + RR2 + RR3 + RR4; w = (1 − Pf/B)
+                        <sup>{consumptionRules.noble.wExponent}</sup>; q = (
+                        {preciseDecimal.format(consumptionRules.noble.discountBase)}<sup>w</sup> − 1) × Rf;
+                        benefício de erro = Dᵢ × ((Rf − Pf − q)/B)
+                        <sup>{consumptionRules.noble.errorExponent}</sup>; ideal = (Rf/B −
+                        {preciseDecimal.format(consumptionRules.noble.idealIncomeOffset)}/B)
+                        <sup>{consumptionRules.noble.idealExponent}</sup>; associado = (erro/ideal)
+                        <sup>{consumptionRules.noble.associatedBenefitExponent}</sup>.
+                      </p>
+                    ) : transaction.basketType === 'goodsIntermediate' ||
+                      transaction.basketType === 'goodsAdvanced' ||
+                      transaction.basketType === 'goodsNoble' ? (
+                      <p>
+                        {transaction.basketType === 'goodsIntermediate'
+                          ? 'Cesta intermediária de bens'
+                          : transaction.basketType === 'goodsAdvanced'
+                            ? 'Cesta avançada de bens'
+                            : 'Cesta nobre de bens'}
+                        : B = RR + RR2 + RR3 + RR4 + RB1
+                        {transaction.basketType !== 'goodsIntermediate' ? ' + RB2' : ''}
+                        {transaction.basketType === 'goodsAdvanced' ? ' + RB3' : ''}
+                        {transaction.basketType === 'goodsNoble' ? ' + RB3 + RB4' : ''}; w = (1 − Pf/B)
+                        <sup>{consumptionRules[transaction.basketType].wExponent}</sup>; q = (
+                        {preciseDecimal.format(consumptionRules[transaction.basketType].discountBase)}
+                        <sup>w</sup> − 1) × Rf; benefício de erro = Dᵢ × ((Rf − Pf − q)/B)
+                        <sup>{consumptionRules[transaction.basketType].errorExponent}</sup>; ideal = Rf/B −
+                        1/(6B) + {preciseDecimal.format(consumptionRules[transaction.basketType].idealConstantOffset)};
+                        benefício ideal = ideal²; associado = (erro/benefício ideal)
+                        <sup>{consumptionRules[transaction.basketType].associatedBenefitExponent}</sup>.
+                      </p>
+                    ) : transaction.basketType === 'goods' ? (
                       <p>
                         Cesta básica de bens: RR_total = RR + RR2 + RR3 + RB1; w = (1 − Pf / RR_total)
                         <sup>{consumptionRules.goods.wExponent}</sup>; q = (

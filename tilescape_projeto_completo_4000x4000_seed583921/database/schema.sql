@@ -38,6 +38,9 @@ ALTER TABLE city_assemblies
   CHECK (minimum_wage BETWEEN 1 AND 100000);
 ALTER TABLE city_assemblies
   ADD COLUMN IF NOT EXISTS population_change_last_month INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE city_assemblies
+  DROP CONSTRAINT IF EXISTS city_assemblies_wellbeing_check,
+  ADD CONSTRAINT city_assemblies_wellbeing_check CHECK (wellbeing BETWEEN 0 AND 200);
 
 DO $$
 BEGIN
@@ -178,8 +181,11 @@ ALTER TABLE all_buildings
 ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS occupants INTEGER NOT NULL DEFAULT 0 CHECK (occupants >= 0);
 ALTER TABLE all_buildings
-  ADD COLUMN IF NOT EXISTS wellbeing DOUBLE PRECISION NOT NULL DEFAULT 0
-  CHECK (wellbeing BETWEEN 0 AND 162);
+  ADD COLUMN IF NOT EXISTS wellbeing DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE all_buildings
+  DROP CONSTRAINT IF EXISTS all_buildings_wellbeing_check,
+  DROP CONSTRAINT IF EXISTS residential_buildings_wellbeing_check,
+  ADD CONSTRAINT all_buildings_wellbeing_check CHECK (wellbeing BETWEEN 0 AND 200);
 ALTER TABLE world_state
   ADD COLUMN IF NOT EXISTS last_immigration_day DATE;
 ALTER TABLE world_state
@@ -199,8 +205,12 @@ ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS desired_workers INTEGER NOT NULL DEFAULT 0 CHECK (desired_workers >= 0);
 
 ALTER TABLE all_buildings
-  ADD COLUMN IF NOT EXISTS minimum_worker_technique SMALLINT NOT NULL DEFAULT 10
-    CHECK (minimum_worker_technique BETWEEN 10 AND 40);
+  ADD COLUMN IF NOT EXISTS minimum_worker_technique SMALLINT NOT NULL DEFAULT 10;
+ALTER TABLE all_buildings
+  DROP CONSTRAINT IF EXISTS all_buildings_minimum_worker_technique_check,
+  DROP CONSTRAINT IF EXISTS residential_buildings_minimum_worker_technique_check,
+  ADD CONSTRAINT all_buildings_minimum_worker_technique_check
+    CHECK (minimum_worker_technique BETWEEN 10 AND 80);
 
 ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS work_points_done DOUBLE PRECISION NOT NULL DEFAULT 0 CHECK (work_points_done >= 0);
@@ -283,15 +293,23 @@ ALTER TABLE all_buildings
       'farm_rice', 'farm_potato', 'farm_wheat', 'farm_barley', 'farm_corn',
       'farm_cattle', 'farm_dairy', 'farm_cane', 'farm_spices', 'farm_vegetables',
       'farm_fruit', 'farm_cocoa', 'farm_sheep', 'farm_cotton',
+      'farm_olive', 'farm_tobacco', 'farm_grape',
       'shop_rice', 'shop_potato', 'shop_corn', 'shop_barley', 'shop_wheat',
       'shop_butcher', 'shop_milk', 'shop_sugar', 'shop_vegetables', 'shop_salt',
       'shop_spices', 'shop_bread', 'shop_cheese', 'shop_chocolate', 'shop_fruit',
       'shop_fish', 'shop_clothing', 'shop_furniture', 'shop_utilities', 'shop_glass',
+      'shop_olive_oil', 'shop_tobacco', 'shop_alcohol', 'shop_wine',
+      'shop_tincture', 'shop_carpet', 'shop_porcelain', 'shop_artwork',
+      'shop_jewelry', 'shop_rarities',
       'warehouse', 'silo', 'fishery', 'salt_gatherer', 'lumber_mill', 'quarry',
-      'iron_mine', 'toolmaker', 'sugar_mill', 'charcoal_works', 'flour_mill',
+      'iron_mine', 'gold_mine', 'silver_mine', 'toolmaker', 'sugar_mill',
+      'charcoal_works', 'flour_mill',
       'bread_factory', 'cheese_factory', 'chocolate_factory', 'steelworks',
       'thread_factory', 'textile_factory', 'furniture_factory', 'utilities_factory',
-      'glass_factory', 'sand_pit'
+      'glass_factory', 'sand_pit', 'tincture_factory', 'carpet_factory',
+      'porcelain_factory', 'olive_oil_factory', 'tobacco_factory',
+      'alcohol_distillery', 'wine_factory', 'artist_workshop',
+      'jeweler_workshop', 'craftsman_workshop'
     ));
 
 CREATE TABLE IF NOT EXISTS building_footprint_catalog (

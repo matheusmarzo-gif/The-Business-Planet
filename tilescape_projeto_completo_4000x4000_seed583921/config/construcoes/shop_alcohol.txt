@@ -1,0 +1,19 @@
+{
+  "type": "shop_alcohol",
+  "kind": "shop",
+  "requiredZone": "urban",
+  "requiresRoad": true,
+  "name": "Destilaria",
+  "asset": "/buildings/commerce/pub.jxl",
+  "width": 2,
+  "height": 2,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 40, "stone": 40, "iron": 40, "steel": 40 },
+  "workPoints": 260000,
+  "maxWorkers": 12,
+  "stockProduct": "Álcool",
+  "stockProductId": "alcohol",
+  "stockCapacity": 20,
+  "salesWorkPointsPerUnit": 420
+}

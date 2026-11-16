@@ -1,0 +1,25 @@
+{
+  "type": "farm_grape",
+  "kind": "farm",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fazenda de Uva",
+  "asset": "/buildings/farms/fazenda_uva.jxl",
+  "width": 4,
+  "height": 4,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 2000, "stone": 1000 },
+  "workPoints": 1200000,
+  "maxWorkers": 100,
+  "stockProduct": "Uva",
+  "stockProductId": "grape",
+  "stockCapacity": 600,
+  "cropRule": {
+    "growthMonths": 4,
+    "dailyWorkPoints": 10000,
+    "harvestWorkPointsPerUnit": 42,
+    "baseYield": 600,
+    "plantingEfficiencyByQuarter": [0.5, 0.6, 0.8, 1]
+  }
+}

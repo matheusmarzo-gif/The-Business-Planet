@@ -3,11 +3,13 @@ import { isValidCityWellbeing, type CityAssembly } from '../types/city';
 import type { CityZone } from '../types/city';
 import type { RoadTile } from '../types/road';
 import {
+  MAX_WORKER_TECHNIQUE,
   getResidenceDefinition,
   type ResidentialBuilding,
   type ResidentialBuildingSummary,
   type WorldBuilding,
 } from '../types/residence';
+import { MAX_RESIDENCE_WELLBEING } from '../types/wellbeing';
 import { isCurrencyAmount } from '../types/currency';
 import type {
   CityRoadUpdate,
@@ -208,18 +210,18 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
     typeof building.minimumWorkerTechnique === 'number' &&
     Number.isInteger(building.minimumWorkerTechnique) &&
     building.minimumWorkerTechnique >= 10 &&
-    building.minimumWorkerTechnique <= 40 &&
+    building.minimumWorkerTechnique <= MAX_WORKER_TECHNIQUE &&
     (building.averageWorkerTechnique === null ||
       (typeof building.averageWorkerTechnique === 'number' &&
         Number.isFinite(building.averageWorkerTechnique) &&
         building.averageWorkerTechnique >= 10 &&
-        building.averageWorkerTechnique <= 40)) &&
+        building.averageWorkerTechnique <= MAX_WORKER_TECHNIQUE)) &&
     isCurrencyAmount(building.rent) &&
     Number.isInteger(building.occupants) &&
     typeof building.wellbeing === 'number' &&
     Number.isFinite(building.wellbeing) &&
     building.wellbeing >= 0 &&
-    building.wellbeing <= 162 &&
+    building.wellbeing <= MAX_RESIDENCE_WELLBEING &&
     Number.isInteger(building.desiredWorkers) &&
     Number.isFinite(building.workPointsDone) &&
     isCurrencyAmount(building.price) &&

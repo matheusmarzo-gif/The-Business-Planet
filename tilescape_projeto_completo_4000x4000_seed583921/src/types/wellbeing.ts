@@ -1,8 +1,12 @@
 import {
   ADVANCED_BASKET_PRODUCT_IDS,
   BASIC_BASKET_PRODUCT_IDS,
+  ADVANCED_GOODS_BASKET_PRODUCT_IDS,
   GOODS_BASKET_PRODUCT_IDS,
+  INTERMEDIATE_GOODS_BASKET_PRODUCT_IDS,
   INTERMEDIATE_BASKET_PRODUCT_IDS,
+  NOBLE_BASKET_PRODUCT_IDS,
+  NOBLE_GOODS_BASKET_PRODUCT_IDS,
 } from './commerceDemand.js';
 
 const WELLBEING_POINTS_BY_PRODUCT = new Map<string, number>([
@@ -10,6 +14,10 @@ const WELLBEING_POINTS_BY_PRODUCT = new Map<string, number>([
   ...INTERMEDIATE_BASKET_PRODUCT_IDS.map((productId) => [productId, 6.25] as const),
   ...ADVANCED_BASKET_PRODUCT_IDS.map((productId) => [productId, 3] as const),
   ...GOODS_BASKET_PRODUCT_IDS.map((productId) => [productId, 6.25] as const),
+  ...NOBLE_BASKET_PRODUCT_IDS.map((productId) => [productId, 3] as const),
+  ...INTERMEDIATE_GOODS_BASKET_PRODUCT_IDS.map((productId) => [productId, 5] as const),
+  ...ADVANCED_GOODS_BASKET_PRODUCT_IDS.map((productId) => [productId, 4] as const),
+  ...NOBLE_GOODS_BASKET_PRODUCT_IDS.map((productId) => [productId, 3] as const),
 ]);
 
 export const MAX_RESIDENCE_WELLBEING = [...WELLBEING_POINTS_BY_PRODUCT.values()]
@@ -90,5 +98,9 @@ export function getWorkerTechnique(wellbeing: number): number {
   if (score <= 100) return 10 * (1 + score / 200);
   if (score <= 125) return 10 * (1.5 + (score - 100) / 50);
   if (score <= 150) return 10 * (2 + (score - 125) / 25);
-  return 10 * (3 + (score - 150) / 12);
+  if (score <= 165) return 10 * (3 + (score - 150) / 15);
+  if (score <= 180) return 10 * (4 + (score - 165) / 15);
+  if (score <= 190) return 10 * (5 + (score - 180) / 10);
+  if (score <= 197) return 10 * (6 + (score - 190) / 7);
+  return 10 * (7 + (score - 197) / 3);
 }

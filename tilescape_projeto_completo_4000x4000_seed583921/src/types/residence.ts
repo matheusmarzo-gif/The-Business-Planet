@@ -11,7 +11,7 @@ import { BUILDING_CONFIGS, GAME_RULES } from '../generated/gameConfig.js';
 import type { StockLevels } from './stockCapacity.js';
 
 export const MIN_WORKER_TECHNIQUE = 10;
-export const MAX_WORKER_TECHNIQUE = 40;
+export const MAX_WORKER_TECHNIQUE = 80;
 export const DEFAULT_MIN_WORKER_TECHNIQUE = MIN_WORKER_TECHNIQUE;
 
 export type ResidenceType = keyof typeof BUILDING_CONFIGS;
@@ -37,6 +37,16 @@ export const SHOP_TYPES = [
   'shop_furniture',
   'shop_utilities',
   'shop_glass',
+  'shop_olive_oil',
+  'shop_tobacco',
+  'shop_alcohol',
+  'shop_wine',
+  'shop_tincture',
+  'shop_carpet',
+  'shop_porcelain',
+  'shop_artwork',
+  'shop_jewelry',
+  'shop_rarities',
 ] as const satisfies readonly ResidenceType[];
 export type BuildingKind =
   | 'residence'
@@ -269,6 +279,9 @@ const CONSTRUCTION_MENU_ORDER: Partial<Record<ConstructionCategory, readonly Res
     'sugar_mill',
     'bread_factory',
     'cheese_factory',
+    'artist_workshop',
+    'jeweler_workshop',
+    'craftsman_workshop',
   ],
   comerciais: [
     'shop_rice',
@@ -291,6 +304,16 @@ const CONSTRUCTION_MENU_ORDER: Partial<Record<ConstructionCategory, readonly Res
     'shop_furniture',
     'shop_utilities',
     'shop_glass',
+    'shop_olive_oil',
+    'shop_tobacco',
+    'shop_alcohol',
+    'shop_wine',
+    'shop_tincture',
+    'shop_carpet',
+    'shop_porcelain',
+    'shop_artwork',
+    'shop_jewelry',
+    'shop_rarities',
   ],
   fazendas: [
     'farm_rice',
@@ -307,6 +330,9 @@ const CONSTRUCTION_MENU_ORDER: Partial<Record<ConstructionCategory, readonly Res
     'farm_fruit',
     'farm_sheep',
     'farm_cotton',
+    'farm_olive',
+    'farm_tobacco',
+    'farm_grape',
   ],
   industrias: [
     'warehouse',
@@ -319,6 +345,13 @@ const CONSTRUCTION_MENU_ORDER: Partial<Record<ConstructionCategory, readonly Res
     'furniture_factory',
     'utilities_factory',
     'glass_factory',
+    'tincture_factory',
+    'carpet_factory',
+    'porcelain_factory',
+    'olive_oil_factory',
+    'tobacco_factory',
+    'alcohol_distillery',
+    'wine_factory',
   ],
 };
 

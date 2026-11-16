@@ -1,0 +1,19 @@
+{
+  "type": "shop_tincture",
+  "kind": "shop",
+  "requiredZone": "urban",
+  "requiresRoad": true,
+  "name": "Loja de Tinturas",
+  "asset": "/buildings/commerce/loja_tintura.jxl",
+  "width": 2,
+  "height": 2,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 40, "stone": 40, "iron": 40, "steel": 40 },
+  "workPoints": 260000,
+  "maxWorkers": 16,
+  "stockProduct": "Tintura",
+  "stockProductId": "tincture",
+  "stockCapacity": 40,
+  "salesWorkPointsPerUnit": 120
+}

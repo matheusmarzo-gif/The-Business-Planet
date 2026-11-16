@@ -6,7 +6,7 @@ export const ASSEMBLY_SIZE = 3;
 export const MAX_CITY_ZONES = 100;
 export const MIN_CITY_MINIMUM_WAGE = 1;
 export const MAX_CITY_MINIMUM_WAGE = 100000;
-export const MAX_CITY_WELLBEING = 162;
+export const MAX_CITY_WELLBEING = 200;
 
 export type CityPlacementError =
   | 'map_bounds'

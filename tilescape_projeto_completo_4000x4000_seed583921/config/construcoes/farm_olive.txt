@@ -1,0 +1,25 @@
+{
+  "type": "farm_olive",
+  "kind": "farm",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fazenda de Oliveira",
+  "asset": "/buildings/farms/fazenda_oliveira.jxl",
+  "width": 4,
+  "height": 4,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 2000, "stone": 1000 },
+  "workPoints": 1200000,
+  "maxWorkers": 50,
+  "stockProduct": "Azeitona",
+  "stockProductId": "olive",
+  "stockCapacity": 1500,
+  "cropRule": {
+    "growthMonths": 8,
+    "dailyWorkPoints": 5000,
+    "harvestWorkPointsPerUnit": 12.5,
+    "baseYield": 1500,
+    "plantingEfficiencyByQuarter": [0.4, 0.3, 0.4, 1]
+  }
+}

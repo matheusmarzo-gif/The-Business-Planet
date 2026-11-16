@@ -49,5 +49,40 @@
     "idealExponent": 3,
     "associatedBenefitExponent": 6
   },
+  "noble": {
+    "discountBase": 0.8,
+    "wExponent": 2,
+    "errorExponent": 2,
+    "idealIncomeOffset": 3,
+    "idealExponent": 2,
+    "associatedBenefitExponent": 8
+  },
+  "goodsIntermediate": {
+    "discountBase": 0.8,
+    "wExponent": 2,
+    "errorExponent": 2,
+    "idealBasketIncomeOffsetDivisor": 6,
+    "idealConstantOffset": 0.07692307692307693,
+    "idealExponent": 2,
+    "associatedBenefitExponent": 8
+  },
+  "goodsAdvanced": {
+    "discountBase": 0.8,
+    "wExponent": 2,
+    "errorExponent": 2,
+    "idealBasketIncomeOffsetDivisor": 6,
+    "idealConstantOffset": 0.07692307692307693,
+    "idealExponent": 2,
+    "associatedBenefitExponent": 9
+  },
+  "goodsNoble": {
+    "discountBase": 0.8,
+    "wExponent": 2,
+    "errorExponent": 2,
+    "idealBasketIncomeOffsetDivisor": 6,
+    "idealConstantOffset": 0.07142857142857142,
+    "idealExponent": 2,
+    "associatedBenefitExponent": 12
+  },
   "associatedBenefitExponent": 4
 }

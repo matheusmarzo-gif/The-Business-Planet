@@ -1,0 +1,28 @@
+{
+  "type": "porcelain_factory",
+  "kind": "industry",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fábrica de Porcelana",
+  "asset": "/buildings/industrial/fabrica_porcelana.jxl",
+  "width": 5,
+  "height": 5,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 1000, "stone": 500, "iron": 500, "steel": 500 },
+  "workPoints": 21000000,
+  "maxWorkers": 60,
+  "stockProduct": "Porcelana",
+  "stockProductId": "porcelain",
+  "stockCapacity": 1000,
+  "toolCapacity": 240,
+  "toolDemandPerWorker": 4,
+  "charcoalCapacity": 400,
+  "inputCapacities": { "sand": 300 },
+  "production": {
+    "mode": "batch",
+    "workPointsPerUnit": 300,
+    "batchSize": 10,
+    "batchInputs": { "sand": 3, "charcoal": 4 }
+  }
+}

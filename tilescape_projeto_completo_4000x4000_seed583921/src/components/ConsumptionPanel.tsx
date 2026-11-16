@@ -5,8 +5,12 @@ import {
   BASIC_BASKET_PRODUCT_IDS,
   CONSUMPTION_PRODUCT_IDS,
   ADVANCED_BASKET_PRODUCT_IDS,
+  ADVANCED_GOODS_BASKET_PRODUCT_IDS,
   GOODS_BASKET_PRODUCT_IDS,
+  INTERMEDIATE_GOODS_BASKET_PRODUCT_IDS,
   INTERMEDIATE_BASKET_PRODUCT_IDS,
+  NOBLE_BASKET_PRODUCT_IDS,
+  NOBLE_GOODS_BASKET_PRODUCT_IDS,
 } from '../types/commerceDemand';
 
 export interface ProductConsumption {
@@ -84,6 +88,18 @@ export default function ConsumptionPanel({
               )}
               {productId === GOODS_BASKET_PRODUCT_IDS[0] && (
                 <div className="consumption-basket-group">Cesta básica de bens</div>
+              )}
+              {productId === NOBLE_BASKET_PRODUCT_IDS[0] && (
+                <div className="consumption-basket-group">Cesta nobre</div>
+              )}
+              {productId === INTERMEDIATE_GOODS_BASKET_PRODUCT_IDS[0] && (
+                <div className="consumption-basket-group">Cesta intermediária de bens</div>
+              )}
+              {productId === ADVANCED_GOODS_BASKET_PRODUCT_IDS[0] && (
+                <div className="consumption-basket-group">Cesta avançada de bens</div>
+              )}
+              {productId === NOBLE_GOODS_BASKET_PRODUCT_IDS[0] && (
+                <div className="consumption-basket-group">Cesta nobre de bens</div>
               )}
               <div className="consumption-row">
                 <span className="warehouse-product">

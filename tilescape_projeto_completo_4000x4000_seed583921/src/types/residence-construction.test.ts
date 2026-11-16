@@ -6,6 +6,7 @@ import {
   isPlayerBuildableConstructionType,
   planConstructionMaterialWithdrawals,
   RESIDENCES,
+  SHOP_TYPES,
 } from './residence.js';
 
 test('allows authenticated players to build every catalog construction', () => {
@@ -76,6 +77,16 @@ test('orders construction menus and applies the requested costs', () => {
       'shop_furniture',
       'shop_utilities',
       'shop_glass',
+      'shop_olive_oil',
+      'shop_tobacco',
+      'shop_alcohol',
+      'shop_wine',
+      'shop_tincture',
+      'shop_carpet',
+      'shop_porcelain',
+      'shop_artwork',
+      'shop_jewelry',
+      'shop_rarities',
     ],
   );
   assert.deepEqual(
@@ -95,11 +106,24 @@ test('orders construction menus and applies the requested costs', () => {
       'farm_fruit',
       'farm_sheep',
       'farm_cotton',
+      'farm_olive',
+      'farm_tobacco',
+      'farm_grape',
     ],
   );
   assert.deepEqual(
     getConstructionMenuDefinitions('artesanais').map(({ type }) => type),
-    ['fishery', 'toolmaker', 'charcoal_works', 'sugar_mill', 'bread_factory', 'cheese_factory'],
+    [
+      'fishery',
+      'toolmaker',
+      'charcoal_works',
+      'sugar_mill',
+      'bread_factory',
+      'cheese_factory',
+      'artist_workshop',
+      'jeweler_workshop',
+      'craftsman_workshop',
+    ],
   );
   assert.deepEqual(
     getConstructionMenuDefinitions('industrias').map(({ type }) => type),
@@ -114,6 +138,13 @@ test('orders construction menus and applies the requested costs', () => {
       'furniture_factory',
       'utilities_factory',
       'glass_factory',
+      'tincture_factory',
+      'carpet_factory',
+      'porcelain_factory',
+      'olive_oil_factory',
+      'tobacco_factory',
+      'alcohol_distillery',
+      'wine_factory',
     ],
   );
   assert.equal(RESIDENCES.silo.width, 4);
@@ -166,11 +197,36 @@ test('orders construction menus and applies the requested costs', () => {
     steelworks: { wood: 1000, stone: 600, iron: 400, workPoints: 20000000 },
     farm_sheep: { wood: 60, stone: 20, workPoints: 130000 },
     farm_cotton: { wood: 60, stone: 20, workPoints: 130000 },
+    farm_olive: { wood: 2000, stone: 1000, workPoints: 1200000 },
+    farm_tobacco: { wood: 2000, stone: 1000, workPoints: 1200000 },
+    farm_grape: { wood: 2000, stone: 1000, workPoints: 1200000 },
     thread_factory: { wood: 800, stone: 500, iron: 300, steel: 100, workPoints: 7000000 },
     textile_factory: { wood: 1000, stone: 600, iron: 400, steel: 100, workPoints: 10000000 },
     furniture_factory: { wood: 1000, stone: 600, iron: 400, steel: 100, workPoints: 10000000 },
     utilities_factory: { wood: 2000, stone: 1200, iron: 800, steel: 300, workPoints: 10000000 },
     glass_factory: { wood: 2000, stone: 1200, iron: 800, steel: 300, workPoints: 10000000 },
+    gold_mine: { wood: 300, stone: 300, steel: 100, workPoints: 2900000 },
+    silver_mine: { wood: 300, stone: 300, steel: 100, workPoints: 2900000 },
+    shop_olive_oil: { wood: 40, stone: 40, iron: 40, steel: 40, workPoints: 260000 },
+    shop_tobacco: { wood: 40, stone: 40, iron: 40, steel: 40, workPoints: 260000 },
+    shop_alcohol: { wood: 40, stone: 40, iron: 40, steel: 40, workPoints: 260000 },
+    shop_wine: { wood: 40, stone: 40, iron: 40, steel: 40, workPoints: 260000 },
+    shop_tincture: { wood: 40, stone: 40, iron: 40, steel: 40, workPoints: 260000 },
+    shop_carpet: { wood: 40, stone: 40, iron: 40, steel: 40, workPoints: 260000 },
+    shop_porcelain: { wood: 40, stone: 40, iron: 40, steel: 40, workPoints: 260000 },
+    shop_artwork: { wood: 60, stone: 60, iron: 60, steel: 40, workPoints: 350000 },
+    shop_jewelry: { wood: 60, stone: 60, iron: 60, steel: 40, workPoints: 350000 },
+    shop_rarities: { wood: 30, stone: 30, iron: 30, steel: 20, workPoints: 250000 },
+    tincture_factory: { wood: 1000, stone: 500, iron: 500, steel: 500, workPoints: 21000000 },
+    carpet_factory: { wood: 1000, stone: 500, iron: 500, steel: 500, workPoints: 21000000 },
+    porcelain_factory: { wood: 1000, stone: 500, iron: 500, steel: 500, workPoints: 21000000 },
+    olive_oil_factory: { wood: 100, stone: 50, iron: 50, steel: 50, workPoints: 3000000 },
+    tobacco_factory: { wood: 100, stone: 50, iron: 50, steel: 50, workPoints: 3000000 },
+    alcohol_distillery: { wood: 100, stone: 50, iron: 50, steel: 50, workPoints: 3000000 },
+    wine_factory: { wood: 100, stone: 50, iron: 50, steel: 50, workPoints: 3000000 },
+    artist_workshop: { wood: 200, stone: 100, iron: 100, steel: 100, workPoints: 4200000 },
+    jeweler_workshop: { wood: 1000, stone: 500, iron: 500, steel: 500, workPoints: 21000000 },
+    craftsman_workshop: { wood: 200, stone: 100, iron: 100, steel: 100, workPoints: 4200000 },
   };
   for (const [type, expected] of Object.entries(costs)) {
     const definition = RESIDENCES[type as keyof typeof RESIDENCES];
@@ -180,6 +236,63 @@ test('orders construction menus and applies the requested costs', () => {
       type,
     );
   }
+});
+
+test('defines the requested shops and their per-unit sales rates', () => {
+  const shops = [
+    ['shop_olive_oil', 'olive_oil', 20, 12, 420],
+    ['shop_tobacco', 'tobacco', 20, 12, 420],
+    ['shop_alcohol', 'alcohol', 20, 12, 420],
+    ['shop_wine', 'wine', 20, 12, 420],
+    ['shop_tincture', 'tincture', 40, 16, 120],
+    ['shop_carpet', 'carpet', 40, 16, 120],
+    ['shop_porcelain', 'porcelain', 40, 16, 120],
+    ['shop_artwork', 'artwork', 20, 16, 600],
+    ['shop_jewelry', 'jewelry', 20, 16, 600],
+    ['shop_rarities', 'rarities', 10, 30, 2100],
+  ] as const;
+  for (const [type, productId, stockCapacity, maxWorkers, workPointsPerUnit] of shops) {
+    const definition = RESIDENCES[type];
+    assert.equal(SHOP_TYPES.includes(type), true, type);
+    assert.equal(definition.kind, 'shop', type);
+    assert.equal(definition.stockProductId, productId, type);
+    assert.equal(definition.stockCapacity, stockCapacity, type);
+    assert.equal(definition.maxWorkers, maxWorkers, type);
+    assert.equal(definition.salesWorkPointsPerUnit, workPointsPerUnit, type);
+  }
+});
+
+test('defines the requested seasonal crop rules', () => {
+  assert.deepEqual(
+    RESIDENCES.farm_olive.cropRule,
+    {
+      growthMonths: 8,
+      dailyWorkPoints: 5000,
+      harvestWorkPointsPerUnit: 12.5,
+      baseYield: 1500,
+      plantingEfficiencyByQuarter: [0.4, 0.3, 0.4, 1],
+    },
+  );
+  assert.deepEqual(
+    RESIDENCES.farm_tobacco.cropRule,
+    {
+      growthMonths: 6,
+      dailyWorkPoints: 5000,
+      harvestWorkPointsPerUnit: 50,
+      baseYield: 800,
+      plantingEfficiencyByQuarter: [0.8, 0.6, 1, 0.8],
+    },
+  );
+  assert.deepEqual(
+    RESIDENCES.farm_grape.cropRule,
+    {
+      growthMonths: 4,
+      dailyWorkPoints: 10000,
+      harvestWorkPointsPerUnit: 42,
+      baseYield: 600,
+      plantingEfficiencyByQuarter: [0.5, 0.6, 0.8, 1],
+    },
+  );
 });
 
 test('plans construction costs across nearby warehouses without allowing partial payment', () => {

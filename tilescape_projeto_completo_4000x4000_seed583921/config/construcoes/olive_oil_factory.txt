@@ -1,0 +1,28 @@
+{
+  "type": "olive_oil_factory",
+  "kind": "industry",
+  "requiredZone": "rural",
+  "requiresRoad": true,
+  "name": "Fábrica de Azeite",
+  "asset": "/buildings/industrial/fabrica_azeite.jxl",
+  "width": 5,
+  "height": 5,
+  "capacity": 0,
+  "localAppeal": 0,
+  "cost": { "wood": 100, "stone": 50, "iron": 50, "steel": 50 },
+  "workPoints": 3000000,
+  "maxWorkers": 30,
+  "stockProduct": "Azeite",
+  "stockProductId": "olive_oil",
+  "stockCapacity": 10,
+  "toolCapacity": 60,
+  "toolDemandPerWorker": 2,
+  "charcoalCapacity": 200,
+  "inputCapacities": { "olive": 60 },
+  "production": {
+    "mode": "batch",
+    "workPointsPerUnit": 600,
+    "batchSize": 1,
+    "batchInputs": { "olive": 6, "charcoal": 20 }
+  }
+}

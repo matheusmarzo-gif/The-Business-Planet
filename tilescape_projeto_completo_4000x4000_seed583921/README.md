@@ -1057,10 +1057,12 @@ batata, peixe, carne vermelha e leite), intermediária (açúcar, vegetais, sal 
 especiarias), avançada (pão, queijo, frutas e chocolate) e básica de bens
 (roupas, móveis, utilitários e vidro) no
 último dia e a média diária por pessoa nos últimos 30 dias, além do preço médio
-pago no dia e no mês. No painel da cidade, **Consumo**
-mostra esses mesmos dados agregados, ponderando as médias pelo número de
-consumidores de cada residência. A quantidade desejada é repartida entre lojas
-que vendem o produto conforme a participação de benefício de cada uma
+pago no dia e no mês. Para casas de outros jogadores, o botão aparece no resumo
+público e os dados só são pedidos ao servidor depois do clique, limitados à casa
+selecionada; o proprietário continua usando o painel completo. No painel da
+cidade, **Consumo** mostra esses mesmos dados agregados, ponderando as médias
+pelo número de consumidores de cada residência. A quantidade desejada é
+repartida entre lojas que vendem o produto conforme a participação de benefício de cada uma
 (`A_i / ΣA`) e a necessidade atendida em cada loja é multiplicada por seu
 benefício. Assim, a demanda efetiva por pessoa é
 `necessidade básica × Σ((A_i / ΣA) × A_i)`. Por exemplo, benefícios 2, 1 e 0,5

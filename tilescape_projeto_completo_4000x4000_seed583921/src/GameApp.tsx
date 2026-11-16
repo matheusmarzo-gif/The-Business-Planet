@@ -411,6 +411,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [viewport, setViewport] = useState({ width: window.innerWidth, height: window.innerHeight });
   const worldStageRef = useRef<HTMLElement | null>(null);
   const localResourceRequestRef = useRef(0);
+  const consumptionRequestRef = useRef(0);
   const [hoveredTile, setHoveredTile] = useState<TileInfo | null>(null);
   const [selectedTile, setSelectedTile] = useState<TileInfo | null>(null);
   const [selectedResidenceId, setSelectedResidenceId] = useState<string | null>(null);
@@ -1065,25 +1066,32 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   };
 
   const openConsumption = async (buildingId: string) => {
+    const requestId = ++consumptionRequestRef.current;
     setReturnToCityAfterConsumption(false);
     setConsumptionScope('RESIDÊNCIA');
     setConsumptionTitle('Consumo da casa');
     setIsConsumptionOpen(true);
     setIsConsumptionLoading(true);
     setConsumptionError('');
+    setConsumption(new Map());
     try {
       const result = await cityRequest<{ products: ProductConsumption[] }>(
         `/api/residential-buildings/${buildingId}/consumption`,
       );
-      setConsumption(new Map(result.products.map((item) => [item.productId, item])));
+      if (consumptionRequestRef.current === requestId) {
+        setConsumption(new Map(result.products.map((item) => [item.productId, item])));
+      }
     } catch (error) {
-      setConsumptionError(error instanceof Error ? error.message : 'Não foi possível carregar o consumo.');
+      if (consumptionRequestRef.current === requestId) {
+        setConsumptionError(error instanceof Error ? error.message : 'Não foi possível carregar o consumo.');
+      }
     } finally {
-      setIsConsumptionLoading(false);
+      if (consumptionRequestRef.current === requestId) setIsConsumptionLoading(false);
     }
   };
 
   const openCityConsumption = async (city: CityAssembly) => {
+    const requestId = ++consumptionRequestRef.current;
     setIsCityModalOpen(false);
     setReturnToCityAfterConsumption(true);
     setConsumptionScope('CIDADE');
@@ -1091,20 +1099,27 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     setIsConsumptionOpen(true);
     setIsConsumptionLoading(true);
     setConsumptionError('');
+    setConsumption(new Map());
     try {
       const result = await cityRequest<{ products: ProductConsumption[] }>(
         `/api/cities/${city.id}/consumption`,
       );
-      setConsumption(new Map(result.products.map((item) => [item.productId, item])));
+      if (consumptionRequestRef.current === requestId) {
+        setConsumption(new Map(result.products.map((item) => [item.productId, item])));
+      }
     } catch (error) {
-      setConsumptionError(error instanceof Error ? error.message : 'Não foi possível carregar o consumo da cidade.');
+      if (consumptionRequestRef.current === requestId) {
+        setConsumptionError(error instanceof Error ? error.message : 'Não foi possível carregar o consumo da cidade.');
+      }
     } finally {
-      setIsConsumptionLoading(false);
+      if (consumptionRequestRef.current === requestId) setIsConsumptionLoading(false);
     }
   };
 
   const closeConsumption = () => {
+    consumptionRequestRef.current += 1;
     setIsConsumptionOpen(false);
+    setIsConsumptionLoading(false);
     if (returnToCityAfterConsumption) {
       setIsCityModalOpen(true);
       setReturnToCityAfterConsumption(false);
@@ -2302,6 +2317,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           <BuildingSummaryPanel
             building={selectedBuildingSummary}
             cityName={cities.find((city) => city.id === selectedBuildingSummary.cityId)?.name ?? '—'}
+            onOpenConsumption={() => void openConsumption(selectedBuildingSummary.id)}
             onClose={() => setSelectedResidenceId(null)}
           />
         )}

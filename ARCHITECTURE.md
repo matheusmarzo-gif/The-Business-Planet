@@ -871,6 +871,10 @@ mapeamento e verificar todas as curvas.
   agregadas na cidade são ponderadas pelo número de consumidores em cada dia;
   os períodos anteriores à disponibilidade de dados desejados aparecem como
   indisponíveis. Preços médios continuam ponderados pelas unidades compradas.
+  Jogadores que não são proprietários recebem somente `ResidentialBuildingSummary`
+  na sincronização do mundo, sem dados de consumo. Em residências concluídas,
+  `Ver consumo da casa` solicita ao servidor, após o clique, o consumo apenas
+  do ID selecionado; o proprietário mantém o botão no painel completo.
 - Pesqueiro e lojas de peixes/leite/açúcar/vegetais/sal/especiarias (`fishery`,
   `shop_fish`, `shop_milk`, `shop_sugar`, `shop_vegetables`, `shop_salt`,
   `shop_spices`):

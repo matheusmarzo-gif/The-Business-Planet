@@ -453,7 +453,10 @@ mapeamento e verificar todas as curvas.
   usuário autenticado), `PUT` (somente o dono, armazém concluído, um produto por
   chamada) e `POST /api/residential-buildings/:id/warehouse/suppliers` (somente
   o dono, compra imediata respeitando ordem, preço, distância, espaço e Work
-  Points).
+  Points). As opções `collector_active` e `supplier_active` ficam em
+  `warehouse_automation_settings`, com leitura em `GET .../warehouse` e gravação
+  por `PUT .../warehouse/automation`, somente pelo dono; a segunda é rejeitada
+  para silos. Ambas iniciam desativadas.
 - `silo` (categoria Indústrias, `kind: 'warehouse'`, área rural, estrada
   adjacente) ocupa 4 × 4, emprega até 100 pessoas e tem 400 m³ de capacidade.
   Custa 300 madeiras, 60 pedras e 20.000 Work Points. Só armazena Trigo,
@@ -1009,7 +1012,19 @@ mapeamento e verificar todas as curvas.
   vendas), `planTransfersDetailed` move produção dos ligados para cada depósito
   e abastece comércios/insumos a partir do saldo acima do mínimo. A rotina
   atualiza o estoque das construções entre depósitos na mesma rodada para não
-  duplicar envios nem abastecimentos. O silo usa capacidade de 400 m³ e sua
+  duplicar envios nem abastecimentos. Só depois de todos os vínculos existentes
+  serem processados, o sistema executa primeiro os coletores ativos e depois os
+  fornecedores ativos. Cada automação considera construções concluídas do mesmo
+  dono cujo centro esteja no raio de 60 tiles, inclusive as que não têm vínculo
+  com aquele depósito; atualiza o estado em memória compartilhada entre
+  depósitos para evitar recolhas ou abastecimentos duplicados. O coletor
+  reutiliza as regras de envio da produção principal e as restrições de produto
+  do silo. O fornecedor existe apenas no armazém e reutiliza as regras de
+  demanda de estoque e insumos. As duas fases usam somente Work Points restantes
+  após os vínculos, respeitam capacidade e espaço, e o fornecedor preserva o
+  estoque mínimo configurado. As
+  preferências persistem independentemente das configurações por produto. O
+  silo usa capacidade de 400 m³ e sua
   lista restrita de produtos; o armazém comum mantém 50 m³ para qualquer produto.
   A ordem Compra/Venda não bloqueia transferências locais. Cada carga consome
   Work Points do depósito (`100 · m³ + 0,125 · kg`; pontos = empregados ×
@@ -1073,6 +1088,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/player/resources?x=&y=` | Autenticado | Retorna `{ wood, stone }` dos armazéns concluídos do jogador em até 60 tiles das coordenadas validadas. |
 | `GET /api/residential-buildings/:id/warehouse-log` | Dono do armazém | Retorna `{ days: [{ day, workPoints }], events: [{ day, buildingType, productId, direction, wanted, moved, reason, errorDetail }] }` do armazém (tabela `warehouse_transport_log`, gravada às 00:00 na etapa de transporte, 30 dias; `reason` = `desired_reached`/`no_space`/`no_work_points`/`warehouse_empty` quando moveu menos que o desejado; erros internos registram etapa e detalhe em `errorDetail`). |
 | `GET /api/residential-buildings/:id/warehouse` | Autenticado | Retorna configurações por produto (`minimumStock`, `maximumStock` numérico ou `null` para `MAX`, valor e modo), estoque e preço médio local ponderado por oferta acima do mínimo; espaço ocupado é calculado no cliente. |
+| `PUT /api/residential-buildings/:id/warehouse/automation` | Dono de armazém/silo concluído | Salva `{ collectorActive, supplierActive }`; o fornecedor deve ser falso em silos. |
 | `GET /api/residential-buildings/:id/warehouse-transfer-quote?destinationId=&productId=` | Dono do armazém | Calcula o limite atual da transferência considerando estoque mínimo de origem, capacidade/estoque desejável do destino, distância e Work Points restantes do dia. |
 | `POST /api/residential-buildings/:id/warehouse-transfer` | Dono do armazém | Transfere `{ destinationId, productId, quantity }` para construção concluída do mesmo dono em até 60 tiles; recalcula e valida todos os limites no servidor, grava o histórico e publica os estoques atualizados. Erros técnicos retornam `{ error, failureStage, reason, failureReference }`; a referência pode ser localizada nos logs do servidor. |
 | `GET /api/residential-buildings/:id/stock-upgrades` | Dono da construção concluída | Retorna os níveis, capacidades, custos de upgrade e valores de downgrade por compartimento; materiais usam custos estimados do jogador com fallback para ofertas de venda em armazéns/silos, mais o salário médio municipal. |

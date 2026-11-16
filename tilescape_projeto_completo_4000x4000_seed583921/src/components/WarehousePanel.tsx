@@ -6,6 +6,7 @@ import {
   MAX_WAREHOUSE_STOCK,
   MAX_WAREHOUSE_PRICE,
   DEFAULT_WAREHOUSE_SETTING,
+  type WarehouseAutomationSettings,
   type WarehouseDemand,
   type WarehouseProductSetting,
   type WarehouseTradeMode,
@@ -14,6 +15,8 @@ import {
 interface WarehousePanelProps {
   building: ResidentialBuilding;
   isOwner: boolean;
+  automation: WarehouseAutomationSettings;
+  automationLoaded: boolean;
   settings: Map<string, WarehouseProductSetting>;
   stock: Map<string, number>;
   averagePrices: Map<string, number>;
@@ -22,6 +25,7 @@ interface WarehousePanelProps {
   isSearchingSuppliers: boolean;
   error: string;
   supplierMessage: string;
+  onSaveAutomation: (settings: WarehouseAutomationSettings) => void;
   onSave: (setting: WarehouseProductSetting) => void;
   onTransfer: (productId: string) => void;
   onSearchSuppliers: () => void;
@@ -41,6 +45,8 @@ const volume = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 export default function WarehousePanel({
   building,
   isOwner,
+  automation,
+  automationLoaded,
   settings,
   stock,
   averagePrices,
@@ -49,6 +55,7 @@ export default function WarehousePanel({
   isSearchingSuppliers,
   error,
   supplierMessage,
+  onSaveAutomation,
   onSave,
   onTransfer,
   onSearchSuppliers,
@@ -119,6 +126,39 @@ export default function WarehousePanel({
         {!isOwner && ' · Somente o dono pode editar.'}
       </p>
       {error && <p role="alert" className="warehouse-error">{error}</p>}
+      <fieldset className="warehouse-automation">
+        <legend>Automação de transporte</legend>
+        <label className="warehouse-automation-option">
+          <input
+            type="checkbox"
+            checked={automation.collectorActive}
+            disabled={!isOwner || isSaving || !automationLoaded}
+            onChange={(event) =>
+              onSaveAutomation({ ...automation, collectorActive: event.target.checked })
+            }
+          />
+          <span>
+            <strong>Coletor ativo</strong>
+            <small>Recolhe produção excedente das suas construções dentro do raio, após os vínculos normais.</small>
+          </span>
+        </label>
+        {building.type === 'warehouse' && (
+          <label className="warehouse-automation-option">
+            <input
+              type="checkbox"
+              checked={automation.supplierActive}
+              disabled={!isOwner || isSaving || !automationLoaded}
+              onChange={(event) =>
+                onSaveAutomation({ ...automation, supplierActive: event.target.checked })
+              }
+            />
+            <span>
+              <strong>Fornecedor ativo</strong>
+              <small>Abastece as suas construções com demanda dentro do raio, após os vínculos normais.</small>
+            </span>
+          </label>
+        )}
+      </fieldset>
       <p className="warehouse-summary">
         Demanda de Work Points no último dia{demand?.lastDay ? ` (${demand.lastDay})` : ''}: {wp(demand?.last ?? 0)}
         {' · '}Média do último mês: {wp(demand?.monthAverage ?? 0)}

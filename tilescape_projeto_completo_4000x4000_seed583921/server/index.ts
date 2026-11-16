@@ -178,7 +178,10 @@ import {
   type Crop,
   type FarmCropType,
 } from '../src/types/farming.js';
-import { parseWarehouseSetting } from '../src/types/warehouse.js';
+import {
+  parseWarehouseAutomationSettings,
+  parseWarehouseSetting,
+} from '../src/types/warehouse.js';
 import { GAME_RULES } from '../src/generated/gameConfig.js';
 import { planDailySpoilage, PRODUCTS, type ProductDefinition } from '../src/types/product.js';
 import {
@@ -5120,16 +5123,24 @@ async function runDailyEmployment(): Promise<boolean> {
       await logProductionBatch(client, state.day, farmHistory);
       });
       await runStage('transporte', async () => {
-      // Transporte entre armazéns e construções ligadas; consome Work Points do armazém.
+      // Executa todos os vínculos antes das automações de coleta e fornecimento.
       const { rows: warehouseRows } = await client.query<{
         id: string;
         tile_x: number;
         tile_y: number;
         building_type: ResidenceType;
+        created_by: string;
+        collector_active: boolean;
+        supplier_active: boolean;
       }>(
-        `SELECT id, tile_x, tile_y, building_type FROM all_buildings
-         WHERE building_type IN ('warehouse', 'silo') AND status = 'completed'
-         ORDER BY tile_x, tile_y, id`,
+        `SELECT building.id, building.tile_x, building.tile_y, building.building_type,
+                building.created_by,
+                COALESCE(automation.collector_active, FALSE) AS collector_active,
+                COALESCE(automation.supplier_active, FALSE) AS supplier_active
+         FROM all_buildings building
+         LEFT JOIN warehouse_automation_settings automation ON automation.building_id = building.id
+         WHERE building.building_type IN ('warehouse', 'silo') AND building.status = 'completed'
+         ORDER BY building.tile_x, building.tile_y, building.id`,
       );
       const workplaceById = new Map(workplaces.map((workplace) => [workplace.id, workplace]));
       type LinkedBuildingRow = {
@@ -5155,6 +5166,58 @@ async function runDailyEmployment(): Promise<boolean> {
         has_stock_row: boolean;
       };
       const warehouseIds = warehouseRows.map((warehouse) => warehouse.id);
+      const activeWarehouseIds = warehouseRows
+        .filter((warehouse) =>
+          warehouse.collector_active ||
+          (warehouse.building_type === 'warehouse' && warehouse.supplier_active),
+        )
+        .map((warehouse) => warehouse.id);
+      const activeTransportBuildingTypes = Object.entries(RESIDENCES)
+        .filter(([, definition]) =>
+          definition.kind === 'farm' ||
+          definition.kind === 'fishery' ||
+          definition.kind === 'resource' ||
+          definition.kind === 'workshop' ||
+          definition.kind === 'industry' ||
+          definition.kind === 'shop',
+        )
+        .map(([type]) => type);
+      type ActiveBuildingRow = {
+        id: string;
+        created_by: string;
+        tile_x: number;
+        tile_y: number;
+        building_type: ResidenceType;
+        stock: number;
+        stock_levels: StockLevels;
+        tool_stock: number;
+        wood_stock: number;
+        iron_stock: number;
+        charcoal_stock: number;
+        sugarcane_stock: number;
+        selected_input_product_id: string | null;
+      };
+      const { rows: activeBuildingRows } = activeWarehouseIds.length > 0
+        ? await client.query<ActiveBuildingRow>(
+            `SELECT building.id, building.created_by, building.tile_x, building.tile_y,
+                    building.building_type, building.stock, building.stock_levels,
+                    building.tool_stock, building.wood_stock, building.iron_stock,
+                    building.charcoal_stock, building.sugarcane_stock,
+                    building.selected_input_product_id
+             FROM all_buildings building
+             WHERE building.status = 'completed'
+               AND building.building_type = ANY($2::text[])
+               AND EXISTS (
+                 SELECT 1 FROM all_buildings storage
+                 WHERE storage.id = ANY($1::uuid[])
+                   AND storage.created_by = building.created_by
+                   AND ABS(storage.tile_x - building.tile_x) <= $3
+                   AND ABS(storage.tile_y - building.tile_y) <= $3
+               )
+             ORDER BY building.id`,
+            [activeWarehouseIds, activeTransportBuildingTypes, LINK_RADIUS + 5],
+          )
+        : { rows: [] as ActiveBuildingRow[] };
       const { rows: linked } = warehouseIds.length > 0
         ? await client.query<LinkedBuildingRow>(
             `SELECT building.id, link.warehouse_id, building.building_type, building.stock,
@@ -5228,13 +5291,42 @@ async function runDailyEmployment(): Promise<boolean> {
           });
         }
       }
+      for (const building of activeBuildingRows) {
+        if (linkedStateById.has(building.id)) continue;
+        linkedStateById.set(building.id, {
+          ...building,
+          warehouse_id: '',
+          buildingId: building.id,
+          type: building.building_type,
+          toolStock: building.tool_stock,
+          woodStock: building.wood_stock,
+          ironStock: building.iron_stock,
+          charcoalStock: building.charcoal_stock,
+          sugarcaneStock: building.sugarcane_stock,
+          inputStocks: {},
+          selectedInputProductId: building.selected_input_product_id,
+          stockLevels: building.stock_levels,
+          input_stocks: {},
+        });
+      }
       for (const building of linked) {
         const buildings = linkedByWarehouse.get(building.warehouse_id) ?? [];
         buildings.push(building);
         linkedByWarehouse.set(building.warehouse_id, buildings);
       }
       const inputStocksByBuilding = new Map<string, Record<string, number>>();
-      for (const stock of linkedInputStocks) {
+      const activeCandidateIds = activeBuildingRows
+        .map((building) => building.id)
+        .filter((buildingId) => !linkedById.has(buildingId));
+      const { rows: activeInputStocks } = activeCandidateIds.length > 0
+        ? await client.query<{ building_id: string; product_id: string; quantity: number }>(
+            `SELECT building_id, product_id, quantity
+             FROM building_input_stock
+             WHERE building_id = ANY($1::uuid[])`,
+            [activeCandidateIds],
+          )
+        : { rows: [] as { building_id: string; product_id: string; quantity: number }[] };
+      for (const stock of [...linkedInputStocks, ...activeInputStocks]) {
         const buildingStocks = inputStocksByBuilding.get(stock.building_id) ?? {};
         buildingStocks[stock.product_id] = stock.quantity;
         inputStocksByBuilding.set(stock.building_id, buildingStocks);
@@ -5293,25 +5385,8 @@ async function runDailyEmployment(): Promise<boolean> {
       }>();
       const transportedByBuilding = new Map<string, number>();
       const productionByBuilding = new Map<string, ProductionHistoryEntry>();
+      const workPointsByWarehouse = new Map<string, number>();
       for (const warehouse of warehouseRows) {
-        const warehouseSite = workplaceById.get(warehouse.id);
-        productionByBuilding.set(warehouse.id, {
-          buildingId: warehouse.id,
-          workPoints:
-            (workers.get(warehouse.id) ?? 0) *
-            getDailyWorkPoints(
-              warehouseSite?.work_hours_per_day ?? 8,
-              RESIDENCE_STATS.health,
-              averageTechniques.get(warehouse.id) ?? 10,
-            ),
-        });
-      }
-
-      for (const warehouse of warehouseRows) {
-        const linkedBuildings = (linkedByWarehouse.get(warehouse.id) ?? [])
-          .map((building) => linkedStateById.get(building.id))
-          .filter((building): building is LinkedBuildingState => building !== undefined);
-        if (linkedBuildings.length === 0) continue;
         const warehouseSite = workplaceById.get(warehouse.id);
         const workPoints =
           (workers.get(warehouse.id) ?? 0) *
@@ -5320,6 +5395,161 @@ async function runDailyEmployment(): Promise<boolean> {
             RESIDENCE_STATS.health,
             averageTechniques.get(warehouse.id) ?? 10,
           );
+        workPointsByWarehouse.set(warehouse.id, workPoints);
+        productionByBuilding.set(warehouse.id, {
+          buildingId: warehouse.id,
+          workPoints,
+        });
+      }
+
+      const recordTransportPlan = (
+        warehouseId: string,
+        plan: ReturnType<typeof planTransfersDetailed>,
+        workingStock?: Map<string, number>,
+      ) => {
+        for (const attempt of plan.attempts) {
+          transportLogRows.push({
+            warehouseId,
+            buildingId: attempt.buildingId,
+            buildingType: linkedStateById.get(attempt.buildingId)?.building_type ?? '',
+            productId: attempt.productId,
+            direction: attempt.direction,
+            wanted: attempt.wanted,
+            moved: attempt.moved,
+            reason: attempt.reason,
+            errorDetail: null,
+          });
+        }
+        const stockDeltas = warehouseStockDeltas.get(warehouseId) ?? new Map<string, number>();
+        for (const transfer of plan.transfers) {
+          const warehouseDelta =
+            transfer.direction === 'out' ? transfer.quantity : -transfer.quantity;
+          stockDeltas.set(
+            transfer.productId,
+            (stockDeltas.get(transfer.productId) ?? 0) + warehouseDelta,
+          );
+          if (workingStock) {
+            workingStock.set(
+              transfer.productId,
+              (workingStock.get(transfer.productId) ?? 0) + warehouseDelta,
+            );
+          }
+          transportDemandByWarehouse.set(
+            warehouseId,
+            (transportDemandByWarehouse.get(warehouseId) ?? 0) +
+              getTransportDemand(transfer.productId, transfer.quantity),
+          );
+          if (transfer.direction === 'out') {
+            transportedByBuilding.set(
+              transfer.buildingId,
+              (transportedByBuilding.get(transfer.buildingId) ?? 0) + transfer.quantity,
+            );
+          }
+
+          const buildingState = linkedStateById.get(transfer.buildingId);
+          const definition = getResidenceDefinition(buildingState?.building_type ?? '');
+          const genericInput =
+            transfer.direction === 'in' &&
+            definition?.inputCapacities?.[transfer.productId] !== undefined &&
+            (!definition.selectableInputProductIds ||
+              buildingState?.selectedInputProductId === transfer.productId);
+          const kind = definition?.kind;
+          const column = genericInput
+            ? 'input_stock'
+            : transfer.direction === 'out' || kind === 'shop'
+              ? 'stock'
+              : ({
+                  tools: 'tool_stock',
+                  wood: 'wood_stock',
+                  iron: 'iron_stock',
+                  charcoal: 'charcoal_stock',
+                  sugarcane: 'sugarcane_stock',
+                } as Record<string, string>)[transfer.productId];
+          if (!column) continue;
+          const changes = buildingChanges.get(transfer.buildingId) ?? {
+            stock: 0,
+            tools: 0,
+            wood: 0,
+            iron: 0,
+            charcoal: 0,
+            sugarcane: 0,
+            inputStocks: new Map<string, number>(),
+          };
+          const buildingDelta =
+            transfer.direction === 'out' ? -transfer.quantity : transfer.quantity;
+          if (column === 'stock') changes.stock += buildingDelta;
+          else if (column === 'tool_stock') changes.tools += buildingDelta;
+          else if (column === 'wood_stock') changes.wood += buildingDelta;
+          else if (column === 'iron_stock') changes.iron += buildingDelta;
+          else if (column === 'charcoal_stock') changes.charcoal += buildingDelta;
+          else if (column === 'sugarcane_stock') changes.sugarcane += buildingDelta;
+          else if (column === 'input_stock') {
+            changes.inputStocks.set(
+              transfer.productId,
+              (changes.inputStocks.get(transfer.productId) ?? 0) + buildingDelta,
+            );
+          }
+          buildingChanges.set(transfer.buildingId, changes);
+          if (buildingState) applyTransferToLinkedBuilding(buildingState, transfer);
+        }
+        warehouseStockDeltas.set(warehouseId, stockDeltas);
+      };
+
+      const recordTransportFailure = (warehouseId: string, transportError: unknown) => {
+        const errorInfo =
+          transportError && typeof transportError === 'object'
+            ? (transportError as Record<string, unknown>)
+            : {};
+        const errorMessage =
+          typeof errorInfo.message === 'string' ? errorInfo.message : String(transportError);
+        const errorMetadata = [
+          typeof errorInfo.code === 'string' ? `SQLSTATE ${errorInfo.code}` : null,
+          typeof errorInfo.constraint === 'string' ? `constraint=${errorInfo.constraint}` : null,
+          typeof errorInfo.column === 'string' ? `column=${errorInfo.column}` : null,
+          typeof errorInfo.detail === 'string' ? errorInfo.detail : null,
+        ].filter((value): value is string => value !== null);
+        const errorDetail =
+          `planning_transfers: ${errorMessage}${errorMetadata.length ? ` (${errorMetadata.join('; ')})` : ''}`.slice(
+            0,
+            1000,
+          );
+        console.error(
+          `Falha no transporte do armazém ${warehouseId} (planning_transfers):`,
+          transportError,
+        );
+        transportLogRows.push({
+          warehouseId,
+          buildingId: warehouseId,
+          buildingType: 'system',
+          productId: '',
+          direction: 'out',
+          wanted: 0,
+          moved: 0,
+          reason: 'error',
+          errorDetail,
+        });
+      };
+
+      const toLogisticsLink = (building: LinkedBuildingState) => ({
+        buildingId: building.id,
+        type: building.building_type,
+        stock: building.stock,
+        toolStock: building.toolStock,
+        woodStock: building.woodStock,
+        ironStock: building.ironStock,
+        charcoalStock: building.charcoalStock,
+        sugarcaneStock: building.sugarcaneStock,
+        inputStocks: building.inputStocks,
+        selectedInputProductId: building.selectedInputProductId,
+        stockLevels: building.stockLevels,
+      });
+
+      for (const warehouse of warehouseRows) {
+        const linkedBuildings = (linkedByWarehouse.get(warehouse.id) ?? [])
+          .map((building) => linkedStateById.get(building.id))
+          .filter((building): building is LinkedBuildingState => building !== undefined);
+        if (linkedBuildings.length === 0) continue;
+        const workPoints = workPointsByWarehouse.get(warehouse.id) ?? 0;
         const inventory = inventoryByWarehouse.get(warehouse.id);
         if (!inventory) {
           throw new Error(`Não foi possível carregar o estoque do armazém ${warehouse.id}.`);
@@ -5334,140 +5564,93 @@ async function runDailyEmployment(): Promise<boolean> {
               workPoints,
               allowedProductIds: RESIDENCES[warehouse.building_type].allowedStorageProductIds,
             },
-            linkedBuildings.map((building) => ({
-              buildingId: building.id,
-              type: building.building_type,
-              stock: building.stock,
-              toolStock: linkedStateById.get(building.id)?.toolStock ?? building.tool_stock,
-              woodStock: linkedStateById.get(building.id)?.woodStock ?? building.wood_stock,
-              ironStock: linkedStateById.get(building.id)?.ironStock ?? building.iron_stock,
-              charcoalStock:
-                linkedStateById.get(building.id)?.charcoalStock ?? building.charcoal_stock,
-              sugarcaneStock:
-                linkedStateById.get(building.id)?.sugarcaneStock ?? building.sugarcane_stock,
-              inputStocks: linkedStateById.get(building.id)?.inputStocks ?? {},
-              selectedInputProductId:
-                linkedStateById.get(building.id)?.selectedInputProductId ??
-                building.selected_input_product_id,
-              stockLevels: linkedStateById.get(building.id)?.stockLevels ?? building.stock_levels,
-            })),
+            linkedBuildings.map(toLogisticsLink),
           );
-          const types = new Map(
-            linkedBuildings.map((building) => [building.id, building.building_type]),
-          );
-          for (const attempt of attempts) {
-            transportLogRows.push({
-              warehouseId: warehouse.id,
-              buildingId: attempt.buildingId,
-              buildingType: types.get(attempt.buildingId) ?? '',
-              productId: attempt.productId,
-              direction: attempt.direction,
-              wanted: attempt.wanted,
-              moved: attempt.moved,
-              reason: attempt.reason,
-              errorDetail: null,
-            });
-          }
-          const stockDeltas = warehouseStockDeltas.get(warehouse.id) ?? new Map<string, number>();
-          for (const transfer of transfers) {
-            const warehouseDelta =
-              transfer.direction === 'out' ? transfer.quantity : -transfer.quantity;
-            stockDeltas.set(
-              transfer.productId,
-              (stockDeltas.get(transfer.productId) ?? 0) + warehouseDelta,
-            );
-            transportDemandByWarehouse.set(
-              warehouse.id,
-              (transportDemandByWarehouse.get(warehouse.id) ?? 0) +
-                getTransportDemand(transfer.productId, transfer.quantity),
-            );
-            if (transfer.direction === 'out') {
-              transportedByBuilding.set(
-                transfer.buildingId,
-                (transportedByBuilding.get(transfer.buildingId) ?? 0) + transfer.quantity,
-              );
-            }
-
-            const definition = getResidenceDefinition(
-              linkedById.get(transfer.buildingId)?.building_type ?? '',
-            );
-            const genericInput =
-              transfer.direction === 'in' &&
-              definition?.inputCapacities?.[transfer.productId] !== undefined &&
-              (!definition.selectableInputProductIds ||
-                linkedById.get(transfer.buildingId)?.selected_input_product_id ===
-                  transfer.productId);
-            const kind = definition?.kind;
-            const column = genericInput
-              ? 'input_stock'
-              : transfer.direction === 'out' || kind === 'shop'
-                ? 'stock'
-                : ({
-                    tools: 'tool_stock',
-                    wood: 'wood_stock',
-                    iron: 'iron_stock',
-                    charcoal: 'charcoal_stock',
-                    sugarcane: 'sugarcane_stock',
-                  } as Record<string, string>)[transfer.productId];
-            if (!column) continue;
-            const changes = buildingChanges.get(transfer.buildingId) ?? {
-              stock: 0,
-              tools: 0,
-              wood: 0,
-              iron: 0,
-              charcoal: 0,
-              sugarcane: 0,
-              inputStocks: new Map<string, number>(),
-            };
-            const buildingDelta =
-              transfer.direction === 'out' ? -transfer.quantity : transfer.quantity;
-            if (column === 'stock') changes.stock += buildingDelta;
-            else if (column === 'tool_stock') changes.tools += buildingDelta;
-            else if (column === 'wood_stock') changes.wood += buildingDelta;
-            else if (column === 'iron_stock') changes.iron += buildingDelta;
-            else if (column === 'charcoal_stock') changes.charcoal += buildingDelta;
-            else if (column === 'sugarcane_stock') changes.sugarcane += buildingDelta;
-            else if (column === 'input_stock') {
-              changes.inputStocks.set(
-                transfer.productId,
-                (changes.inputStocks.get(transfer.productId) ?? 0) + buildingDelta,
-              );
-            }
-            buildingChanges.set(transfer.buildingId, changes);
-            const linkedState = linkedStateById.get(transfer.buildingId);
-            if (linkedState) applyTransferToLinkedBuilding(linkedState, transfer);
-          }
-          warehouseStockDeltas.set(warehouse.id, stockDeltas);
+          recordTransportPlan(warehouse.id, { transfers, attempts });
         } catch (transportError) {
-          const errorInfo =
-            transportError && typeof transportError === 'object'
-              ? (transportError as Record<string, unknown>)
-              : {};
-          const errorMessage =
-            typeof errorInfo.message === 'string' ? errorInfo.message : String(transportError);
-          const errorMetadata = [
-            typeof errorInfo.code === 'string' ? `SQLSTATE ${errorInfo.code}` : null,
-            typeof errorInfo.constraint === 'string' ? `constraint=${errorInfo.constraint}` : null,
-            typeof errorInfo.column === 'string' ? `column=${errorInfo.column}` : null,
-            typeof errorInfo.detail === 'string' ? errorInfo.detail : null,
-          ].filter((value): value is string => value !== null);
-          const errorDetail =
-            `planning_transfers: ${errorMessage}${errorMetadata.length ? ` (${errorMetadata.join('; ')})` : ''}`.slice(
-              0,
-              1000,
-            );
-          console.error(`Falha no transporte do armazém ${warehouse.id} (planning_transfers):`, transportError);
-          transportLogRows.push({
-            warehouseId: warehouse.id,
-            buildingId: warehouse.id,
-            buildingType: 'system',
-            productId: '',
-            direction: 'out',
-            wanted: 0,
-            moved: 0,
-            reason: 'error',
-            errorDetail,
+          recordTransportFailure(warehouse.id, transportError);
+        }
+      }
+
+      const workingStockByWarehouse = new Map<string, Map<string, number>>();
+      for (const [warehouseId, inventory] of inventoryByWarehouse) {
+        const workingStock = new Map(inventory.stock);
+        for (const [productId, delta] of warehouseStockDeltas.get(warehouseId) ?? []) {
+          workingStock.set(productId, (workingStock.get(productId) ?? 0) + delta);
+        }
+        workingStockByWarehouse.set(warehouseId, workingStock);
+      }
+
+      const runWarehouseAutomation = (
+        warehouse: (typeof warehouseRows)[number],
+        options: { collectProduction: boolean; supplyDemand: boolean },
+      ) => {
+        const inventory = inventoryByWarehouse.get(warehouse.id);
+        const workingStock = workingStockByWarehouse.get(warehouse.id);
+        if (!inventory || !workingStock) {
+          throw new Error(`Não foi possível carregar o estoque do armazém ${warehouse.id}.`);
+        }
+        const candidates = activeBuildingRows
+          .filter(
+            (building) =>
+              building.created_by === warehouse.created_by &&
+              isWithinLinkRadius(
+                {
+                  type: building.building_type,
+                  x: building.tile_x,
+                  y: building.tile_y,
+                },
+                {
+                  type: warehouse.building_type,
+                  x: warehouse.tile_x,
+                  y: warehouse.tile_y,
+                },
+              ),
+          )
+          .map((building) => linkedStateById.get(building.id))
+          .filter((building): building is LinkedBuildingState => building !== undefined);
+        if (candidates.length === 0) return;
+
+        const workPoints = Math.max(
+          0,
+          (workPointsByWarehouse.get(warehouse.id) ?? 0) -
+            (transportDemandByWarehouse.get(warehouse.id) ?? 0),
+        );
+        const { transfers, attempts } = planTransfersDetailed(
+          {
+            stock: workingStock,
+            minimumStock: inventory.minimumStock,
+            maximumStock: inventory.maximumStock,
+            capacityM3: RESIDENCES[warehouse.building_type].storageCapacityM3 ?? 0,
+            workPoints,
+            allowedProductIds: RESIDENCES[warehouse.building_type].allowedStorageProductIds,
+          },
+          candidates.map(toLogisticsLink),
+          options,
+        );
+        recordTransportPlan(warehouse.id, { transfers, attempts }, workingStock);
+      };
+
+      for (const warehouse of warehouseRows) {
+        if (!warehouse.collector_active) continue;
+        try {
+          runWarehouseAutomation(warehouse, {
+            collectProduction: true,
+            supplyDemand: false,
           });
+        } catch (transportError) {
+          recordTransportFailure(warehouse.id, transportError);
+        }
+      }
+      for (const warehouse of warehouseRows) {
+        if (warehouse.building_type !== 'warehouse' || !warehouse.supplier_active) continue;
+        try {
+          runWarehouseAutomation(warehouse, {
+            collectProduction: false,
+            supplyDemand: true,
+          });
+        } catch (transportError) {
+          recordTransportFailure(warehouse.id, transportError);
         }
       }
 
@@ -9140,6 +9323,14 @@ async function start() {
            FROM warehouse_product_settings WHERE building_id = $1`,
           [request.params.id],
         );
+        const automation = await pool.query<{
+          collector_active: boolean;
+          supplier_active: boolean;
+        }>(
+          `SELECT collector_active, supplier_active
+           FROM warehouse_automation_settings WHERE building_id = $1`,
+          [request.params.id],
+        );
         const stockRows = await pool.query<{ product_id: string; quantity: number }>(
           'SELECT product_id, quantity FROM warehouse_stock WHERE building_id = $1',
           [request.params.id],
@@ -9180,6 +9371,12 @@ async function start() {
             price: row.price,
             mode: row.mode,
           })),
+          automation: {
+            collectorActive: automation.rows[0]?.collector_active ?? false,
+            supplierActive:
+              rows[0].building_type === 'warehouse' &&
+              (automation.rows[0]?.supplier_active ?? false),
+          },
           stock: stockRows.rows.map((row) => ({ productId: row.product_id, quantity: row.quantity })),
           averagePrices: averagePriceRows.rows.map((row) => ({
             productId: row.product_id,
@@ -9341,6 +9538,57 @@ async function start() {
       })
       .catch((error: unknown) => {
         console.error('Não foi possível salvar a configuração do armazém:', error);
+        response.status(503).json({ error: 'residence_unavailable' });
+      });
+  });
+  app.put('/api/residential-buildings/:id/warehouse/automation', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    const automation = parseWarehouseAutomationSettings(request.body);
+    if (!residenceIdPattern.test(request.params.id) || !automation) {
+      response.status(400).json({ error: 'invalid_warehouse_automation' });
+      return;
+    }
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+
+    void pool
+      .query<{ building_type: string; created_by: string; status: string }>(
+        'SELECT building_type, created_by, status FROM all_buildings WHERE id = $1',
+        [request.params.id],
+      )
+      .then(async ({ rows }) => {
+        const building = rows[0];
+        if (!building) {
+          response.status(404).json({ error: 'residence_not_found' });
+          return;
+        }
+        if (!isStorageBuilding(building.building_type) || building.status !== 'completed') {
+          response.status(400).json({ error: 'not_a_warehouse' });
+          return;
+        }
+        if (building.created_by !== userId) {
+          response.status(403).json({ error: 'residence_not_owned' });
+          return;
+        }
+        if (building.building_type === 'silo' && automation.supplierActive) {
+          response.status(400).json({ error: 'supplier_not_available_for_silo' });
+          return;
+        }
+        await pool.query(
+          `INSERT INTO warehouse_automation_settings
+             (building_id, collector_active, supplier_active)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (building_id)
+           DO UPDATE SET collector_active = EXCLUDED.collector_active,
+                         supplier_active = EXCLUDED.supplier_active`,
+          [request.params.id, automation.collectorActive, automation.supplierActive],
+        );
+        response.json(automation);
+      })
+      .catch((error: unknown) => {
+        console.error('Não foi possível salvar a automação do armazém:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
   });

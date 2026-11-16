@@ -3,6 +3,11 @@ import { isCurrencyAmount, roundCurrency } from './currency.js';
 
 export type WarehouseTradeMode = 'sell' | 'buy';
 
+export interface WarehouseAutomationSettings {
+  collectorActive: boolean;
+  supplierActive: boolean;
+}
+
 export interface WarehouseProductSetting {
   productId: string;
   minimumStock: number;
@@ -27,7 +32,21 @@ export const DEFAULT_WAREHOUSE_SETTING = {
   mode: 'sell',
 } as const;
 
+export const DEFAULT_WAREHOUSE_AUTOMATION_SETTINGS: WarehouseAutomationSettings = {
+  collectorActive: false,
+  supplierActive: false,
+};
+
 const PRODUCT_IDS = new Set(PRODUCTS.map((product) => product.id));
+
+export function parseWarehouseAutomationSettings(
+  value: unknown,
+): WarehouseAutomationSettings | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { collectorActive, supplierActive } = value as Record<string, unknown>;
+  if (typeof collectorActive !== 'boolean' || typeof supplierActive !== 'boolean') return null;
+  return { collectorActive, supplierActive };
+}
 
 export function parseWarehouseSetting(value: unknown): WarehouseProductSetting | null {
   if (typeof value !== 'object' || value === null) return null;

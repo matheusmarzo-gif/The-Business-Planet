@@ -996,6 +996,15 @@ repartidas proporcionalmente ao que falta em cada construção. O transporte
 custa Work Points do armazém:
 `100 × m³ + 0,125 × kg`; os pontos vêm dos funcionários do armazém e limites de
 espaço ou Work Points podem impedir parte do transporte.
+Em **Produtos e estoque**, o dono pode ativar **Coletor ativo** para recolher
+estoque de produção principal de suas construções concluídas dentro do mesmo
+raio, inclusive as não ligadas; silos continuam limitados aos produtos que podem
+armazenar. Em armazéns, **Fornecedor ativo** abastece construções suas com
+demanda de produto ou insumos dentro do raio, também sem exigir vínculo. As duas
+opções começam desativadas e são processadas diariamente somente depois de
+todos os vínculos normais: primeiro os coletores e depois os fornecedores. Assim,
+usam apenas os Work Points e estoques que sobrarem, respeitando capacidade e
+espaço; ao abastecer, o armazém preserva o estoque mínimo configurado.
 O painel do armazém mostra o estoque real e o espaço ocupado. A barra superior
 mostra Madeira, Pedra, Ferro e Aço dos armazéns próprios a até 60 tiles do centro
 da câmera; os totais são atualizados ao explorar outra área e periodicamente.

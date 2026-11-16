@@ -155,6 +155,35 @@ test('multiple linked warehouses do not overfill a shop in the same transport ru
   assert.equal(shop.stock, 120);
 });
 
+test('collector and supplier phases can run independently without changing default planning', () => {
+  const warehouse: WarehouseLogistics = {
+    stock: new Map([['milk', 20]]),
+    minimumStock: new Map(),
+    maximumStock: new Map(),
+    capacityM3: 50,
+    workPoints: 10000,
+  };
+  const links = [
+    { buildingId: 'dairy-farm', type: 'farm_dairy' as const, stock: 50 },
+    { buildingId: 'milk-shop', type: 'shop_milk' as const, stock: 0 },
+  ];
+
+  assert.deepEqual(
+    planTransfersDetailed(warehouse, links, { collectProduction: true, supplyDemand: false })
+      .transfers.map(({ buildingId, direction }) => ({ buildingId, direction })),
+    [{ buildingId: 'dairy-farm', direction: 'out' }],
+  );
+  assert.deepEqual(
+    planTransfersDetailed(warehouse, links, { collectProduction: false, supplyDemand: true })
+      .transfers.map(({ buildingId, direction }) => ({ buildingId, direction })),
+    [{ buildingId: 'milk-shop', direction: 'in' }],
+  );
+  assert.deepEqual(
+    planTransfersDetailed(warehouse, links).transfers,
+    planTransfersDetailed(warehouse, links, { collectProduction: true, supplyDemand: true }).transfers,
+  );
+});
+
 test('upgraded stock capacity is used when automatically replenishing a linked shop', () => {
   const transfers = planTransfersDetailed(
     {

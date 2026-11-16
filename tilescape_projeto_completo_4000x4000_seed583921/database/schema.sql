@@ -388,6 +388,12 @@ CREATE TABLE IF NOT EXISTS warehouse_product_settings (
   PRIMARY KEY (building_id, product_id)
 );
 
+CREATE TABLE IF NOT EXISTS warehouse_automation_settings (
+  building_id UUID PRIMARY KEY REFERENCES all_buildings (id) ON DELETE CASCADE,
+  collector_active BOOLEAN NOT NULL DEFAULT FALSE,
+  supplier_active BOOLEAN NOT NULL DEFAULT FALSE
+);
+
 ALTER TABLE warehouse_product_settings
   ALTER COLUMN price TYPE NUMERIC(12, 2) USING price::numeric(12, 2);
 

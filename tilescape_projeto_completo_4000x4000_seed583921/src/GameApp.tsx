@@ -23,7 +23,12 @@ import CommerceHistoryPanel, { type CommerceDay } from './components/CommerceHis
 import WarehouseLogPanel, { type WarehouseLogDay, type WarehouseLogEvent } from './components/WarehouseLogPanel';
 import PerformanceLogPanel from './components/PerformanceLogPanel';
 import BuildingSummaryPanel from './components/BuildingSummaryPanel';
-import type { WarehouseDemand, WarehouseProductSetting } from './types/warehouse';
+import {
+  DEFAULT_WAREHOUSE_AUTOMATION_SETTINGS,
+  type WarehouseAutomationSettings,
+  type WarehouseDemand,
+  type WarehouseProductSetting,
+} from './types/warehouse';
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
 import { connectToWorld, WorldSnapshot } from './game/worldClient';
@@ -412,6 +417,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const worldStageRef = useRef<HTMLElement | null>(null);
   const localResourceRequestRef = useRef(0);
   const consumptionRequestRef = useRef(0);
+  const warehouseSelectionRequestRef = useRef(0);
   const [hoveredTile, setHoveredTile] = useState<TileInfo | null>(null);
   const [selectedTile, setSelectedTile] = useState<TileInfo | null>(null);
   const [selectedResidenceId, setSelectedResidenceId] = useState<string | null>(null);
@@ -422,6 +428,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [workSettingsError, setWorkSettingsError] = useState('');
   const [isWarehouseOpen, setIsWarehouseOpen] = useState(false);
   const [warehouseSettings, setWarehouseSettings] = useState<Map<string, WarehouseProductSetting>>(new Map());
+  const [warehouseAutomation, setWarehouseAutomation] = useState<WarehouseAutomationSettings>(
+    DEFAULT_WAREHOUSE_AUTOMATION_SETTINGS,
+  );
+  const [warehouseAutomationLoaded, setWarehouseAutomationLoaded] = useState(false);
   const [warehouseError, setWarehouseError] = useState('');
   const [warehouseStock, setWarehouseStock] = useState<Map<string, number>>(new Map());
   const [warehouseAveragePrices, setWarehouseAveragePrices] = useState<Map<string, number>>(new Map());
@@ -829,9 +839,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   }, [selectedResidenceKey, selectedResidence?.status, isResidenceOwner]);
 
   useEffect(() => {
+    warehouseSelectionRequestRef.current += 1;
     setIsWarehouseOpen(false);
     setWarehouseError('');
     setWarehouseSettings(new Map());
+    setWarehouseAutomation(DEFAULT_WAREHOUSE_AUTOMATION_SETTINGS);
+    setWarehouseAutomationLoaded(false);
     setWarehouseStock(new Map());
     setWarehouseAveragePrices(new Map());
     setWarehouseStockLoaded(false);
@@ -1127,14 +1140,19 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   };
 
   const refreshWarehouse = async (buildingId: string, includeSettings = false): Promise<boolean> => {
+    const requestVersion = warehouseSelectionRequestRef.current;
     try {
       const result = await cityRequest<{
         settings: WarehouseProductSetting[];
+        automation: WarehouseAutomationSettings;
         stock: { productId: string; quantity: number }[];
         averagePrices: { productId: string; averagePrice: number }[];
         demand: WarehouseDemand;
       }>(`/api/residential-buildings/${buildingId}/warehouse`);
+      if (requestVersion !== warehouseSelectionRequestRef.current) return false;
       setWarehouseDemand(result.demand);
+      setWarehouseAutomation(result.automation);
+      setWarehouseAutomationLoaded(true);
       if (includeSettings) {
         setWarehouseSettings(new Map(result.settings.map((setting) => [setting.productId, setting])));
       }
@@ -1224,6 +1242,30 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setWarehouseSettings((current) => new Map(current).set(saved.productId, saved));
     } catch (error) {
       setWarehouseError(error instanceof Error ? error.message : 'Não foi possível salvar o produto.');
+    } finally {
+      setIsSavingWorkSettings(false);
+    }
+  };
+
+  const saveWarehouseAutomation = async (
+    buildingId: string,
+    automation: WarehouseAutomationSettings,
+  ) => {
+    const requestVersion = warehouseSelectionRequestRef.current;
+    setIsSavingWorkSettings(true);
+    setWarehouseError('');
+    try {
+      const saved = await cityRequest<WarehouseAutomationSettings>(
+        `/api/residential-buildings/${buildingId}/warehouse/automation`,
+        { method: 'PUT', body: JSON.stringify(automation) },
+      );
+      if (requestVersion === warehouseSelectionRequestRef.current) {
+        setWarehouseAutomation(saved);
+      }
+    } catch (error) {
+      setWarehouseError(
+        error instanceof Error ? error.message : 'Não foi possível salvar a automação do armazém.',
+      );
     } finally {
       setIsSavingWorkSettings(false);
     }
@@ -2491,6 +2533,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
           <WarehousePanel
             building={selectedResidence}
             isOwner={isResidenceOwner}
+            automation={warehouseAutomation}
+            automationLoaded={warehouseAutomationLoaded}
             settings={warehouseSettings}
             stock={warehouseStock}
             averagePrices={warehouseAveragePrices}
@@ -2499,6 +2543,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             isSearchingSuppliers={isSearchingSuppliers}
             error={warehouseError}
             supplierMessage={warehouseSupplierMessage}
+            onSaveAutomation={(automation) =>
+              void saveWarehouseAutomation(selectedResidenceKey, automation)
+            }
             onSave={(setting) => void saveWarehouseSetting(selectedResidenceKey, setting)}
             onTransfer={(productId) => beginWarehouseTransfer(selectedResidenceKey, productId)}
             onSearchSuppliers={() => void searchWarehouseSuppliers(selectedResidenceKey)}

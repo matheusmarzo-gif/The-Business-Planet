@@ -80,6 +80,11 @@ export interface WarehouseLogistics {
   allowedProductIds?: readonly string[];
 }
 
+export interface TransferPlanOptions {
+  collectProduction?: boolean;
+  supplyDemand?: boolean;
+}
+
 export interface WarehouseStockDelta {
   warehouseId: string;
   productId: string;
@@ -255,6 +260,7 @@ export function allocateProportionalStock(
 export function planTransfersDetailed(
   warehouse: WarehouseLogistics,
   links: LogisticsLink[],
+  options: TransferPlanOptions = {},
 ): { transfers: Transfer[]; attempts: TransferAttempt[] } {
   const stock = new Map(warehouse.stock);
   let points = warehouse.workPoints;
@@ -341,95 +347,98 @@ export function planTransfersDetailed(
     transfers.push({ buildingId: link.buildingId, productId: product.id, quantity, direction });
   };
 
-  // Produtores enviam ao armazém; depois comércios recebem a mercadoria e produtores recebem insumos.
-  for (const link of sorted) {
-    const kind = getResidenceDefinition(link.type)?.kind;
-    if (
-      kind === 'farm' ||
-      kind === 'fishery' ||
-      kind === 'resource' ||
-      kind === 'workshop' ||
-      kind === 'industry'
-    ) {
-      move(link, 'out');
-    }
-  }
-  const linkedDemands = new Map<string, { buildingId: string; quantity: number }[]>();
-  const addDemand = (link: LogisticsLink, productId: string, quantity: number) => {
-    if (quantity <= 0) return;
-    const demands = linkedDemands.get(productId) ?? [];
-    demands.push({ buildingId: link.buildingId, quantity });
-    linkedDemands.set(productId, demands);
-  };
-  for (const link of sorted) {
-    const definition = getResidenceDefinition(link.type);
-    if (definition?.kind === 'shop' && definition.stockProductId) {
-      addDemand(
-        link,
-        definition.stockProductId,
-        getStockCapacity(definition, 'stock', link.stockLevels) - link.stock,
-      );
-    }
-    if (definition?.toolCapacity) {
-      addDemand(link, 'tools', getStockCapacity(definition, 'tools', link.stockLevels) - (link.toolStock ?? 0));
-    }
-    if (definition?.woodCapacity) {
-      addDemand(link, 'wood', getStockCapacity(definition, 'wood', link.stockLevels) - (link.woodStock ?? 0));
-    }
-    if (definition?.ironCapacity) {
-      addDemand(link, 'iron', getStockCapacity(definition, 'iron', link.stockLevels) - (link.ironStock ?? 0));
-    }
-    if (definition?.charcoalCapacity) {
-      addDemand(link, 'charcoal', getStockCapacity(definition, 'charcoal', link.stockLevels) - (link.charcoalStock ?? 0));
-    }
-    if (definition?.sugarcaneCapacity) {
-      addDemand(
-        link,
-        'sugarcane',
-        getStockCapacity(definition, 'sugarcane', link.stockLevels) - (link.sugarcaneStock ?? 0),
-      );
-    }
-    if (definition) {
-      for (const productId of getActiveInputProductIds(definition, link.selectedInputProductId)) {
-        addDemand(
-          link,
-          productId,
-          getStockCapacity(definition, `input:${productId}`, link.stockLevels) -
-            (link.inputStocks?.[productId] ?? 0),
-        );
+  if (options.collectProduction !== false) {
+    for (const link of sorted) {
+      const kind = getResidenceDefinition(link.type)?.kind;
+      if (
+        kind === 'farm' ||
+        kind === 'fishery' ||
+        kind === 'resource' ||
+        kind === 'workshop' ||
+        kind === 'industry'
+      ) {
+        move(link, 'out');
       }
     }
   }
-  const linkedAllocations = new Map<string, number>();
-  for (const [productId, demands] of linkedDemands) {
-    const available = Math.max(
-      0,
-      (stock.get(productId) ?? 0) - (warehouse.minimumStock.get(productId) ?? 0),
-    );
-    const keyedDemands = demands.map((item) => ({
-      ...item,
-      buildingId: `${item.buildingId}:${productId}`,
-    }));
-    const allocation = allocateProportionalStock(available, keyedDemands);
-    for (const [buildingId, quantity] of allocation) linkedAllocations.set(buildingId, quantity);
-  }
-  for (const link of sorted) {
-    const definition = getResidenceDefinition(link.type);
-    const allocationFor = (productId: string | undefined) =>
-      productId ? linkedAllocations.get(`${link.buildingId}:${productId}`) : undefined;
-    if (definition?.kind === 'shop' && definition.stockProductId) {
-      move(link, 'in', undefined, allocationFor(definition.stockProductId));
+  if (options.supplyDemand !== false) {
+    const linkedDemands = new Map<string, { buildingId: string; quantity: number }[]>();
+    const addDemand = (link: LogisticsLink, productId: string, quantity: number) => {
+      if (quantity <= 0) return;
+      const demands = linkedDemands.get(productId) ?? [];
+      demands.push({ buildingId: link.buildingId, quantity });
+      linkedDemands.set(productId, demands);
+    };
+    for (const link of sorted) {
+      const definition = getResidenceDefinition(link.type);
+      if (definition?.kind === 'shop' && definition.stockProductId) {
+        addDemand(
+          link,
+          definition.stockProductId,
+          getStockCapacity(definition, 'stock', link.stockLevels) - link.stock,
+        );
+      }
+      if (definition?.toolCapacity) {
+        addDemand(link, 'tools', getStockCapacity(definition, 'tools', link.stockLevels) - (link.toolStock ?? 0));
+      }
+      if (definition?.woodCapacity) {
+        addDemand(link, 'wood', getStockCapacity(definition, 'wood', link.stockLevels) - (link.woodStock ?? 0));
+      }
+      if (definition?.ironCapacity) {
+        addDemand(link, 'iron', getStockCapacity(definition, 'iron', link.stockLevels) - (link.ironStock ?? 0));
+      }
+      if (definition?.charcoalCapacity) {
+        addDemand(link, 'charcoal', getStockCapacity(definition, 'charcoal', link.stockLevels) - (link.charcoalStock ?? 0));
+      }
+      if (definition?.sugarcaneCapacity) {
+        addDemand(
+          link,
+          'sugarcane',
+          getStockCapacity(definition, 'sugarcane', link.stockLevels) - (link.sugarcaneStock ?? 0),
+        );
+      }
+      if (definition) {
+        for (const productId of getActiveInputProductIds(definition, link.selectedInputProductId)) {
+          addDemand(
+            link,
+            productId,
+            getStockCapacity(definition, `input:${productId}`, link.stockLevels) -
+              (link.inputStocks?.[productId] ?? 0),
+          );
+        }
+      }
     }
-    if (definition?.toolCapacity) move(link, 'in', 'tools', allocationFor('tools'));
-    if (definition?.woodCapacity) move(link, 'in', 'wood', allocationFor('wood'));
-    if (definition?.ironCapacity) move(link, 'in', 'iron', allocationFor('iron'));
-    if (definition?.charcoalCapacity) move(link, 'in', 'charcoal', allocationFor('charcoal'));
-    if (definition?.sugarcaneCapacity) {
-      move(link, 'in', 'sugarcane', allocationFor('sugarcane'));
+    const linkedAllocations = new Map<string, number>();
+    for (const [productId, demands] of linkedDemands) {
+      const available = Math.max(
+        0,
+        (stock.get(productId) ?? 0) - (warehouse.minimumStock.get(productId) ?? 0),
+      );
+      const keyedDemands = demands.map((item) => ({
+        ...item,
+        buildingId: `${item.buildingId}:${productId}`,
+      }));
+      const allocation = allocateProportionalStock(available, keyedDemands);
+      for (const [buildingId, quantity] of allocation) linkedAllocations.set(buildingId, quantity);
     }
-    if (definition) {
-      for (const productId of getActiveInputProductIds(definition, link.selectedInputProductId)) {
-        move(link, 'in', productId, allocationFor(productId));
+    for (const link of sorted) {
+      const definition = getResidenceDefinition(link.type);
+      const allocationFor = (productId: string | undefined) =>
+        productId ? linkedAllocations.get(`${link.buildingId}:${productId}`) : undefined;
+      if (definition?.kind === 'shop' && definition.stockProductId) {
+        move(link, 'in', undefined, allocationFor(definition.stockProductId));
+      }
+      if (definition?.toolCapacity) move(link, 'in', 'tools', allocationFor('tools'));
+      if (definition?.woodCapacity) move(link, 'in', 'wood', allocationFor('wood'));
+      if (definition?.ironCapacity) move(link, 'in', 'iron', allocationFor('iron'));
+      if (definition?.charcoalCapacity) move(link, 'in', 'charcoal', allocationFor('charcoal'));
+      if (definition?.sugarcaneCapacity) {
+        move(link, 'in', 'sugarcane', allocationFor('sugarcane'));
+      }
+      if (definition) {
+        for (const productId of getActiveInputProductIds(definition, link.selectedInputProductId)) {
+          move(link, 'in', productId, allocationFor(productId));
+        }
       }
     }
   }

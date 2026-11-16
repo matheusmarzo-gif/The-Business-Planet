@@ -2200,7 +2200,7 @@ async function getPlayerNames(userIds: readonly string[]): Promise<Map<string, s
   const { rows } = await authPool.query<{ id: string; name: string | null }>(
     `SELECT id, name
      FROM neon_auth."user"
-     WHERE id = ANY($1::text[])`,
+     WHERE id::text = ANY($1::text[])`,
     [uniqueIds],
   );
   return new Map(rows.map((row) => [row.id, row.name?.trim() || 'Jogador']));
@@ -10845,7 +10845,7 @@ async function start() {
       }
       const { rows } = connections.size
         ? await authPool.query<{ id: string; name: string | null; email: string | null }>(
-            'SELECT id, name, email FROM neon_auth."user" WHERE id = ANY($1::text[])',
+            'SELECT id, name, email FROM neon_auth."user" WHERE id::text = ANY($1::text[])',
             [[...connections.keys()]],
           )
         : { rows: [] };

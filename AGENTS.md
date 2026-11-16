@@ -89,7 +89,7 @@ Estas instruções se aplicam a todo o repositório, inclusive ao aplicativo em
   conteúdo:
 
   ```powershell
-  docker compose --env-file .\tilescape_projeto_completo_4000x4000_seed583921\.env.docker up -d --build game
+  docker compose --env-file .\tilescape_projeto_completo_4000x4000_seed583921\.env.docker up -d --build --force-recreate game
   ```
 
 - Não derrube nem recrie PostgreSQL/Redis sem necessidade e nunca use

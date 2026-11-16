@@ -238,7 +238,7 @@ com fast-forward e, a partir da raiz dessa cópia, reconstrua somente o jogo:
 
 ```powershell
 git pull --ff-only origin main
-docker compose --env-file .\tilescape_projeto_completo_4000x4000_seed583921\.env.docker up -d --build game
+docker compose --env-file .\tilescape_projeto_completo_4000x4000_seed583921\.env.docker up -d --build --force-recreate game
 docker compose ps
 Invoke-WebRequest http://localhost:3001/api/health
 ```

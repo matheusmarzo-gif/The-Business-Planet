@@ -222,6 +222,35 @@ conteúdo do Vite usam cache imutável de um ano. Imagens públicas são JPEG XL
 esse formato. O Render pode compilar o cliente e hospedar esse processo como Web
 Service.
 
+### Publicação no Docker do PC do servidor
+
+A cópia implantada fica em `C:\Valdora\The-Business-Planet`. O arquivo
+`docker-compose.yml` da raiz constrói o serviço `game` a partir de
+`tilescape_projeto_completo_4000x4000_seed583921/Dockerfile`; as configurações
+privadas usadas pelo Compose ficam em
+`tilescape_projeto_completo_4000x4000_seed583921/.env.docker`. O jogo é publicado
+em `127.0.0.1:3001`, atrás do Cloudflare Tunnel. Um push ao GitHub, por si só,
+não altera o contêiner que já está rodando.
+
+Para disponibilizar uma mudança, primeiro valide e publique o commit no GitHub.
+Depois confirme que a cópia implantada está limpa e na branch correta, atualize-a
+com fast-forward e, a partir da raiz dessa cópia, reconstrua somente o jogo:
+
+```powershell
+git pull --ff-only origin main
+docker compose --env-file .\tilescape_projeto_completo_4000x4000_seed583921\.env.docker up -d --build game
+docker compose ps
+Invoke-WebRequest http://localhost:3001/api/health
+```
+
+O endpoint de saúde deve retornar `{"status":"ok"}`. O serviço de aplicação
+conecta ao PostgreSQL e Redis definidos na configuração do Compose; reconstruir
+`game` não deve apagar nem recriar os volumes desses serviços. Não use
+`docker compose down -v` para publicar. Se a cópia estiver suja, houver divergência
+de branch ou algum passo de publicação falhar, preserve o estado e resolva o
+bloqueio antes de prosseguir; uma versão só está disponível após a checagem de
+saúde bem-sucedida.
+
 ## Autenticação e autorização
 
 1. `src/auth/AuthGate.tsx` restaura a sessão do Neon Auth e controla cadastro,

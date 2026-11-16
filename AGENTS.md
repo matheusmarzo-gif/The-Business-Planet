@@ -73,3 +73,30 @@ Estas instruções se aplicam a todo o repositório, inclusive ao aplicativo em
   gerados, dependências instaladas nem arquivos de usuário não relacionados.
 - Use mensagens de commit descritivas e inclua o trailer de coautoria exigido
   pelas instruções de commit do ambiente.
+
+## Publicação imediata no Docker do servidor
+
+- Depois de cada mudança solicitada e validada, publique o commit no GitHub e
+  disponibilize a versão na cópia implantada em
+  `C:\Valdora\The-Business-Planet`. Isso também se aplica a mudanças somente
+  em documentação, conforme solicitado pelo operador.
+- O push ao GitHub não atualiza contêineres automaticamente. Verifique a
+  branch, o remoto e a limpeza da cópia implantada antes de sincronizar com
+  `git pull --ff-only origin <branch>`. Se houver alterações locais, divergência
+  ou conflito, preserve os arquivos e pare para relatar o bloqueio.
+- A partir da raiz de `C:\Valdora\The-Business-Planet`, reconstrua somente o
+  serviço do jogo, usando o arquivo de ambiente privado sem ler ou imprimir seu
+  conteúdo:
+
+  ```powershell
+  docker compose --env-file .\tilescape_projeto_completo_4000x4000_seed583921\.env.docker up -d --build game
+  ```
+
+- Não derrube nem recrie PostgreSQL/Redis sem necessidade e nunca use
+  `docker compose down -v` como parte da publicação. Preserve os volumes de
+  dados.
+- Confirme `docker compose ps` e consulte
+  `http://localhost:3001/api/health`; a resposta esperada é
+  `{"status":"ok"}`. Só considere a publicação concluída quando o build, o
+  serviço `game` e a verificação de saúde forem bem-sucedidos. Se a implantação
+  falhar, informe o erro sem declarar a versão como publicada.

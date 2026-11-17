@@ -938,20 +938,7 @@ function getCityWellbeingById(
   );
 }
 
-const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, minimum_worker_technique, rent, occupants, wellbeing, desired_workers, work_points_done, price, stock, stock_levels, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
-  COALESCE((SELECT array_agg(link.warehouse_id::text ORDER BY link.warehouse_id)
-            FROM building_warehouse_links link
-            WHERE link.building_id = all_buildings.id), ARRAY[]::text[]) AS warehouse_ids,
-  COALESCE((SELECT jsonb_object_agg(input.product_id, input.quantity)
-            FROM building_input_stock input
-            WHERE input.building_id = all_buildings.id), '{}'::jsonb) AS input_stocks,
-  efficiency_penalty,
-  farm_auto_planting_enabled, farm_auto_planting_months, farm_planting_workers, farm_harvest_workers,
-  crop_phase, to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day, crop_ratio_sum, crop_days,
-  crop_yield, crop_harvested,
-  (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
-   WHERE j.workplace_id = all_buildings.id OR j.residence_id = all_buildings.id) AS employed,
-  (SELECT SUM(j.count * CASE
+const AVERAGE_WORKER_TECHNIQUE_SQL = (buildingId: string) => `(SELECT SUM(j.count * CASE
              WHEN LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) <= 100
                THEN 10 * (1 + LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) / 200)
              WHEN LEAST(200::float8, GREATEST(0::float8, home.wellbeing)) <= 125
@@ -970,7 +957,22 @@ const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y
            END) / NULLIF(SUM(j.count), 0)
    FROM job_assignments j
    JOIN all_buildings home ON home.id = j.residence_id
-   WHERE j.workplace_id = all_buildings.id) AS average_worker_technique,
+   WHERE j.workplace_id = ${buildingId})`;
+
+const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, minimum_worker_technique, rent, occupants, wellbeing, desired_workers, work_points_done, price, stock, stock_levels, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
+  COALESCE((SELECT array_agg(link.warehouse_id::text ORDER BY link.warehouse_id)
+            FROM building_warehouse_links link
+            WHERE link.building_id = all_buildings.id), ARRAY[]::text[]) AS warehouse_ids,
+  COALESCE((SELECT jsonb_object_agg(input.product_id, input.quantity)
+            FROM building_input_stock input
+            WHERE input.building_id = all_buildings.id), '{}'::jsonb) AS input_stocks,
+  efficiency_penalty,
+  farm_auto_planting_enabled, farm_auto_planting_months, farm_planting_workers, farm_harvest_workers,
+  crop_phase, to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day, crop_ratio_sum, crop_days,
+  crop_yield, crop_harvested,
+  (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
+   WHERE j.workplace_id = all_buildings.id OR j.residence_id = all_buildings.id) AS employed,
+  ${AVERAGE_WORKER_TECHNIQUE_SQL('all_buildings.id')} AS average_worker_technique,
   COALESCE((SELECT SUM(j.count * w.wage) FROM job_assignments j
             JOIN all_buildings w ON w.id = j.workplace_id
             WHERE j.residence_id = all_buildings.id)
@@ -7528,16 +7530,29 @@ async function start() {
         pool.query<{
           id: string;
           building_type: ResidenceType;
+          status: ResidentialBuilding['status'];
           building_number: number;
           tile_x: number;
           tile_y: number;
+          desired_workers: number;
+          employed: number;
+          work_hours_per_day: number;
+          wage: string;
+          average_worker_technique: number | null;
+          minimum_worker_technique: number;
+          price: string;
           employee_expense: string;
           revenue: string;
           units_sold: string;
           units_lost: string;
         }>(
-          `SELECT building.id, building.building_type, building.building_number,
-                  building.tile_x, building.tile_y,
+          `SELECT building.id, building.building_type, building.status, building.building_number,
+                  building.tile_x, building.tile_y, building.desired_workers,
+                  COALESCE((SELECT SUM(j.count)::int FROM job_assignments j
+                            WHERE j.workplace_id = building.id), 0) AS employed,
+                  building.work_hours_per_day, building.wage,
+                  ${AVERAGE_WORKER_TECHNIQUE_SQL('building.id')} AS average_worker_technique,
+                  building.minimum_worker_technique, building.price,
                   COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense,
                   COALESCE(SUM(history.units_sold::bigint * history.sale_price), 0)::text AS revenue,
                   COALESCE(SUM(history.units_sold), 0)::text AS units_sold,
@@ -7735,14 +7750,26 @@ async function start() {
         pool.query<{
           id: string;
           building_type: ResidenceType;
+          status: ResidentialBuilding['status'];
           building_number: number;
           tile_x: number;
           tile_y: number;
+          desired_workers: number;
+          employed: number;
+          work_hours_per_day: number;
+          wage: string;
+          average_worker_technique: number | null;
+          minimum_worker_technique: number;
           employee_expense: string;
           produced: string;
         }>(
-          `SELECT building.id, building.building_type, building.building_number,
-                  building.tile_x, building.tile_y,
+          `SELECT building.id, building.building_type, building.status, building.building_number,
+                  building.tile_x, building.tile_y, building.desired_workers,
+                  COALESCE((SELECT SUM(j.count)::int FROM job_assignments j
+                            WHERE j.workplace_id = building.id), 0) AS employed,
+                  building.work_hours_per_day, building.wage,
+                  ${AVERAGE_WORKER_TECHNIQUE_SQL('building.id')} AS average_worker_technique,
+                  building.minimum_worker_technique,
                   COALESCE(payroll.employee_expense, 0)::text AS employee_expense,
                   COALESCE(production.produced, 0)::text AS produced
            FROM all_buildings building
@@ -8060,9 +8087,16 @@ async function start() {
         shops: shopResult.rows.map((row) => ({
           id: row.id,
           type: row.building_type,
+          status: row.status,
           buildingNumber: row.building_number,
           x: row.tile_x,
           y: row.tile_y,
+          employed: row.employed,
+          desiredWorkers: row.desired_workers,
+          workHoursPerDay: row.work_hours_per_day,
+          wage: Number(row.wage),
+          averageWorkerTechnique: row.average_worker_technique,
+          minimumWorkerTechnique: row.minimum_worker_technique,
           employeeExpense: Number(row.employee_expense),
           revenue: Number(row.revenue),
           unitsSold: Number(row.units_sold),
@@ -8074,6 +8108,7 @@ async function start() {
             getShopProductUnitCostEstimate(row.building_type, productCosts),
             Number(row.employee_expense),
           ),
+          price: Number(row.price),
         })),
         residences: residenceResult.rows.map((row) => ({
           id: row.id,
@@ -8090,9 +8125,16 @@ async function start() {
         production: productionResult.rows.map((row) => ({
           id: row.id,
           type: row.building_type,
+          status: row.status,
           buildingNumber: row.building_number,
           x: row.tile_x,
           y: row.tile_y,
+          employed: row.employed,
+          desiredWorkers: row.desired_workers,
+          workHoursPerDay: row.work_hours_per_day,
+          wage: Number(row.wage),
+          averageWorkerTechnique: row.average_worker_technique,
+          minimumWorkerTechnique: row.minimum_worker_technique,
           employeeExpense: Number(row.employee_expense),
           produced: Number(row.produced),
           stockProductId: getResidenceDefinition(row.building_type)?.stockProductId ?? null,

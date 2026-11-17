@@ -1,4 +1,9 @@
-import { RESIDENCES, type ResidenceCost, type ResidenceType } from './residence.js';
+import {
+  RESIDENCES,
+  type ResidenceCost,
+  type ResidenceType,
+  type ResidentialBuildingStatus,
+} from './residence.js';
 import { roundCurrency } from './currency.js';
 
 export const ACCOUNTING_PERIOD_DAYS = [1, 7, 30] as const;
@@ -44,14 +49,22 @@ export interface AccountingBuildingPosition {
 export interface AccountingShop {
   id: string;
   type: ResidenceType;
+  status: ResidentialBuildingStatus;
   buildingNumber: number;
   x: number;
   y: number;
+  employed: number;
+  desiredWorkers: number;
+  workHoursPerDay: number;
+  wage: number;
+  averageWorkerTechnique: number | null;
+  minimumWorkerTechnique: number;
   employeeExpense: number;
   revenue: number;
   unitsSold: number;
   unitsLost: number;
   estimatedNetRevenue: number | null;
+  price: number;
 }
 
 export interface AccountingWarehouse {
@@ -86,9 +99,16 @@ export interface AccountingResidence {
 export interface AccountingProductionBuilding {
   id: string;
   type: ResidenceType;
+  status: ResidentialBuildingStatus;
   buildingNumber: number;
   x: number;
   y: number;
+  employed: number;
+  desiredWorkers: number;
+  workHoursPerDay: number;
+  wage: number;
+  averageWorkerTechnique: number | null;
+  minimumWorkerTechnique: number;
   employeeExpense: number;
   produced: number;
   stockProductId: string | null;

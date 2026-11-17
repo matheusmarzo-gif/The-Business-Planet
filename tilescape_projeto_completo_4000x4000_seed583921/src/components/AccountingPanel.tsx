@@ -1,6 +1,16 @@
 import { Fragment, useMemo, useState } from 'react';
 import { PRODUCTS } from '../types/product';
-import { getResidentialBuildingName, RESIDENCES, type ResidenceType } from '../types/residence';
+import {
+  getResidentialBuildingName,
+  MAX_WAGE,
+  MAX_WORKER_TECHNIQUE,
+  MAX_WORK_HOURS,
+  MIN_WORKER_TECHNIQUE,
+  MIN_WORK_HOURS,
+  RESIDENCES,
+  type ResidenceType,
+} from '../types/residence';
+import { getMaxDesiredWorkers } from '../types/employment';
 import { formatMoney } from '../types/wallet';
 import {
   ADVANCED_BASKET_PRODUCT_IDS,
@@ -19,6 +29,8 @@ import {
   summarizeAccountingShops,
   type AccountingBuildingPosition,
   type AccountingPeriodDays,
+  type AccountingProductionBuilding,
+  type AccountingShop,
   type AccountingWeekOffset,
   type AccountingSummary,
 } from '../types/accounting';
@@ -32,6 +44,16 @@ interface AccountingPanelProps {
   weekOffset: AccountingWeekOffset;
   onWeekChange: (offset: AccountingWeekOffset) => void;
   onViewBuilding: (building: AccountingBuildingPosition) => void;
+  onSaveWorkSettings: (
+    buildingId: string,
+    settings: {
+      wage: number;
+      workHoursPerDay: number;
+      desiredWorkers: number;
+      minimumWorkerTechnique: number;
+    },
+  ) => Promise<void>;
+  onSavePrice: (buildingId: string, price: number) => Promise<void>;
   onClose: () => void;
 }
 
@@ -39,6 +61,7 @@ const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const quantity = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 const unitCost = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 const benefit = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 6 });
+const technique = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 
 const SHOP_BASKET_GROUPS = [
   { id: 'basic', label: 'Cesta básica', productIds: BASIC_BASKET_PRODUCT_IDS },
@@ -62,6 +85,167 @@ const SHOP_GROUP_BY_PRODUCT = new Map<string, string>(
 const getShopBasketGroup = (type: ResidenceType) =>
   SHOP_GROUP_BY_PRODUCT.get(RESIDENCES[type].stockProductId ?? '') ?? 'other';
 
+function AccountingBuildingDetails({
+  building,
+  onSaveWorkSettings,
+  onSavePrice,
+}: {
+  building: AccountingShop | AccountingProductionBuilding;
+  onSaveWorkSettings: AccountingPanelProps['onSaveWorkSettings'];
+  onSavePrice: AccountingPanelProps['onSavePrice'];
+}) {
+  const [desiredWorkers, setDesiredWorkers] = useState(String(building.desiredWorkers));
+  const [workHoursPerDay, setWorkHoursPerDay] = useState(String(building.workHoursPerDay));
+  const [wage, setWage] = useState(String(building.wage));
+  const [minimumWorkerTechnique, setMinimumWorkerTechnique] = useState(
+    String(building.minimumWorkerTechnique),
+  );
+  const [price, setPrice] = useState('price' in building ? String(building.price) : '');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isSavingPrice, setIsSavingPrice] = useState(false);
+  const [message, setMessage] = useState('');
+  const isShop = 'price' in building;
+
+  return (
+    <div
+      className={`accounting-building-details${isShop ? ' accounting-shop-details' : ''}`}
+      id={`accounting-building-${building.id}`}
+    >
+      <div className="accounting-building-fields">
+        <label>
+          Funcionários atuais
+          <output>{integer.format(building.employed)}</output>
+        </label>
+        <label>
+          Funcionários desejados
+          <input
+            type="number"
+            min={0}
+            max={getMaxDesiredWorkers(building.type, building.status)}
+            step={1}
+            required
+            value={desiredWorkers}
+            disabled={isSavingSettings}
+            onChange={(event) => setDesiredWorkers(event.target.value)}
+          />
+        </label>
+        <label>
+          Carga horária (horas/dia)
+          <input
+            type="number"
+            min={MIN_WORK_HOURS}
+            max={MAX_WORK_HOURS}
+            step={1}
+            required
+            value={workHoursPerDay}
+            disabled={isSavingSettings}
+            onChange={(event) => setWorkHoursPerDay(event.target.value)}
+          />
+        </label>
+        <label>
+          Salário (C$ por dia)
+          <input
+            type="number"
+            min={0}
+            max={MAX_WAGE}
+            step={0.01}
+            required
+            value={wage}
+            disabled={isSavingSettings}
+            onChange={(event) => setWage(event.target.value)}
+          />
+        </label>
+        <label>
+          Técnica média atual
+          <output>
+            {building.averageWorkerTechnique === null
+              ? '—'
+              : technique.format(building.averageWorkerTechnique)}
+          </output>
+        </label>
+        <label>
+          Técnica mínima desejável
+          <input
+            type="number"
+            min={MIN_WORKER_TECHNIQUE}
+            max={MAX_WORKER_TECHNIQUE}
+            step={1}
+            required
+            value={minimumWorkerTechnique}
+            disabled={isSavingSettings}
+            onChange={(event) => setMinimumWorkerTechnique(event.target.value)}
+          />
+        </label>
+        {isShop && (
+          <label>
+            Preço de venda (C$)
+            <input
+              type="number"
+              min={0.01}
+              max={100000}
+              step={0.01}
+              required
+              value={price}
+              disabled={isSavingPrice}
+              onChange={(event) => setPrice(event.target.value)}
+            />
+          </label>
+        )}
+      </div>
+      <div className="accounting-building-actions">
+        <button
+          type="button"
+          disabled={isSavingSettings}
+          onClick={async () => {
+            setIsSavingSettings(true);
+            setMessage('');
+            try {
+              await onSaveWorkSettings(building.id, {
+                wage: Number(wage),
+                workHoursPerDay: Number(workHoursPerDay),
+                desiredWorkers: Number(desiredWorkers),
+                minimumWorkerTechnique: Number(minimumWorkerTechnique),
+              });
+              setMessage('Configurações salvas.');
+            } catch (error) {
+              setMessage(
+                error instanceof Error ? error.message : 'Não foi possível salvar as configurações.',
+              );
+            } finally {
+              setIsSavingSettings(false);
+            }
+          }}
+        >
+          {isSavingSettings ? 'Salvando…' : 'Salvar funcionários e jornada'}
+        </button>
+        {isShop && (
+          <button
+            type="button"
+            disabled={isSavingPrice}
+            onClick={async () => {
+              setIsSavingPrice(true);
+              setMessage('');
+              try {
+                await onSavePrice(building.id, Number(price));
+                setMessage('Preço de venda salvo.');
+              } catch (error) {
+                setMessage(
+                  error instanceof Error ? error.message : 'Não foi possível salvar o preço.',
+                );
+              } finally {
+                setIsSavingPrice(false);
+              }
+            }}
+          >
+            {isSavingPrice ? 'Salvando…' : 'Salvar preço'}
+          </button>
+        )}
+        {message && <small role="status">{message}</small>}
+      </div>
+    </div>
+  );
+}
+
 export default function AccountingPanel({
   summary,
   isLoading,
@@ -71,6 +255,8 @@ export default function AccountingPanel({
   weekOffset,
   onWeekChange,
   onViewBuilding,
+  onSaveWorkSettings,
+  onSavePrice,
   onClose,
 }: AccountingPanelProps) {
   const [activeTab, setActiveTab] = useState<
@@ -78,6 +264,15 @@ export default function AccountingPanel({
   >('summary');
   const [productSearch, setProductSearch] = useState('');
   const [shopTypeFilter, setShopTypeFilter] = useState<ResidenceType | 'all'>('all');
+  const [expandedBuildings, setExpandedBuildings] = useState<Set<string>>(() => new Set());
+  const toggleBuildingDetails = (buildingId: string) => {
+    setExpandedBuildings((current) => {
+      const next = new Set(current);
+      if (next.has(buildingId)) next.delete(buildingId);
+      else next.add(buildingId);
+      return next;
+    });
+  };
   const periodLabel = getAccountingPeriodLabel(periodDays);
   const weeklySummary = summary?.weeklySummary;
   const shops = summary?.shops ?? [];
@@ -318,8 +513,21 @@ export default function AccountingPanel({
               <Fragment key={group.id}>
                 <div className="accounting-shop-group">{group.label}</div>
                 {group.shops.map((shop) => (
-                  <div className="accounting-row accounting-shop-row" key={shop.id}>
-                    <span>{getResidentialBuildingName(shop.type, shop.buildingNumber)}</span>
+                  <Fragment key={shop.id}>
+                  <div className="accounting-row accounting-shop-row">
+                    <span className="accounting-building-name">
+                      {getResidentialBuildingName(shop.type, shop.buildingNumber)}
+                      <button
+                        type="button"
+                        className="accounting-expand-button"
+                        aria-label={`${expandedBuildings.has(shop.id) ? 'Ocultar' : 'Editar'} ${getResidentialBuildingName(shop.type, shop.buildingNumber)}`}
+                        aria-expanded={expandedBuildings.has(shop.id)}
+                        aria-controls={`accounting-building-${shop.id}`}
+                        onClick={() => toggleBuildingDetails(shop.id)}
+                      >
+                        {expandedBuildings.has(shop.id) ? '−' : '+'}
+                      </button>
+                    </span>
                     <span>{formatMoney(shop.employeeExpense)}</span>
                     <span>{formatMoney(shop.revenue)}</span>
                     <span>{integer.format(shop.unitsSold)}</span>
@@ -337,6 +545,14 @@ export default function AccountingPanel({
                       Visualizar
                     </button>
                   </div>
+                  {expandedBuildings.has(shop.id) && (
+                    <AccountingBuildingDetails
+                      building={shop}
+                      onSaveWorkSettings={onSaveWorkSettings}
+                      onSavePrice={onSavePrice}
+                    />
+                  )}
+                  </Fragment>
                 ))}
               </Fragment>
             ))}
@@ -473,14 +689,35 @@ export default function AccountingPanel({
                 ? `${integer.format(building.produced)} ${product?.name ?? building.stockProductId}`
                 : integer.format(building.produced);
               return (
-                <div className="accounting-four-row" key={building.id}>
-                  <span>{getResidentialBuildingName(building.type, building.buildingNumber)}</span>
+                <Fragment key={building.id}>
+                  <div className="accounting-four-row">
+                  <span className="accounting-building-name">
+                    {getResidentialBuildingName(building.type, building.buildingNumber)}
+                    <button
+                      type="button"
+                      className="accounting-expand-button"
+                      aria-label={`${expandedBuildings.has(building.id) ? 'Ocultar' : 'Editar'} ${getResidentialBuildingName(building.type, building.buildingNumber)}`}
+                      aria-expanded={expandedBuildings.has(building.id)}
+                      aria-controls={`accounting-building-${building.id}`}
+                      onClick={() => toggleBuildingDetails(building.id)}
+                    >
+                      {expandedBuildings.has(building.id) ? '−' : '+'}
+                    </button>
+                  </span>
                   <span>{formatMoney(building.employeeExpense)}</span>
                   <span>{produced}</span>
                   <button type="button" className="accounting-view-button" onClick={() => onViewBuilding(building)}>
                     Visualizar
                   </button>
-                </div>
+                  </div>
+                  {expandedBuildings.has(building.id) && (
+                    <AccountingBuildingDetails
+                      building={building}
+                      onSaveWorkSettings={onSaveWorkSettings}
+                      onSavePrice={onSavePrice}
+                    />
+                  )}
+                </Fragment>
               );
             })}
           </div>

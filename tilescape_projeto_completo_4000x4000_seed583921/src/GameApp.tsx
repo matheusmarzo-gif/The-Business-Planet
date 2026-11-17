@@ -1584,6 +1584,73 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setIsSavingWorkSettings(false);
     }
   };
+  const updateAccountingBuilding = (building: ResidentialBuilding) => {
+    setResidentialBuildings((current) =>
+      current.map((item) =>
+        item.id === building.id
+          ? {
+              ...building,
+              ownerName: building.ownerName ?? item.ownerName,
+              isOwnedByCurrentUser: item.isOwnedByCurrentUser,
+            }
+          : item,
+      ),
+    );
+    setAccountingSummary((current) => current && ({
+      ...current,
+      shops: current.shops.map((shop) =>
+        shop.id === building.id
+          ? {
+              ...shop,
+              status: building.status,
+              employed: building.employed,
+              desiredWorkers: building.desiredWorkers,
+              workHoursPerDay: building.workHoursPerDay,
+              wage: building.wage,
+              averageWorkerTechnique: building.averageWorkerTechnique,
+              minimumWorkerTechnique: building.minimumWorkerTechnique,
+              price: building.price,
+            }
+          : shop,
+      ),
+      production: current.production.map((item) =>
+        item.id === building.id
+          ? {
+              ...item,
+              status: building.status,
+              employed: building.employed,
+              desiredWorkers: building.desiredWorkers,
+              workHoursPerDay: building.workHoursPerDay,
+              wage: building.wage,
+              averageWorkerTechnique: building.averageWorkerTechnique,
+              minimumWorkerTechnique: building.minimumWorkerTechnique,
+            }
+          : item,
+      ),
+    }));
+  };
+  const saveAccountingWorkSettings = async (
+    buildingId: string,
+    settings: {
+      wage: number;
+      workHoursPerDay: number;
+      desiredWorkers: number;
+      minimumWorkerTechnique: number;
+    },
+  ) => {
+    const building = await cityRequest<ResidentialBuilding>(
+      `/api/residential-buildings/${buildingId}/work-settings`,
+      { method: 'PATCH', body: JSON.stringify(settings) },
+    );
+    updateAccountingBuilding(building);
+  };
+  const saveAccountingPrice = async (buildingId: string, price: number) => {
+    const building = await cityRequest<ResidentialBuilding>(
+      `/api/residential-buildings/${buildingId}/price`,
+      { method: 'PATCH', body: JSON.stringify({ price }) },
+    );
+    updateAccountingBuilding(building);
+  };
   const saveInputProduct = async (buildingId: string, productId: string) => {
     if (!window.confirm('Trocar a matéria-prima descartará o estoque atual dela. Deseja continuar?')) {
       return;
@@ -2518,6 +2585,8 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
               void loadAccounting(accountingPeriodDays, offset);
             }}
             onViewBuilding={viewAccountingBuilding}
+            onSaveWorkSettings={saveAccountingWorkSettings}
+            onSavePrice={saveAccountingPrice}
             onClose={() => setIsAccountingOpen(false)}
           />
         )}

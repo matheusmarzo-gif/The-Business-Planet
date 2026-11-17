@@ -1159,15 +1159,21 @@ estimativa disponível, o resultado aparece como indisponível quando houve vend
 ou perdas. As lojas podem ser filtradas por tipo nos blocos correspondentes às
 cestas de consumo; as linhas também são agrupadas por cesta. A linha final soma
 as lojas visíveis, e a receita líquida estimada total fica indisponível se alguma
-loja visível não tiver estimativa. **Visualizar**
-centraliza a loja no mapa e abre seus detalhes. **Armazéns** mostra os armazéns do jogador (também com **Visualizar**),
+loja visível não tiver estimativa. Use **+** ao lado do nome para expandir
+funcionários atuais e desejados, carga horária, salário, técnica média atual e
+técnica mínima desejável; lojas também permitem editar o preço de venda. Salve
+cada grupo de campos no controle correspondente. **Visualizar** centraliza a
+loja no mapa e abre seus detalhes.
+**Armazéns** mostra os armazéns do jogador (também com **Visualizar**),
 salários pagos e, por produto,
 quantidades e valores comprados/vendidos, além do resultado bruto (receita de
 vendas menos custo de compras). O resultado por produto não desconta salários.
 **Residências** lista moradores, capacidade e aluguel efetivamente gerado para
 cada casa no período selecionado, com o mesmo atalho **Visualizar**. **Produção**
 lista fazendas, pesqueiros, recursos e oficinas, seus salários e unidades
-produzidas no período selecionado. **Produto** lista todos os produtos com o
+produzidas no período selecionado. Use **+** para expandir funcionários atuais
+e desejados, carga horária, salário, técnica média atual e técnica mínima
+desejável. **Produto** lista todos os produtos com o
 estoque atual, produção, compras e vendas entre jogadores, consumo e custo
 unitário estimado no período. O consumo separa residências e insumos industriais
 no detalhe ao passar o cursor. **Lojas e perda de estoque** soma as vendas das

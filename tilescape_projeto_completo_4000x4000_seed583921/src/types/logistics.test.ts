@@ -87,7 +87,7 @@ test('silos only hold their configured resources during local transport and ware
     maximumStock: new Map(),
     capacityM3: 400,
     workPoints: 10000,
-    allowedProductIds: ['wheat', 'barley', 'potato', 'corn', 'rice', 'spices', 'cocoa', 'sugarcane', 'olive', 'grape', 'tobacco_leaf'],
+    allowedProductIds: ['wheat', 'barley', 'potato', 'corn', 'rice', 'fruit', 'spices', 'cocoa', 'sugarcane', 'olive', 'grape', 'tobacco_leaf'],
   };
   const localTransfers = planTransfersDetailed(silo, [
     { buildingId: 'dairy-farm', type: 'farm_dairy', stock: 20 },
@@ -95,6 +95,7 @@ test('silos only hold their configured resources during local transport and ware
   ]);
   assert.deepEqual(localTransfers.transfers, []);
   assert.equal(canStoreProduct('silo', 'wheat'), true);
+  assert.equal(canStoreProduct('silo', 'fruit'), true);
   assert.equal(canStoreProduct('silo', 'milk'), false);
   const allowedLocalTransfer = planTransfersDetailed(
     {
@@ -112,6 +113,19 @@ test('silos only hold their configured resources during local transport and ware
   assert.deepEqual(allowedLocalTransfer.transfers, [{
     buildingId: 'flour-mill',
     productId: 'wheat',
+    quantity: 5,
+    direction: 'in',
+  }]);
+  const fruitTransfer = planTransfersDetailed(
+    {
+      ...silo,
+      stock: new Map([['fruit', 5]]),
+    },
+    [{ buildingId: 'fruit-shop', type: 'shop_fruit', stock: 0 }],
+  );
+  assert.deepEqual(fruitTransfer.transfers, [{
+    buildingId: 'fruit-shop',
+    productId: 'fruit',
     quantity: 5,
     direction: 'in',
   }]);

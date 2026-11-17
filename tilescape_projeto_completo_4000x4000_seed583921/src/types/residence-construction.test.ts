@@ -187,6 +187,7 @@ test('orders construction menus and applies the requested costs', () => {
     'potato',
     'corn',
     'rice',
+    'fruit',
     'spices',
     'cocoa',
     'sugarcane',

@@ -507,8 +507,9 @@ pesada; cada compra é limitada aos Work Points disponíveis naquela rodada.
 
 O **Silo** também fica em Indústrias. Tem 4 × 4 tiles, até 100 funcionários,
 capacidade de 400 m³ e custa 300 madeiras, 60 pedras e 20.000 Work Points.
-Só pode armazenar Trigo, Cevada, Batata, Milho, Arroz, Especiarias, Cacau, Cana,
-Azeitona, Uva, Fumo, Algodão e Lã; transferências e compras/vendas respeitam essa lista.
+Só pode armazenar Trigo, Cevada, Batata, Milho, Arroz, Frutas, Especiarias,
+Cacau, Cana, Azeitona, Uva, Fumo, Algodão e Lã; transferências e compras/vendas
+respeitam essa lista.
 Assim como o Armazém, ao clicar nele é possível abrir **Produtos e estoque** e
 configurar os produtos permitidos.
 

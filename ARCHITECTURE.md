@@ -474,9 +474,9 @@ mapeamento e verificar todas as curvas.
 - `silo` (categoria Indústrias, `kind: 'warehouse'`, área rural, estrada
   adjacente) ocupa 4 × 4, emprega até 100 pessoas e tem 400 m³ de capacidade.
   Custa 300 madeiras, 60 pedras e 20.000 Work Points. Só armazena Trigo,
-  Cevada, Batata, Milho, Arroz, Especiarias, Cacau, Cana, Azeitona, Uva e Fumo;
-  a restrição também é aplicada a transferências locais/manuais, compras e
-  vendas. Sprite `public/buildings/industrial/silo.png`.
+  Cevada, Batata, Milho, Arroz, Fruta, Especiarias, Cacau, Cana, Azeitona, Uva,
+  Fumo, Algodão e Lã; a restrição também é aplicada a transferências locais/manuais,
+  compras e vendas. Sprite `public/buildings/industrial/silo.png`.
 - `shop_rice` (categoria Comerciais, área urbana, `kind: 'shop'`) também usa o
   catálogo e a tabela `all_buildings`: 2 × 2, até 1 funcionário,
   estoque máximo de 5 de Arroz, 10 madeiras e 5 pedras, 5.000 Work Points.

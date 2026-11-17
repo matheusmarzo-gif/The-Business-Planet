@@ -546,6 +546,7 @@ describe('warehouse logistics', () => {
     assert.equal(isStorageBuilding('silo'), true);
     assert.equal(isStorageBuilding('farm_rice'), false);
     assert.equal(canStoreProduct('silo', 'wheat'), true);
+    assert.equal(canStoreProduct('silo', 'fruit'), true);
     assert.equal(canStoreProduct('silo', 'cotton'), true);
     assert.equal(canStoreProduct('silo', 'wool'), true);
     assert.equal(canStoreProduct('silo', 'milk'), false);

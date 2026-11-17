@@ -2627,9 +2627,10 @@ describe('municipal zones', () => {
           RESIDENCES.house_poor3.localAppeal,
           RESIDENCES.house_poor3.cost.wood,
           RESIDENCES.house_poor3.cost.stone,
+          RESIDENCES.house_poor3.cost.iron,
           RESIDENCES.house_poor3.workPoints,
         ],
-        [4, 4, 128, 30, 1200, 2000, 300000],
+        [4, 4, 128, 30, 1500, 1000, 200, 3300000],
       );
       assert.equal(isTileInResidenceFootprint(first, { x: 21, y: 21 }), true);
       assert.equal(isTileInResidenceFootprint(first, { x: 22, y: 21 }), false);

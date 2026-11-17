@@ -179,7 +179,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `server/database-query-traffic.ts` | Identificadores estáveis de consultas e estimativa em UTF-8 do JSON retornado pelo PostgreSQL. |
 | `database/schema.sql` | DDL aplicado pelo servidor durante a inicialização. |
 | `config/demanda_basica.txt` | Multiplicadores de demanda residencial por produto, carregados na inicialização do servidor. |
-| `config/construcoes/*.txt` | Dados editáveis das 58 construções, um JSON por arquivo. |
+| `config/construcoes/*.txt` | Dados editáveis das 89 construções, um JSON por arquivo. |
 | `config/formulas/*.txt` | Parâmetros editáveis de consumo, trabalho e transporte. |
 | `server/generate-game-config.ts` | Valida os TXT e gera o módulo de configuração compartilhado. |
 | `src/generated/gameConfig.ts` | Saída ignorada pelo Git, regenerada pelos comandos npm antes de uso. |
@@ -421,20 +421,27 @@ mapeamento e verificar todas as curvas.
 ## Residências
 
 - A ordem de construção é explícita em `getConstructionMenuDefinitions`:
-  Comerciais (lojas de arroz, trigo, cevada, batata e milho; Peixaria, Leitaria,
+  Residências (simples, médias e altas, em três tamanhos), Comerciais
+  (lojas de arroz, trigo, cevada, batata e milho; Peixaria, Leitaria,
   Açougue; lojas de açúcar, especiarias, vegetais e sal; Padaria, Queijaria,
   Frutaria, Chocolateria), Fazendas (arroz, trigo, cevada, batata, milho,
   leiteira, bovina, cana, vegetais, especiarias, cacau, frutas), Artesanais
   (Pesqueiro, Ferramentaria, Carvoaria, Casa de Engenho) e Indústrias (Armazém,
   Moinho, Fábrica de Pães, Fábrica de Queijo, Fábrica de Chocolate). O painel
-  exibe custos em madeira, pedra e ferro quando definidos.
-- O catálogo gerado em `src/generated/gameConfig.ts` define `house_poor1`
-  (2 × 2 tiles, capacidade 4, apreço local 50, custo de 100 madeiras e 30
-  pedras, 18.000 Work Points), `house_poor2` (3 × 3, capacidade 32, apreço
-  local 40, custo de 300 madeiras e 450 pedras, 67.500 Work Points) e
-  `house_poor3` (4 × 4, capacidade 128, apreço local 30, custo de 1.200
-  madeiras e 2.000 pedras, 300.000 Work Points). As três são residências urbanas
-  com estrada adjacente, imigração e aluguel.
+  exibe custos em madeira, pedra, ferro e aço quando definidos.
+- O catálogo gerado em `src/generated/gameConfig.ts` define nove residências
+  urbanas com estrada adjacente, imigração e aluguel. Simples 1/2/3 medem 2 × 2,
+  3 × 3 e 4 × 4 tiles; têm capacidade 4/32/128 e apreço local 50/40/30. Seus
+  custos são, respectivamente, 60 madeiras/10 pedras/10.000 Work Points,
+  300 madeiras/250 pedras/150.000 Work Points e
+  1.500 madeiras/1.000 pedras/200 ferro/3.300.000 Work Points. As médias 1/2/3
+  mantêm as mesmas dimensões e capacidades, com apreço 70/55/40 e custos de
+  90 madeiras/15 pedras/15.000 Work Points, 450 madeiras/375 pedras/225.000
+  Work Points e 2.250 madeiras/1.500 pedras/300 ferro/100 aço/4.000.000 Work
+  Points. As altas 1/2/3 também mantêm essas dimensões e capacidades, com apreço
+  100/80/60 e custos de 180 madeiras/30 pedras/15 ferro/15.000 Work Points,
+  900 madeiras/750 pedras/50 ferro/50 aço/225.000 Work Points e
+  4.500 madeiras/3.000 pedras/600 ferro/250 aço/4.000.000 Work Points.
 - `warehouse` (categoria Indústrias, `kind: 'warehouse'`, área rural, estrada
   adjacente) usa o mesmo catálogo/tabela: 4 × 4, até 100 funcionários,
   capacidade de 50 m³ para qualquer produto, 300 madeiras, 60 pedras e 20.000
@@ -793,7 +800,7 @@ mapeamento e verificar todas as curvas.
 
   ## Configuração editável das regras
 
-  Os 83 arquivos `config/construcoes/<tipo>.txt` são a fonte dos dados do catálogo:
+  Os 89 arquivos `config/construcoes/<tipo>.txt` são a fonte dos dados do catálogo:
   nome, imagem pública, categoria funcional, zona e requisitos de posicionamento,
   dimensões, custos, Work Points de obra, capacidade de trabalhadores, estoques
   de produtos/insumos, receitas, regras de produção e safras sazonais. Os arquivos

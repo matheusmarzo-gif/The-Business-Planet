@@ -290,6 +290,8 @@ ALTER TABLE all_buildings
   ADD CONSTRAINT all_buildings_building_type_check
     CHECK (building_type IN (
       'house_poor1', 'house_poor2', 'house_poor3',
+      'house_middle', 'house_middle2', 'house_middle3',
+      'house_high', 'house_high2', 'house_high3',
       'farm_rice', 'farm_potato', 'farm_wheat', 'farm_barley', 'farm_corn',
       'farm_cattle', 'farm_dairy', 'farm_cane', 'farm_spices', 'farm_vegetables',
       'farm_fruit', 'farm_cocoa', 'farm_sheep', 'farm_cotton',

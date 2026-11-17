@@ -1,0 +1,18 @@
+{
+  "type": "house_middle2",
+  "kind": "residence",
+  "requiredZone": "urban",
+  "requiresRoad": true,
+  "name": "Residência média 2",
+  "asset": "/buildings/residences/house_middle2.jxl",
+  "width": 3,
+  "height": 3,
+  "capacity": 32,
+  "localAppeal": 55,
+  "cost": {
+    "wood": 450,
+    "stone": 375
+  },
+  "workPoints": 225000,
+  "maxWorkers": 20
+}

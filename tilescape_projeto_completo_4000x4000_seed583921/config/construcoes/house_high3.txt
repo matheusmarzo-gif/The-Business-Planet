@@ -1,0 +1,20 @@
+{
+  "type": "house_high3",
+  "kind": "residence",
+  "requiredZone": "urban",
+  "requiresRoad": true,
+  "name": "Residência alta 3",
+  "asset": "/buildings/residences/house_high3.jxl",
+  "width": 4,
+  "height": 4,
+  "capacity": 128,
+  "localAppeal": 60,
+  "cost": {
+    "wood": 4500,
+    "stone": 3000,
+    "iron": 600,
+    "steel": 250
+  },
+  "workPoints": 4000000,
+  "maxWorkers": 0
+}

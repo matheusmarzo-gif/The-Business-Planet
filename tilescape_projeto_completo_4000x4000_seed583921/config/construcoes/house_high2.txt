@@ -1,0 +1,20 @@
+{
+  "type": "house_high2",
+  "kind": "residence",
+  "requiredZone": "urban",
+  "requiresRoad": true,
+  "name": "Residência alta 2",
+  "asset": "/buildings/residences/house_high2.jxl",
+  "width": 3,
+  "height": 3,
+  "capacity": 32,
+  "localAppeal": 80,
+  "cost": {
+    "wood": 900,
+    "stone": 750,
+    "iron": 50,
+    "steel": 50
+  },
+  "workPoints": 225000,
+  "maxWorkers": 20
+}

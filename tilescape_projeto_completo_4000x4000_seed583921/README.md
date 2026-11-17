@@ -289,7 +289,7 @@ persistidos pelo servidor; armazéns e silos mantêm seus limites próprios em m
 
 ### Configuração editável do jogo
 
-Os dados das 58 construções ficam em arquivos individuais
+Os dados das 89 construções ficam em arquivos individuais
 [`config/construcoes/`](./config/construcoes/), um JSON válido por arquivo
 `.txt` nomeado pelo tipo interno (por exemplo, `farm_rice.txt`). É possível
 ajustar dimensões, zona, estrada/água exigida, custo de Madeira/Pedra/Ferro/Aço, Work
@@ -385,7 +385,7 @@ por litro de leite.
 
 ### Residências
 
-Na categoria **Residências**, selecione uma das três casas para ver no cursor
+Na categoria **Residências**, selecione uma das nove casas para ver no cursor
 uma prévia verde/vermelha. Cada tile da casa precisa estar coberto por uma ou
 mais áreas urbanas da cidade; o footprint pode atravessar regiões urbanas
 vizinhas. Também precisa ficar em terra, sem ocupar outra construção ou estrada
@@ -393,12 +393,18 @@ e ao lado de uma estrada. Clique para iniciar a obra:
 
 | Residência | Tamanho | Capacidade | Apreço da construção | Custo | Trabalho necessário |
 | --- | --- | --- | --- | --- | --- |
-| Simples 1 | 2 × 2 tiles | 4 pessoas | 50 | 100 madeiras, 30 pedras | 18.000 Work Points |
-| Simples 2 | 3 × 3 tiles | 32 pessoas | 40 | 300 madeiras, 450 pedras | 67.500 Work Points |
-| Simples 3 | 4 × 4 tiles | 128 pessoas | 30 | 1.200 madeiras, 2.000 pedras | 300.000 Work Points |
+| Simples 1 | 2 × 2 tiles | 4 pessoas | 50 | 60 madeiras, 10 pedras | 10.000 Work Points |
+| Simples 2 | 3 × 3 tiles | 32 pessoas | 40 | 300 madeiras, 250 pedras | 150.000 Work Points |
+| Simples 3 | 4 × 4 tiles | 128 pessoas | 30 | 1.500 madeiras, 1.000 pedras, 200 ferro | 3.300.000 Work Points |
+| Média 1 | 2 × 2 tiles | 4 pessoas | 70 | 90 madeiras, 15 pedras | 15.000 Work Points |
+| Média 2 | 3 × 3 tiles | 32 pessoas | 55 | 450 madeiras, 375 pedras | 225.000 Work Points |
+| Média 3 | 4 × 4 tiles | 128 pessoas | 40 | 2.250 madeiras, 1.500 pedras, 300 ferro, 100 aço | 4.000.000 Work Points |
+| Alta 1 | 2 × 2 tiles | 4 pessoas | 100 | 180 madeiras, 30 pedras, 15 ferro | 15.000 Work Points |
+| Alta 2 | 3 × 3 tiles | 32 pessoas | 80 | 900 madeiras, 750 pedras, 50 ferro, 50 aço | 225.000 Work Points |
+| Alta 3 | 4 × 4 tiles | 128 pessoas | 60 | 4.500 madeiras, 3.000 pedras, 600 ferro, 250 aço | 4.000.000 Work Points |
 
 Todos os jogadores podem iniciar construções das seis categorias. Para jogadores
-que não são Master, o custo de Madeira, Pedra e, quando indicado, Ferro é
+que não são Master, o custo de Madeira, Pedra, Ferro e Aço, quando indicados, é
 descontado dos armazéns concluídos do próprio jogador a até 60 tiles do centro
 da construção; o servidor exige os materiais e faz a cobrança atomicamente ao
 iniciar a obra. Se o

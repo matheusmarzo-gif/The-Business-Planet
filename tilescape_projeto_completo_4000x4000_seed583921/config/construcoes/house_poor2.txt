@@ -11,8 +11,8 @@
     "localAppeal":  40,
     "cost":  {
                  "wood":  300,
-                 "stone":  450
+                 "stone":  250
              },
-    "workPoints":  67500,
+    "workPoints":  150000,
     "maxWorkers":  20
 }

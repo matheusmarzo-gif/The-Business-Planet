@@ -55,6 +55,36 @@ test('allows every catalog construction in the database building type constraint
 
 test('orders construction menus and applies the requested costs', () => {
   assert.deepEqual(
+    getConstructionMenuDefinitions('residencias').map(({ type }) => type),
+    [
+      'house_poor1',
+      'house_poor2',
+      'house_poor3',
+      'house_middle',
+      'house_middle2',
+      'house_middle3',
+      'house_high',
+      'house_high2',
+      'house_high3',
+    ],
+  );
+  assert.deepEqual(
+    getConstructionMenuDefinitions('residencias').map(
+      ({ width, height, capacity, localAppeal }) => [width, height, capacity, localAppeal],
+    ),
+    [
+      [2, 2, 4, 50],
+      [3, 3, 32, 40],
+      [4, 4, 128, 30],
+      [2, 2, 4, 70],
+      [3, 3, 32, 55],
+      [4, 4, 128, 40],
+      [2, 2, 4, 100],
+      [3, 3, 32, 80],
+      [4, 4, 128, 60],
+    ],
+  );
+  assert.deepEqual(
     getConstructionMenuDefinitions('comerciais').map(({ type }) => type),
     [
       'shop_rice',
@@ -168,6 +198,15 @@ test('orders construction menus and applies the requested costs', () => {
   ]);
 
   const costs: Partial<Record<keyof typeof RESIDENCES, { wood: number; stone: number; iron?: number; steel?: number; workPoints: number }>> = {
+    house_poor1: { wood: 60, stone: 10, workPoints: 10000 },
+    house_poor2: { wood: 300, stone: 250, workPoints: 150000 },
+    house_poor3: { wood: 1500, stone: 1000, iron: 200, workPoints: 3300000 },
+    house_middle: { wood: 90, stone: 15, workPoints: 15000 },
+    house_middle2: { wood: 450, stone: 375, workPoints: 225000 },
+    house_middle3: { wood: 2250, stone: 1500, iron: 300, steel: 100, workPoints: 4000000 },
+    house_high: { wood: 180, stone: 30, iron: 15, workPoints: 15000 },
+    house_high2: { wood: 900, stone: 750, iron: 50, steel: 50, workPoints: 225000 },
+    house_high3: { wood: 4500, stone: 3000, iron: 600, steel: 250, workPoints: 4000000 },
     silo: { wood: 300, stone: 60, workPoints: 20000 },
     farm_rice: { wood: 100, stone: 40, workPoints: 30000 },
     farm_wheat: { wood: 100, stone: 40, workPoints: 30000 },

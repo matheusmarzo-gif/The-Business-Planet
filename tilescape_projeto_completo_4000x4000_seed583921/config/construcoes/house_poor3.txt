@@ -10,9 +10,10 @@
   "capacity": 128,
   "localAppeal": 30,
   "cost": {
-    "wood": 1200,
-    "stone": 2000
+    "wood": 1500,
+    "stone": 1000,
+    "iron": 200
   },
-  "workPoints": 300000,
+  "workPoints": 3300000,
   "maxWorkers": 0
 }

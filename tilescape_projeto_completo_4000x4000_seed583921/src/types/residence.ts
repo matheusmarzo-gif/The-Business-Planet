@@ -272,6 +272,17 @@ export function isRentIncreaseWithinCityAverageStepLimit(
 export const RESIDENCES: Record<ResidenceType, ResidenceDefinition> = BUILDING_CONFIGS;
 
 const CONSTRUCTION_MENU_ORDER: Partial<Record<ConstructionCategory, readonly ResidenceType[]>> = {
+  residencias: [
+    'house_poor1',
+    'house_poor2',
+    'house_poor3',
+    'house_middle',
+    'house_middle2',
+    'house_middle3',
+    'house_high',
+    'house_high2',
+    'house_high3',
+  ],
   artesanais: [
     'fishery',
     'toolmaker',

@@ -3,6 +3,7 @@ import { RESIDENCES, type ResidenceType } from './residence.js';
 
 export const CITY_NEIGHBOR_DISTANCE = 850;
 export const CITY_UNEMPLOYMENT_THRESHOLD = 0.1;
+export const CITY_MIN_POPULATION_FOR_DECLINE = 2000;
 
 export interface PopulationCity {
   id: string;
@@ -139,9 +140,13 @@ export function planMonthlyPopulationChange(
   const decliningCityIds = new Set(
     cities
       .filter(
-        (city) =>
-          getUnemploymentRate(populationByCity.get(city.id) ?? 0, city.employed) >
-          CITY_UNEMPLOYMENT_THRESHOLD,
+        (city) => {
+          const population = populationByCity.get(city.id) ?? 0;
+          return (
+            population >= CITY_MIN_POPULATION_FOR_DECLINE &&
+            getUnemploymentRate(population, city.employed) > CITY_UNEMPLOYMENT_THRESHOLD
+          );
+        },
       )
       .map((city) => city.id),
   );

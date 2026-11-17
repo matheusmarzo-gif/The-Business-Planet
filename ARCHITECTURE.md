@@ -31,7 +31,9 @@ vínculos de trabalho; a economia da cidade compara os gastos residenciais com
 a massa salarial mensal. O bem-estar individual das residências é calculado
 pelas necessidades supridas. No dia 7 de cada mês, às 03:00, a população também
 cresce ou decresce por residência conforme o bem-estar, o desemprego municipal,
-as vagas de emprego e a capacidade habitacional. Casas parcialmente ocupadas
+as vagas de emprego e a capacidade habitacional. O decrescimento exige ao mesmo
+tempo desemprego acima de 10% e população municipal de pelo menos 2.000 pessoas.
+Casas parcialmente ocupadas
 crescem pela própria taxa de bem-estar; o crescimento destinado às casas vazias
 é calculado sobre os moradores das casas que estavam lotadas, com bem-estar
 médio ponderado pela população, e distribuído pelas casas vazias em ordem de ID

@@ -134,6 +134,42 @@ describe('population change', () => {
     assert.equal(plan.populationChangeByCity.get('city'), 40);
   });
 
+  it('does not decline cities below 2000 residents even when unemployment exceeds 10%', () => {
+    const city: PopulationCity = {
+      id: 'small-city',
+      centerX: 0,
+      centerY: 0,
+      employed: 0,
+      jobOffers: 1,
+    };
+    const residences: PopulationResidence[] = [
+      ...Array.from({ length: 15 }, (_, index) => ({
+        id: `full-${index}`,
+        cityId: 'small-city',
+        type: 'house_poor3' as const,
+        status: 'completed' as const,
+        occupants: 128,
+        wellbeing: 40,
+        rent: 1,
+      })),
+      {
+        id: 'partial',
+        cityId: 'small-city',
+        type: 'house_poor3',
+        status: 'completed',
+        occupants: 79,
+        wellbeing: 40,
+        rent: 1,
+      },
+    ];
+
+    const plan = planMonthlyPopulationChange([city], residences, () => 0.99);
+
+    assert.equal(plan.occupantsByResidence.size, 0);
+    assert.equal(plan.migrations.length, 0);
+    assert.equal(plan.populationChangeByCity.get('small-city'), 0);
+  });
+
   it('weights the full-home wellbeing average by occupants before calculating growth', () => {
     const city: PopulationCity = {
       id: 'city',
@@ -180,10 +216,19 @@ describe('population change', () => {
 
   it('reduces population in declining cities and transfers high-wellbeing emigrants', () => {
     const cities: PopulationCity[] = [
-      { id: 'declining', centerX: 0, centerY: 0, employed: 178, jobOffers: 1 },
+      { id: 'declining', centerX: 0, centerY: 0, employed: 1780, jobOffers: 1 },
       { id: 'neighbor', centerX: 849, centerY: 0, employed: 90, jobOffers: 1 },
     ];
     const residences: PopulationResidence[] = [
+      ...Array.from({ length: 15 }, (_, index) => ({
+        id: `stable-${index}`,
+        cityId: 'declining',
+        type: 'house_poor3' as const,
+        status: 'completed' as const,
+        occupants: 120,
+        wellbeing: 100,
+        rent: 1,
+      })),
       {
         id: 'low',
         cityId: 'declining',
@@ -233,17 +278,28 @@ describe('population change', () => {
       employed: 88,
       jobOffers: 0,
     };
-    const residence: PopulationResidence = {
-      id: 'high',
-      cityId: 'declining',
-      type: 'house_poor3',
-      status: 'completed',
-      occupants: 100,
-      wellbeing: 120,
-      rent: 1,
-    };
+    const residences: PopulationResidence[] = [
+      ...Array.from({ length: 15 }, (_, index) => ({
+        id: `stable-${index}`,
+        cityId: 'declining',
+        type: 'house_poor3' as const,
+        status: 'completed' as const,
+        occupants: 128,
+        wellbeing: 100,
+        rent: 1,
+      })),
+      {
+        id: 'high',
+        cityId: 'declining',
+        type: 'house_poor3',
+        status: 'completed',
+        occupants: 100,
+        wellbeing: 120,
+        rent: 1,
+      },
+    ];
 
-    const plan = planMonthlyPopulationChange([city], [residence], () => 0.99);
+    const plan = planMonthlyPopulationChange([city], residences, () => 0.99);
 
     assert.equal(plan.occupantsByResidence.get('high'), 99);
     assert.deepEqual(plan.migrations, []);

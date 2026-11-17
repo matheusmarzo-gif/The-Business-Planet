@@ -472,8 +472,9 @@ bem-estar médio ponderado pelos moradores, e distribui esse crescimento pelas
 casas vazias em ordem de ID, respeitando a capacidade. Por exemplo, 40.000
 moradores em casas lotadas com bem-estar médio 35 geram 40 novos moradores:
 32 ocupam a primeira casa vazia e 8, a próxima. Frações de moradores são
-arredondadas probabilisticamente. Se o desemprego ultrapassar 10%, casas com
-bem-estar de 0 a 50 perdem 2% da população; casas acima de 100 perdem 1%, que
+arredondadas probabilisticamente. O decrescimento só ocorre quando o desemprego
+ultrapassa 10% e a cidade tem pelo menos 2.000 habitantes. Nessas cidades, casas
+com bem-estar de 0 a 50 perdem 2% da população; casas acima de 100 perdem 1%, que
 pode emigrar para uma cidade
 aleatória a menos de 850 tiles e que não esteja em decrescimento. Os emigrantes
 ocupam primeiro as residências concluídas mais baratas da cidade de destino.

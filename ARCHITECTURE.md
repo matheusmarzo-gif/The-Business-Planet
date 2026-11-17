@@ -166,8 +166,8 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/types/product.ts` | Catálogo estático dos produtos, unidades, peso, volume e validade padrão. |
 | `src/components/ProductCatalog.tsx` | Interface pesquisável para consultar as fichas de produtos. |
 | `src/components/CommerceHistoryPanel.tsx` | Histórico diário de despesas, vendas e resultado dos comércios. |
-| `src/components/AccountingPanel.tsx` | Relatórios agregados de lojas comerciais, armazéns, residências, produção e produtos do jogador autenticado. |
-| `src/types/accounting.ts` | Tipos da resposta contábil e estimadores de custo unitário de produção e aquisição. |
+| `src/components/AccountingPanel.tsx` | Relatórios agregados do jogador autenticado; lojas são agrupadas por cesta e têm filtros por tipo e totais sobre as linhas visíveis. |
+| `src/types/accounting.ts` | Tipos da resposta contábil, estimadores de custo unitário e agregação dos totais das lojas exibidas. |
 | `src/components/PerformanceLogPanel.tsx` | Exibição das etapas do processamento, métricas WebSocket e volume estimado de respostas SQL. |
 | `src/types/performanceLog.ts` | Tipos dos registros de desempenho retornados pela API. |
 | `src/components/CityZoneEditor.tsx` | Editor master das regiões urbanas e rurais de uma cidade. |

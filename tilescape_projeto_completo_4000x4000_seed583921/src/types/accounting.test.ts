@@ -12,6 +12,8 @@ import {
   getAccountingPeriodLabel,
   parseAccountingPeriodDays,
   parseAccountingWeekOffset,
+  summarizeAccountingShops,
+  type AccountingShop,
 } from './accounting.js';
 
 test('aggregates shop sales and stock loss by the product sold', () => {
@@ -50,6 +52,49 @@ test('uses the product tab unit-cost estimate to calculate shop net revenue', ()
   assert.equal(calculateEstimatedShopNetRevenue(100, 10, 2, unitCost, 10), 60);
   assert.equal(calculateEstimatedShopNetRevenue(1, 0, 0, null, 0.5), 0.5);
   assert.equal(calculateEstimatedShopNetRevenue(100, 10, 2, null, 10), null);
+});
+
+test('summarizes shop accounting totals and marks estimated net revenue unavailable if needed', () => {
+  const shops: AccountingShop[] = [
+    {
+      id: 'shop-1',
+      type: 'shop_rice',
+      buildingNumber: 1,
+      x: 0,
+      y: 0,
+      employeeExpense: 12.35,
+      revenue: 40.55,
+      unitsSold: 10,
+      unitsLost: 1,
+      estimatedNetRevenue: 20.25,
+    },
+    {
+      id: 'shop-2',
+      type: 'shop_fish',
+      buildingNumber: 1,
+      x: 1,
+      y: 1,
+      employeeExpense: 8.4,
+      revenue: 14.45,
+      unitsSold: 5,
+      unitsLost: 2,
+      estimatedNetRevenue: 3.65,
+    },
+  ];
+
+  assert.deepEqual(summarizeAccountingShops(shops), {
+    employeeExpense: 20.75,
+    revenue: 55,
+    unitsSold: 15,
+    unitsLost: 3,
+    estimatedNetRevenue: 23.9,
+  });
+  assert.equal(
+    summarizeAccountingShops(shops.map((shop, index) =>
+      index === 1 ? { ...shop, estimatedNetRevenue: null } : shop,
+    )).estimatedNetRevenue,
+    null,
+  );
 });
 
 test('returns no shop product cost when the product has no estimate', () => {

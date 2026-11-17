@@ -278,3 +278,29 @@ export function calculateEstimatedShopNetRevenue(
   if (totalUnits > 0 && unitCostEstimate === null) return null;
   return roundCurrency(revenue - totalUnits * (unitCostEstimate ?? 0) - employeeExpense);
 }
+
+export interface AccountingShopTotals {
+  employeeExpense: number;
+  revenue: number;
+  unitsSold: number;
+  unitsLost: number;
+  estimatedNetRevenue: number | null;
+}
+
+export function summarizeAccountingShops(
+  shops: readonly AccountingShop[],
+): AccountingShopTotals {
+  return {
+    employeeExpense: roundCurrency(
+      shops.reduce((total, shop) => total + shop.employeeExpense, 0),
+    ),
+    revenue: roundCurrency(shops.reduce((total, shop) => total + shop.revenue, 0)),
+    unitsSold: shops.reduce((total, shop) => total + shop.unitsSold, 0),
+    unitsLost: shops.reduce((total, shop) => total + shop.unitsLost, 0),
+    estimatedNetRevenue: shops.every((shop) => shop.estimatedNetRevenue !== null)
+      ? roundCurrency(
+          shops.reduce((total, shop) => total + (shop.estimatedNetRevenue ?? 0), 0),
+        )
+      : null,
+  };
+}

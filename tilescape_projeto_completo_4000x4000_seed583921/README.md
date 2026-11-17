@@ -1061,10 +1061,13 @@ no próprio estoque e transferem o excedente para o armazém ligado.
 
 **Consumo:** em residências concluídas, **Ver consumo da casa** mostra por
 pessoa a quantidade consumida e, entre parênteses, a quantidade desejada de
-todos os produtos das cestas básica (arroz, trigo, cevada, milho,
-batata, peixe, carne vermelha e leite), intermediária (açúcar, vegetais, sal e
-especiarias), avançada (pão, queijo, frutas e chocolate) e básica de bens
-(roupas, móveis, utilitários e vidro) no
+todos os produtos das cestas básica (arroz, trigo, cevada, milho, batata, peixe,
+carne vermelha e leite), intermediária (açúcar, vegetais, sal e especiarias),
+avançada (pão, queijo, frutas e chocolate), nobre (azeite, tabaco, álcool e
+vinho), básica de bens (roupas, móveis, utilitários e vidro), intermediária de
+bens (tinturas, tapetes e porcelana), avançada de bens (artes e jóias) e nobre
+de bens (raridades). A cesta nobre aparece antes da cesta básica de bens no
+painel. O consumo é mostrado no
 último dia e a média diária por pessoa nos últimos 30 dias, além do preço médio
 pago no dia e no mês. Para casas de outros jogadores, o botão aparece no resumo
 público e os dados só são pedidos ao servidor depois do clique, limitados à casa
@@ -1143,7 +1146,10 @@ líquida estimada subtrai da receita o custo estimado atual do produto mostrado
 na aba **Produto**, multiplicado pelas unidades vendidas e perdidas, e também os
 salários. Esse custo atual é aplicado a todo o período selecionado; se não houver
 estimativa disponível, o resultado aparece como indisponível quando houve vendas
-ou perdas. **Visualizar**
+ou perdas. As lojas podem ser filtradas por tipo nos blocos correspondentes às
+cestas de consumo; as linhas também são agrupadas por cesta. A linha final soma
+as lojas visíveis, e a receita líquida estimada total fica indisponível se alguma
+loja visível não tiver estimativa. **Visualizar**
 centraliza a loja no mapa e abre seus detalhes. **Armazéns** mostra os armazéns do jogador (também com **Visualizar**),
 salários pagos e, por produto,
 quantidades e valores comprados/vendidos, além do resultado bruto (receita de

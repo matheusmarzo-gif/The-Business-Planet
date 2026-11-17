@@ -1,11 +1,22 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { PRODUCTS } from '../types/product';
-import { getResidentialBuildingName } from '../types/residence';
+import { getResidentialBuildingName, RESIDENCES, type ResidenceType } from '../types/residence';
 import { formatMoney } from '../types/wallet';
+import {
+  ADVANCED_BASKET_PRODUCT_IDS,
+  ADVANCED_GOODS_BASKET_PRODUCT_IDS,
+  BASIC_BASKET_PRODUCT_IDS,
+  GOODS_BASKET_PRODUCT_IDS,
+  INTERMEDIATE_BASKET_PRODUCT_IDS,
+  INTERMEDIATE_GOODS_BASKET_PRODUCT_IDS,
+  NOBLE_BASKET_PRODUCT_IDS,
+  NOBLE_GOODS_BASKET_PRODUCT_IDS,
+} from '../types/commerceDemand';
 import {
   getAccountingPeriodLabel,
   parseAccountingWeekOffset,
   parseAccountingPeriodDays,
+  summarizeAccountingShops,
   type AccountingBuildingPosition,
   type AccountingPeriodDays,
   type AccountingWeekOffset,
@@ -28,6 +39,28 @@ const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const quantity = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 const unitCost = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 
+const SHOP_BASKET_GROUPS = [
+  { id: 'basic', label: 'Cesta básica', productIds: BASIC_BASKET_PRODUCT_IDS },
+  { id: 'intermediate', label: 'Cesta intermediária', productIds: INTERMEDIATE_BASKET_PRODUCT_IDS },
+  { id: 'advanced', label: 'Cesta avançada', productIds: ADVANCED_BASKET_PRODUCT_IDS },
+  { id: 'noble', label: 'Cesta nobre', productIds: NOBLE_BASKET_PRODUCT_IDS },
+  { id: 'goods', label: 'Cesta básica de bens', productIds: GOODS_BASKET_PRODUCT_IDS },
+  { id: 'intermediateGoods', label: 'Cesta intermediária de bens', productIds: INTERMEDIATE_GOODS_BASKET_PRODUCT_IDS },
+  { id: 'advancedGoods', label: 'Cesta avançada de bens', productIds: ADVANCED_GOODS_BASKET_PRODUCT_IDS },
+  { id: 'nobleGoods', label: 'Cesta nobre de bens', productIds: NOBLE_GOODS_BASKET_PRODUCT_IDS },
+] as const;
+const SHOP_FILTER_BLOCKS = [
+  ...SHOP_BASKET_GROUPS.map(({ id, label }) => ({ id, label })),
+  { id: 'other', label: 'Outras lojas' },
+] as const;
+const SHOP_GROUP_BY_PRODUCT = new Map<string, string>(
+  SHOP_BASKET_GROUPS.flatMap((group) =>
+    group.productIds.map((productId) => [productId, group.id] as const),
+  ),
+);
+const getShopBasketGroup = (type: ResidenceType) =>
+  SHOP_GROUP_BY_PRODUCT.get(RESIDENCES[type].stockProductId ?? '') ?? 'other';
+
 export default function AccountingPanel({
   summary,
   isLoading,
@@ -43,8 +76,32 @@ export default function AccountingPanel({
     'summary' | 'shops' | 'warehouses' | 'residences' | 'production' | 'products'
   >('summary');
   const [productSearch, setProductSearch] = useState('');
+  const [shopTypeFilter, setShopTypeFilter] = useState<ResidenceType | 'all'>('all');
   const periodLabel = getAccountingPeriodLabel(periodDays);
   const weeklySummary = summary?.weeklySummary;
+  const shops = summary?.shops ?? [];
+  const shopTypesByBlock = useMemo(() => {
+    const availableTypes = [...new Set(shops.map((shop) => shop.type))];
+    return SHOP_FILTER_BLOCKS.map((group) => ({
+      ...group,
+      shopTypes: availableTypes
+        .filter((type) => getShopBasketGroup(type) === group.id)
+        .sort((a, b) => RESIDENCES[a].name.localeCompare(RESIDENCES[b].name, 'pt-BR')),
+    }));
+  }, [shops]);
+  const filteredShops = useMemo(
+    () => shops.filter((shop) => shopTypeFilter === 'all' || shop.type === shopTypeFilter),
+    [shops, shopTypeFilter],
+  );
+  const visibleShopGroups = useMemo(
+    () =>
+      SHOP_FILTER_BLOCKS.map((group) => ({
+        ...group,
+        shops: filteredShops.filter((shop) => getShopBasketGroup(shop.type) === group.id),
+      })).filter((group) => group.shops.length > 0),
+    [filteredShops],
+  );
+  const shopTotals = useMemo(() => summarizeAccountingShops(filteredShops), [filteredShops]);
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLocaleLowerCase('pt-BR');
     return (summary?.products ?? []).filter((item) => {
@@ -204,6 +261,42 @@ export default function AccountingPanel({
             (unidades vendidas + perdidas) − salários. O custo atual é aplicado a todo o período selecionado;
             sem estimativa disponível, o resultado fica indisponível quando houve movimentação.
           </p>
+          <div className="accounting-shop-filters" aria-label="Filtrar lojas comerciais por tipo">
+            <div className="accounting-shop-filter-title">Filtrar por tipo de loja</div>
+            <div className="accounting-shop-filter-groups">
+              <fieldset className="accounting-shop-filter-block">
+                <legend>Exibição</legend>
+                <button
+                  type="button"
+                  className={`accounting-shop-filter-option${shopTypeFilter === 'all' ? ' active' : ''}`}
+                  aria-pressed={shopTypeFilter === 'all'}
+                  onClick={() => setShopTypeFilter('all')}
+                >
+                  Todas as lojas
+                </button>
+              </fieldset>
+              {shopTypesByBlock.map((group) =>
+                group.shopTypes.length > 0 ? (
+                  <fieldset className="accounting-shop-filter-block" key={group.id}>
+                    <legend>{group.label}</legend>
+                    <div className="accounting-shop-filter-options">
+                      {group.shopTypes.map((type) => (
+                        <button
+                          type="button"
+                          className={`accounting-shop-filter-option${shopTypeFilter === type ? ' active' : ''}`}
+                          aria-pressed={shopTypeFilter === type}
+                          key={type}
+                          onClick={() => setShopTypeFilter(type)}
+                        >
+                          {RESIDENCES[type].name}
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                ) : null,
+              )}
+            </div>
+          </div>
           <div className="warehouse-list accounting-list">
             <div className="accounting-row accounting-shop-row warehouse-head">
               <span>Loja</span>
@@ -217,21 +310,50 @@ export default function AccountingPanel({
             {!isLoading && !error && (summary?.shops.length ?? 0) === 0 && (
               <p className="warehouse-summary">Você ainda não possui lojas comerciais.</p>
             )}
-            {summary?.shops.map((shop) => (
-              <div className="accounting-row accounting-shop-row" key={shop.id}>
-                <span>{getResidentialBuildingName(shop.type, shop.buildingNumber)}</span>
-                <span>{formatMoney(shop.employeeExpense)}</span>
-                <span>{formatMoney(shop.revenue)}</span>
-                <span>{integer.format(shop.unitsSold)}</span>
-                <span>{integer.format(shop.unitsLost)}</span>
-                <span>
-                  {shop.estimatedNetRevenue === null ? 'Indisponível' : formatMoney(shop.estimatedNetRevenue)}
-                </span>
-                <button type="button" className="accounting-view-button" onClick={() => onViewBuilding(shop)}>
-                  Visualizar
-                </button>
-              </div>
+            {!isLoading && !error && shops.length > 0 && filteredShops.length === 0 && (
+              <p className="warehouse-summary">Nenhuma loja corresponde a esse filtro.</p>
+            )}
+            {visibleShopGroups.map((group) => (
+              <Fragment key={group.id}>
+                <div className="accounting-shop-group">{group.label}</div>
+                {group.shops.map((shop) => (
+                  <div className="accounting-row accounting-shop-row" key={shop.id}>
+                    <span>{getResidentialBuildingName(shop.type, shop.buildingNumber)}</span>
+                    <span>{formatMoney(shop.employeeExpense)}</span>
+                    <span>{formatMoney(shop.revenue)}</span>
+                    <span>{integer.format(shop.unitsSold)}</span>
+                    <span>{integer.format(shop.unitsLost)}</span>
+                    <span>
+                      {shop.estimatedNetRevenue === null
+                        ? 'Indisponível'
+                        : formatMoney(shop.estimatedNetRevenue)}
+                    </span>
+                    <button
+                      type="button"
+                      className="accounting-view-button"
+                      onClick={() => onViewBuilding(shop)}
+                    >
+                      Visualizar
+                    </button>
+                  </div>
+                ))}
+              </Fragment>
             ))}
+            {filteredShops.length > 0 && (
+              <div className="accounting-row accounting-shop-row accounting-shop-total">
+                <strong>Total</strong>
+                <span>{formatMoney(shopTotals.employeeExpense)}</span>
+                <span>{formatMoney(shopTotals.revenue)}</span>
+                <span>{integer.format(shopTotals.unitsSold)}</span>
+                <span>{integer.format(shopTotals.unitsLost)}</span>
+                <span>
+                  {shopTotals.estimatedNetRevenue === null
+                    ? 'Indisponível'
+                    : formatMoney(shopTotals.estimatedNetRevenue)}
+                </span>
+                <span />
+              </div>
+            )}
           </div>
         </>
       ) : activeTab === 'warehouses' ? (

@@ -38,6 +38,7 @@ interface AccountingPanelProps {
 const integer = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const quantity = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 const unitCost = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+const benefit = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 6 });
 
 const SHOP_BASKET_GROUPS = [
   { id: 'basic', label: 'Cesta básica', productIds: BASIC_BASKET_PRODUCT_IDS },
@@ -421,20 +422,28 @@ export default function AccountingPanel({
             individual; o valor é creditado diretamente ao proprietário. O histórico começa com esta atualização.
           </p>
           <div className="warehouse-list accounting-list">
-            <div className="accounting-four-row warehouse-head">
+            <div className="accounting-four-row accounting-residence-row warehouse-head">
               <span>Residência</span>
               <span>Moradores / capacidade</span>
               <span>Aluguel gerado</span>
+              <span>Benefício associado</span>
               <span />
             </div>
             {!isLoading && !error && (summary?.residences.length ?? 0) === 0 && (
               <p className="warehouse-summary">Você ainda não possui residências.</p>
             )}
             {summary?.residences.map((residence) => (
-              <div className="accounting-four-row" key={residence.id}>
+              <div className="accounting-four-row accounting-residence-row" key={residence.id}>
                 <span>{getResidentialBuildingName(residence.type, residence.buildingNumber)}</span>
                 <span>{integer.format(residence.occupants)} / {integer.format(residence.capacity)}</span>
-                <span>{formatMoney(residence.rentRevenue)}</span>
+                <span title={`Aluguel atual por pessoa: ${formatMoney(residence.rentPerPerson)}`}>
+                  {formatMoney(residence.rentRevenue)}
+                </span>
+                <span>
+                  {residence.associatedBenefit === null
+                    ? '—'
+                    : benefit.format(residence.associatedBenefit)}
+                </span>
                 <button type="button" className="accounting-view-button" onClick={() => onViewBuilding(residence)}>
                   Visualizar
                 </button>

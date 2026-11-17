@@ -114,6 +114,13 @@ demanda o custo mensal (`Cb`), os apreços de empregabilidade, região,
 construção e interno, `benefício erro`, `benefício ideal` e o benefício
 associado usando consumo dos últimos 30 dias, aluguel e salário médio dos
 empregados da residência.
+O dono também pode informar `?rent=<valor>` nessa consulta para simular o
+benefício com outro aluguel; a rota valida o valor e a propriedade e não grava
+alterações. O relatório `GET /api/accounting` calcula em lote o benefício
+associado das residências concluídas do jogador usando os mesmos dados de cidade
+e de ofertas de trabalho; construções ainda não concluídas retornam esse campo
+como indisponível. A aba Contábil → Residências exibe o benefício e o aluguel
+gerado, com o aluguel atual por pessoa no tooltip.
 O salário médio da cidade é ponderado pelo número de empregados. O apreço de
 empregabilidade usa o salário médio da residência quando há mais de dois
 moradores e ao menos metade está empregada. Nos demais casos, considera as vagas
@@ -166,7 +173,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/types/product.ts` | Catálogo estático dos produtos, unidades, peso, volume e validade padrão. |
 | `src/components/ProductCatalog.tsx` | Interface pesquisável para consultar as fichas de produtos. |
 | `src/components/CommerceHistoryPanel.tsx` | Histórico diário de despesas, vendas e resultado dos comércios. |
-| `src/components/AccountingPanel.tsx` | Relatórios agregados do jogador autenticado; lojas são agrupadas por cesta e têm filtros por tipo e totais sobre as linhas visíveis. |
+| `src/components/AccountingPanel.tsx` | Relatórios agregados do jogador autenticado; lojas são agrupadas por cesta e têm filtros e totais; residências exibem benefício associado e aluguel atual por pessoa. |
 | `src/types/accounting.ts` | Tipos da resposta contábil, estimadores de custo unitário e agregação dos totais das lojas exibidas. |
 | `src/components/PerformanceLogPanel.tsx` | Exibição das etapas do processamento, métricas WebSocket e volume estimado de respostas SQL. |
 | `src/types/performanceLog.ts` | Tipos dos registros de desempenho retornados pela API. |
@@ -1088,7 +1095,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo e desejo médios por consumidor da cidade, ponderados pelas residências, além do preço médio ponderado, no último dia e nos últimos 30 dias. |
 | `GET /api/wallet` | Autenticado | Cria a carteira sem saldo prévio com C$ 25.000 (idempotente), preserva saldos existentes e retorna `{ balance }`. |
-| `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. A aba comercial calcula receita líquida com custos médios diários persistidos; a aba Produto agrega estoque, produção, comércio entre jogadores e consumo residencial/industrial, além do custo unitário estimado. |
+| `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. A aba comercial calcula receita líquida com custos médios diários persistidos; a aba Residências retorna benefício associado para residências concluídas e aluguel atual por pessoa; a aba Produto agrega estoque, produção, comércio entre jogadores e consumo residencial/industrial, além do custo unitário estimado. |
 | `GET /api/rankings?days=30\|365` | Autenticado | Retorna rankings globais com os 30 primeiros e a posição do jogador atual, se estiver fora do top 30: valor estimado da empresa, área total das construções, quantidade de tiles de estrada, vendas/produção por produto, lucro e investimentos no período selecionado. |
 | `PUT /api/residential-buildings/:id/farm-automation` | Dono da fazenda agrícola concluída | Valida e salva meses de replantio e limites de trabalhadores por fase; desativar mantém as preferências e o ciclo atual, mas interrompe novos plantios automáticos. |
 | `PATCH /api/residential-buildings/:id/input-product` | Dono do Moinho concluído | Seleciona trigo, cevada ou milho; descarta o estoque de outro insumo na mesma transação e publica a seleção/estoques. |

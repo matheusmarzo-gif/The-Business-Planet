@@ -212,7 +212,7 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
         } else if (body.error === 'road_not_found') {
           error = 'Essa estrada não existe mais.';
         } else if (body.error === 'residence_not_owned') {
-          error = 'Você só pode demolir residências que construiu.';
+          error = 'Essa residência não pertence a você.';
         } else if (body.error === 'residence_not_found') {
           error = 'Essa residência não existe mais.';
         } else if (body.error === 'stock_upgrade_price_unavailable') {
@@ -793,7 +793,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     return () => {
       cancelled = true;
     };
-  }, [selectedResidence?.status, selectedResidence?.type, selectedResidenceKey]);
+  }, [selectedResidence?.status, selectedResidence?.type, selectedResidence?.rent, selectedResidenceKey]);
 
   useEffect(() => {
     setIsResidenceOwner(false);
@@ -2373,6 +2373,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onSave={(settings) => void saveWorkSettings(selectedResidence.id, settings)}
             onSaveRent={(rent) => void saveRent(selectedResidence.id, rent)}
             residenceBenefit={residenceBenefit}
+            onSimulateRent={(rent) =>
+              cityRequest<ResidenceBenefitCalculation>(
+                `/api/residential-buildings/${selectedResidence.id}/residence-benefit?rent=${encodeURIComponent(String(rent))}`,
+              )
+            }
             onSavePrice={(price) => void savePrice(selectedResidence.id, price)}
             onSimulateSale={(settings) =>
               cityRequest<ShopSalesSimulation>(

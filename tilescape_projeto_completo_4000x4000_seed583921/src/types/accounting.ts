@@ -79,6 +79,8 @@ export interface AccountingResidence {
   occupants: number;
   capacity: number;
   rentRevenue: number;
+  rentPerPerson: number;
+  associatedBenefit: number | null;
 }
 
 export interface AccountingProductionBuilding {

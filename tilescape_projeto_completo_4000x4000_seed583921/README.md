@@ -109,6 +109,10 @@ Ao selecionar uma residência concluída, o painel mostra, logo abaixo de
 **Salvar aluguel**, o benefício associado calculado com o aluguel, a média de
 gastos dos últimos 30 dias e a renda diária média por morador da residência.
 Se ela estiver vazia, o cálculo usa a renda média por morador da cidade.
+O dono pode editar o aluguel e usar **Simular valor do aluguel** para consultar
+o benefício associado estimado sem salvar a alteração. Em **Contábil → Residências**,
+o relatório apresenta o benefício associado das residências concluídas; passe o
+mouse sobre **Aluguel gerado** para ver o aluguel atual por pessoa.
 O painel também mostra o apreço da empregabilidade. Com mais de dois moradores,
 se pelo menos metade estiver empregada, ele compara o salário médio da residência
 com a média salarial dos empregados da cidade. Nos demais casos, se houver vagas

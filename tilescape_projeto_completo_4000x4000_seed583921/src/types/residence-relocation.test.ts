@@ -4,6 +4,7 @@ import {
   calculateResidenceAppealsFromIncome,
   calculateResidenceAppeals,
   calculateResidenceBenefit,
+  calculateResidenceBenefits,
   getResidenceBenefitIncome,
   planResidenceRelocations,
 } from './residence-relocation.js';
@@ -375,4 +376,40 @@ test('uses city average income for empty homes and residence average otherwise',
   });
   assert.ok(calculation.errorBenefit > 0);
   assert.ok(calculation.idealBenefit > 0);
+});
+
+test('calculates accounting benefits using city average income for empty residences', () => {
+  const residences = [
+    {
+      id: 'empty-home',
+      cityId: 'city',
+      type: 'house_poor1' as const,
+      x: 1,
+      y: 1,
+      occupants: 0,
+      employed: 0,
+      capacity: 10,
+      salaryAverage: 0,
+      constructionAppeal: 40,
+    },
+    {
+      id: 'occupied-home',
+      cityId: 'city',
+      type: 'house_poor1' as const,
+      x: 2,
+      y: 1,
+      occupants: 4,
+      employed: 2,
+      capacity: 10,
+      salaryAverage: 20,
+      constructionAppeal: 40,
+    },
+  ];
+  const benefits = calculateResidenceBenefits(residences, [], [
+    { ...residences[0], rent: 10, monthlyProductsCost: 50, dailyIncome: 0 },
+  ]);
+  const calculation = benefits.get('empty-home');
+
+  assert.equal(calculation?.monthlyCost, 60);
+  assert.ok(calculation?.associatedBenefit && calculation.associatedBenefit > 0);
 });

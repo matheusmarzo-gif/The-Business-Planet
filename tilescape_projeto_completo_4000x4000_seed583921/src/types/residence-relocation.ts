@@ -32,6 +32,12 @@ export interface ResidenceEmploymentOffer {
 export type ResidenceIncomeAppealCandidate =
   Omit<ResidenceAppealCandidate, 'cityAverageSalary'>;
 
+export interface ResidenceBenefitTarget extends ResidenceIncomeAppealCandidate {
+  rent: number;
+  monthlyProductsCost: number;
+  dailyIncome: number;
+}
+
 export interface ResidenceAppealValues {
   employabilityAppeal: number;
   regionalAppeal: number;
@@ -39,10 +45,9 @@ export interface ResidenceAppealValues {
   internalAppeal: number;
 }
 
-export function calculateResidenceAppealsFromIncome(
-  residences: ResidenceIncomeAppealCandidate[],
-  employmentOffers: readonly ResidenceEmploymentOffer[] = [],
-): Map<string, ResidenceAppealValues> {
+function getResidenceCityIncomeTotals(
+  residences: readonly ResidenceIncomeAppealCandidate[],
+): Map<string, { payroll: number; employees: number }> {
   const cityTotals = new Map<string, { payroll: number; employees: number }>();
   for (const residence of residences) {
     const totals = cityTotals.get(residence.cityId) ?? { payroll: 0, employees: 0 };
@@ -51,6 +56,14 @@ export function calculateResidenceAppealsFromIncome(
     totals.employees += employed;
     cityTotals.set(residence.cityId, totals);
   }
+  return cityTotals;
+}
+
+export function calculateResidenceAppealsFromIncome(
+  residences: ResidenceIncomeAppealCandidate[],
+  employmentOffers: readonly ResidenceEmploymentOffer[] = [],
+): Map<string, ResidenceAppealValues> {
+  const cityTotals = getResidenceCityIncomeTotals(residences);
   return calculateResidenceAppeals(
     residences.map((residence) => {
       const totals = cityTotals.get(residence.cityId);
@@ -257,6 +270,37 @@ export function calculateResidenceBenefit(input: {
     ...appealValues,
     productContributions: [],
   };
+}
+
+export function calculateResidenceBenefits(
+  residences: ResidenceIncomeAppealCandidate[],
+  employmentOffers: readonly ResidenceEmploymentOffer[],
+  targets: readonly ResidenceBenefitTarget[],
+): Map<string, ResidenceBenefitCalculation> {
+  const appeals = calculateResidenceAppealsFromIncome(residences, employmentOffers);
+  const cityIncomeTotals = getResidenceCityIncomeTotals(residences);
+  const benefits = new Map<string, ResidenceBenefitCalculation>();
+  for (const target of targets) {
+    const appeal = appeals.get(target.id);
+    if (!appeal) {
+      throw new RangeError(`Não foi possível calcular os apreços da residência ${target.id}.`);
+    }
+    const cityTotals = cityIncomeTotals.get(target.cityId);
+    const cityAverageIncome = cityTotals && cityTotals.employees > 0
+      ? cityTotals.payroll / cityTotals.employees
+      : 0;
+    benefits.set(target.id, calculateResidenceBenefit({
+      rent: target.rent,
+      monthlyCost: target.rent + target.monthlyProductsCost,
+      dailyIncome: getResidenceBenefitIncome(
+        target.occupants,
+        target.dailyIncome,
+        cityAverageIncome,
+      ),
+      ...appeal,
+    }));
+  }
+  return benefits;
 }
 
 export function getAssociatedResidenceBenefit(input: {

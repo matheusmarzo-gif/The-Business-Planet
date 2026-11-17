@@ -56,6 +56,7 @@ interface ResidencePanelProps {
   }) => void;
   onSaveRent: (rent: number) => void;
   residenceBenefit: ResidenceBenefitCalculation | null;
+  onSimulateRent: (rent: number) => Promise<ResidenceBenefitCalculation>;
   onSavePrice: (price: number) => void;
   onSimulateSale: (
     settings: { price: number; wage: number; workHoursPerDay: number },
@@ -193,6 +194,7 @@ export default function ResidencePanel({
   onSave,
   onSaveRent,
   residenceBenefit,
+  onSimulateRent,
   onSavePrice,
   onSimulateSale,
   onSimulateHiring,
@@ -229,6 +231,11 @@ export default function ResidencePanel({
   const [saleSimulationMessage, setSaleSimulationMessage] = useState('');
   const [isSimulatingSale, setIsSimulatingSale] = useState(false);
   const saleSimulationRequestId = useRef(0);
+  const [simulatedResidenceBenefit, setSimulatedResidenceBenefit] =
+    useState<ResidenceBenefitCalculation | null>(null);
+  const [rentSimulationMessage, setRentSimulationMessage] = useState('');
+  const [isSimulatingRent, setIsSimulatingRent] = useState(false);
+  const rentSimulationRequestId = useRef(0);
   const [hiringSimulationMessage, setHiringSimulationMessage] = useState('');
   const [isSimulatingHiring, setIsSimulatingHiring] = useState(false);
   const [inputProductId, setInputProductId] = useState(
@@ -247,6 +254,7 @@ export default function ResidencePanel({
 
   useEffect(() => {
     saleSimulationRequestId.current += 1;
+    rentSimulationRequestId.current += 1;
     setWage(String(building.wage));
     setHours(String(building.workHoursPerDay));
     setRent(String(building.rent));
@@ -254,6 +262,9 @@ export default function ResidencePanel({
     setMinimumWorkerTechnique(String(building.minimumWorkerTechnique));
     setSaleSimulationMessage('');
     setIsSimulatingSale(false);
+    setSimulatedResidenceBenefit(null);
+    setRentSimulationMessage('');
+    setIsSimulatingRent(false);
     setHiringSimulationMessage('');
   }, [
     building.id,
@@ -960,9 +971,56 @@ export default function ResidencePanel({
             step={0.01}
             value={rent}
             disabled={!isOwner || isSaving}
-            onChange={(event) => setRent(event.target.value)}
+            onChange={(event) => {
+              rentSimulationRequestId.current += 1;
+              setRent(event.target.value);
+              setSimulatedResidenceBenefit(null);
+              setRentSimulationMessage('');
+              setIsSimulatingRent(false);
+            }}
           />
         </label>
+        {isOwner && isResidence && building.status === 'completed' && (
+          <>
+            <button
+              type="button"
+              disabled={isSaving || isSimulatingRent}
+              onClick={async () => {
+                const requestId = ++rentSimulationRequestId.current;
+                setIsSimulatingRent(true);
+                setSimulatedResidenceBenefit(null);
+                setRentSimulationMessage('');
+                try {
+                  const calculation = await onSimulateRent(Number(rent));
+                  if (requestId === rentSimulationRequestId.current) {
+                    setSimulatedResidenceBenefit(calculation);
+                  }
+                } catch (error) {
+                  if (requestId === rentSimulationRequestId.current) {
+                    setRentSimulationMessage(
+                      error instanceof Error
+                        ? error.message
+                        : 'Não foi possível simular o benefício com esse aluguel.',
+                    );
+                  }
+                } finally {
+                  if (requestId === rentSimulationRequestId.current) {
+                    setIsSimulatingRent(false);
+                  }
+                }
+              }}
+            >
+              {isSimulatingRent ? 'Simulando…' : 'Simular valor do aluguel'}
+            </button>
+            {simulatedResidenceBenefit && (
+              <small role="status">
+                Benefício associado simulado:{' '}
+                {benefitNumber.format(simulatedResidenceBenefit.associatedBenefit)}
+              </small>
+            )}
+            {rentSimulationMessage && <small role="alert">{rentSimulationMessage}</small>}
+          </>
+        )}
         {isOwner ? (
           <button type="submit" disabled={isSaving}>
             {isSaving ? 'Salvando…' : 'Salvar aluguel'}

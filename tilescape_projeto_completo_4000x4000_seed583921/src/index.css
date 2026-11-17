@@ -144,6 +144,7 @@ button { color: inherit; }
 .accounting-summary-grid article strong { color: #eee7d6; font-size: 16px; }
 .accounting-row { display: grid; grid-template-columns: minmax(180px, 1.5fr) repeat(2, minmax(150px, 1fr)) 100px; gap: 10px; align-items: center; min-width: 620px; padding: 7px 2px; font-size: 11px; }
 .accounting-four-row { display: grid; grid-template-columns: minmax(180px, 1.5fr) repeat(2, minmax(150px, 1fr)) 100px; gap: 10px; align-items: center; min-width: 620px; padding: 7px 2px; font-size: 11px; }
+.accounting-four-row.accounting-residence-row { grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(120px, 1fr)) 100px; min-width: 850px; }
 .accounting-row.accounting-warehouse-building { grid-template-columns: minmax(180px, 1fr) 100px; min-width: 300px; }
 .accounting-row.accounting-shop-row, .accounting-row.accounting-shop-row.warehouse-head { grid-template-columns: minmax(180px, 1.4fr) repeat(5, minmax(120px, 1fr)) 100px; min-width: 1050px; }
 .accounting-product-row { display: grid; grid-template-columns: minmax(125px, 1.4fr) repeat(7, minmax(110px, 1fr)); gap: 8px; align-items: center; min-width: 1000px; padding: 7px 2px; font-size: 11px; }

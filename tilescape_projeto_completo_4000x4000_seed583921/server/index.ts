@@ -199,9 +199,12 @@ import {
   calculateResidenceAppealsFromIncome,
   calculateResidenceAppeals,
   calculateResidenceBenefit,
+  calculateResidenceBenefits,
   getResidenceBenefitIncome,
   planResidenceRelocations,
+  type ResidenceBenefitTarget,
   type ResidenceEmploymentOffer,
+  type ResidenceIncomeAppealCandidate,
   type ResidenceRelocation,
 } from '../src/types/residence-relocation.js';
 import { DEFAULT_TILE_LIST } from '../src/utils/tileAssets.js';
@@ -7674,23 +7677,58 @@ async function start() {
         ),
         pool.query<{
           id: string;
+          city_id: string;
           building_type: ResidenceType;
           building_number: number;
           tile_x: number;
           tile_y: number;
+          status: ResidentialBuilding['status'];
+          rent: number;
           occupants: number;
+          daily_income: number;
+          monthly_products_cost: number;
           rent_revenue: string;
         }>(
-          `SELECT building.id, building.building_type, building.building_number,
-                  building.tile_x, building.tile_y, building.occupants,
-                  COALESCE(SUM(history.rent_revenue), 0)::text AS rent_revenue
+          `SELECT building.id, building.city_id, building.building_type, building.building_number,
+                  building.tile_x, building.tile_y, building.status, building.rent,
+                  building.occupants,
+                  COALESCE(payroll.total, 0)::float8
+                    / GREATEST(building.occupants, 1) AS daily_income,
+                  COALESCE(product_totals.monthly_products_cost, 0)::float8
+                    AS monthly_products_cost,
+                  COALESCE(history.rent_revenue, 0)::text AS rent_revenue
            FROM all_buildings building
-           LEFT JOIN residence_rent_history history
-             ON history.building_id = building.id
-            AND history.day BETWEEN $2::date - ($4::integer - 1) AND $2::date
+           LEFT JOIN (
+             SELECT building_id, SUM(rent_revenue) AS rent_revenue
+             FROM residence_rent_history
+             WHERE day BETWEEN $2::date - ($4::integer - 1) AND $2::date
+             GROUP BY building_id
+           ) history ON history.building_id = building.id
+           LEFT JOIN LATERAL (
+             SELECT SUM(assignments.count * workplace.wage)::float8 AS total
+             FROM job_assignments assignments
+             JOIN all_buildings workplace ON workplace.id = assignments.workplace_id
+             WHERE assignments.residence_id = building.id
+           ) payroll ON TRUE
+           LEFT JOIN LATERAL (
+             WITH product_costs AS (
+               SELECT product_id,
+                      (SUM(quantity) FILTER (WHERE consumers IS NOT NULL)
+                        / NULLIF(SUM(consumers), 0))
+                        * (SUM(spent) FILTER (WHERE consumers IS NOT NULL)
+                          / NULLIF(SUM(quantity) FILTER (WHERE consumers IS NOT NULL), 0))
+                        AS contribution
+               FROM residence_consumption
+               WHERE building_id = building.id
+                 AND day >= $2::date - 30
+                 AND day < $2::date
+               GROUP BY product_id
+             )
+             SELECT SUM(contribution)::float8 AS monthly_products_cost
+             FROM product_costs
+           ) product_totals ON TRUE
            WHERE building.created_by = $1
              AND building.building_type = ANY($3::text[])
-           GROUP BY building.id
            ORDER BY building.building_type, building.building_number`,
           [userId, day, RESIDENCE_BUILDING_TYPES, periodDays],
         ),
@@ -7804,6 +7842,124 @@ async function start() {
            GROUP BY product_id`,
         ),
       ]);
+
+      const completedResidenceRows = residenceResult.rows.filter(
+        (row) => row.status === 'completed',
+      );
+      const residenceBenefits = new Map<string, ReturnType<typeof calculateResidenceBenefit>>();
+      if (completedResidenceRows.length > 0) {
+        const [cityResidenceResult, workplaceResult] = await Promise.all([
+          pool.query<{
+            id: string;
+            city_id: string;
+            building_type: ResidenceType;
+            tile_x: number;
+            tile_y: number;
+            occupants: number;
+            employed: number;
+            payroll: number;
+          }>(
+            `SELECT home.id, home.city_id, home.building_type, home.tile_x, home.tile_y,
+                    home.occupants,
+                    COALESCE(SUM(assignments.count), 0)::int AS employed,
+                    COALESCE(SUM(assignments.count * workplace.wage), 0)::float8 AS payroll
+             FROM all_buildings home
+             LEFT JOIN job_assignments assignments ON assignments.residence_id = home.id
+             LEFT JOIN all_buildings workplace ON workplace.id = assignments.workplace_id
+             WHERE home.city_id IN (
+               SELECT own.city_id FROM all_buildings own
+               WHERE own.created_by = $1 AND own.building_type = ANY($2::text[])
+             )
+               AND home.status = 'completed'
+               AND home.building_type = ANY($2::text[])
+             GROUP BY home.id`,
+            [userId, RESIDENCE_BUILDING_TYPES],
+          ),
+          pool.query<{
+            city_id: string;
+            building_type: ResidenceType;
+            tile_x: number;
+            tile_y: number;
+            wage: number;
+            desired_workers: number;
+            status: ResidentialBuilding['status'];
+            employed: number;
+          }>(
+            `SELECT workplace.city_id, workplace.building_type, workplace.tile_x,
+                    workplace.tile_y, workplace.wage, workplace.desired_workers,
+                    workplace.status, COALESCE(SUM(assignment.count), 0)::int AS employed
+             FROM all_buildings workplace
+             LEFT JOIN job_assignments assignment ON assignment.workplace_id = workplace.id
+             WHERE workplace.city_id IN (
+               SELECT own.city_id FROM all_buildings own
+               WHERE own.created_by = $1 AND own.building_type = ANY($2::text[])
+             )
+               AND (
+                 workplace.building_type <> ALL($2::text[])
+                 OR workplace.status = 'under_construction'
+               )
+             GROUP BY workplace.id`,
+            [userId, RESIDENCE_BUILDING_TYPES],
+          ),
+        ]);
+        const residenceCandidates: ResidenceIncomeAppealCandidate[] =
+          cityResidenceResult.rows.map((home) => {
+            const definition = RESIDENCES[home.building_type];
+            return {
+              id: home.id,
+              cityId: home.city_id,
+              type: home.building_type,
+              x: home.tile_x + definition.width / 2,
+              y: home.tile_y + definition.height / 2,
+              occupants: home.occupants,
+              employed: home.employed,
+              capacity: definition.capacity,
+              salaryAverage: home.employed > 0 ? home.payroll / home.employed : 0,
+              constructionAppeal: definition.localAppeal,
+            };
+          });
+        const candidatesById = new Map(
+          residenceCandidates.map((candidate) => [candidate.id, candidate]),
+        );
+        const benefitTargets: ResidenceBenefitTarget[] = completedResidenceRows.map((row) => {
+          const candidate = candidatesById.get(row.id);
+          if (!candidate) {
+            throw new Error(`Não foi possível carregar os dados da residência ${row.id}.`);
+          }
+          return {
+            ...candidate,
+            rent: Number(row.rent),
+            monthlyProductsCost: Number(row.monthly_products_cost),
+            dailyIncome: Number(row.daily_income),
+          };
+        });
+        const employmentOffers: ResidenceEmploymentOffer[] = workplaceResult.rows.flatMap(
+          (workplace) => {
+            const desiredWorkers = Math.min(
+              workplace.desired_workers,
+              getMaxDesiredWorkers(workplace.building_type, workplace.status),
+            );
+            const vacancies = Math.max(0, desiredWorkers - workplace.employed);
+            return vacancies > 0
+              ? [{
+                  cityId: workplace.city_id,
+                  type: workplace.building_type,
+                  x: workplace.tile_x,
+                  y: workplace.tile_y,
+                  wage: workplace.wage,
+                  vacancies,
+                }]
+              : [];
+          },
+        );
+        for (const [residenceId, calculation] of calculateResidenceBenefits(
+          residenceCandidates,
+          employmentOffers,
+          benefitTargets,
+        )) {
+          residenceBenefits.set(residenceId, calculation);
+        }
+      }
 
       const marketPrices = new Map(
         marketPriceResult.rows.map((row) => [row.product_id, Number(row.average_price)]),
@@ -7928,6 +8084,8 @@ async function start() {
           occupants: row.occupants,
           capacity: RESIDENCES[row.building_type].capacity,
           rentRevenue: Number(row.rent_revenue),
+          rentPerPerson: Number(row.rent),
+          associatedBenefit: residenceBenefits.get(row.id)?.associatedBenefit ?? null,
         })),
         production: productionResult.rows.map((row) => ({
           id: row.id,
@@ -8133,8 +8291,18 @@ async function start() {
       response.status(400).json({ error: 'invalid_residence' });
       return;
     }
+    const rentQuery = request.query.rent;
+    const isRentSimulation = rentQuery !== undefined;
+    const simulatedRent = isRentSimulation && typeof rentQuery === 'string'
+      ? parseRent({ rent: Number(rentQuery) })
+      : null;
+    if (isRentSimulation && simulatedRent === null) {
+      response.status(400).json({ error: 'invalid_rent' });
+      return;
+    }
     void (async () => {
       const { rows } = await pool.query<{
+        created_by: string;
         city_id: string;
         building_type: ResidenceType;
         tile_x: number;
@@ -8146,7 +8314,7 @@ async function start() {
         product_contributions: { productId: string; contribution: number }[];
       }>(
         `WITH selected AS (
-           SELECT building.id, building.city_id, building.tile_x, building.tile_y,
+           SELECT building.id, building.created_by, building.city_id, building.tile_x, building.tile_y,
                   building.building_type, building.rent, building.occupants,
                   COALESCE(SUM(assignments.count * workplace.wage), 0)::float8
                     / GREATEST(building.occupants, 1) AS daily_income,
@@ -8179,7 +8347,8 @@ async function start() {
            WHERE building.id = $1
            GROUP BY building.id, product_totals.monthly_products_cost, product_totals.product_contributions
          )
-         SELECT selected.city_id, selected.building_type, selected.tile_x, selected.tile_y,
+         SELECT selected.created_by, selected.city_id, selected.building_type,
+                selected.tile_x, selected.tile_y,
                 selected.rent, selected.occupants,
                 selected.daily_income, selected.monthly_products_cost,
                 selected.product_contributions
@@ -8189,6 +8358,10 @@ async function start() {
       const row = rows[0];
       if (!row || getResidenceDefinition(row.building_type)?.kind !== 'residence') {
         response.status(row ? 400 : 404).json({ error: row ? 'not_a_residence' : 'residence_not_found' });
+        return;
+      }
+      if (isRentSimulation && row.created_by !== authenticatedUserIds.get(request)) {
+        response.status(403).json({ error: 'residence_not_owned' });
         return;
       }
       const residenceTypes = Object.values(RESIDENCES)
@@ -8278,8 +8451,8 @@ async function start() {
         throw new Error(`Não foi possível calcular os apreços da residência ${request.params.id}.`);
       }
       const calculation = calculateResidenceBenefit({
-        rent: row.rent,
-        monthlyCost: row.rent + row.monthly_products_cost,
+        rent: simulatedRent ?? row.rent,
+        monthlyCost: (simulatedRent ?? row.rent) + row.monthly_products_cost,
         dailyIncome: getResidenceBenefitIncome(
           row.occupants,
           row.daily_income,

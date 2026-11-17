@@ -227,37 +227,29 @@ describe('wallet', () => {
     }
   });
 
-  it('scales chocolate production inputs and their fractional chances with Work Points', () => {
+  it('produces chocolate in the configured batch and demands one tool per worker', () => {
     const rule = RESIDENCES.chocolate_factory.production!;
     const input = {
       progress: 0,
-      workPoints: 800,
+      workPoints: 4000,
       penalty: 0,
       freeSpace: 50,
-      charcoal: 100,
       tools: 200,
-      inputStocks: { cocoa: 5, sugar: 10, milk: 130 },
+      inputStocks: { cocoa: 1, charcoal: 20, sugar: 2, milk: 26 },
     };
     const result = planProduction(rule, input, () => 0.2);
-    assert.equal(result.units, 2);
-    assert.equal(result.charcoalUsed, 4);
-    assert.equal(result.toolsUsed, 8);
-    assert.deepEqual(result.inputStocksUsed, { charcoal: 4, milk: 5, tools: 8, cocoa: 0, sugar: 1 });
-
-    const partial = planProduction(
-      rule,
-      { ...input, workPoints: 600 },
-      () => 0.3,
-    );
-    assert.equal(partial.units, 2);
-    assert.equal(partial.charcoalUsed, 3);
-    assert.equal(partial.toolsUsed, 6);
-    assert.equal(partial.inputStocksUsed.milk, 4);
-    assert.equal(partial.progress, 0);
-
+    assert.equal(result.units, 10);
+    assert.equal(result.charcoalUsed, 20);
+    assert.equal(result.toolsUsed, 0);
+    assert.deepEqual(result.inputStocksUsed, { cocoa: 1, charcoal: 20, sugar: 2, milk: 26 });
+    assert.equal(RESIDENCES.chocolate_factory.toolDemandPerWorker, 1);
     assert.equal(
-      planProduction(rule, { ...input, tools: 0 }).units,
-      0,
+      rollToolDemand(
+        RESIDENCES.chocolate_factory.maxWorkers,
+        () => 0.2,
+        RESIDENCES.chocolate_factory.toolDemandPerWorker,
+      ),
+      40,
     );
   });
 

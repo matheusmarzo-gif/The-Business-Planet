@@ -982,10 +982,9 @@ mapeamento e verificar todas as curvas.
   produz 1 queijo por 20 litros + 200 WP. A Fábrica de Chocolate ocupa 4 × 4,
   emprega 40, custa 180 madeiras/120 pedras/60 ferros e exige 480.000 WP e armazena 50 chocolates,
   5 cacaus, 130 litros de leite, 10 açúcares, 100 carvões e 200 Ferramentas.
-  Cada 400 WP gera 1 chocolate, consumindo 2 carvões, 2 leites e 4 Ferramentas;
-  os consumos esperados de cacau (0,1), açúcar (0,2) e leite extra (0,6) por
-  unidade são arredondados estocasticamente, inclusive para frações de WP. Os
-  insumos perecíveis também passam pela deterioração diária. Sprites em
+  Cada 4.000 WP, 1 cacau, 20 carvões, 2 açúcares e 26 litros de leite produzem
+  10 chocolates; a penalidade de ferramentas consome 1 Ferramenta por trabalhador
+  por dia. Os insumos perecíveis também passam pela deterioração diária. Sprites em
   `public/buildings/industrial/`.
 - Comércio entre armazéns (`planWarehouseTrades` em `src/types/logistics.ts`): às
   03:00 e 15:00 (`world_state.last_warehouse_trade_slot`, ex. `2026-01-01T15`,

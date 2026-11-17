@@ -16,16 +16,13 @@
   "stockProductId": "chocolate",
   "stockCapacity": 50,
   "toolCapacity": 200,
+  "toolDemandPerWorker": 1,
   "charcoalCapacity": 100,
   "inputCapacities": { "cocoa": 5, "milk": 130, "sugar": 10 },
   "production": {
     "mode": "batch",
-    "workPointsPerUnit": 400,
-    "batchInputs": { "charcoal": 2, "milk": 2, "tools": 4 },
-    "batchInputRates": {
-      "cocoa": 0.1,
-      "sugar": 0.2,
-      "milk": 0.6
-    }
+    "workPointsPerUnit": 4000,
+    "batchSize": 10,
+    "batchInputs": { "cocoa": 1, "charcoal": 20, "sugar": 2, "milk": 26 }
   }
 }

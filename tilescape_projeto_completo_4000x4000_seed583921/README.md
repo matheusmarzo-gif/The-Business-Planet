@@ -542,10 +542,9 @@ por falta. Os três edifícios recebem seus insumos pelo armazém ligado e envia
 produção ao armazém. A **Fábrica de Chocolate** (4 × 4, 40 funcionários) custa
 180 madeiras, 120 pedras e 60 ferros, exige 480.000 Work Points e guarda 50 chocolates, 5
 cacaus, 130 litros de leite, 10 açúcares, 100 carvões e 200 Ferramentas. A cada
-400 Work Points produz 1 chocolate: consome 2 carvões, 2 leites e 4 Ferramentas;
-há 10% de chance proporcional de consumir 1 cacau, 20% de consumir 1 açúcar e
-60% de consumir 1 leite extra por unidade. Frações de produção e consumo são
-arredondadas como probabilidades.
+4.000 Work Points, 1 cacau, 20 carvões, 2 açúcares e 26 litros de leite produzem
+10 chocolates. A penalidade de ferramentas consome 1 Ferramenta por trabalhador
+por dia.
 
 As **Fazendas de Ovelha e de Algodão** ocupam 4 × 4, empregam até 10 pessoas,
 custam 60 madeiras/20 pedras e exigem 130.000 Work Points. A primeira guarda

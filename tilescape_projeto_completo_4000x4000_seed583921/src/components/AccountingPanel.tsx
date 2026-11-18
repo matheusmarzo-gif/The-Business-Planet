@@ -24,16 +24,26 @@ import {
 } from '../types/commerceDemand';
 import {
   getAccountingPeriodLabel,
+  getAccountingFarmWorkPointsNeeded,
   parseAccountingWeekOffset,
   parseAccountingPeriodDays,
   summarizeAccountingShops,
   type AccountingBuildingPosition,
+  type AccountingFarm,
   type AccountingPeriodDays,
   type AccountingProductionBuilding,
   type AccountingShop,
   type AccountingWeekOffset,
   type AccountingSummary,
 } from '../types/accounting';
+import {
+  getHarvestDay,
+  getHarvestYield,
+  getMonthOfDay,
+  getPlantingFactor,
+  isAutomatableFarmType,
+  type FarmAutomationSettings,
+} from '../types/farming';
 
 interface AccountingPanelProps {
   summary: AccountingSummary | null;
@@ -54,6 +64,7 @@ interface AccountingPanelProps {
     },
   ) => Promise<void>;
   onSavePrice: (buildingId: string, price: number) => Promise<void>;
+  onSaveFarmAutomation: (buildingId: string, settings: FarmAutomationSettings) => Promise<void>;
   onClose: () => void;
 }
 
@@ -62,6 +73,21 @@ const quantity = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
 const unitCost = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 const benefit = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 6 });
 const technique = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
+const percent = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
+const FARM_MONTHS = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+];
 
 const SHOP_BASKET_GROUPS = [
   { id: 'basic', label: 'Cesta básica', productIds: BASIC_BASKET_PRODUCT_IDS },
@@ -90,7 +116,7 @@ function AccountingBuildingDetails({
   onSaveWorkSettings,
   onSavePrice,
 }: {
-  building: AccountingShop | AccountingProductionBuilding;
+  building: AccountingShop | AccountingProductionBuilding | AccountingFarm;
   onSaveWorkSettings: AccountingPanelProps['onSaveWorkSettings'];
   onSavePrice: AccountingPanelProps['onSavePrice'];
 }) {
@@ -105,6 +131,7 @@ function AccountingBuildingDetails({
   const [isSavingPrice, setIsSavingPrice] = useState(false);
   const [message, setMessage] = useState('');
   const isShop = 'price' in building;
+  const farm = 'farmAutomation' in building ? building : null;
 
   return (
     <div
@@ -125,10 +152,15 @@ function AccountingBuildingDetails({
             step={1}
             required
             value={desiredWorkers}
-            disabled={isSavingSettings}
+            disabled={isSavingSettings || Boolean(farm?.farmAutomation.enabled)}
             onChange={(event) => setDesiredWorkers(event.target.value)}
           />
         </label>
+        {farm?.farmAutomation.enabled && (
+          <small className="accounting-farm-automation-note">
+            A quantidade de funcionários é controlada pela automação durante cada fase.
+          </small>
+        )}
         <label>
           Carga horária (horas/dia)
           <input
@@ -246,6 +278,171 @@ function AccountingBuildingDetails({
   );
 }
 
+function AccountingFarmAutomationEditor({
+  building,
+  onSave,
+}: {
+  building: AccountingFarm;
+  onSave: AccountingPanelProps['onSaveFarmAutomation'];
+}) {
+  const [settings, setSettings] = useState<FarmAutomationSettings>(() => ({
+    ...building.farmAutomation,
+    plantingMonths: [...building.farmAutomation.plantingMonths],
+  }));
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  if (!isAutomatableFarmType(building.type)) return null;
+
+  const isCattleFarm = building.type === 'farm_cattle';
+  const toggleMonth = (month: number) => {
+    setSettings((current) => ({
+      ...current,
+      plantingMonths: current.plantingMonths.includes(month)
+        ? current.plantingMonths.filter((value) => value !== month)
+        : [...current.plantingMonths, month].sort((a, b) => a - b),
+    }));
+  };
+
+  return (
+    <form
+      className="farm-automation-settings accounting-farm-automation"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        setIsSaving(true);
+        setMessage('');
+        try {
+          await onSave(building.id, settings);
+          setMessage('Automação salva.');
+        } catch (error) {
+          setMessage(
+            error instanceof Error ? error.message : 'Não foi possível salvar a automação da fazenda.',
+          );
+        } finally {
+          setIsSaving(false);
+        }
+      }}
+    >
+      <label className="farm-automation-toggle">
+        <input
+          type="checkbox"
+          checked={settings.enabled}
+          disabled={isSaving}
+          onChange={(event) =>
+            setSettings((current) => ({ ...current, enabled: event.target.checked }))
+          }
+        />
+        Automatizar os ciclos desta fazenda
+      </label>
+      <p>
+        Quando a fazenda estiver sem ciclo, {isCattleFarm ? 'a criação' : 'o plantio'} começará no
+        primeiro processamento diário de um mês selecionado. Ciclos em andamento não serão interrompidos.
+      </p>
+      <fieldset>
+        <legend>
+          {isCattleFarm
+            ? 'Meses permitidos para iniciar a criação'
+            : 'Meses permitidos para iniciar ou replantar'}
+        </legend>
+        <div className="farm-automation-months">
+          {FARM_MONTHS.map((monthName, index) => {
+            const month = index + 1;
+            return (
+              <label key={month}>
+                <input
+                  type="checkbox"
+                  checked={settings.plantingMonths.includes(month)}
+                  disabled={isSaving}
+                  onChange={() => toggleMonth(month)}
+                />
+                {monthName}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+      <label>
+        Funcionários durante {isCattleFarm ? 'a criação' : 'o plantio e crescimento'} (0 a{' '}
+        {RESIDENCES[building.type].maxWorkers})
+        <input
+          type="number"
+          min={0}
+          max={RESIDENCES[building.type].maxWorkers}
+          step={1}
+          value={settings.plantingWorkers}
+          disabled={isSaving}
+          onChange={(event) =>
+            setSettings((current) => ({
+              ...current,
+              plantingWorkers: Number(event.target.value),
+            }))
+          }
+        />
+      </label>
+      <label>
+        Funcionários durante {isCattleFarm ? 'o abate' : 'a colheita'} (0 a{' '}
+        {RESIDENCES[building.type].maxWorkers})
+        <input
+          type="number"
+          min={0}
+          max={RESIDENCES[building.type].maxWorkers}
+          step={1}
+          value={settings.harvestWorkers}
+          disabled={isSaving}
+          onChange={(event) =>
+            setSettings((current) => ({
+              ...current,
+              harvestWorkers: Number(event.target.value),
+            }))
+          }
+        />
+      </label>
+      {settings.enabled && settings.plantingMonths.length === 0 && (
+        <p role="alert">Selecione pelo menos um mês para ativar a automação.</p>
+      )}
+      <div className="farm-automation-actions">
+        <button
+          type="submit"
+          disabled={isSaving || (settings.enabled && settings.plantingMonths.length === 0)}
+        >
+          {isSaving
+            ? 'Salvando…'
+            : settings.enabled
+              ? 'Salvar automatização'
+              : 'Salvar configurações'}
+        </button>
+        {message && <small role="status">{message}</small>}
+      </div>
+    </form>
+  );
+}
+
+function getFarmHarvestForecast(farm: AccountingFarm): string {
+  const definition = RESIDENCES[farm.type];
+  const productName =
+    PRODUCTS.find((product) => product.id === farm.stockProductId)?.name ?? farm.stockProductId;
+  if (!farm.crop || !definition.cropRule) {
+    return definition.cropRule
+      ? 'Sem ciclo de colheita ativo.'
+      : 'Produção contínua; sem previsão de colheita.';
+  }
+
+  const harvestDay = getHarvestDay(farm.crop.plantedDay, definition.cropRule.growthMonths);
+  const forecastUnits =
+    farm.crop.phase === 'harvesting'
+      ? Math.max(0, farm.crop.yieldUnits - farm.crop.harvested)
+      : getHarvestYield(
+          farm.crop.plantedDay,
+          farm.crop.ratioSum,
+          farm.crop.days,
+          definition.cropRule,
+        );
+  const date = `${harvestDay.slice(8, 10)}/${harvestDay.slice(5, 7)}/${harvestDay.slice(0, 4)}`;
+  return farm.crop.phase === 'harvesting'
+    ? `Safra pronta desde ${date}: ${integer.format(forecastUnits)} ${productName} restantes.`
+    : `Previsão de colheita: ${integer.format(forecastUnits)} ${productName} em ${date}. Estimativa pela mão de obra acumulada.`;
+}
+
 export default function AccountingPanel({
   summary,
   isLoading,
@@ -257,13 +454,15 @@ export default function AccountingPanel({
   onViewBuilding,
   onSaveWorkSettings,
   onSavePrice,
+  onSaveFarmAutomation,
   onClose,
 }: AccountingPanelProps) {
   const [activeTab, setActiveTab] = useState<
-    'summary' | 'shops' | 'warehouses' | 'residences' | 'production' | 'products'
+    'summary' | 'shops' | 'warehouses' | 'residences' | 'production' | 'farms' | 'products'
   >('summary');
   const [productSearch, setProductSearch] = useState('');
   const [shopTypeFilter, setShopTypeFilter] = useState<ResidenceType | 'all'>('all');
+  const [farmTypeFilter, setFarmTypeFilter] = useState<ResidenceType | 'all'>('all');
   const [expandedBuildings, setExpandedBuildings] = useState<Set<string>>(() => new Set());
   const toggleBuildingDetails = (buildingId: string) => {
     setExpandedBuildings((current) => {
@@ -276,6 +475,22 @@ export default function AccountingPanel({
   const periodLabel = getAccountingPeriodLabel(periodDays);
   const weeklySummary = summary?.weeklySummary;
   const shops = summary?.shops ?? [];
+  const farms = summary?.farms ?? [];
+  const farmTypes = useMemo(
+    () =>
+      [...new Set(farms.map((farm) => farm.type))].sort((a, b) =>
+        RESIDENCES[a].name.localeCompare(RESIDENCES[b].name, 'pt-BR'),
+      ),
+    [farms],
+  );
+  const filteredFarms = useMemo(
+    () => farms.filter((farm) => farmTypeFilter === 'all' || farm.type === farmTypeFilter),
+    [farmTypeFilter, farms],
+  );
+  const productsById = useMemo(
+    () => new Map((summary?.products ?? []).map((product) => [product.productId, product])),
+    [summary?.products],
+  );
   const shopTypesByBlock = useMemo(() => {
     const availableTypes = [...new Set(shops.map((shop) => shop.type))];
     return SHOP_FILTER_BLOCKS.map((group) => ({
@@ -385,6 +600,15 @@ export default function AccountingPanel({
           onClick={() => setActiveTab('production')}
         >
           Produção
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'farms'}
+          className={activeTab === 'farms' ? 'active' : ''}
+          onClick={() => setActiveTab('farms')}
+        >
+          Fazendas
         </button>
         <button
           type="button"
@@ -716,6 +940,130 @@ export default function AccountingPanel({
                       onSaveWorkSettings={onSaveWorkSettings}
                       onSavePrice={onSavePrice}
                     />
+                  )}
+                </Fragment>
+              );
+            })}
+          </div>
+        </>
+      ) : activeTab === 'farms' ? (
+        <>
+          <p className="accounting-history-note">
+            Work Points e produção somam o período selecionado; o estoque é atual. A eficiência do plantio
+            usa o mês em que o ciclo começou, e a eficiência de mão de obra usa o ciclo atual (ou o último
+            registro diário na fazenda leiteira, sem o fator sazonal). Work Points necessários são a meta
+            diária pelos dias com ciclo ativo; em lavouras sem ciclo ativo, as eficiências ficam indisponíveis.
+            Na fazenda leiteira, Work Points necessários são os Work Points por unidade produzida. Consumo
+            mostra o total do produto nas construções do jogador, sem atribuí-lo a uma fazenda específica.
+          </p>
+          <label className="accounting-period">
+            Filtrar por tipo de fazenda
+            <select
+              value={farmTypeFilter}
+              disabled={isLoading}
+              onChange={(event) => setFarmTypeFilter(event.target.value as ResidenceType | 'all')}
+            >
+              <option value="all">Todas as fazendas</option>
+              {farmTypes.map((type) => (
+                <option key={type} value={type}>{RESIDENCES[type].name}</option>
+              ))}
+            </select>
+          </label>
+          <div className="warehouse-list accounting-list">
+            <div className="accounting-farm-row warehouse-head">
+              <span>Fazenda</span>
+              <span>Eficiência do plantio</span>
+              <span>Eficiência atual (mão de obra)</span>
+              <span>Work Points gerados</span>
+              <span>Work Points necessários</span>
+              <span>Estoque</span>
+              <span>Produção</span>
+              <span>Consumo</span>
+              <span />
+            </div>
+            {!isLoading && !error && filteredFarms.length === 0 && (
+              <p className="warehouse-summary">
+                {farmTypeFilter === 'all'
+                  ? 'Você ainda não possui fazendas.'
+                  : 'Não há fazendas deste tipo.'}
+              </p>
+            )}
+            {filteredFarms.map((farm) => {
+              const definition = RESIDENCES[farm.type];
+              const product = PRODUCTS.find((entry) => entry.id === farm.stockProductId);
+              const productName = product?.name ?? farm.stockProductId;
+              const productFlow = productsById.get(farm.stockProductId);
+              const workPointsNeeded = getAccountingFarmWorkPointsNeeded(
+                definition.cropRule?.dailyWorkPoints ?? null,
+                farm.activeDays,
+                farm.produced,
+                definition.cropRule ? null : definition.production?.workPointsPerUnit ?? null,
+              );
+              const plantingEfficiency =
+                definition.cropRule && farm.crop
+                  ? getPlantingFactor(
+                      getMonthOfDay(farm.crop.plantedDay),
+                      definition.cropRule.plantingEfficiencyByQuarter,
+                    )
+                  : null;
+              const consumptionTitle = productFlow
+                ? `Consumo total de ${productName} nas construções do jogador no período selecionado: ${quantity.format(productFlow.consumedQuantity)}. Não é atribuído a esta fazenda.`
+                : `Consumo total de ${productName} nas construções do jogador no período selecionado.`;
+              return (
+                <Fragment key={farm.id}>
+                  <div className="accounting-farm-row">
+                    <span className="accounting-farm-name">
+                      <img
+                        src={definition.asset}
+                        alt=""
+                        title={getFarmHarvestForecast(farm)}
+                        className="accounting-farm-icon"
+                      />
+                      <span>{getResidentialBuildingName(farm.type, farm.buildingNumber)}</span>
+                      <button
+                        type="button"
+                        className="accounting-expand-button"
+                        aria-label={`${expandedBuildings.has(farm.id) ? 'Ocultar' : 'Editar'} ${getResidentialBuildingName(farm.type, farm.buildingNumber)}`}
+                        aria-expanded={expandedBuildings.has(farm.id)}
+                        aria-controls={`accounting-building-${farm.id}`}
+                        onClick={() => toggleBuildingDetails(farm.id)}
+                      >
+                        {expandedBuildings.has(farm.id) ? '−' : '+'}
+                      </button>
+                    </span>
+                    <span>
+                      {plantingEfficiency === null ? '—' : `${percent.format(plantingEfficiency * 100)}%`}
+                    </span>
+                    <span>
+                      {farm.efficiency === null ? '—' : `${percent.format(farm.efficiency)}%`}
+                    </span>
+                    <span>{quantity.format(farm.workPointsGenerated)}</span>
+                    <span>{quantity.format(workPointsNeeded)}</span>
+                    <span>{quantity.format(farm.stock)} {productName}</span>
+                    <span>{quantity.format(farm.produced)} {productName}</span>
+                    <span title={consumptionTitle}>
+                      {quantity.format(productFlow?.consumedQuantity ?? 0)} {productName}
+                    </span>
+                    <button
+                      type="button"
+                      className="accounting-view-button"
+                      onClick={() => onViewBuilding(farm)}
+                    >
+                      Visualizar
+                    </button>
+                  </div>
+                  {expandedBuildings.has(farm.id) && (
+                    <>
+                      <AccountingBuildingDetails
+                        building={farm}
+                        onSaveWorkSettings={onSaveWorkSettings}
+                        onSavePrice={onSavePrice}
+                      />
+                      <AccountingFarmAutomationEditor
+                        building={farm}
+                        onSave={onSaveFarmAutomation}
+                      />
+                    </>
                   )}
                 </Fragment>
               );

@@ -1140,7 +1140,7 @@ não podem ser reconstruídos.
 
 ## Contábil
 
-O botão **Contábil** na barra inferior tem uma aba **Resumo** e cinco abas
+O botão **Contábil** na barra inferior tem uma aba **Resumo** e seis abas
 detalhadas. O resumo permite consultar a semana atual ou qualquer uma das quatro
 semanas anteriores. O lucro/prejuízo inclui receitas das lojas, aluguéis e
 vendas de armazéns, menos compras de armazéns, despesas de produtos e salários.
@@ -1171,10 +1171,15 @@ quantidades e valores comprados/vendidos, além do resultado bruto (receita de
 vendas menos custo de compras). O resultado por produto não desconta salários.
 **Residências** lista moradores, capacidade e aluguel efetivamente gerado para
 cada casa no período selecionado, com o mesmo atalho **Visualizar**. **Produção**
-lista fazendas, pesqueiros, recursos e oficinas, seus salários e unidades
-produzidas no período selecionado. Use **+** para expandir funcionários atuais
-e desejados, carga horária, salário, técnica média atual e técnica mínima
-desejável. **Produto** lista todos os produtos com o
+lista construções produtivas, seus salários e unidades produzidas no período
+selecionado. Use **+** para expandir funcionários atuais e desejados, carga
+horária, salário, técnica média atual e técnica mínima desejável.
+**Fazendas** detalha eficiência do plantio e da mão de obra, Work Points
+gerados e necessários, estoque atual, produção e consumo do produto no período.
+O consumo é o total nas construções do jogador e não é atribuído a uma fazenda
+específica. Passe o cursor sobre o ícone para ver a previsão de colheita; use o
+filtro para selecionar o tipo de fazenda e **+** para editar jornada, salário e
+automação do ciclo. **Produto** lista todos os produtos com o
 estoque atual, produção, compras e vendas entre jogadores, consumo e custo
 unitário estimado no período. O consumo separa residências e insumos industriais
 no detalhe ao passar o cursor. **Lojas e perda de estoque** soma as vendas das

@@ -1627,6 +1627,20 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             }
           : item,
       ),
+      farms: current.farms.map((farm) =>
+        farm.id === building.id
+          ? {
+              ...farm,
+              status: building.status,
+              employed: building.employed,
+              desiredWorkers: building.desiredWorkers,
+              workHoursPerDay: building.workHoursPerDay,
+              wage: building.wage,
+              averageWorkerTechnique: building.averageWorkerTechnique,
+              minimumWorkerTechnique: building.minimumWorkerTechnique,
+            }
+          : farm,
+      ),
     }));
   };
   const saveAccountingWorkSettings = async (
@@ -1650,6 +1664,34 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       { method: 'PATCH', body: JSON.stringify({ price }) },
     );
     updateAccountingBuilding(building);
+  };
+  const saveAccountingFarmAutomation = async (
+    buildingId: string,
+    settings: FarmAutomationSettings,
+  ) => {
+    const building = await cityRequest<ResidentialBuilding>(
+      `/api/residential-buildings/${buildingId}/farm-automation`,
+      { method: 'PUT', body: JSON.stringify(settings) },
+    );
+    setResidentialBuildings((current) =>
+      current.map((item) =>
+        item.id === building.id
+          ? {
+              ...building,
+              ownerName: building.ownerName ?? item.ownerName,
+              isOwnedByCurrentUser: item.isOwnedByCurrentUser,
+            }
+          : item,
+      ),
+    );
+    setAccountingSummary((current) => current && ({
+      ...current,
+      farms: current.farms.map((farm) =>
+        farm.id === building.id
+          ? { ...farm, farmAutomation: building.farmAutomation }
+          : farm,
+      ),
+    }));
   };
   const saveInputProduct = async (buildingId: string, productId: string) => {
     if (!window.confirm('Trocar a matéria-prima descartará o estoque atual dela. Deseja continuar?')) {
@@ -2587,6 +2629,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             onViewBuilding={viewAccountingBuilding}
             onSaveWorkSettings={saveAccountingWorkSettings}
             onSavePrice={saveAccountingPrice}
+            onSaveFarmAutomation={saveAccountingFarmAutomation}
             onClose={() => setIsAccountingOpen(false)}
           />
         )}

@@ -233,6 +233,9 @@ const landTileIds = new Set(
 const RESIDENCE_BUILDING_TYPES = Object.values(RESIDENCES)
   .filter((definition) => definition.kind === 'residence')
   .map((definition) => definition.type);
+const FARM_BUILDING_TYPES = Object.values(RESIDENCES)
+  .filter((definition) => definition.kind === 'farm')
+  .map((definition) => definition.type);
 const PRODUCTION_BUILDING_TYPES = Object.values(RESIDENCES)
   .filter((definition) => Boolean(definition.production))
   .map((definition) => definition.type);
@@ -7520,6 +7523,7 @@ async function start() {
         productCostResult,
         residenceResult,
         productionResult,
+        farmResult,
         weeklyFinanceResult,
         employeeCountResult,
         assetBuildingsResult,
@@ -7789,6 +7793,73 @@ async function start() {
              AND building.building_type = ANY($3::text[])
            ORDER BY building.building_type, building.building_number`,
           [userId, day, PRODUCTION_BUILDING_TYPES, periodDays],
+        ),
+        pool.query<{
+          id: string;
+          building_type: ResidenceType;
+          status: ResidentialBuilding['status'];
+          building_number: number;
+          tile_x: number;
+          tile_y: number;
+          desired_workers: number;
+          employed: number;
+          work_hours_per_day: number;
+          wage: string;
+          average_worker_technique: number | null;
+          minimum_worker_technique: number;
+          stock: number;
+          work_points: string;
+          active_days: number;
+          produced: string;
+          efficiency: number | null;
+          efficiency_day: string | null;
+          crop_phase: Crop['phase'] | null;
+          crop_planted_day: string | null;
+          crop_ratio_sum: number;
+          crop_days: number;
+          crop_yield: number;
+          crop_harvested: number;
+          farm_auto_planting_enabled: boolean;
+          farm_auto_planting_months: number[];
+          farm_planting_workers: number;
+          farm_harvest_workers: number;
+        }>(
+          `SELECT building.id, building.building_type, building.status, building.building_number,
+                  building.tile_x, building.tile_y, building.desired_workers,
+                  COALESCE((SELECT SUM(j.count)::int FROM job_assignments j
+                            WHERE j.workplace_id = building.id), 0) AS employed,
+                  building.work_hours_per_day, building.wage,
+                  ${AVERAGE_WORKER_TECHNIQUE_SQL('building.id')} AS average_worker_technique,
+                  building.minimum_worker_technique, building.stock,
+                  COALESCE(history.work_points, 0)::text AS work_points,
+                  COALESCE(history.active_days, 0)::int AS active_days,
+                  COALESCE(history.produced, 0)::text AS produced,
+                  latest.efficiency, latest.efficiency_day,
+                  building.crop_phase,
+                  to_char(building.crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day,
+                  building.crop_ratio_sum, building.crop_days, building.crop_yield, building.crop_harvested,
+                  building.farm_auto_planting_enabled, building.farm_auto_planting_months,
+                  building.farm_planting_workers, building.farm_harvest_workers
+           FROM all_buildings building
+           LEFT JOIN LATERAL (
+             SELECT SUM(work_points) AS work_points,
+                    COUNT(*)::int AS active_days,
+                    SUM(produced) AS produced
+             FROM production_history
+             WHERE building_id = building.id
+               AND day BETWEEN $2::date - ($4::integer - 1) AND $2::date
+           ) history ON TRUE
+           LEFT JOIN LATERAL (
+             SELECT efficiency, to_char(day, 'YYYY-MM-DD') AS efficiency_day
+             FROM production_history
+             WHERE building_id = building.id
+             ORDER BY day DESC
+             LIMIT 1
+           ) latest ON TRUE
+           WHERE building.created_by = $1
+             AND building.building_type = ANY($3::text[])
+           ORDER BY building.building_type, building.building_number`,
+          [userId, day, FARM_BUILDING_TYPES, periodDays],
         ),
         pool.query<{ revenue: string; expenses: string }>(
           `SELECT COALESCE(SUM(parts.revenue), 0)::text AS revenue,
@@ -8139,6 +8210,59 @@ async function start() {
           produced: Number(row.produced),
           stockProductId: getResidenceDefinition(row.building_type)?.stockProductId ?? null,
         })).sort((first, second) =>
+          RESIDENCES[first.type].name.localeCompare(RESIDENCES[second.type].name, 'pt-BR') ||
+          first.buildingNumber - second.buildingNumber,
+        ),
+        farms: farmResult.rows.map((row) => {
+          const definition = RESIDENCES[row.building_type];
+          if (!definition.stockProductId) {
+            throw new Error(`A fazenda ${row.id} não tem um produto de estoque configurado.`);
+          }
+          const crop =
+            row.crop_phase !== null && row.crop_planted_day !== null
+              ? {
+                  phase: row.crop_phase,
+                  plantedDay: row.crop_planted_day,
+                  ratioSum: Number(row.crop_ratio_sum),
+                  days: row.crop_days,
+                  yieldUnits: row.crop_yield,
+                  harvested: row.crop_harvested,
+                }
+              : null;
+          return {
+            id: row.id,
+            type: row.building_type,
+            status: row.status,
+            buildingNumber: row.building_number,
+            x: row.tile_x,
+            y: row.tile_y,
+            employed: row.employed,
+            desiredWorkers: row.desired_workers,
+            workHoursPerDay: row.work_hours_per_day,
+            wage: Number(row.wage),
+            averageWorkerTechnique: row.average_worker_technique,
+            minimumWorkerTechnique: row.minimum_worker_technique,
+            stock: row.stock,
+            produced: Number(row.produced),
+            workPointsGenerated: Number(row.work_points),
+            activeDays: row.active_days,
+            efficiency: definition.cropRule
+              ? crop && crop.days > 0
+                ? (crop.ratioSum / crop.days) * 100
+                : null
+              : row.efficiency !== null && row.efficiency_day !== null
+                ? row.efficiency / getDairyFarmEfficiency(Number(row.efficiency_day.slice(5, 7)))
+                : row.efficiency,
+            stockProductId: definition.stockProductId,
+            crop,
+            farmAutomation: {
+              enabled: row.farm_auto_planting_enabled,
+              plantingMonths: row.farm_auto_planting_months,
+              plantingWorkers: row.farm_planting_workers,
+              harvestWorkers: row.farm_harvest_workers,
+            },
+          };
+        }).sort((first, second) =>
           RESIDENCES[first.type].name.localeCompare(RESIDENCES[second.type].name, 'pt-BR') ||
           first.buildingNumber - second.buildingNumber,
         ),

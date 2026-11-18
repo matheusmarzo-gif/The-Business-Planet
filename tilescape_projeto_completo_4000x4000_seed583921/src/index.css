@@ -145,6 +145,10 @@ button { color: inherit; }
 .accounting-row { display: grid; grid-template-columns: minmax(180px, 1.5fr) repeat(2, minmax(150px, 1fr)) 100px; gap: 10px; align-items: center; min-width: 620px; padding: 7px 2px; font-size: 11px; }
 .accounting-four-row { display: grid; grid-template-columns: minmax(180px, 1.5fr) repeat(2, minmax(150px, 1fr)) 100px; gap: 10px; align-items: center; min-width: 620px; padding: 7px 2px; font-size: 11px; }
 .accounting-four-row.accounting-residence-row { grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(120px, 1fr)) 100px; min-width: 850px; }
+.accounting-farm-row { display: grid; grid-template-columns: minmax(210px, 1.4fr) repeat(7, minmax(120px, 1fr)) 100px; gap: 10px; align-items: center; min-width: 1330px; padding: 7px 2px; font-size: 11px; }
+.accounting-farm-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.accounting-farm-name > span { flex: 1 1 auto; min-width: 0; }
+.accounting-farm-icon { flex: 0 0 34px; width: 34px; height: 34px; border-radius: 5px; object-fit: cover; cursor: help; }
 .accounting-row.accounting-warehouse-building { grid-template-columns: minmax(180px, 1fr) 100px; min-width: 300px; }
 .accounting-row.accounting-shop-row, .accounting-row.accounting-shop-row.warehouse-head { grid-template-columns: minmax(180px, 1.4fr) repeat(5, minmax(120px, 1fr)) 100px; min-width: 1050px; }
 .accounting-building-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -154,6 +158,8 @@ button { color: inherit; }
 .accounting-building-details.accounting-shop-details { min-width: 1050px; }
 .accounting-building-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
 .accounting-building-fields label { display: grid; gap: 5px; color: #a6a897; font-size: 10px; }
+.accounting-farm-automation-note { grid-column: 1 / -1; color: #a6a897; font-size: 10px; }
+.accounting-farm-automation { grid-column: 1 / -1; min-width: 760px; }
 .accounting-building-fields input, .accounting-building-fields output { box-sizing: border-box; width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid rgba(219,201,158,.2); border-radius: 7px; color: #eee7d6; background: #19241e; font: 500 12px 'DM Sans', sans-serif; }
 .accounting-building-fields output { min-height: 32px; }
 .accounting-building-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

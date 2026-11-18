@@ -85,6 +85,19 @@ inclusive indústrias, e ordena os edifícios alfabeticamente por nome. Clique
 simples em qualquer construção abre seu painel; a conta Master pode arrastar
 uma construção para movê-la. O endpoint valida novamente a posição, mantém o
 estado da construção e rejeita movimentos que invalidem vínculos com armazéns.
+**Contábil → Fazendas** lista construções do tipo fazenda com dados do período
+selecionado e estoque atual: Work Points e produção vêm de `production_history`,
+e o consumo é o total do produto nas construções do jogador, sem atribuição a
+uma fazenda individual. A eficiência do plantio usa o fator sazonal do ciclo
+atual; a eficiência de mão de obra usa a média do ciclo agrícola ou, para a
+fazenda leiteira, o último registro de produção normalizado pelo fator sazonal.
+Work Points necessários são a
+meta diária do cultivo multiplicada pelos dias com ciclo ativo; na fazenda
+leiteira, são os Work Points por unidade produzida. A previsão do ícone usa o
+ciclo persistido e a produtividade de mão de obra acumulada. A expansão permite
+editar jornada e salário pelas configurações de trabalho existentes e editar a
+automação pelo endpoint `PUT /api/residential-buildings/:id/farm-automation`,
+que mantém a validação de propriedade e limites do servidor.
 O Contábil também agrega estoques e movimentações de produtos e estima custos
 unitários por jogador. O custo de mão de obra usa o custo salarial por Work
 Point; matérias-primas usam o custo estimado do dia anterior, e compras entre

@@ -6,6 +6,7 @@ import {
   estimateConstructionMaterialValue,
   estimateBlendedUnitCost,
   estimateProductionUnitCost,
+  getAccountingFarmWorkPointsNeeded,
   getShopProductUnitCostEstimate,
   getShopSalesAndLossByProduct,
   getAccountingWeekRange,
@@ -15,6 +16,12 @@ import {
   summarizeAccountingShops,
   type AccountingShop,
 } from './accounting.js';
+
+test('calculates farm Work Points needed from active crop days', () => {
+  assert.equal(getAccountingFarmWorkPointsNeeded(5000, 6, 12, 100), 30000);
+  assert.equal(getAccountingFarmWorkPointsNeeded(null, 0, 12, 5), 60);
+  assert.throws(() => getAccountingFarmWorkPointsNeeded(-1, 2, 0, null), RangeError);
+});
 
 test('aggregates shop sales and stock loss by the product sold', () => {
   assert.deepEqual(

@@ -4,6 +4,7 @@ import {
   type ResidenceType,
   type ResidentialBuildingStatus,
 } from './residence.js';
+import type { Crop, FarmAutomationSettings } from './farming.js';
 import { roundCurrency } from './currency.js';
 
 export const ACCOUNTING_PERIOD_DAYS = [1, 7, 30] as const;
@@ -114,6 +115,29 @@ export interface AccountingProductionBuilding {
   stockProductId: string | null;
 }
 
+export interface AccountingFarm {
+  id: string;
+  type: ResidenceType;
+  status: ResidentialBuildingStatus;
+  buildingNumber: number;
+  x: number;
+  y: number;
+  employed: number;
+  desiredWorkers: number;
+  workHoursPerDay: number;
+  wage: number;
+  averageWorkerTechnique: number | null;
+  minimumWorkerTechnique: number;
+  stock: number;
+  produced: number;
+  workPointsGenerated: number;
+  activeDays: number;
+  efficiency: number | null;
+  stockProductId: string;
+  crop: Crop | null;
+  farmAutomation: FarmAutomationSettings;
+}
+
 export interface AccountingProduct {
   productId: string;
   stockQuantity: number;
@@ -126,6 +150,27 @@ export interface AccountingProduct {
   residentialConsumption: number;
   productionInputConsumption: number;
   unitCostEstimate: number | null;
+}
+
+export function getAccountingFarmWorkPointsNeeded(
+  dailyWorkPoints: number | null,
+  activeDays: number,
+  produced: number,
+  workPointsPerUnit: number | null,
+): number {
+  if (
+    (dailyWorkPoints !== null && (!Number.isFinite(dailyWorkPoints) || dailyWorkPoints < 0)) ||
+    !Number.isInteger(activeDays) ||
+    activeDays < 0 ||
+    !Number.isFinite(produced) ||
+    produced < 0 ||
+    (workPointsPerUnit !== null &&
+      (!Number.isFinite(workPointsPerUnit) || workPointsPerUnit < 0))
+  ) {
+    throw new RangeError('A necessidade de Work Points da fazenda é inválida.');
+  }
+  if (dailyWorkPoints !== null) return dailyWorkPoints * activeDays;
+  return (workPointsPerUnit ?? 0) * produced;
 }
 
 export function getShopSalesAndLossByProduct(
@@ -192,6 +237,7 @@ export interface AccountingSummary {
   shops: AccountingShop[];
   residences: AccountingResidence[];
   production: AccountingProductionBuilding[];
+  farms: AccountingFarm[];
   products: AccountingProduct[];
   warehouse: {
     employeeExpense: number;

@@ -134,6 +134,60 @@ describe('population change', () => {
     assert.equal(plan.populationChangeByCity.get('city'), 40);
   });
 
+  it('distributes growth from full homes to partially occupied residences with free capacity', () => {
+    const city: PopulationCity = {
+      id: 'city',
+      centerX: 0,
+      centerY: 0,
+      employed: 228,
+      jobOffers: 1,
+    };
+    const otherCity: PopulationCity = {
+      id: 'other-city',
+      centerX: 1000,
+      centerY: 0,
+      employed: 0,
+      jobOffers: 1,
+    };
+    const residences: PopulationResidence[] = [
+      {
+        id: 'full',
+        cityId: 'city',
+        type: 'house_poor3',
+        status: 'completed',
+        occupants: 128,
+        wellbeing: 100,
+        rent: 1,
+      },
+      {
+        id: 'partially-occupied',
+        cityId: 'city',
+        type: 'house_poor3',
+        status: 'completed',
+        occupants: 100,
+        wellbeing: 100,
+        rent: 1,
+      },
+      {
+        id: 'outside-city',
+        cityId: 'other-city',
+        type: 'house_poor3',
+        status: 'completed',
+        occupants: 0,
+        wellbeing: 100,
+        rent: 1,
+      },
+    ];
+
+    const plan = planMonthlyPopulationChange([city, otherCity], residences, () => 0);
+
+    assert.equal(plan.occupantsByResidence.has('full'), false);
+    assert.equal(plan.occupantsByResidence.get('partially-occupied'), 104);
+    assert.equal(plan.occupantsByResidence.has('outside-city'), false);
+    assert.equal(plan.populationChangeByCity.get('city'), 4);
+    assert.equal(plan.populationChangeByCity.get('other-city'), 0);
+  });
+
   it('does not decline cities below 2000 residents even when unemployment exceeds 10%', () => {
     const city: PopulationCity = {
       id: 'small-city',

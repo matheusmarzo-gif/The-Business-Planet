@@ -465,17 +465,17 @@ concluída. O crescimento exige vaga na casa, ofertas de emprego na cidade e
 desemprego de no máximo 10% (desempregados ÷ população). As taxas mensais são
 0,1% para bem-estar de 0 a 50; 0,3% acima de 50 e abaixo de 100; 1,5% de 100
 a 124; 3% de 125 a 149; e 1,5% de 150 a 162. Acima de 162 até o limite atual
-de 200, a taxa é 0,3%. Casas parcialmente
-ocupadas crescem pela própria taxa de bem-estar. Para as casas vazias, o jogo
-calcula uma única taxa sobre a população das casas que estavam lotadas, usando o
-bem-estar médio ponderado pelos moradores, e distribui esse crescimento pelas
-casas vazias em ordem de ID, respeitando a capacidade. Por exemplo, 40.000
-moradores em casas lotadas com bem-estar médio 35 geram 40 novos moradores:
-32 ocupam a primeira casa vazia e 8, a próxima. Frações de moradores são
-arredondadas probabilisticamente. O decrescimento só ocorre quando o desemprego
-ultrapassa 10% e a cidade tem pelo menos 2.000 habitantes. Nessas cidades, casas
-com bem-estar de 0 a 50 perdem 2% da população; casas acima de 100 perdem 1%, que
-pode emigrar para uma cidade
+de 200, a taxa é 0,3%. Casas parcialmente ocupadas crescem pela própria taxa de
+bem-estar. O crescimento adicional calculado sobre a população das casas que
+estavam lotadas usa o bem-estar médio ponderado pelos moradores e é distribuído,
+em ordem de ID, entre as residências da mesma cidade que ainda tenham espaço,
+inclusive as parcialmente ocupadas, respeitando a capacidade. Por exemplo,
+40.000 moradores em casas lotadas com bem-estar médio 35 geram 40 novos
+moradores, distribuídos em ordem de ID pelos espaços disponíveis na cidade.
+Frações de moradores são arredondadas probabilisticamente. O decrescimento só
+ocorre quando o desemprego ultrapassa 10% e a cidade tem pelo menos 2.000
+habitantes. Nessas cidades, casas com bem-estar de 0 a 50 perdem 2% da
+população; casas acima de 100 perdem 1%, que pode emigrar para uma cidade
 aleatória a menos de 850 tiles e que não esteja em decrescimento. Os emigrantes
 ocupam primeiro as residências concluídas mais baratas da cidade de destino.
 Sem cidade vizinha elegível ou capacidade para recebê-los, a população que saiu

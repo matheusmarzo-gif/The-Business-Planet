@@ -33,11 +33,11 @@ pelas necessidades supridas. No dia 7 de cada mês, às 03:00, a população tam
 cresce ou decresce por residência conforme o bem-estar, o desemprego municipal,
 as vagas de emprego e a capacidade habitacional. O decrescimento exige ao mesmo
 tempo desemprego acima de 10% e população municipal de pelo menos 2.000 pessoas.
-Casas parcialmente ocupadas
-crescem pela própria taxa de bem-estar; o crescimento destinado às casas vazias
-é calculado sobre os moradores das casas que estavam lotadas, com bem-estar
-médio ponderado pela população, e distribuído pelas casas vazias em ordem de ID
-até sua capacidade. As taxas mensais incluem 0,1% para bem-estar de 0 a 50.
+Casas parcialmente ocupadas crescem pela própria taxa de bem-estar; o
+crescimento adicional calculado sobre os moradores das casas que estavam
+lotadas, com bem-estar médio ponderado pela população, é distribuído em ordem
+de ID entre residências da mesma cidade que ainda tenham espaço, inclusive as
+parcialmente ocupadas. As taxas mensais incluem 0,1% para bem-estar de 0 a 50.
 A escala máxima de bem-estar residencial é 200; entre 163 e 200 a regra
 populacional existente mantém a taxa de crescimento de 0,3%.
 A emigração pode ser recebida por uma cidade vizinha elegível a menos de 850

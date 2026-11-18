@@ -235,7 +235,6 @@ export function planMonthlyPopulationChange(
     const fullHomes = cityHomes.filter(
       (home) => home.occupants >= RESIDENCES[home.type].capacity,
     );
-    const emptyHomes = cityHomes.filter((home) => home.occupants === 0);
     for (const home of cityHomes) {
       if (
         getUnemploymentRate(populationByCity.get(city.id) ?? 0, city.employed) >
@@ -265,7 +264,10 @@ export function planMonthlyPopulationChange(
     }
 
     const fullPopulation = fullHomes.reduce((total, home) => total + home.occupants, 0);
-    if (fullPopulation === 0 || emptyHomes.length === 0) continue;
+    const homesWithFreeCapacity = cityHomes.filter(
+      (home) => home.occupants < RESIDENCES[home.type].capacity,
+    );
+    if (fullPopulation === 0 || homesWithFreeCapacity.length === 0) continue;
     const weightedWellbeing =
       fullHomes.reduce((total, home) => total + home.wellbeing * home.occupants, 0) /
       fullPopulation;
@@ -274,9 +276,10 @@ export function planMonthlyPopulationChange(
       getPopulationGrowthRate(weightedWellbeing),
       random,
     );
-    for (const home of emptyHomes) {
+    for (const home of homesWithFreeCapacity) {
       if (remainingGrowth <= 0) break;
-      const increase = Math.min(RESIDENCES[home.type].capacity, remainingGrowth);
+      const freeCapacity = RESIDENCES[home.type].capacity - home.occupants;
+      const increase = Math.min(freeCapacity, remainingGrowth);
       home.occupants += increase;
       occupantsByResidence.set(home.id, home.occupants);
       populationByCity.set(city.id, (populationByCity.get(city.id) ?? 0) + increase);

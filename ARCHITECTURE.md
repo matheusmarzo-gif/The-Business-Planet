@@ -68,6 +68,8 @@ só pode oferecer trabalhadores quando sua técnica, derivada do bem-estar, atin
 o mínimo configurado pela construção. Tanto a distribuição diária quanto a prévia
 de contratação exigem que residência e local de trabalho pertençam à mesma
 cidade; o raio de busca de 60 tiles não permite cruzar limites municipais.
+O fator de distância do benefício da oferta de trabalho é `60 / (60 + d)`,
+onde `d` é a distância entre os centros da residência e do local de trabalho.
 Movimentar uma construção entre cidades remove imediatamente as atribuições
 incompatíveis, e as existentes são reconciliadas na inicialização do servidor.
 O painel mostra a técnica média dos trabalhadores atualmente alocados a cada

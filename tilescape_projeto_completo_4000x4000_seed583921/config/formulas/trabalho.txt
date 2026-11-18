@@ -9,8 +9,7 @@
     "benefitExponent": 2
   },
   "distanceFactor": {
-    "radiusTiles": 60,
-    "radicandNumerator": 60
+    "radiusTiles": 60
   },
   "restFactor": {
     "shortDayHours": 4,

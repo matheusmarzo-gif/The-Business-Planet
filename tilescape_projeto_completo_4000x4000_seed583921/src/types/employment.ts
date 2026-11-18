@@ -124,8 +124,8 @@ export function getWorkBenefit(
     throw new RangeError('A distância até o trabalho precisa ser não negativa.');
   }
   const factor = getHoursFactor(hours);
-  const { radiusTiles, radicandNumerator } = GAME_RULES.work.distanceFactor;
-  const distanceFactor = Math.sqrt(radicandNumerator / (radiusTiles + distance));
+  const { radiusTiles } = GAME_RULES.work.distanceFactor;
+  const distanceFactor = radiusTiles / (radiusTiles + distance);
   const offerSizeMultiplier =
     openJobs <= 4 ? 5 :
     openJobs <= 10 ? 3 :

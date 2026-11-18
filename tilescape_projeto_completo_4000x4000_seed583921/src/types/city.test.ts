@@ -2027,7 +2027,7 @@ describe('work settings', () => {
     assert.equal(getHoursFactor(14), 0.5);
     assert.equal(getHoursFactor(2), 0.5);
     assert.equal(getWorkBenefit(10, 80, 8), 300);
-    assert.ok(Math.abs(getWorkBenefit(10, 80, 8, 60) - 300 * Math.sqrt(0.5)) < 1e-12);
+    assert.equal(getWorkBenefit(10, 80, 8, 60), 150);
     assert.equal(getRestFactor(4), 1.2);
     assert.equal(getRestFactor(8), 1);
     assert.ok(Math.abs(getRestFactor(14) - 0.8) < 1e-9);
@@ -2106,11 +2106,11 @@ describe('work settings', () => {
     const far = workplace('far', 159, 10, 32);
     far.y = 99;
     const assignments = allocateWorkers([home], [near, far]);
-    const distanceFactor = Math.sqrt(60 / 120);
+    const distanceFactor = 60 / 120;
 
     assert.deepEqual(assignments, [
-      { workplaceId: 'near', residenceId: 'home', count: 19 },
-      { workplaceId: 'far', residenceId: 'home', count: 13 },
+      { workplaceId: 'near', residenceId: 'home', count: 21 },
+      { workplaceId: 'far', residenceId: 'home', count: 11 },
     ]);
     assert.equal(assignments.reduce((sum, assignment) => sum + assignment.count, 0), home.occupants);
     assert.equal(getWorkBenefit(32, 10, 8, 60) / getWorkBenefit(32, 10, 8), distanceFactor);

@@ -636,7 +636,7 @@ async function generateGameConfig(): Promise<void> {
   validateKeys(
     readRecord(formulas.work, 'distanceFactor'),
     'config/formulas/trabalho.txt:distanceFactor',
-    ['radiusTiles', 'radicandNumerator'],
+    ['radiusTiles'],
   );
   validateKeys(
     readRecord(formulas.work, 'restFactor'),
@@ -751,7 +751,6 @@ async function generateGameConfig(): Promise<void> {
     'hoursFactor.deviationScaleHours',
     'hoursFactor.benefitExponent',
     'distanceFactor.radiusTiles',
-    'distanceFactor.radicandNumerator',
     'restFactor.shortDayHours',
     'restFactor.standardDayHours',
     'restFactor.longDayHours',

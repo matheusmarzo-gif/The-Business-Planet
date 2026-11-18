@@ -896,7 +896,7 @@ definitivo da construção (por exemplo, 1 na Leitaria). Em construções
 concluídas vale o limite do catálogo. Todo dia às 12:00 (horário do mundo), cada
 residência considera ofertas com vagas a até 60 tiles na mesma cidade. O benefício de
 cada oferta é `vagas × bônus × F_H² × (salário diário ÷ horas) × fator_distância`, com
-`F_H = 1 − 0,5·(|H−8|/6)²` e `fator_distância = √(60 / (60 + d))`, onde `d` é a
+`F_H = 1 − 0,5·(|H−8|/6)²` e `fator_distância = 60 / (60 + d)`, onde `d` é a
 distância entre os centros da residência e do trabalho. O bônus depende das
 vagas abertas: ×5 (1–4), ×3 (5–10), ×2 (11–20), ×1 (21–40), ×0,9 (41–100),
 ×0,8 (101–300) e ×0,7 (mais de 300). Os moradores são

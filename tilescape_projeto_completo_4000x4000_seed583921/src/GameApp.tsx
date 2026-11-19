@@ -18,6 +18,7 @@ import MasterPanel, { type OnlinePlayer } from './components/MasterPanel';
 import WarehousePanel from './components/WarehousePanel';
 import WarehouseTransferPanel from './components/WarehouseTransferPanel';
 import ConsumptionPanel, { type ProductConsumption } from './components/ConsumptionPanel';
+import LocalDemandPanel from './components/LocalDemandPanel';
 import ProductionHistoryPanel, { type ProductionDay } from './components/ProductionHistoryPanel';
 import CommerceHistoryPanel, { type CommerceDay } from './components/CommerceHistoryPanel';
 import WarehouseLogPanel, { type WarehouseLogDay, type WarehouseLogEvent } from './components/WarehouseLogPanel';
@@ -31,6 +32,7 @@ import {
 } from './types/warehouse';
 import { GameMap } from './game/GameMap';
 import { getAccessToken } from './auth/authClient';
+import type { LocalDemandSummary } from './types/localDemand';
 import { connectToWorld, WorldSnapshot } from './game/worldClient';
 import {
   CityAssembly,
@@ -417,6 +419,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const worldStageRef = useRef<HTMLElement | null>(null);
   const localResourceRequestRef = useRef(0);
   const consumptionRequestRef = useRef(0);
+  const localDemandRequestRef = useRef(0);
   const warehouseSelectionRequestRef = useRef(0);
   const [hoveredTile, setHoveredTile] = useState<TileInfo | null>(null);
   const [selectedTile, setSelectedTile] = useState<TileInfo | null>(null);
@@ -447,6 +450,10 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     steel: number;
   } | null>(null);
   const [isConsumptionOpen, setIsConsumptionOpen] = useState(false);
+  const [isLocalDemandOpen, setIsLocalDemandOpen] = useState(false);
+  const [isLocalDemandLoading, setIsLocalDemandLoading] = useState(false);
+  const [localDemandError, setLocalDemandError] = useState('');
+  const [localDemandSummary, setLocalDemandSummary] = useState<LocalDemandSummary | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState('');
@@ -1079,6 +1086,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   };
 
   const openConsumption = async (buildingId: string) => {
+    localDemandRequestRef.current += 1;
+    setIsLocalDemandOpen(false);
+    setIsLocalDemandLoading(false);
     const requestId = ++consumptionRequestRef.current;
     setReturnToCityAfterConsumption(false);
     setConsumptionScope('RESIDÊNCIA');
@@ -1104,6 +1114,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   };
 
   const openCityConsumption = async (city: CityAssembly) => {
+    localDemandRequestRef.current += 1;
+    setIsLocalDemandOpen(false);
+    setIsLocalDemandLoading(false);
     const requestId = ++consumptionRequestRef.current;
     setIsCityModalOpen(false);
     setReturnToCityAfterConsumption(true);
@@ -1137,6 +1150,40 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setIsCityModalOpen(true);
       setReturnToCityAfterConsumption(false);
     }
+  };
+
+  const openLocalDemand = async (buildingId: string) => {
+    consumptionRequestRef.current += 1;
+    setIsConsumptionOpen(false);
+    setIsConsumptionLoading(false);
+    setReturnToCityAfterConsumption(false);
+    const requestId = ++localDemandRequestRef.current;
+    setIsLocalDemandOpen(true);
+    setIsLocalDemandLoading(true);
+    setLocalDemandError('');
+    setLocalDemandSummary(null);
+    try {
+      const result = await cityRequest<LocalDemandSummary>(
+        `/api/residential-buildings/${buildingId}/local-demand`,
+      );
+      if (localDemandRequestRef.current === requestId) {
+        setLocalDemandSummary(result);
+      }
+    } catch (error) {
+      if (localDemandRequestRef.current === requestId) {
+        setLocalDemandError(
+          error instanceof Error ? error.message : 'Não foi possível carregar a demanda local.',
+        );
+      }
+    } finally {
+      if (localDemandRequestRef.current === requestId) setIsLocalDemandLoading(false);
+    }
+  };
+
+  const closeLocalDemand = () => {
+    localDemandRequestRef.current += 1;
+    setIsLocalDemandOpen(false);
+    setIsLocalDemandLoading(false);
   };
 
   const refreshWarehouse = async (buildingId: string, includeSettings = false): Promise<boolean> => {
@@ -2469,6 +2516,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             building={selectedBuildingSummary}
             cityName={cities.find((city) => city.id === selectedBuildingSummary.cityId)?.name ?? '—'}
             onOpenConsumption={() => void openConsumption(selectedBuildingSummary.id)}
+            onOpenLocalDemand={() => void openLocalDemand(selectedBuildingSummary.id)}
             onClose={() => setSelectedResidenceId(null)}
           />
         )}
@@ -2511,6 +2559,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             warehouseStock={warehouseStock}
             warehouseStockLoaded={warehouseStockLoaded}
             onOpenConsumption={() => void openConsumption(selectedResidence.id)}
+            onOpenLocalDemand={() => void openLocalDemand(selectedResidence.id)}
             onOpenProductionHistory={() => void openProductionHistory(selectedResidence.id)}
             onOpenCommerceHistory={() => void openCommerceHistory(selectedResidence.id)}
             onOpenWarehouseLog={() => void openWarehouseLog(selectedResidence.id)}
@@ -2609,6 +2658,14 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
             scope={consumptionScope}
             title={consumptionTitle}
             onClose={closeConsumption}
+          />
+        )}
+        {isLocalDemandOpen && (
+          <LocalDemandPanel
+            summary={localDemandSummary}
+            isLoading={isLocalDemandLoading}
+            error={localDemandError}
+            onClose={closeLocalDemand}
           />
         )}
         {isAccountingOpen && (

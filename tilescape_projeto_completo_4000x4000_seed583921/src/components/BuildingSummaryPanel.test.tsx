@@ -28,6 +28,7 @@ function renderPanel(
       building,
       cityName: 'Test City',
       onOpenConsumption: () => undefined,
+      onOpenLocalDemand: () => undefined,
       onClose: () => undefined,
     }),
   );
@@ -37,9 +38,12 @@ test('offers on-demand consumption for completed public residences', () => {
   const markup = renderPanel('house_poor1');
 
   assert.match(markup, /Ver consumo da casa/);
+  assert.match(markup, /Demanda Local/);
 });
 
 test('does not offer consumption for buildings without completed residence data', () => {
   assert.doesNotMatch(renderPanel('house_poor1', 'under_construction'), /Ver consumo da casa/);
+  assert.doesNotMatch(renderPanel('house_poor1', 'under_construction'), /Demanda Local/);
   assert.doesNotMatch(renderPanel('shop_alcohol'), /Ver consumo da casa/);
+  assert.match(renderPanel('shop_alcohol'), /Demanda Local/);
 });

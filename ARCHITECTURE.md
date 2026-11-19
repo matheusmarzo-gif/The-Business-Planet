@@ -82,6 +82,16 @@ concorrentes do mesmo tipo de construção a até 60 tiles dela, usando estoques
 preços e empregos atuais, além dos parâmetros editados no painel. A rota valida
 a propriedade da loja e lê um snapshot consistente sem persistir alterações; a
 simulação não depende do cache local de diagnósticos.
+O botão **Demanda Local** aparece nas construções concluídas, próprias ou de
+outros jogadores. `GET /api/residential-buildings/:id/local-demand` agrega, em
+um snapshot somente de leitura, as residências concluídas da mesma cidade a até
+60 tiles: moradores, empregados e folha salarial, além das vagas de trabalho
+próximas. Para cada produto, a demanda usa a média diária desejada por pessoa
+nos últimos 30 dias multiplicada pelos empregados atuais da residência; a
+oferta usa a média diária efetivamente comprada pelo mesmo número de empregados.
+O preço ponderado é o total gasto dividido pelas unidades compradas no período.
+A resposta contém somente totais agregados e não exige que o jogador seja dono
+da construção.
 O relatório contábil de produção inclui toda construção com regra de produção,
 inclusive indústrias, e ordena os edifícios alfabeticamente por nome. Clique
 simples em qualquer construção abre seu painel; a conta Master pode arrastar
@@ -190,6 +200,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | `src/types/product.ts` | Catálogo estático dos produtos, unidades, peso, volume e validade padrão. |
 | `src/components/ProductCatalog.tsx` | Interface pesquisável para consultar as fichas de produtos. |
 | `src/components/CommerceHistoryPanel.tsx` | Histórico diário de despesas, vendas e resultado dos comércios. |
+| `src/components/LocalDemandPanel.tsx` | Exibe população, empregos e agregados de demanda local por produto, agrupados por cesta. |
 | `src/components/AccountingPanel.tsx` | Relatórios agregados do jogador autenticado; lojas são agrupadas por cesta e têm filtros e totais; lojas e construções produtivas expandem configuração de funcionários, técnica e preços comerciais. |
 | `src/types/accounting.ts` | Tipos dos dados contábeis de construção, estimadores de custo unitário e agregação dos totais das lojas exibidas. |
 | `src/components/PerformanceLogPanel.tsx` | Exibição das etapas do processamento, métricas WebSocket e volume estimado de respostas SQL. |
@@ -1110,6 +1121,7 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/performance-logs` | Autenticado | Retorna até 100 medições recentes de etapas globais, armazenadas no Redis por até sete dias. |
 | `GET /api/cities` | Autenticado | Retorna cidades com população, pessoas empregadas, vagas abertas e salário médio diário dos empregados. |
 | `GET /api/cities/:id/consumption` | Autenticado | Retorna consumo e desejo médios por consumidor da cidade, ponderados pelas residências, além do preço médio ponderado, no último dia e nos últimos 30 dias. |
+| `GET /api/residential-buildings/:id/local-demand` | Autenticado | Retorna totais agregados das residências concluídas e das vagas de trabalho próximas na mesma cidade, em até 60 tiles, mais demanda desejada, compras efetivas e preço médio ponderado por produto nos últimos 30 dias; não exige propriedade da construção. |
 | `GET /api/wallet` | Autenticado | Cria a carteira sem saldo prévio com C$ 25.000 (idempotente), preserva saldos existentes e retorna `{ balance }`. |
 | `GET /api/accounting?days=1\|7\|30&week=0\|1\|2\|3\|4` | Autenticado | Retorna relatórios detalhados no período selecionado e o resumo financeiro da semana indicada (0 = atual, 4 = quatro semanas antes), além de funcionários empregados e estimativas atuais do valor da empresa e do estoque. Lojas e construções produtivas incluem funcionários atuais/desejados, jornada, salário e técnica atual/mínima para edição na interface; lojas incluem o preço atual de venda. A aba comercial calcula receita líquida com custos médios diários persistidos; a aba Residências retorna benefício associado para residências concluídas e aluguel atual por pessoa; a aba Produto agrega estoque, produção, comércio entre jogadores e consumo residencial/industrial, além do custo unitário estimado. |
 | `GET /api/rankings?days=30\|365` | Autenticado | Retorna rankings globais com os 30 primeiros e a posição do jogador atual, se estiver fora do top 30: valor estimado da empresa, área total das construções, quantidade de tiles de estrada, vendas/produção por produto, lucro e investimentos no período selecionado. |

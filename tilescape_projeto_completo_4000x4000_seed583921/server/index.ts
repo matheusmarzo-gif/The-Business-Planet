@@ -54,6 +54,8 @@ import {
   RESIDENCES,
   RESIDENCE_STATS,
   SHOP_TYPES,
+  WORKER_SEARCH_RADIUS,
+  isWithinWorkerSearchRadius,
   type ResidentialBuilding,
   type ResidentialBuildingSummary,
   type ResidenceType,
@@ -90,6 +92,11 @@ import {
 } from '../src/types/worldSync.js';
 import { STARTING_BALANCE } from '../src/types/wallet.js';
 import { roundCurrency } from '../src/types/currency.js';
+import {
+  calculateLocalDemandSummary,
+  type LocalDemandProductHistory,
+  type LocalDemandResidence,
+} from '../src/types/localDemand.js';
 import {
   calculateDailyRentRevenue,
   calculateEstimatedShopNetRevenue,
@@ -9396,6 +9403,176 @@ async function start() {
         console.error('Não foi possível consultar o consumo da residência:', error);
         response.status(503).json({ error: 'residence_unavailable' });
       });
+  });
+  app.get('/api/residential-buildings/:id/local-demand', requireAuth, (request, response) => {
+    if (!residenceIdPattern.test(request.params.id)) {
+      response.status(400).json({ error: 'invalid_building' });
+      return;
+    }
+
+    void pool.connect().then(async (client) => {
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        const { rows: anchorRows } = await client.query<{
+          id: string;
+          city_id: string;
+          building_type: ResidenceType;
+          tile_x: number;
+          tile_y: number;
+          day: Date;
+        }>(
+          `SELECT building.id, building.city_id, building.building_type,
+                  building.tile_x, building.tile_y,
+                  (SELECT (world_time AT TIME ZONE 'UTC')::date
+                   FROM world_state WHERE id = 1) AS day
+           FROM all_buildings building
+           WHERE building.id = $1`,
+          [request.params.id],
+        );
+        const anchor = anchorRows[0];
+        if (!anchor) {
+          await client.query('COMMIT');
+          response.status(404).json({ error: 'building_not_found' });
+          return;
+        }
+
+        const maxFootprintDimension = Math.max(
+          ...Object.values(RESIDENCES).map((definition) =>
+            Math.max(definition.width, definition.height),
+          ),
+        );
+        const searchPadding = WORKER_SEARCH_RADIUS + maxFootprintDimension;
+        const { rows: buildingRows } = await client.query<{
+          id: string;
+          building_type: ResidenceType;
+          tile_x: number;
+          tile_y: number;
+          status: ResidentialBuilding['status'];
+          occupants: number;
+          desired_workers: number;
+          wage: number;
+          workplace_employed: number;
+          residence_employed: number;
+          residence_wage_total: number;
+        }>(
+          `SELECT building.id, building.building_type, building.tile_x, building.tile_y,
+                  building.status, building.occupants, building.desired_workers,
+                  building.wage::float8 AS wage,
+                  COALESCE((
+                    SELECT SUM(assignment.count)::int
+                    FROM job_assignments assignment
+                    WHERE assignment.workplace_id = building.id
+                  ), 0)::int AS workplace_employed,
+                  COALESCE((
+                    SELECT SUM(assignment.count)::int
+                    FROM job_assignments assignment
+                    WHERE assignment.residence_id = building.id
+                  ), 0)::int AS residence_employed,
+                  COALESCE((
+                    SELECT SUM(assignment.count * workplace.wage)
+                    FROM job_assignments assignment
+                    JOIN all_buildings workplace ON workplace.id = assignment.workplace_id
+                    WHERE assignment.residence_id = building.id
+                  ), 0)::float8 AS residence_wage_total
+           FROM all_buildings building
+           WHERE building.city_id = $1
+             AND building.tile_x BETWEEN $2::int - $4::int AND $2::int + $4::int
+             AND building.tile_y BETWEEN $3::int - $4::int AND $3::int + $4::int`,
+          [
+            anchor.city_id,
+            anchor.tile_x,
+            anchor.tile_y,
+            searchPadding,
+          ],
+        );
+        const nearbyBuildings = buildingRows.filter((building) =>
+          isWithinWorkerSearchRadius(
+            { type: anchor.building_type, x: anchor.tile_x, y: anchor.tile_y },
+            { type: building.building_type, x: building.tile_x, y: building.tile_y },
+          ),
+        );
+        const residences = nearbyBuildings
+          .filter(
+            (building) =>
+              building.status === 'completed' &&
+              getResidenceDefinition(building.building_type)?.kind === 'residence',
+          )
+          .map((building) => ({
+            id: building.id,
+            occupants: building.occupants,
+            employed: building.residence_employed,
+            wageTotal: building.residence_wage_total,
+          }));
+        const localResidenceIds = residences.map((residence) => residence.id);
+        const { rows: historyRows } = localResidenceIds.length > 0
+          ? await client.query<{
+              residence_id: string;
+              product_id: string;
+              month_quantity: number;
+              month_spent: number;
+              month_consumed_quantity: number;
+              month_consumer_days: number;
+              month_desired_quantity: number;
+              month_desired_consumer_days: number;
+            }>(
+              `SELECT building_id::text AS residence_id, product_id,
+                      COALESCE(SUM(quantity), 0)::float8 AS month_quantity,
+                      COALESCE(SUM(spent), 0)::float8 AS month_spent,
+                      COALESCE(SUM(quantity)
+                        FILTER (WHERE consumers IS NOT NULL), 0)::float8
+                        AS month_consumed_quantity,
+                      COALESCE(SUM(consumers), 0)::float8 AS month_consumer_days,
+                      COALESCE(SUM(desired_quantity), 0)::float8 AS month_desired_quantity,
+                      COALESCE(SUM(consumers)
+                        FILTER (WHERE desired_quantity IS NOT NULL), 0)::float8
+                        AS month_desired_consumer_days
+               FROM residence_consumption
+               WHERE building_id = ANY($2::uuid[])
+                 AND day > $1::date - 30
+                 AND day <= $1::date
+               GROUP BY building_id, product_id`,
+              [anchor.day, localResidenceIds],
+            )
+          : { rows: [] };
+        const localHistory: LocalDemandProductHistory[] = historyRows.map((row) => ({
+          residenceId: row.residence_id,
+          productId: row.product_id,
+          monthQuantity: row.month_quantity,
+          monthSpent: row.month_spent,
+          monthConsumedQuantity: row.month_consumed_quantity,
+          monthConsumerDays: row.month_consumer_days,
+          monthDesiredQuantity: row.month_desired_quantity,
+          monthDesiredConsumerDays: row.month_desired_consumer_days,
+        }));
+        const openJobOffers = nearbyBuildings.reduce((total, building) => {
+          const definition = getResidenceDefinition(building.building_type);
+          if (!definition || (definition.kind === 'residence' && building.status !== 'under_construction')) {
+            return total;
+          }
+          const desiredWorkers = Math.min(
+            building.desired_workers,
+            getMaxDesiredWorkers(building.building_type, building.status),
+          );
+          return total + Math.max(0, desiredWorkers - building.workplace_employed);
+        }, 0);
+
+        const summary = calculateLocalDemandSummary(
+          residences,
+          localHistory,
+          openJobOffers,
+        );
+        await client.query('COMMIT');
+        response.json(summary);
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+    }).catch((error: unknown) => {
+      console.error('Não foi possível consultar a demanda local:', error);
+      response.status(503).json({ error: 'local_demand_unavailable' });
+    });
   });
   app.get('/api/residential-buildings/:id/warehouse-transfer-quote', requireAuth, (request, response) => {
     const userId = authenticatedUserIds.get(request);

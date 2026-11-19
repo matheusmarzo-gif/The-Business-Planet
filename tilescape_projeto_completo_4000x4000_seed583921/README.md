@@ -131,6 +131,20 @@ produto para o `Cb`. A média diária de cada produto considera a quantidade
 consumida por trabalhador empregado, usando os consumidores registrados em cada
 dia. Os dados são calculados no servidor a partir do histórico persistido da
 residência.
+
+### Demanda Local
+
+Em qualquer construção concluída, própria ou de outro jogador, abra
+**Demanda Local** para consultar as residências e vagas de trabalho da mesma
+cidade em um raio de 60 tiles. O painel mostra moradores, moradores empregados,
+vagas de emprego e salário médio diário. A tabela agrupa os produtos por cesta:
+a demanda é a média diária desejada por pessoa nos últimos 30 dias multiplicada
+pelos empregados atuais de cada residência; a oferta é a média diária realmente
+comprada, ponderada pelos mesmos empregados. O preço ponderado considera o
+valor e a quantidade das compras residenciais do período. Os dados são
+agregados no servidor; informações individuais de outras residências não são
+expostas.
+
 6. Adicione o domínio público do app à lista de domínios confiáveis do Neon Auth:
 
    ```powershell

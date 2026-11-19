@@ -8,6 +8,7 @@ interface BuildingSummaryPanelProps {
   building: ResidentialBuildingSummary;
   cityName: string;
   onOpenConsumption: () => void;
+  onOpenLocalDemand: () => void;
   onClose: () => void;
 }
 
@@ -15,6 +16,7 @@ export default function BuildingSummaryPanel({
   building,
   cityName,
   onOpenConsumption,
+  onOpenLocalDemand,
   onClose,
 }: BuildingSummaryPanelProps) {
   return (
@@ -53,6 +55,11 @@ export default function BuildingSummaryPanel({
       {building.status === 'completed' && RESIDENCES[building.type].kind === 'residence' && (
         <button type="button" className="warehouse-open" onClick={onOpenConsumption}>
           Ver consumo da casa
+        </button>
+      )}
+      {building.status === 'completed' && (
+        <button type="button" className="warehouse-open" onClick={onOpenLocalDemand}>
+          Demanda Local
         </button>
       )}
     </aside>

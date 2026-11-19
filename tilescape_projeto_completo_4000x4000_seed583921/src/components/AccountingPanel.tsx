@@ -1076,7 +1076,7 @@ export default function AccountingPanel({
             Estoque atual e movimentações do período selecionado. Consumo inclui as residências e os insumos
             usados na produção. Custos são estimativas atualizadas diariamente, combinando Work Points,
             insumos avaliados pelo custo do dia anterior e compras de outros jogadores. A coluna lojas e perda
-            de estoque soma vendas das lojas e produtos perdidos por validade no período.
+            de estoque soma vendas das lojas e perdas por validade em lojas, armazéns e demais locais.
           </p>
           <label className="warehouse-search accounting-product-search">
             <span>Buscar produto</span>
@@ -1100,7 +1100,11 @@ export default function AccountingPanel({
             </div>
             {filteredProducts.map((item) => {
               const product = PRODUCTS.find((entry) => entry.id === item.productId);
-              const shopsAndLoss = item.shopSalesQuantity + item.shopStockLossQuantity;
+              const totalStockLoss =
+                item.shopStockLossQuantity +
+                item.warehouseStockLossQuantity +
+                item.otherStockLossQuantity;
+              const shopsAndLoss = item.shopSalesQuantity + totalStockLoss;
               return (
                 <div className="accounting-product-row" key={item.productId}>
                   <span>{product?.name ?? item.productId}</span>
@@ -1109,7 +1113,7 @@ export default function AccountingPanel({
                   <span>{quantity.format(item.importedQuantity)}</span>
                   <span>{quantity.format(item.exportedQuantity)}</span>
                   <span
-                    title={`Vendas nas lojas: ${quantity.format(item.shopSalesQuantity)} · Perda de estoque: ${quantity.format(item.shopStockLossQuantity)}`}
+                    title={`Vendas nas lojas: ${quantity.format(item.shopSalesQuantity)} · Perda de estoque: ${quantity.format(totalStockLoss)} (lojas: ${quantity.format(item.shopStockLossQuantity)} · armazéns: ${quantity.format(item.warehouseStockLossQuantity)} · demais locais: ${quantity.format(item.otherStockLossQuantity)})`}
                   >
                     {quantity.format(shopsAndLoss)}
                   </span>

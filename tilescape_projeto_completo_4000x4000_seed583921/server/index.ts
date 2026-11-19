@@ -100,6 +100,7 @@ import {
 import {
   calculateDailyRentRevenue,
   calculateEstimatedShopNetRevenue,
+  getAccountingStockLossByProduct,
   estimateConstructionMaterialValue,
   estimateBlendedUnitCost,
   estimateProductionUnitCost,
@@ -1198,7 +1199,21 @@ async function applyDailySpoilage(client: PoolClient, day: string): Promise<bool
   let changed = false;
   const shopTypes = new Set<string>(SHOP_TYPES);
   const spoiledShopStocks: { id: string; quantity: number }[] = [];
+  const spoiledInventoryStocks = new Map<
+    string,
+    { buildingId: string; productId: string; quantity: number }
+  >();
   const stockKey = (buildingId: string, productId: string) => `${buildingId}\u0000${productId}`;
+  const addSpoiledInventoryStock = (buildingId: string, productId: string, quantity: number) => {
+    if (quantity <= 0) return;
+    const key = stockKey(buildingId, productId);
+    const existing = spoiledInventoryStocks.get(key);
+    if (existing) {
+      existing.quantity += quantity;
+    } else {
+      spoiledInventoryStocks.set(key, { buildingId, productId, quantity });
+    }
+  };
   const addDailyQuantity = (quantities: Map<string, number>, key: string, quantity: number) => {
     if (quantity <= 0) return;
     quantities.set(key, (quantities.get(key) ?? 0) + quantity);
@@ -1279,6 +1294,8 @@ async function applyDailySpoilage(client: PoolClient, day: string): Promise<bool
     ]);
     if (shopTypes.has(building.building_type)) {
       spoiledShopStocks.push({ id: building.id, quantity });
+    } else {
+      addSpoiledInventoryStock(building.id, productId, quantity);
     }
     changed = true;
   }
@@ -1366,6 +1383,7 @@ async function applyDailySpoilage(client: PoolClient, day: string): Promise<bool
       'UPDATE warehouse_stock SET quantity = quantity - $3 WHERE building_id = $1 AND product_id = $2',
       [stock.building_id, stock.product_id, quantity],
     );
+    addSpoiledInventoryStock(stock.building_id, stock.product_id, quantity);
     changed = true;
   }
 
@@ -1398,6 +1416,9 @@ async function applyDailySpoilage(client: PoolClient, day: string): Promise<bool
        WHERE building.id = spoiled.id`,
       [spoiledSugarcane.map(({ id }) => id), spoiledSugarcane.map(({ quantity }) => quantity)],
     );
+    for (const stock of spoiledSugarcane) {
+      addSpoiledInventoryStock(stock.id, 'sugarcane', stock.quantity);
+    }
     changed = true;
   }
   const { rows: inputStocks } = await client.query<{
@@ -1439,8 +1460,33 @@ async function applyDailySpoilage(client: PoolClient, day: string): Promise<bool
         spoiledInputs.map((stock) => stock.spoiled),
       ],
     );
+    for (const stock of spoiledInputs) {
+      addSpoiledInventoryStock(stock.building_id, stock.product_id, stock.spoiled);
+    }
     changed = true;
   }
+  if (spoiledInventoryStocks.size > 0) {
+    const spoiledStocks = [...spoiledInventoryStocks.values()];
+    await client.query(
+      `INSERT INTO inventory_spoilage_history (building_id, product_id, day, units_lost)
+       SELECT batch.building_id, batch.product_id, $1::date, batch.units_lost
+       FROM UNNEST($2::uuid[], $3::text[], $4::integer[])
+         AS batch(building_id, product_id, units_lost)
+       ON CONFLICT (building_id, product_id, day) DO UPDATE
+       SET units_lost = inventory_spoilage_history.units_lost + EXCLUDED.units_lost`,
+      [
+        day,
+        spoiledStocks.map((stock) => stock.buildingId),
+        spoiledStocks.map((stock) => stock.productId),
+        spoiledStocks.map((stock) => stock.quantity),
+      ],
+    );
+  }
+  await client.query(
+    `DELETE FROM inventory_spoilage_history
+     WHERE day < $1::date - $2::integer`,
+    [day, LEADERBOARD_HISTORY_DAYS - 1],
+  );
   return changed;
 }
 
@@ -7647,6 +7693,7 @@ async function start() {
         warehouseBuildingsResult,
         productResult,
         productFlowResult,
+        stockLossResult,
         productCostResult,
         residenceResult,
         productionResult,
@@ -7814,6 +7861,25 @@ async function start() {
             PRODUCT_PRODUCER_DEFINITIONS.map((definition) => definition.stockProductId ?? ''),
             PRODUCTS.map((product) => product.id),
           ],
+        ),
+        pool.query<{
+          product_id: string;
+          location: 'shop' | 'warehouse' | 'other';
+          units_lost: string;
+        }>(
+          `SELECT history.product_id,
+                  CASE
+                    WHEN building.building_type = ANY($2::text[]) THEN 'shop'
+                    WHEN building.building_type IN ('warehouse', 'silo') THEN 'warehouse'
+                    ELSE 'other'
+                  END AS location,
+                  SUM(history.units_lost)::text AS units_lost
+           FROM inventory_spoilage_history history
+           JOIN all_buildings building ON building.id = history.building_id
+           WHERE building.created_by = $1
+             AND history.day BETWEEN $3::date - ($4::integer - 1) AND $3::date
+           GROUP BY history.product_id, location`,
+          [userId, SHOP_TYPES, day, periodDays],
         ),
         pool.query<{ product_id: string; unit_cost: string }>(
           `SELECT product_id, unit_cost::text
@@ -8239,9 +8305,17 @@ async function start() {
           unitsLost: Number(row.units_lost),
         })),
       );
+      const additionalStockLosses = getAccountingStockLossByProduct(
+        stockLossResult.rows.map((row) => ({
+          productId: row.product_id,
+          location: row.location,
+          unitsLost: Number(row.units_lost),
+        })),
+      );
       const productSummaries = PRODUCTS.map((product) => {
         const flow = productFlows.get(product.id);
         const shopFlow = shopSalesAndLoss.get(product.id);
+        const stockLoss = additionalStockLosses.get(product.id);
         const residentialConsumption = Number(flow?.residential_consumption ?? 0);
         const productionInputConsumption = Number(flow?.production_input_consumption ?? 0);
         return {
@@ -8251,7 +8325,10 @@ async function start() {
           importedQuantity: Number(flow?.imported_quantity ?? 0),
           exportedQuantity: Number(flow?.exported_quantity ?? 0),
           shopSalesQuantity: shopFlow?.soldQuantity ?? 0,
-          shopStockLossQuantity: shopFlow?.lostQuantity ?? 0,
+          shopStockLossQuantity:
+            (shopFlow?.lostQuantity ?? 0) + (stockLoss?.shopQuantity ?? 0),
+          warehouseStockLossQuantity: stockLoss?.warehouseQuantity ?? 0,
+          otherStockLossQuantity: stockLoss?.otherQuantity ?? 0,
           consumedQuantity: residentialConsumption + productionInputConsumption,
           residentialConsumption,
           productionInputConsumption,

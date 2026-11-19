@@ -536,6 +536,17 @@ CREATE TABLE IF NOT EXISTS commerce_history (
 CREATE INDEX IF NOT EXISTS commerce_history_day_idx
   ON commerce_history (day, building_id);
 
+CREATE TABLE IF NOT EXISTS inventory_spoilage_history (
+  building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,
+  product_id TEXT NOT NULL,
+  day DATE NOT NULL,
+  units_lost INTEGER NOT NULL CHECK (units_lost > 0),
+  PRIMARY KEY (building_id, product_id, day)
+);
+
+CREATE INDEX IF NOT EXISTS inventory_spoilage_history_day_idx
+  ON inventory_spoilage_history (day, building_id);
+
 ALTER TABLE commerce_history
   DROP CONSTRAINT IF EXISTS commerce_history_sale_price_check,
   ADD COLUMN IF NOT EXISTS units_lost INTEGER NOT NULL DEFAULT 0,

@@ -1217,9 +1217,13 @@ de sucesso.
   estoque continua usando preços médios atuais de venda nos armazéns.
 - `production_input_history` registra os produtos efetivamente consumidos por
   construções produtivas e alimenta o consumo industrial da aba **Produto**.
-  Essa aba também agrega `commerce_history.units_sold` e `units_lost` por
-  produto, exibindo a soma de vendas das lojas e perdas por validade com o
-  detalhamento no tooltip; a busca de produtos é filtrada no cliente pelo nome.
+  `inventory_spoilage_history` registra por dia as perdas por validade nos
+  estoques de armazéns, insumos e demais construções; o estoque principal das
+  lojas continua registrado em `commerce_history.units_lost`. A aba **Produto**
+  combina essas fontes e detalha no tooltip as perdas de lojas, armazéns e
+  demais locais, além de somar as vendas das lojas. Perdas fora das lojas
+  anteriores à criação do histórico não podem ser reconstruídas. A busca de
+  produtos é filtrada no cliente pelo nome.
   `product_cost_history` conserva estimativas unitárias por jogador/produto/dia,
   e `player_product_costs` guarda o valor mais recente. O custo combina Work
   Points e salário do dia, insumos avaliados pelo custo do dia anterior e

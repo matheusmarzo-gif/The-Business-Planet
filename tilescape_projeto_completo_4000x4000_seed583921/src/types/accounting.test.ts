@@ -6,6 +6,7 @@ import {
   estimateConstructionMaterialValue,
   estimateBlendedUnitCost,
   estimateProductionUnitCost,
+  getAccountingStockLossByProduct,
   getAccountingFarmWorkPointsNeeded,
   getShopProductUnitCostEstimate,
   getShopSalesAndLossByProduct,
@@ -33,6 +34,22 @@ test('aggregates shop sales and stock loss by the product sold', () => {
     new Map([
       ['rice', { soldQuantity: 13, lostQuantity: 3 }],
       ['fish', { soldQuantity: 3, lostQuantity: 4 }],
+    ]),
+  );
+});
+
+test('aggregates stock loss by product and storage location', () => {
+  assert.deepEqual(
+    getAccountingStockLossByProduct([
+      { productId: 'bread', location: 'shop', unitsLost: 2 },
+      { productId: 'bread', location: 'warehouse', unitsLost: 5 },
+      { productId: 'bread', location: 'other', unitsLost: 3 },
+      { productId: 'bread', location: 'warehouse', unitsLost: 1 },
+      { productId: 'fish', location: 'other', unitsLost: 4 },
+    ]),
+    new Map([
+      ['bread', { shopQuantity: 2, warehouseQuantity: 6, otherQuantity: 3 }],
+      ['fish', { shopQuantity: 0, warehouseQuantity: 0, otherQuantity: 4 }],
     ]),
   );
 });

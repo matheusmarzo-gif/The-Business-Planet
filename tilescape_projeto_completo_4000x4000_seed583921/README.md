@@ -1203,7 +1203,10 @@ automação do ciclo. **Produto** lista todos os produtos com o
 estoque atual, produção, compras e vendas entre jogadores, consumo e custo
 unitário estimado no período. O consumo separa residências e insumos industriais
 no detalhe ao passar o cursor. **Lojas e perda de estoque** soma as vendas das
-lojas e as unidades perdidas por validade; passe o cursor para ver cada parcela.
+lojas e as perdas por validade de todos os estoques; passe o cursor para ver
+as parcelas de lojas, armazéns e demais locais. As perdas fora das lojas passam
+a ser registradas com esta atualização; períodos anteriores não podem ser
+reconstruídos para esses locais.
 A busca filtra os produtos pelo nome, como no painel do armazém. O custo de
 produção usa o custo salarial por Work Point e o custo estimado no dia anterior
 para os insumos; compras externas e produção própria são combinadas pela

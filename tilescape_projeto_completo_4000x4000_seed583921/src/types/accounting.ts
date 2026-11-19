@@ -146,6 +146,8 @@ export interface AccountingProduct {
   exportedQuantity: number;
   shopSalesQuantity: number;
   shopStockLossQuantity: number;
+  warehouseStockLossQuantity: number;
+  otherStockLossQuantity: number;
   consumedQuantity: number;
   residentialConsumption: number;
   productionInputConsumption: number;
@@ -184,6 +186,36 @@ export function getShopSalesAndLossByProduct(
     totals.soldQuantity += shop.unitsSold;
     totals.lostQuantity += shop.unitsLost;
     quantities.set(productId, totals);
+  }
+  return quantities;
+}
+
+export function getAccountingStockLossByProduct(
+  losses: readonly {
+    productId: string;
+    location: 'shop' | 'warehouse' | 'other';
+    unitsLost: number;
+  }[],
+): Map<string, {
+  shopQuantity: number;
+  warehouseQuantity: number;
+  otherQuantity: number;
+}> {
+  const quantities = new Map<string, {
+    shopQuantity: number;
+    warehouseQuantity: number;
+    otherQuantity: number;
+  }>();
+  for (const loss of losses) {
+    const totals = quantities.get(loss.productId) ?? {
+      shopQuantity: 0,
+      warehouseQuantity: 0,
+      otherQuantity: 0,
+    };
+    if (loss.location === 'shop') totals.shopQuantity += loss.unitsLost;
+    else if (loss.location === 'warehouse') totals.warehouseQuantity += loss.unitsLost;
+    else totals.otherQuantity += loss.unitsLost;
+    quantities.set(loss.productId, totals);
   }
   return quantities;
 }

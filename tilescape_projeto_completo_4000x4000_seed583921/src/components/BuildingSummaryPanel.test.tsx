@@ -34,16 +34,21 @@ function renderPanel(
   );
 }
 
-test('offers on-demand consumption for completed public residences', () => {
+test('offers on-demand consumption but not local demand for public residences', () => {
   const markup = renderPanel('house_poor1');
 
   assert.match(markup, /Ver consumo da casa/);
-  assert.match(markup, /Demanda Local/);
+  assert.doesNotMatch(markup, /Demanda Local/);
+});
+
+test('offers local demand for eligible completed public businesses only', () => {
+  assert.match(renderPanel('shop_alcohol'), /Demanda Local/);
+  assert.doesNotMatch(renderPanel('farm_barley'), /Demanda Local/);
+  assert.doesNotMatch(renderPanel('shop_alcohol', 'under_construction'), /Demanda Local/);
 });
 
 test('does not offer consumption for buildings without completed residence data', () => {
   assert.doesNotMatch(renderPanel('house_poor1', 'under_construction'), /Ver consumo da casa/);
   assert.doesNotMatch(renderPanel('house_poor1', 'under_construction'), /Demanda Local/);
   assert.doesNotMatch(renderPanel('shop_alcohol'), /Ver consumo da casa/);
-  assert.match(renderPanel('shop_alcohol'), /Demanda Local/);
 });

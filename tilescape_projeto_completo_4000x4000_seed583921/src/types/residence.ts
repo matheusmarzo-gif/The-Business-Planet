@@ -70,6 +70,17 @@ export const KIND_CATEGORY: Record<BuildingKind, ConstructionCategory> = {
   resource: 'recursos',
 };
 
+const LOCAL_DEMAND_CATEGORIES: readonly ConstructionCategory[] = [
+  'artesanais',
+  'comerciais',
+  'recursos',
+  'industrias',
+];
+
+export function supportsLocalDemand(kind: BuildingKind): boolean {
+  return LOCAL_DEMAND_CATEGORIES.includes(KIND_CATEGORY[kind]);
+}
+
 // 'accumulate': 1 unidade a cada N Work Points, com resto acumulado.
 // 'chance': Work Points/N é a probabilidade diária de 1 unidade (parte inteira é certa).
 // 'batch': cada N Work Points + insumos geram um lote de `batchSize` unidades.

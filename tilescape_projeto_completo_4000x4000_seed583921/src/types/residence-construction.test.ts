@@ -7,6 +7,7 @@ import {
   planConstructionMaterialWithdrawals,
   RESIDENCES,
   SHOP_TYPES,
+  supportsLocalDemand,
 } from './residence.js';
 
 test('allows authenticated players to build every catalog construction', () => {
@@ -19,6 +20,18 @@ test('rejects construction types outside the catalog', () => {
   assert.equal(isPlayerBuildableConstructionType('prefeitura'), false);
   assert.equal(isPlayerBuildableConstructionType('__proto__'), false);
   assert.equal(isPlayerBuildableConstructionType(null), false);
+});
+
+test('allows local demand only for artisanal, commercial, resource, and industrial categories', () => {
+  assert.deepEqual(
+    (['fishery', 'workshop', 'shop', 'resource', 'warehouse', 'industry'] as const)
+      .map(supportsLocalDemand),
+    [true, true, true, true, true, true],
+  );
+  assert.deepEqual(
+    (['residence', 'farm'] as const).map(supportsLocalDemand),
+    [false, false],
+  );
 });
 
 test('allows every catalog construction in the database building type constraint', async () => {

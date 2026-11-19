@@ -14,6 +14,7 @@ import {
   RESIDENCE_STATS,
   WORKER_SEARCH_RADIUS,
   RESIDENCES,
+  supportsLocalDemand,
   getResidentialBuildingName,
   type ResidentialBuilding,
   type ResidenceType,
@@ -539,7 +540,7 @@ export default function ResidencePanel({
           Ver consumo da casa
         </button>
       )}
-      {building.status === 'completed' && (
+      {building.status === 'completed' && supportsLocalDemand(definition.kind) && (
         <button type="button" className="warehouse-open" onClick={onOpenLocalDemand}>
           Demanda Local
         </button>

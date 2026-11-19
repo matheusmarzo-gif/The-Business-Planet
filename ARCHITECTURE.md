@@ -82,8 +82,9 @@ concorrentes do mesmo tipo de construção a até 60 tiles dela, usando estoques
 preços e empregos atuais, além dos parâmetros editados no painel. A rota valida
 a propriedade da loja e lê um snapshot consistente sem persistir alterações; a
 simulação não depende do cache local de diagnósticos.
-O botão **Demanda Local** aparece nas construções concluídas, próprias ou de
-outros jogadores. `GET /api/residential-buildings/:id/local-demand` agrega, em
+O botão **Demanda Local** aparece nas construções concluídas das categorias
+artesanais, comerciais, recursos e indústrias, próprias ou de outros jogadores.
+`GET /api/residential-buildings/:id/local-demand` agrega, em
 um snapshot somente de leitura, as residências concluídas da mesma cidade a até
 60 tiles: moradores, empregados e folha salarial, além das vagas de trabalho
 próximas. Para cada produto, a demanda usa a média diária desejada por pessoa

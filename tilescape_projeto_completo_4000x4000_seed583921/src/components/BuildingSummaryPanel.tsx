@@ -1,6 +1,7 @@
 import {
   getResidentialBuildingName,
   RESIDENCES,
+  supportsLocalDemand,
   type ResidentialBuildingSummary,
 } from '../types/residence';
 
@@ -57,7 +58,7 @@ export default function BuildingSummaryPanel({
           Ver consumo da casa
         </button>
       )}
-      {building.status === 'completed' && (
+      {building.status === 'completed' && supportsLocalDemand(RESIDENCES[building.type].kind) && (
         <button type="button" className="warehouse-open" onClick={onOpenLocalDemand}>
           Demanda Local
         </button>

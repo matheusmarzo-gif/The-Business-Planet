@@ -732,10 +732,10 @@ mapeamento e verificar todas as curvas.
   `commerce_history` fornece os preços e unidades vendidas nos últimos 30 dias.
   `getCityProductAveragePrices` calcula a média ponderada por unidades vendidas,
   por produto e cidade; se ainda não houve venda do produto, usa a média dos
-  preços atuais anunciados na cidade. Produtos básicos sem preço disponível não
-  contribuem em `RR`; os intermediários sem preço não contribuem em `RR2`;
-  produtos avançados sem preço não contribuem em `RR3`; os bens sem preço não
-  contribuem em `RB1`. `RR` é o custo diário por pessoa da cesta básica, `RR2`
+  preços atuais anunciados na cidade. Em cada cesta, produtos sem preço recebem
+  uma contribuição estimada pela média das contribuições dos produtos com preço
+  naquela mesma cesta; sem nenhum produto precificado, não há estimativa e o
+  custo da cesta permanece zero. `RR` é o custo diário por pessoa da cesta básica, `RR2`
   o da cesta intermediária, `RR3` o da cesta avançada e `RB1` o da cesta de
   bens. Para todos os produtos, `Pf = preço local × necessidade
   diária por pessoa`, `Dᵢ = √(60 / (60 + dᵢ))`, onde `dᵢ` é a distância entre

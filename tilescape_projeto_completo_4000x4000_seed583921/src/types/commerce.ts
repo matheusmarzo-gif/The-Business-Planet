@@ -623,7 +623,7 @@ function getBasketBreakdownForProducts(
   shops: Pick<SalesShop, 'cityId' | 'productId' | 'price'>[],
   history: CityProductSale[],
 ): BasketProductBreakdown[] {
-  return productIds.map((productId) => {
+  const breakdown = productIds.map((productId) => {
     const demand = demandByProduct.get(productId);
     if (demand === undefined) {
       throw new Error(`A demanda não está configurada para ${productId}.`);
@@ -659,6 +659,21 @@ function getBasketBreakdownForProducts(
       basketType,
     };
   });
+  const offeredContributions = breakdown.filter(
+    (item) => item.basketContribution !== null,
+  );
+  if (offeredContributions.length === 0) return breakdown;
+
+  const estimatedContribution =
+    offeredContributions.reduce(
+      (total, item) => total + (item.basketContribution ?? 0),
+      0,
+    ) / offeredContributions.length;
+  return breakdown.map((item) =>
+    item.basketContribution === null
+      ? { ...item, basketContribution: estimatedContribution }
+      : item,
+  );
 }
 
 export function getBasicBasketBreakdown(

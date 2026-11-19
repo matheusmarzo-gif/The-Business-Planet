@@ -1000,8 +1000,10 @@ A loja vende somente o estoque que tiver (começa em 0; pode ser abastecida por
 um armazém ligado). No histórico do comércio, **Ver cálculo** mostra `RR` e
 `RR2` e a composição por produto de cada cesta: necessidade diária por morador,
 preço médio usado, subtotal, origem do preço (vendas ponderadas ou média dos
-anúncios), unidades vendidas e receita no período; itens sem preço disponível
-aparecem fora do custo de referência correspondente. Também mostra preço médio
+anúncios), unidades vendidas e receita no período. Para cada cesta, produtos sem
+oferta recebem uma contribuição estimada pela média das contribuições dos itens
+com oferta naquela mesma cesta; sem ofertas, a cesta não recebe estimativa. Essa
+estimativa aparece identificada no detalhamento. Também mostra preço médio
 do produto, `Pf`, `w`, `q`, benefícios de
 erro/ideal/associado, participação e número de moradores alocados, demanda,
 estoque/capacidade e resultado. Os subtotais da cesta são exibidos com maior

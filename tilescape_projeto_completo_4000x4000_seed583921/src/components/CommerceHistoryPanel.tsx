@@ -134,16 +134,21 @@ export default function CommerceHistoryPanel({
                       <details className="commerce-basket-breakdown">
                         <summary>Composição das cestas (soma diária por morador)</summary>
                         <p>
-                          Cada contribuição é consumo diário configurado × preço médio municipal.
+                          Para produtos com oferta, cada contribuição é consumo diário configurado × preço médio municipal.
                           Produtos básicos compõem RR, intermediários RR2, avançados RR3 e nobres RR4.
-                          As cestas de bens compõem RB1 a RB4. Os subtotais são somados sem
-                          arredondamento intermediário.
+                          As cestas de bens compõem RB1 a RB4. Quando um produto não tem oferta,
+                          sua contribuição é estimada pela média das contribuições dos produtos
+                          com oferta na mesma cesta; sem ofertas, a cesta não recebe estimativa.
+                          Os subtotais são somados sem arredondamento intermediário.
                         </p>
                         {transaction.basketBreakdown.map((item) => {
                           const product = PRODUCTS.find(({ id }) => id === item.productId);
                           const unit = product?.unit === 'liter' ? 'L' : 'un.';
-                          const priceSource =
-                            item.priceSource === 'weighted_sales'
+                          const estimatedContribution =
+                            item.averagePrice === null && item.basketContribution !== null;
+                          const priceSource = estimatedContribution
+                            ? 'contribuição estimada pela média dos produtos com oferta na cesta'
+                            : item.priceSource === 'weighted_sales'
                               ? `média ponderada de ${integer.format(item.historicalUnitsSold)} unidades vendidas, receita ${formatPreciseMoney(item.historicalRevenue)}`
                               : item.priceSource === 'current_shop_prices'
                                 ? `média dos preços anunciados em ${integer.format(item.currentShopCount)} loja(s)`
@@ -153,7 +158,9 @@ export default function CommerceHistoryPanel({
                               {product?.name ?? item.productId}: {preciseDecimal.format(item.dailyNeedPerPerson)}{' '}
                               {unit}/morador/dia ×{' '}
                               {item.averagePrice === null
-                                ? 'sem preço'
+                                ? estimatedContribution
+                                  ? 'sem oferta (estimado)'
+                                  : 'sem preço'
                                 : formatPreciseMoney(item.averagePrice)}{' '}
                               ={' '}
                               {item.basketContribution === null

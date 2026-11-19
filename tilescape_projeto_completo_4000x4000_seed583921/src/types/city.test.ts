@@ -978,7 +978,7 @@ describe('shop sales', () => {
     ]);
     assert.equal(prices.get(getCityProductKey('city-a', 'rice')), 12.5);
     assert.equal(prices.get(getCityProductKey('city-b', 'wheat')), 8);
-    assert.equal(getBasicBasketCost('city-a', demandByProduct, prices), 0.375);
+    assert.equal(getBasicBasketCost('city-a', demandByProduct, prices), 3);
   });
 
   it('records every basket item, price source, and precise contribution to RR', () => {
@@ -1017,7 +1017,7 @@ describe('shop sales', () => {
         { productId: 'milk', priceSource: 'weighted_sales', basketContribution: 1.41 },
       ],
     );
-    assert.equal(getBasicBasketCost('city-a', demandByProduct, prices), 1.9143);
+    assert.equal(getBasicBasketCost('city-a', demandByProduct, prices), 5.1048);
     assert.equal(getIntermediateBasketCost('city-a', demandByProduct, prices), 0);
     const allBasketItems = getBasketBreakdown(
       'city-a',
@@ -1059,7 +1059,7 @@ describe('shop sales', () => {
     assert.ok(
       breakdown
         .filter((item) => item.basketContribution !== null)
-        .reduce((total, item) => total + (item.basketContribution ?? 0), 0) === 1.9143,
+        .reduce((total, item) => total + (item.basketContribution ?? 0), 0) === 5.1048,
     );
     const plan = planShopSalesDetailed(
       [home('basket-home', 0, 32, 10)],
@@ -1073,8 +1073,69 @@ describe('shop sales', () => {
     assert.ok(diagnostic);
     assert.equal(isShopResidenceTransaction(diagnostic), true);
     assert.deepEqual(diagnostic.basketBreakdown, allBasketItems);
-    assert.equal(diagnostic.referenceBasketCost, 1.9143);
+    assert.equal(diagnostic.referenceBasketCost, 5.1048);
     assert.equal(diagnostic.intermediateBasketCost, 0);
+  });
+
+  it('estimates missing products from the offered contribution average in every basket', () => {
+    const offers = [
+      ['fish', 40],
+      ['sugar', 10],
+      ['bread', 6],
+      ['fruit', 250],
+      ['clothing', 100],
+      ['olive_oil', 20],
+      ['tincture', 5],
+      ['artwork', 10],
+    ].map(([productId, price], index) => ({
+      ...shop(`basket-offer-${index}`, 0, Number(price), 100, 100),
+      productId: String(productId),
+    }));
+    const averagePrices = getCityProductAveragePrices(offers, []);
+    const breakdown = getBasketBreakdown(
+      'city-a',
+      demandByProduct,
+      averagePrices,
+      offers,
+      [],
+    );
+    const basketCost = (basketType: string) =>
+      breakdown
+        .filter((item) => item.basketType === basketType)
+        .reduce((total, item) => total + (item.basketContribution ?? 0), 0);
+    const expectedBasketCosts: readonly [string, number][] = [
+      ['basic', 9.6],
+      ['intermediate', 0.4],
+      ['advanced', 22],
+      ['goods', 4],
+      ['noble', 4],
+      ['goodsIntermediate', 1.5],
+      ['goodsAdvanced', 1],
+      ['goodsNoble', 0],
+    ];
+
+    for (const [basketType, expected] of expectedBasketCosts) {
+      assert.ok(Math.abs(basketCost(basketType) - expected) < 1e-12);
+    }
+
+    assert.equal(
+      breakdown.find((item) => item.productId === 'bread')?.basketContribution,
+      6,
+    );
+    assert.equal(
+      breakdown.find((item) => item.productId === 'fruit')?.basketContribution,
+      5,
+    );
+    assert.deepEqual(
+      breakdown
+        .filter((item) => item.basketType === 'advanced' && item.averagePrice === null)
+        .map((item) => item.basketContribution),
+      [5.5, 5.5],
+    );
+    assert.equal(
+      breakdown.find((item) => item.productId === 'rarities')?.basketContribution,
+      null,
+    );
   });
 
   it('uses the intermediate-basket formula, RR2, and both income thresholds', () => {
@@ -1465,11 +1526,11 @@ describe('shop sales', () => {
       fishShops.map((store) =>
         plan.transactionsByShop.get(store.id)?.[0].candidate.allocatedResidents,
       ),
-      [14, 13, 5],
+      [13, 13, 6],
     );
     assert.deepEqual(plan.purchases, [
       { shopId: 'fish-9', residenceId: 'home-32', productId: 'fish', quantity: 5 },
-      { shopId: 'fish-20', residenceId: 'home-32', productId: 'fish', quantity: 1 },
+      { shopId: 'fish-20', residenceId: 'home-32', productId: 'fish', quantity: 2 },
     ]);
   });
 
@@ -1494,8 +1555,8 @@ describe('shop sales', () => {
       () => 0,
     );
     assert.deepEqual(plan, [
-      { shopId: 'milk-a', residenceId: 'milk-home', productId: 'milk', quantity: 2 },
-      { shopId: 'milk-b', residenceId: 'milk-home', productId: 'milk', quantity: 2 },
+      { shopId: 'milk-a', residenceId: 'milk-home', productId: 'milk', quantity: 1 },
+      { shopId: 'milk-b', residenceId: 'milk-home', productId: 'milk', quantity: 1 },
     ]);
   });
 
@@ -1727,7 +1788,7 @@ describe('fazenda leiteira e demanda configurável', () => {
         multipliers,
         new Map([[getCityProductKey('city-a', 'milk'), 10]]),
       ),
-      10,
+      80,
     );
   });
 

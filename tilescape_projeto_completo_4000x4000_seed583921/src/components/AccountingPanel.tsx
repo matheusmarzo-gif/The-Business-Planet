@@ -3,6 +3,7 @@ import { PRODUCTS } from '../types/product';
 import {
   getResidentialBuildingName,
   MAX_WAGE,
+  MAX_WAGE_PER_TECHNIQUE_RATE,
   MAX_WORKER_TECHNIQUE,
   MAX_WORK_HOURS,
   MIN_WORKER_TECHNIQUE,
@@ -62,8 +63,12 @@ interface AccountingPanelProps {
     buildingId: string,
     settings: {
       wage: number;
+      wageByTechnique: boolean;
+      wagePerTechniqueRate: number;
       workHoursPerDay: number;
       desiredWorkers: number;
+      desiredWorkersByWorkPoints: boolean;
+      desiredWorkPointsPerDay: number;
       minimumWorkerTechnique: number;
     },
   ) => Promise<void>;
@@ -124,9 +129,23 @@ function AccountingBuildingDetails({
   onSaveWorkSettings: AccountingPanelProps['onSaveWorkSettings'];
   onSavePrice: AccountingPanelProps['onSavePrice'];
 }) {
-  const [desiredWorkers, setDesiredWorkers] = useState(String(building.desiredWorkers));
+  const [desiredWorkers, setDesiredWorkers] = useState(String(building.fixedDesiredWorkers));
+  const [desiredWorkersByWorkPoints, setDesiredWorkersByWorkPoints] = useState(
+    building.desiredWorkersByWorkPoints,
+  );
+  const [desiredWorkPointsPerDay, setDesiredWorkPointsPerDay] = useState(
+    String(building.desiredWorkPointsPerDay),
+  );
   const [workHoursPerDay, setWorkHoursPerDay] = useState(String(building.workHoursPerDay));
   const [wage, setWage] = useState(String(building.wage));
+  const [wageByTechnique, setWageByTechnique] = useState(building.wageByTechnique);
+  const [wagePerTechniqueRate, setWagePerTechniqueRate] = useState(
+    String(
+      building.wageByTechnique
+        ? building.wagePerTechniqueRate
+        : Number((building.wage / (building.averageWorkerTechnique ?? 10)).toFixed(2)),
+    ),
+  );
   const [minimumWorkerTechnique, setMinimumWorkerTechnique] = useState(
     String(building.minimumWorkerTechnique),
   );
@@ -148,18 +167,41 @@ function AccountingBuildingDetails({
           <output>{integer.format(building.employed)}</output>
         </label>
         <label>
-          Funcionários desejados
+          {desiredWorkersByWorkPoints
+            ? 'Work Points desejados por dia'
+            : 'Funcionários desejados'}
           <input
             type="number"
             min={0}
-            max={getMaxDesiredWorkers(building.type, building.status)}
+            max={desiredWorkersByWorkPoints
+              ? 1_000_000_000
+              : getMaxDesiredWorkers(building.type, building.status)}
             step={1}
             required
-            value={desiredWorkers}
+            value={desiredWorkersByWorkPoints ? desiredWorkPointsPerDay : desiredWorkers}
             disabled={isSavingSettings || Boolean(farm?.farmAutomation.enabled)}
-            onChange={(event) => setDesiredWorkers(event.target.value)}
+            onChange={(event) =>
+              desiredWorkersByWorkPoints
+                ? setDesiredWorkPointsPerDay(event.target.value)
+                : setDesiredWorkers(event.target.value)
+            }
           />
         </label>
+        <label className="farm-automation-toggle">
+          <input
+            type="checkbox"
+            checked={desiredWorkersByWorkPoints}
+            disabled={isSavingSettings || Boolean(farm?.farmAutomation.enabled)}
+            onChange={(event) => setDesiredWorkersByWorkPoints(event.target.checked)}
+          />
+          Definir por Work Points por dia
+        </label>
+        {desiredWorkersByWorkPoints && (
+          <small>
+            Meta diária de {integer.format(Number(desiredWorkPointsPerDay) || 0)} Work Points;
+            equipe atual calculada: {integer.format(building.desiredWorkers)}.
+          </small>
+        )}
         {farm?.farmAutomation.enabled && (
           <small className="accounting-farm-automation-note">
             A quantidade de funcionários é controlada pela automação durante cada fase.
@@ -179,18 +221,36 @@ function AccountingBuildingDetails({
           />
         </label>
         <label>
-          Salário (C$ por dia)
+          {wageByTechnique
+            ? 'Salário (C$ por ponto de técnica)'
+            : 'Salário (C$ por dia)'}
           <input
             type="number"
-            min={0}
-            max={MAX_WAGE}
+            min={wageByTechnique ? 0 : 0}
+            max={wageByTechnique ? MAX_WAGE_PER_TECHNIQUE_RATE : MAX_WAGE}
             step={0.01}
             required
-            value={wage}
+            value={wageByTechnique ? wagePerTechniqueRate : wage}
             disabled={isSavingSettings}
-            onChange={(event) => setWage(event.target.value)}
+            onChange={(event) =>
+              wageByTechnique
+                ? setWagePerTechniqueRate(event.target.value)
+                : setWage(event.target.value)
+            }
           />
         </label>
+        <label className="farm-automation-toggle">
+          <input
+            type="checkbox"
+            checked={wageByTechnique}
+            disabled={isSavingSettings}
+            onChange={(event) => setWageByTechnique(event.target.checked)}
+          />
+          Calcular salário pela técnica média
+        </label>
+        {wageByTechnique && (
+          <small>Salário efetivo atual: {formatMoney(building.wage)} por dia.</small>
+        )}
         <label>
           Técnica média atual
           <output>
@@ -238,8 +298,12 @@ function AccountingBuildingDetails({
             try {
               await onSaveWorkSettings(building.id, {
                 wage: Number(wage),
+                wageByTechnique,
+                wagePerTechniqueRate: Number(wagePerTechniqueRate),
                 workHoursPerDay: Number(workHoursPerDay),
                 desiredWorkers: Number(desiredWorkers),
+                desiredWorkersByWorkPoints,
+                desiredWorkPointsPerDay: Number(desiredWorkPointsPerDay),
                 minimumWorkerTechnique: Number(minimumWorkerTechnique),
               });
               setMessage('Configurações salvas.');
@@ -365,38 +429,80 @@ function AccountingFarmAutomationEditor({
           })}
         </div>
       </fieldset>
-      <label>
-        Funcionários durante {isCattleFarm ? 'a criação' : 'o plantio e crescimento'} (0 a{' '}
-        {RESIDENCES[building.type].maxWorkers})
+      <label className="farm-automation-toggle">
         <input
-          type="number"
-          min={0}
-          max={RESIDENCES[building.type].maxWorkers}
-          step={1}
-          value={settings.plantingWorkers}
+          type="checkbox"
+          checked={settings.plantingWorkersByWorkPoints}
           disabled={isSaving}
           onChange={(event) =>
             setSettings((current) => ({
               ...current,
-              plantingWorkers: Number(event.target.value),
+              plantingWorkersByWorkPoints: event.target.checked,
+            }))
+          }
+        />
+        Definir equipe de {isCattleFarm ? 'criação' : 'plantio e crescimento'} por Work Points?
+      </label>
+      <label>
+        {settings.plantingWorkersByWorkPoints
+          ? 'Work Points desejados por dia'
+          : `Funcionários durante ${isCattleFarm ? 'a criação' : 'o plantio e crescimento'} (0 a ${RESIDENCES[building.type].maxWorkers})`}
+        <input
+          type="number"
+          min={0}
+          max={settings.plantingWorkersByWorkPoints
+            ? 1_000_000_000
+            : RESIDENCES[building.type].maxWorkers}
+          step={1}
+          value={settings.plantingWorkersByWorkPoints
+            ? settings.plantingWorkPointsPerDay
+            : settings.plantingWorkers}
+          disabled={isSaving}
+          onChange={(event) =>
+            setSettings((current) => ({
+              ...current,
+              ...(current.plantingWorkersByWorkPoints
+                ? { plantingWorkPointsPerDay: Number(event.target.value) }
+                : { plantingWorkers: Number(event.target.value) }),
             }))
           }
         />
       </label>
-      <label>
-        Funcionários durante {isCattleFarm ? 'o abate' : 'a colheita'} (0 a{' '}
-        {RESIDENCES[building.type].maxWorkers})
+      <label className="farm-automation-toggle">
         <input
-          type="number"
-          min={0}
-          max={RESIDENCES[building.type].maxWorkers}
-          step={1}
-          value={settings.harvestWorkers}
+          type="checkbox"
+          checked={settings.harvestWorkersByWorkPoints}
           disabled={isSaving}
           onChange={(event) =>
             setSettings((current) => ({
               ...current,
-              harvestWorkers: Number(event.target.value),
+              harvestWorkersByWorkPoints: event.target.checked,
+            }))
+          }
+        />
+        Definir equipe de {isCattleFarm ? 'abate' : 'colheita'} por Work Points?
+      </label>
+      <label>
+        {settings.harvestWorkersByWorkPoints
+          ? 'Work Points desejados por dia'
+          : `Funcionários durante ${isCattleFarm ? 'o abate' : 'a colheita'} (0 a ${RESIDENCES[building.type].maxWorkers})`}
+        <input
+          type="number"
+          min={0}
+          max={settings.harvestWorkersByWorkPoints
+            ? 1_000_000_000
+            : RESIDENCES[building.type].maxWorkers}
+          step={1}
+          value={settings.harvestWorkersByWorkPoints
+            ? settings.harvestWorkPointsPerDay
+            : settings.harvestWorkers}
+          disabled={isSaving}
+          onChange={(event) =>
+            setSettings((current) => ({
+              ...current,
+              ...(current.harvestWorkersByWorkPoints
+                ? { harvestWorkPointsPerDay: Number(event.target.value) }
+                : { harvestWorkers: Number(event.target.value) }),
             }))
           }
         />

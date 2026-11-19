@@ -444,8 +444,15 @@ concluídas mostram ocupantes, capacidade, técnica, saúde, bem-estar, empregad
 e salário médio dos empregados (calculado a partir dos empregos já alocados:
 soma dos salários ÷ número de empregados; sem empregados, o valor é zero);
 obras mostram Work Points, empregados
-e permitem ao dono editar o salário ofertado (C$ por dia de trabalho) e a carga
-horária por dia (4 a 14 h). O dono também define o aluguel por pessoa (mínimo
+e permitem ao dono editar a quantidade desejada de funcionários ou uma meta
+diária de Work Points, além do salário fixo ou de uma taxa por ponto de técnica.
+Na meta de Work Points, o jogo arredonda para cima a quantidade necessária,
+considera jornada e técnica média e respeita o limite de funcionários da
+construção. Sem trabalhadores, estima a técnica pela média de bem-estar da
+cidade; sem moradores, usa técnica 10. O salário por técnica é recalculado
+pela média atual dos trabalhadores (ou técnica 10 sem empregados), respeitando
+o salário mínimo municipal. A carga horária continua editável (4 a 14 h). O
+dono também define o aluguel por pessoa (mínimo
 C$ 0,01, com até duas casas decimais) da residência. Todo dia às 00:00 do reino,
 cidades com menos de 1.000 habitantes recebem 40 imigrantes, que ocupam as
 residências concluídas mais baratas com vaga (empate: maior apreço). A população
@@ -898,8 +905,10 @@ especiarias; o excedente da colheita aguarda no campo até haver espaço livre.
 A Fazenda de Vegetais também ocupa 3 × 3, emprega até 50 funcionários, custa
 100 madeiras, 40 pedras e 40 ferros, exige 110.000 Work Points e guarda até 100 vegetais.
 Nas fazendas com ciclo de cultivo ou criação, **Configurações avançadas** permite
-automatizar o replantio: selecione os meses permitidos e quantos funcionários
-deseja durante o crescimento e durante a colheita. A automação não interrompe um
+automatizar o replantio: selecione os meses permitidos e defina, separadamente
+para crescimento/criação e colheita/abate, um número fixo de funcionários ou
+uma meta diária de Work Points. A meta é convertida em funcionários com a
+produtividade atual e limitada ao máximo da fazenda. A automação não interrompe um
 ciclo ativo; quando a fazenda ficar livre, ela aguarda um dos meses selecionados
 para iniciar outro. Na Fazenda Bovina, os meses selecionados controlam o início
 de um novo ciclo de criação, com trabalhadores configurados separadamente para
@@ -908,9 +917,23 @@ proprietário continua iniciando os ciclos manualmente.
 
 ### Empregos e salários
 
-Em obras, fazendas, comércios e indústrias o dono define **funcionários
-desejados**, **salário por dia** e **carga horária** (4 a 14 h). Durante a obra,
-é possível definir até 100 funcionários, independentemente do limite final do
+Em obras, fazendas, comércios e indústrias o dono define a quantidade de
+**funcionários desejados** ou ativa **por Work Points**, informando a meta
+diária. O número necessário é arredondado para cima com base nos Work Points
+diários por pessoa (`12,5 × horas × saúde/100 × técnica/10 × fator de
+descanso`) e não ultrapassa o limite da construção. Sem funcionários na
+construção, a técnica usada vem do bem-estar médio ponderado pelos moradores
+da cidade; se a cidade não tiver moradores, a técnica é 10.
+
+O **salário ofertado** pode ser fixo (C$ por dia de trabalho) ou definido como
+uma taxa em C$ por ponto de técnica. No segundo modo, o salário diário acompanha
+a técnica média dos empregados da construção; sem empregados, usa técnica 10.
+O cálculo respeita o salário mínimo municipal. A carga horária permanece
+configurável (4 a 14 h). Essas opções também podem ser editadas em **Contábil**.
+Nas fazendas automatizadas, as metas de Work Points são configuradas à parte
+para crescimento/criação e colheita/abate.
+
+Durante a obra é possível definir até 100 funcionários, independentemente do limite final do
 edifício; ao concluir, o número desejado e os empregados são reduzidos ao máximo
 definitivo da construção (por exemplo, 1 na Leitaria). Em construções
 concluídas vale o limite do catálogo. Todo dia às 12:00 (horário do mundo), cada

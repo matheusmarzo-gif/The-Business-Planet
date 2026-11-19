@@ -4,6 +4,8 @@ import type { CityZone } from '../types/city';
 import type { RoadTile } from '../types/road';
 import {
   MAX_WORKER_TECHNIQUE,
+  MAX_WORK_POINTS_TARGET,
+  MAX_WAGE_PER_TECHNIQUE_RATE,
   getResidenceDefinition,
   type ResidentialBuilding,
   type ResidentialBuildingSummary,
@@ -192,6 +194,10 @@ function isWorldBuilding(value: unknown): value is WorldBuilding {
 function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
   if (typeof value !== 'object' || value === null) return false;
   const building = value as Record<string, unknown>;
+  const farmAutomation =
+    typeof building.farmAutomation === 'object' && building.farmAutomation !== null
+      ? building.farmAutomation as Record<string, unknown>
+      : null;
   return (
     typeof building.id === 'string' &&
     (building.ownerName === undefined || typeof building.ownerName === 'string') &&
@@ -206,6 +212,9 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
     typeof building.startedAt === 'string' &&
     (building.completedAt === null || typeof building.completedAt === 'string') &&
     isCurrencyAmount(building.wage) &&
+    typeof building.wageByTechnique === 'boolean' &&
+    isCurrencyAmount(building.wagePerTechniqueRate) &&
+    building.wagePerTechniqueRate <= MAX_WAGE_PER_TECHNIQUE_RATE &&
     Number.isInteger(building.workHoursPerDay) &&
     typeof building.minimumWorkerTechnique === 'number' &&
     Number.isInteger(building.minimumWorkerTechnique) &&
@@ -223,6 +232,27 @@ function isResidentialBuilding(value: unknown): value is ResidentialBuilding {
     building.wellbeing >= 0 &&
     building.wellbeing <= MAX_RESIDENCE_WELLBEING &&
     Number.isInteger(building.desiredWorkers) &&
+    Number.isInteger(building.fixedDesiredWorkers) &&
+    typeof building.desiredWorkersByWorkPoints === 'boolean' &&
+    typeof building.desiredWorkPointsPerDay === 'number' &&
+    Number.isSafeInteger(building.desiredWorkPointsPerDay) &&
+    building.desiredWorkPointsPerDay >= 0 &&
+    building.desiredWorkPointsPerDay <= MAX_WORK_POINTS_TARGET &&
+    farmAutomation !== null &&
+    typeof farmAutomation.enabled === 'boolean' &&
+    Array.isArray(farmAutomation.plantingMonths) &&
+    Number.isInteger(farmAutomation.plantingWorkers) &&
+    typeof farmAutomation.plantingWorkersByWorkPoints === 'boolean' &&
+    typeof farmAutomation.plantingWorkPointsPerDay === 'number' &&
+    Number.isSafeInteger(farmAutomation.plantingWorkPointsPerDay) &&
+    farmAutomation.plantingWorkPointsPerDay >= 0 &&
+    farmAutomation.plantingWorkPointsPerDay <= MAX_WORK_POINTS_TARGET &&
+    Number.isInteger(farmAutomation.harvestWorkers) &&
+    typeof farmAutomation.harvestWorkersByWorkPoints === 'boolean' &&
+    typeof farmAutomation.harvestWorkPointsPerDay === 'number' &&
+    Number.isSafeInteger(farmAutomation.harvestWorkPointsPerDay) &&
+    farmAutomation.harvestWorkPointsPerDay >= 0 &&
+    farmAutomation.harvestWorkPointsPerDay <= MAX_WORK_POINTS_TARGET &&
     Number.isFinite(building.workPointsDone) &&
     isCurrencyAmount(building.price) &&
     Number.isInteger(building.stock) &&

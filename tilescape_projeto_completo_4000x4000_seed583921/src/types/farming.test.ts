@@ -12,7 +12,16 @@ test('validates and orders farm automation settings', () => {
       { enabled: true, plantingMonths: [9, 3], plantingWorkers: 10, harvestWorkers: 4 },
       10,
     ),
-    { enabled: true, plantingMonths: [3, 9], plantingWorkers: 10, harvestWorkers: 4 },
+    {
+      enabled: true,
+      plantingMonths: [3, 9],
+      plantingWorkers: 10,
+      plantingWorkersByWorkPoints: false,
+      plantingWorkPointsPerDay: 0,
+      harvestWorkers: 4,
+      harvestWorkersByWorkPoints: false,
+      harvestWorkPointsPerDay: 0,
+    },
   );
 });
 
@@ -52,7 +61,11 @@ test('starts automated crops only when idle and in a selected month', () => {
     enabled: true,
     plantingMonths: [3, 9],
     plantingWorkers: 10,
+    plantingWorkersByWorkPoints: false,
+    plantingWorkPointsPerDay: 0,
     harvestWorkers: 4,
+    harvestWorkersByWorkPoints: false,
+    harvestWorkPointsPerDay: 0,
   };
   assert.equal(shouldStartAutomatedCrop(settings, null, 3), true);
   assert.equal(shouldStartAutomatedCrop(settings, 'growing', 3), false);

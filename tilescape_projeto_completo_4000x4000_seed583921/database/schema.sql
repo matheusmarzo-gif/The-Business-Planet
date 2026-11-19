@@ -158,6 +158,10 @@ ON CONFLICT (user_id) DO NOTHING;
 
 ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS wage NUMERIC(12, 2) NOT NULL DEFAULT 10 CHECK (wage BETWEEN 0 AND 100000);
+ALTER TABLE all_buildings
+  ADD COLUMN IF NOT EXISTS wage_by_technique BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS wage_per_technique_rate NUMERIC(12, 2) NOT NULL DEFAULT 1
+    CHECK (wage_per_technique_rate BETWEEN 0 AND 1250);
 UPDATE all_buildings AS building
 SET wage = city.minimum_wage
 FROM city_assemblies AS city
@@ -203,6 +207,20 @@ ALTER TABLE world_state
 
 ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS desired_workers INTEGER NOT NULL DEFAULT 0 CHECK (desired_workers >= 0);
+ALTER TABLE all_buildings
+  ADD COLUMN IF NOT EXISTS fixed_desired_workers INTEGER,
+  ADD COLUMN IF NOT EXISTS desired_workers_by_work_points BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS desired_work_points_per_day INTEGER NOT NULL DEFAULT 0
+    CHECK (desired_work_points_per_day BETWEEN 0 AND 1000000000);
+UPDATE all_buildings
+SET fixed_desired_workers = desired_workers
+WHERE fixed_desired_workers IS NULL;
+ALTER TABLE all_buildings
+  ALTER COLUMN fixed_desired_workers SET DEFAULT 0,
+  ALTER COLUMN fixed_desired_workers SET NOT NULL;
+ALTER TABLE all_buildings
+  DROP CONSTRAINT IF EXISTS all_buildings_fixed_desired_workers_check,
+  ADD CONSTRAINT all_buildings_fixed_desired_workers_check CHECK (fixed_desired_workers >= 0);
 
 ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS minimum_worker_technique SMALLINT NOT NULL DEFAULT 10;
@@ -256,7 +274,13 @@ ALTER TABLE all_buildings
   ADD COLUMN IF NOT EXISTS farm_auto_planting_enabled BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS farm_auto_planting_months SMALLINT[] NOT NULL DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS farm_planting_workers INTEGER NOT NULL DEFAULT 0 CHECK (farm_planting_workers >= 0),
-  ADD COLUMN IF NOT EXISTS farm_harvest_workers INTEGER NOT NULL DEFAULT 0 CHECK (farm_harvest_workers >= 0);
+  ADD COLUMN IF NOT EXISTS farm_planting_workers_by_work_points BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS farm_planting_work_points_per_day INTEGER NOT NULL DEFAULT 0
+    CHECK (farm_planting_work_points_per_day BETWEEN 0 AND 1000000000),
+  ADD COLUMN IF NOT EXISTS farm_harvest_workers INTEGER NOT NULL DEFAULT 0 CHECK (farm_harvest_workers >= 0),
+  ADD COLUMN IF NOT EXISTS farm_harvest_workers_by_work_points BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS farm_harvest_work_points_per_day INTEGER NOT NULL DEFAULT 0
+    CHECK (farm_harvest_work_points_per_day BETWEEN 0 AND 1000000000);
 
 ALTER TABLE all_buildings
   DROP CONSTRAINT IF EXISTS all_buildings_farm_auto_planting_months_check,

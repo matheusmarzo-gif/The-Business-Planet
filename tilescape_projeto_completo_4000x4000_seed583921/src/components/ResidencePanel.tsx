@@ -6,6 +6,7 @@ import {
 import {
   MAX_RENT,
   MAX_WAGE,
+  MAX_WAGE_PER_TECHNIQUE_RATE,
   MAX_WORK_HOURS,
   MAX_WORKER_TECHNIQUE,
   MIN_RENT,
@@ -51,8 +52,12 @@ interface ResidencePanelProps {
   error: string;
   onSave: (settings: {
     wage: number;
+    wageByTechnique: boolean;
+    wagePerTechniqueRate: number;
     workHoursPerDay: number;
     desiredWorkers: number;
+    desiredWorkersByWorkPoints: boolean;
+    desiredWorkPointsPerDay: number;
     minimumWorkerTechnique: number;
   }) => void;
   onSaveRent: (rent: number) => void;
@@ -60,12 +65,22 @@ interface ResidencePanelProps {
   onSimulateRent: (rent: number) => Promise<ResidenceBenefitCalculation>;
   onSavePrice: (price: number) => void;
   onSimulateSale: (
-    settings: { price: number; wage: number; workHoursPerDay: number },
+    settings: {
+      price: number;
+      wage: number;
+      wageByTechnique: boolean;
+      wagePerTechniqueRate: number;
+      workHoursPerDay: number;
+    },
   ) => Promise<ShopSalesSimulation>;
   onSimulateHiring: (settings: {
     wage: number;
+    wageByTechnique: boolean;
+    wagePerTechniqueRate: number;
     workHoursPerDay: number;
     desiredWorkers: number;
+    desiredWorkersByWorkPoints: boolean;
+    desiredWorkPointsPerDay: number;
     minimumWorkerTechnique: number;
   }) => Promise<number>;
   onSaveInputProduct: (productId: string) => void;
@@ -224,9 +239,23 @@ export default function ResidencePanel({
 }: ResidencePanelProps) {
   const definition = RESIDENCES[building.type];
   const [wage, setWage] = useState(String(building.wage));
+  const [wageByTechnique, setWageByTechnique] = useState(building.wageByTechnique);
+  const [wagePerTechniqueRate, setWagePerTechniqueRate] = useState(
+    String(
+      building.wageByTechnique
+        ? building.wagePerTechniqueRate
+        : Number((building.wage / (building.averageWorkerTechnique ?? 10)).toFixed(2)),
+    ),
+  );
   const [hours, setHours] = useState(String(building.workHoursPerDay));
   const [rent, setRent] = useState(String(building.rent));
   const [desired, setDesired] = useState(String(building.desiredWorkers));
+  const [desiredByWorkPoints, setDesiredByWorkPoints] = useState(
+    building.desiredWorkersByWorkPoints,
+  );
+  const [desiredWorkPoints, setDesiredWorkPoints] = useState(
+    String(building.desiredWorkPointsPerDay),
+  );
   const [minimumWorkerTechnique, setMinimumWorkerTechnique] = useState(
     String(building.minimumWorkerTechnique),
   );
@@ -259,9 +288,18 @@ export default function ResidencePanel({
     saleSimulationRequestId.current += 1;
     rentSimulationRequestId.current += 1;
     setWage(String(building.wage));
+    setWageByTechnique(building.wageByTechnique);
+    setWagePerTechniqueRate(String(building.wagePerTechniqueRate));
+    if (!building.wageByTechnique) {
+      setWagePerTechniqueRate(
+        String(Number((building.wage / (building.averageWorkerTechnique ?? 10)).toFixed(2))),
+      );
+    }
     setHours(String(building.workHoursPerDay));
     setRent(String(building.rent));
-    setDesired(String(building.desiredWorkers));
+    setDesired(String(building.fixedDesiredWorkers));
+    setDesiredByWorkPoints(building.desiredWorkersByWorkPoints);
+    setDesiredWorkPoints(String(building.desiredWorkPointsPerDay));
     setMinimumWorkerTechnique(String(building.minimumWorkerTechnique));
     setSaleSimulationMessage('');
     setIsSimulatingSale(false);
@@ -272,9 +310,15 @@ export default function ResidencePanel({
   }, [
     building.id,
     building.wage,
+    building.wageByTechnique,
+    building.wagePerTechniqueRate,
+    building.averageWorkerTechnique,
     building.workHoursPerDay,
     building.rent,
     building.desiredWorkers,
+    building.fixedDesiredWorkers,
+    building.desiredWorkersByWorkPoints,
+    building.desiredWorkPointsPerDay,
     building.minimumWorkerTechnique,
   ]);
 
@@ -288,15 +332,23 @@ export default function ResidencePanel({
     building.farmAutomation.enabled,
     building.farmAutomation.plantingMonths.join(','),
     building.farmAutomation.plantingWorkers,
+    building.farmAutomation.plantingWorkersByWorkPoints,
+    building.farmAutomation.plantingWorkPointsPerDay,
     building.farmAutomation.harvestWorkers,
+    building.farmAutomation.harvestWorkersByWorkPoints,
+    building.farmAutomation.harvestWorkPointsPerDay,
   ]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     onSave({
       wage: Number(wage),
+      wageByTechnique,
+      wagePerTechniqueRate: Number(wagePerTechniqueRate),
       workHoursPerDay: Number(hours),
       desiredWorkers: Number(desired),
+      desiredWorkersByWorkPoints: desiredByWorkPoints,
+      desiredWorkPointsPerDay: Number(desiredWorkPoints),
       minimumWorkerTechnique: Number(minimumWorkerTechnique),
     });
   };
@@ -646,40 +698,94 @@ export default function ResidencePanel({
                       })}
                     </div>
                   </fieldset>
-                  <label>
-                    Funcionários durante {building.type === 'farm_cattle' ? 'a criação' : 'o plantio e crescimento'} (0 a {definition.maxWorkers})
+                  <label className="farm-automation-toggle">
                     <input
-                      type="number"
-                      min={0}
-                      max={definition.maxWorkers}
-                      step={1}
-                      value={farmAutomation.plantingWorkers}
+                      type="checkbox"
+                      checked={farmAutomation.plantingWorkersByWorkPoints}
                       disabled={isSaving}
                       onChange={(event) =>
                         setFarmAutomation((current) => ({
                           ...current,
-                          plantingWorkers: Number(event.target.value),
+                          plantingWorkersByWorkPoints: event.target.checked,
                         }))
                       }
                     />
+                    Definir equipe de {building.type === 'farm_cattle' ? 'criação' : 'plantio e crescimento'} por Work Points?
                   </label>
                   <label>
-                    Funcionários durante {building.type === 'farm_cattle' ? 'o abate' : 'a colheita'} (0 a {definition.maxWorkers})
+                    {farmAutomation.plantingWorkersByWorkPoints
+                      ? 'Work Points desejados por dia'
+                      : `Funcionários durante ${building.type === 'farm_cattle' ? 'a criação' : 'o plantio e crescimento'} (0 a ${definition.maxWorkers})`}
                     <input
                       type="number"
                       min={0}
-                      max={definition.maxWorkers}
+                      max={farmAutomation.plantingWorkersByWorkPoints
+                        ? 1_000_000_000
+                        : definition.maxWorkers}
                       step={1}
-                      value={farmAutomation.harvestWorkers}
+                      value={farmAutomation.plantingWorkersByWorkPoints
+                        ? farmAutomation.plantingWorkPointsPerDay
+                        : farmAutomation.plantingWorkers}
                       disabled={isSaving}
                       onChange={(event) =>
                         setFarmAutomation((current) => ({
                           ...current,
-                          harvestWorkers: Number(event.target.value),
+                          ...(current.plantingWorkersByWorkPoints
+                            ? { plantingWorkPointsPerDay: Number(event.target.value) }
+                            : { plantingWorkers: Number(event.target.value) }),
                         }))
                       }
                     />
                   </label>
+                  {farmAutomation.plantingWorkersByWorkPoints && (
+                    <small>
+                      A equipe calculada não ultrapassará o limite de {definition.maxWorkers} funcionários.
+                    </small>
+                  )}
+                  <label className="farm-automation-toggle">
+                    <input
+                      type="checkbox"
+                      checked={farmAutomation.harvestWorkersByWorkPoints}
+                      disabled={isSaving}
+                      onChange={(event) =>
+                        setFarmAutomation((current) => ({
+                          ...current,
+                          harvestWorkersByWorkPoints: event.target.checked,
+                        }))
+                      }
+                    />
+                    Definir equipe de {building.type === 'farm_cattle' ? 'abate' : 'colheita'} por Work Points?
+                  </label>
+                  <label>
+                    {farmAutomation.harvestWorkersByWorkPoints
+                      ? 'Work Points desejados por dia'
+                      : `Funcionários durante ${building.type === 'farm_cattle' ? 'o abate' : 'a colheita'} (0 a ${definition.maxWorkers})`}
+                    <input
+                      type="number"
+                      min={0}
+                      max={farmAutomation.harvestWorkersByWorkPoints
+                        ? 1_000_000_000
+                        : definition.maxWorkers}
+                      step={1}
+                      value={farmAutomation.harvestWorkersByWorkPoints
+                        ? farmAutomation.harvestWorkPointsPerDay
+                        : farmAutomation.harvestWorkers}
+                      disabled={isSaving}
+                      onChange={(event) =>
+                        setFarmAutomation((current) => ({
+                          ...current,
+                          ...(current.harvestWorkersByWorkPoints
+                            ? { harvestWorkPointsPerDay: Number(event.target.value) }
+                            : { harvestWorkers: Number(event.target.value) }),
+                        }))
+                      }
+                    />
+                  </label>
+                  {farmAutomation.harvestWorkersByWorkPoints && (
+                    <small>
+                      A equipe calculada não ultrapassará o limite de {definition.maxWorkers} funcionários.
+                    </small>
+                  )}
                   {farmAutomation.enabled && farmAutomation.plantingMonths.length === 0 && (
                     <p role="alert">Selecione pelo menos um mês para ativar a automação.</p>
                   )}
@@ -753,34 +859,78 @@ export default function ResidencePanel({
       )}
       {(building.status === 'under_construction' || isFarm) && (
         <form className="work-settings" onSubmit={submit}>
+          <label className="farm-automation-toggle">
+            <input
+              type="checkbox"
+              checked={desiredByWorkPoints}
+              disabled={!isOwner || isSaving || (cropRule !== undefined && building.farmAutomation.enabled)}
+              onChange={(event) => setDesiredByWorkPoints(event.target.checked)}
+            />
+            Definir funcionários desejados por Work Points?
+          </label>
           <label>
-            Funcionários desejados (0 a {maxDesiredWorkers})
+            {desiredByWorkPoints
+              ? 'Work Points desejados por dia'
+              : `Funcionários desejados (0 a ${maxDesiredWorkers})`}
             <input
               type="number"
               min={0}
-              max={maxDesiredWorkers}
+              max={desiredByWorkPoints ? 1_000_000_000 : maxDesiredWorkers}
               step={1}
-              value={desired}
-              disabled={!isOwner || isSaving || (cropRule !== undefined && building.farmAutomation.enabled)}
-              onChange={(event) => setDesired(event.target.value)}
+              value={desiredByWorkPoints ? desiredWorkPoints : desired}
+              disabled={
+                !isOwner ||
+                isSaving ||
+                (cropRule !== undefined && building.farmAutomation.enabled)
+              }
+              onChange={(event) =>
+                desiredByWorkPoints
+                  ? setDesiredWorkPoints(event.target.value)
+                  : setDesired(event.target.value)
+              }
             />
           </label>
+          {desiredByWorkPoints && (
+            <small>
+              Meta estimada atualmente: {number.format(building.desiredWorkers)} funcionário(s).
+              O limite desta construção é {number.format(maxDesiredWorkers)}.
+            </small>
+          )}
           {cropRule && building.farmAutomation.enabled && (
             <small>A quantidade de funcionários é controlada pelas configurações avançadas durante cada fase.</small>
           )}
+          <label className="farm-automation-toggle">
+            <input
+              type="checkbox"
+              checked={wageByTechnique}
+              disabled={!isOwner || isSaving}
+              onChange={(event) => setWageByTechnique(event.target.checked)}
+            />
+            Calcular salário ofertado por ponto de técnica?
+          </label>
           <label>
-            Salário ofertado (C$ por dia de trabalho)
+            {wageByTechnique
+              ? 'Salário ofertado (C$ por ponto de técnica)'
+              : 'Salário ofertado (C$ por dia de trabalho)'}
             <input
               type="number"
-              min={Math.max(MIN_CITY_MINIMUM_WAGE, cityMinimumWage)}
-              max={MAX_WAGE}
+              min={wageByTechnique ? 0 : Math.max(MIN_CITY_MINIMUM_WAGE, cityMinimumWage)}
+              max={wageByTechnique ? MAX_WAGE_PER_TECHNIQUE_RATE : MAX_WAGE}
               step={0.01}
-              value={wage}
+              value={wageByTechnique ? wagePerTechniqueRate : wage}
               disabled={!isOwner || isSaving}
-              onChange={(event) => setWage(event.target.value)}
+              onChange={(event) =>
+                wageByTechnique
+                  ? setWagePerTechniqueRate(event.target.value)
+                  : setWage(event.target.value)
+              }
             />
           </label>
-          <small>Salário mínimo da cidade: {formatMoney(cityMinimumWage)} por dia.</small>
+          <small>
+            {wageByTechnique
+              ? `Salário efetivo atual: ${formatMoney(building.wage)} por dia; técnica atual ${building.averageWorkerTechnique === null ? 'estimada pela cidade' : number.format(building.averageWorkerTechnique)}.`
+              : `Salário mínimo da cidade: ${formatMoney(cityMinimumWage)} por dia.`}
+          </small>
           <label>
             Técnica mínima necessária
             <input
@@ -803,8 +953,12 @@ export default function ResidencePanel({
                   setHiringSimulationMessage('');
                   void onSimulateHiring({
                     wage: Number(wage),
+                      wageByTechnique,
+                      wagePerTechniqueRate: Number(wagePerTechniqueRate),
                     workHoursPerDay: Number(hours),
-                    desiredWorkers: Number(desired),
+                      desiredWorkers: Number(desired),
+                      desiredWorkersByWorkPoints: desiredByWorkPoints,
+                      desiredWorkPointsPerDay: Number(desiredWorkPoints),
                     minimumWorkerTechnique: Number(minimumWorkerTechnique),
                   })
                     .then((hired) => {
@@ -882,6 +1036,8 @@ export default function ResidencePanel({
                     const result = await onSimulateSale({
                       price: Number(price),
                       wage: Number(wage),
+                      wageByTechnique,
+                      wagePerTechniqueRate: Number(wagePerTechniqueRate),
                       workHoursPerDay: Number(hours),
                     });
                     if (requestId !== saleSimulationRequestId.current) return;

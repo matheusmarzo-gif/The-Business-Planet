@@ -13,6 +13,7 @@ import type { StockLevels } from './stockCapacity.js';
 export const MIN_WORKER_TECHNIQUE = 10;
 export const MAX_WORKER_TECHNIQUE = 80;
 export const DEFAULT_MIN_WORKER_TECHNIQUE = MIN_WORKER_TECHNIQUE;
+export const MAX_WORK_POINTS_TARGET = 1_000_000_000;
 
 export type ResidenceType = keyof typeof BUILDING_CONFIGS;
 
@@ -161,6 +162,8 @@ export interface ResidenceDefinition {
 
 export const DEFAULT_WAGE = GAME_RULES.work.wage.default;
 export const MAX_WAGE = GAME_RULES.work.wage.maximum;
+export const DEFAULT_WAGE_PER_TECHNIQUE_RATE = 1;
+export const MAX_WAGE_PER_TECHNIQUE_RATE = MAX_WAGE / MAX_WORKER_TECHNIQUE;
 export const DEFAULT_WORK_HOURS = GAME_RULES.work.hours.default;
 export const MIN_WORK_HOURS = GAME_RULES.work.hours.minimum;
 export const MAX_WORK_HOURS = GAME_RULES.work.hours.maximum;
@@ -220,6 +223,10 @@ export function parseWorkSettings(
   workHoursPerDay: number;
   desiredWorkers: number;
   minimumWorkerTechnique: number;
+  desiredWorkersByWorkPoints: boolean;
+  desiredWorkPointsPerDay: number;
+  wageByTechnique: boolean;
+  wagePerTechniqueRate: number;
 } | null {
   if (typeof value !== 'object' || value === null) return null;
   const settings = value as Record<string, unknown>;
@@ -227,6 +234,10 @@ export function parseWorkSettings(
   const minimumWorkerTechnique = settings.minimumWorkerTechnique === undefined
     ? DEFAULT_MIN_WORKER_TECHNIQUE
     : settings.minimumWorkerTechnique;
+  const desiredWorkersByWorkPoints = settings.desiredWorkersByWorkPoints ?? false;
+  const desiredWorkPointsPerDay = settings.desiredWorkPointsPerDay ?? 0;
+  const wageByTechnique = settings.wageByTechnique ?? false;
+  const wagePerTechniqueRate = settings.wagePerTechniqueRate ?? DEFAULT_WAGE_PER_TECHNIQUE_RATE;
   if (
     typeof desiredWorkers !== 'number' ||
     !Number.isInteger(desiredWorkers) ||
@@ -243,7 +254,17 @@ export function parseWorkSettings(
     typeof minimumWorkerTechnique !== 'number' ||
     !Number.isInteger(minimumWorkerTechnique) ||
     minimumWorkerTechnique < MIN_WORKER_TECHNIQUE ||
-    minimumWorkerTechnique > MAX_WORKER_TECHNIQUE
+    minimumWorkerTechnique > MAX_WORKER_TECHNIQUE ||
+    typeof desiredWorkersByWorkPoints !== 'boolean' ||
+    typeof desiredWorkPointsPerDay !== 'number' ||
+    !Number.isSafeInteger(desiredWorkPointsPerDay) ||
+    desiredWorkPointsPerDay < 0 ||
+    desiredWorkPointsPerDay > MAX_WORK_POINTS_TARGET ||
+    typeof wageByTechnique !== 'boolean' ||
+    typeof wagePerTechniqueRate !== 'number' ||
+    !isCurrencyAmount(wagePerTechniqueRate) ||
+    wagePerTechniqueRate < 0 ||
+    wagePerTechniqueRate > MAX_WAGE_PER_TECHNIQUE_RATE
   ) {
     return null;
   }
@@ -252,6 +273,10 @@ export function parseWorkSettings(
     workHoursPerDay,
     desiredWorkers,
     minimumWorkerTechnique,
+    desiredWorkersByWorkPoints,
+    desiredWorkPointsPerDay,
+    wageByTechnique,
+    wagePerTechniqueRate: roundCurrency(wagePerTechniqueRate),
   };
 }
 
@@ -414,12 +439,17 @@ export interface ResidentialBuilding {
   startedAt: string;
   completedAt: string | null;
   wage: number;
+  wageByTechnique: boolean;
+  wagePerTechniqueRate: number;
   workHoursPerDay: number;
   minimumWorkerTechnique: number;
   rent: number;
   occupants: number;
   wellbeing: number;
   desiredWorkers: number;
+  fixedDesiredWorkers: number;
+  desiredWorkersByWorkPoints: boolean;
+  desiredWorkPointsPerDay: number;
   workPointsDone: number;
   price: number;
   stock: number;

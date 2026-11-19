@@ -5,7 +5,10 @@ import {
   isWithinWorkerSearchRadius,
   MAX_WORKER_TECHNIQUE,
   MIN_WORKER_TECHNIQUE,
+  MIN_WORK_HOURS,
+  MAX_WORK_HOURS,
   MAX_CONSTRUCTION_WORKERS,
+  MAX_WORK_POINTS_TARGET,
 } from './residence.js';
 import { roundCurrency } from './currency.js';
 import { GAME_RULES } from '../generated/gameConfig.js';
@@ -80,7 +83,6 @@ export function getRestFactor(hours: number): number {
 }
 
 export const WORK_POINTS_RATE = GAME_RULES.work.workPointsPerHour;
-
 // Work Points diários por funcionário; técnica 10 preserva o rendimento-base.
 export function getDailyWorkPoints(hours: number, health: number, technique = 10): number {
   const { health: healthScale } = GAME_RULES.work.residentStats;
@@ -91,6 +93,54 @@ export function getDailyWorkPoints(hours: number, health: number, technique = 10
     (technique / 10) *
     getRestFactor(hours)
   );
+}
+
+export function getWorkersForWorkPoints(
+  workPointsPerDay: number,
+  hours: number,
+  technique: number,
+  maximumWorkers: number,
+): number {
+  if (
+    !Number.isSafeInteger(workPointsPerDay) ||
+    workPointsPerDay < 0 ||
+    workPointsPerDay > MAX_WORK_POINTS_TARGET ||
+    !Number.isInteger(hours) ||
+    hours < MIN_WORK_HOURS ||
+    hours > MAX_WORK_HOURS ||
+    !Number.isInteger(maximumWorkers) ||
+    maximumWorkers < 0 ||
+    !Number.isFinite(technique) ||
+    technique < 10 ||
+    technique > 80
+  ) {
+    throw new RangeError('A meta de Work Points ou a produtividade é inválida.');
+  }
+  if (workPointsPerDay === 0 || maximumWorkers === 0) return 0;
+  const pointsPerWorker = getDailyWorkPoints(hours, 100, technique);
+  if (!Number.isFinite(pointsPerWorker) || pointsPerWorker <= 0) {
+    throw new RangeError('A produtividade diária por funcionário precisa ser positiva.');
+  }
+  return Math.min(maximumWorkers, Math.ceil(workPointsPerDay / pointsPerWorker));
+}
+
+export function getTechniqueAdjustedWage(
+  rate: number,
+  technique: number,
+  minimumWage: number,
+): number {
+  if (
+    !Number.isFinite(rate) ||
+    rate < 0 ||
+    !Number.isFinite(technique) ||
+    technique < 10 ||
+    technique > 80 ||
+    !Number.isFinite(minimumWage) ||
+    minimumWage < 0
+  ) {
+    throw new RangeError('A taxa salarial, a técnica ou o piso salarial é inválido.');
+  }
+  return roundCurrency(Math.max(minimumWage, rate * technique));
 }
 
 export function getAverageWorkerTechnique(

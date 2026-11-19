@@ -111,7 +111,10 @@ leiteira, são os Work Points por unidade produzida. A previsão do ícone usa o
 ciclo persistido e a produtividade de mão de obra acumulada. A expansão permite
 editar jornada e salário pelas configurações de trabalho existentes e editar a
 automação pelo endpoint `PUT /api/residential-buildings/:id/farm-automation`,
-que mantém a validação de propriedade e limites do servidor.
+que mantém a validação de propriedade e limites do servidor. Cada fase pode
+definir trabalhadores fixos ou uma meta diária de Work Points; a meta é
+convertida em funcionários com a técnica e jornada atuais e limitada ao
+máximo do tipo de fazenda.
 O Contábil também agrega estoques e movimentações de produtos e estima custos
 unitários por jogador. O custo de mão de obra usa o custo salarial por Work
 Point; matérias-primas usam o custo estimado do dia anterior, e compras entre
@@ -679,11 +682,25 @@ mapeamento e verificar todas as curvas.
   são residências têm `desired_workers` (0 até 100 durante a obra e 0 até
   `maxWorkers` após a conclusão; padrão 0), `wage` e `work_hours_per_day`.
   Cada cidade guarda `minimum_wage` (padrão C$ 1/dia), visível a todos e
-  editável apenas pela conta master. O servidor rejeita ofertas abaixo do piso;
+  editável apenas pela conta master. O servidor rejeita ofertas fixas abaixo do piso;
   aumentá-lo reajusta na mesma transação os salários menores nas construções
   daquela cidade. Novas construções começam com salário de pelo menos C$ 10 ou
   o piso vigente, o que for maior. A inicialização do esquema também eleva
   salários antigos que estejam abaixo do piso.
+  `fixed_desired_workers` mantém o valor fixo editado, enquanto
+  `desired_workers_by_work_points` e `desired_work_points_per_day` controlam a
+  meta dinâmica. Às 12:00, `runDailyEmployment` recalcula a quantidade
+  necessária como `ceil(meta / getDailyWorkPoints(jornada, saúde 100, técnica))`,
+  limitada ao máximo da construção. A técnica média atual dos empregados é
+  usada; sem empregados, usa a técnica derivada do bem-estar municipal médio
+  ponderado pelos moradores (técnica 10 sem população). Para fazendas
+  automatizadas, as metas e os modos são persistidos separadamente para
+  crescimento/plantio e colheita.
+  `wage_by_technique` e `wage_per_technique_rate` persistem a taxa salarial:
+  no ciclo diário, o salário é recalculado como taxa × técnica média da
+  construção, com técnica 10 sem empregados, respeitando o piso municipal. O
+  salário atualizado é persistido antes da folha e novamente após a alocação
+  para acompanhar a técnica dos novos empregados.
   `runDailyEmployment` (mesmo lock `583921303`, chamada em
   `advanceClock`) às 12:00 do mundo recalcula do zero `job_assignments`
   (`workplace_id`, `residence_id`, `count`): `allocateWorkers` percorre as
@@ -1154,8 +1171,8 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `POST /api/residential-buildings/:id/complete` | Master | Conclui uma residência instantaneamente. |
 | `DELETE /api/residential-buildings/:id` | Criador da residência | Demole a residência sem confirmação e publica o novo estado. |
 | `GET /api/residential-buildings/:id/ownership` | Autenticado | Informa se o usuário é o criador da construção. |
-| `PATCH /api/residential-buildings/:id/work-settings` | Criador; obras e construções não residenciais concluídas | Valida funcionários desejados (0–100 em obras ou 0–máximo após concluídas), salário diário (até duas casas decimais), carga horária (4–14 h) e técnica mínima necessária (10–80); reduz empregados excedentes. |
-| `POST /api/residential-buildings/:id/simulate-hiring` | Dono da construção | Calcula uma prévia de contratação com os dados da cidade no servidor, sem expor ao navegador dados privados de outras construções. |
+| `PATCH /api/residential-buildings/:id/work-settings` | Criador; obras e construções não residenciais concluídas | Valida o número fixo de funcionários (0–100 em obras ou 0–máximo após concluídas) ou a meta de Work Points/dia, salário fixo ou C$ por ponto de técnica, jornada (4–14 h) e técnica mínima (10–80); estima a equipe com técnica média atual ou técnica municipal na ausência de empregados e reduz empregados excedentes. |
+| `POST /api/residential-buildings/:id/simulate-hiring` | Dono da construção | Calcula uma prévia de contratação com funcionários fixos ou meta diária de Work Points e salário fixo ou por técnica, usando os dados da cidade no servidor sem expor ao navegador informações privadas de outras construções. |
 | `PATCH /api/residential-buildings/:id/rent` | Criador | Valida e grava o aluguel por pessoa (≥ C$ 0,01, até duas casas decimais). |
 | `GET /api/world` | Autenticado | Retorna relógio, dimensões/semente e jogadores online. |
 

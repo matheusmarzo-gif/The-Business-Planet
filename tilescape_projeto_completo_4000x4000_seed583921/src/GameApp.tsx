@@ -63,6 +63,7 @@ import {
   MIN_WORK_HOURS,
   DEFAULT_RENT,
   DEFAULT_WAGE,
+  DEFAULT_WAGE_PER_TECHNIQUE_RATE,
   DEFAULT_WORK_HOURS,
   RESIDENCES,
   getConstructionMenuDefinitions,
@@ -1550,8 +1551,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     buildingId: string,
     settings: {
       wage: number;
+      wageByTechnique: boolean;
+      wagePerTechniqueRate: number;
       workHoursPerDay: number;
       desiredWorkers: number;
+      desiredWorkersByWorkPoints: boolean;
+      desiredWorkPointsPerDay: number;
       minimumWorkerTechnique: number;
     },
   ) => {
@@ -1656,8 +1661,13 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
               status: building.status,
               employed: building.employed,
               desiredWorkers: building.desiredWorkers,
+              fixedDesiredWorkers: building.fixedDesiredWorkers,
+              desiredWorkersByWorkPoints: building.desiredWorkersByWorkPoints,
+              desiredWorkPointsPerDay: building.desiredWorkPointsPerDay,
               workHoursPerDay: building.workHoursPerDay,
               wage: building.wage,
+              wageByTechnique: building.wageByTechnique,
+              wagePerTechniqueRate: building.wagePerTechniqueRate,
               averageWorkerTechnique: building.averageWorkerTechnique,
               minimumWorkerTechnique: building.minimumWorkerTechnique,
               price: building.price,
@@ -1671,8 +1681,13 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
               status: building.status,
               employed: building.employed,
               desiredWorkers: building.desiredWorkers,
+              fixedDesiredWorkers: building.fixedDesiredWorkers,
+              desiredWorkersByWorkPoints: building.desiredWorkersByWorkPoints,
+              desiredWorkPointsPerDay: building.desiredWorkPointsPerDay,
               workHoursPerDay: building.workHoursPerDay,
               wage: building.wage,
+              wageByTechnique: building.wageByTechnique,
+              wagePerTechniqueRate: building.wagePerTechniqueRate,
               averageWorkerTechnique: building.averageWorkerTechnique,
               minimumWorkerTechnique: building.minimumWorkerTechnique,
             }
@@ -1685,8 +1700,13 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
               status: building.status,
               employed: building.employed,
               desiredWorkers: building.desiredWorkers,
+              fixedDesiredWorkers: building.fixedDesiredWorkers,
+              desiredWorkersByWorkPoints: building.desiredWorkersByWorkPoints,
+              desiredWorkPointsPerDay: building.desiredWorkPointsPerDay,
               workHoursPerDay: building.workHoursPerDay,
               wage: building.wage,
+              wageByTechnique: building.wageByTechnique,
+              wagePerTechniqueRate: building.wagePerTechniqueRate,
               averageWorkerTechnique: building.averageWorkerTechnique,
               minimumWorkerTechnique: building.minimumWorkerTechnique,
             }
@@ -1698,8 +1718,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     buildingId: string,
     settings: {
       wage: number;
+      wageByTechnique: boolean;
+      wagePerTechniqueRate: number;
       workHoursPerDay: number;
       desiredWorkers: number;
+      desiredWorkersByWorkPoints: boolean;
+      desiredWorkPointsPerDay: number;
       minimumWorkerTechnique: number;
     },
   ) => {
@@ -1739,7 +1763,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       ...current,
       farms: current.farms.map((farm) =>
         farm.id === building.id
-          ? { ...farm, farmAutomation: building.farmAutomation }
+          ? {
+              ...farm,
+              desiredWorkers: building.desiredWorkers,
+              farmAutomation: building.farmAutomation,
+            }
           : farm,
       ),
     }));
@@ -2070,12 +2098,17 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       startedAt: new Date().toISOString(),
       completedAt: null,
       wage: DEFAULT_WAGE,
+      wageByTechnique: false,
+      wagePerTechniqueRate: DEFAULT_WAGE_PER_TECHNIQUE_RATE,
       workHoursPerDay: DEFAULT_WORK_HOURS,
       minimumWorkerTechnique: 10,
       rent: DEFAULT_RENT,
       occupants: 0,
       wellbeing: 0,
       desiredWorkers: 0,
+      fixedDesiredWorkers: 0,
+      desiredWorkersByWorkPoints: false,
+      desiredWorkPointsPerDay: 0,
       workPointsDone: 0,
       price: DEFAULT_SHOP_PRICE,
       stock: 0,
@@ -2095,7 +2128,11 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         enabled: false,
         plantingMonths: [],
         plantingWorkers: 0,
+        plantingWorkersByWorkPoints: false,
+        plantingWorkPointsPerDay: 0,
         harvestWorkers: 0,
+        harvestWorkersByWorkPoints: false,
+        harvestWorkPointsPerDay: 0,
       },
       crop: null,
       employed: 0,

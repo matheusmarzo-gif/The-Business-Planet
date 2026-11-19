@@ -26,7 +26,11 @@ export interface FarmAutomationSettings {
   enabled: boolean;
   plantingMonths: number[];
   plantingWorkers: number;
+  plantingWorkersByWorkPoints: boolean;
+  plantingWorkPointsPerDay: number;
   harvestWorkers: number;
+  harvestWorkersByWorkPoints: boolean;
+  harvestWorkPointsPerDay: number;
 }
 
 export function parseFarmAutomationSettings(
@@ -38,6 +42,10 @@ export function parseFarmAutomationSettings(
   }
   const record = value as Record<string, unknown>;
   const { enabled, plantingMonths, plantingWorkers, harvestWorkers } = record;
+  const plantingWorkersByWorkPoints = record.plantingWorkersByWorkPoints ?? false;
+  const plantingWorkPointsPerDay = record.plantingWorkPointsPerDay ?? 0;
+  const harvestWorkersByWorkPoints = record.harvestWorkersByWorkPoints ?? false;
+  const harvestWorkPointsPerDay = record.harvestWorkPointsPerDay ?? 0;
   if (
     typeof enabled !== 'boolean' ||
     !Array.isArray(plantingMonths) ||
@@ -53,7 +61,17 @@ export function parseFarmAutomationSettings(
     typeof harvestWorkers !== 'number' ||
     !Number.isInteger(harvestWorkers) ||
     harvestWorkers < 0 ||
-    harvestWorkers > maxWorkers
+    harvestWorkers > maxWorkers ||
+    typeof plantingWorkersByWorkPoints !== 'boolean' ||
+    typeof plantingWorkPointsPerDay !== 'number' ||
+    !Number.isSafeInteger(plantingWorkPointsPerDay) ||
+    plantingWorkPointsPerDay < 0 ||
+    plantingWorkPointsPerDay > 1_000_000_000 ||
+    typeof harvestWorkersByWorkPoints !== 'boolean' ||
+    typeof harvestWorkPointsPerDay !== 'number' ||
+    !Number.isSafeInteger(harvestWorkPointsPerDay) ||
+    harvestWorkPointsPerDay < 0 ||
+    harvestWorkPointsPerDay > 1_000_000_000
   ) {
     return null;
   }
@@ -61,12 +79,16 @@ export function parseFarmAutomationSettings(
     enabled,
     plantingMonths: [...plantingMonths].sort((a, b) => a - b),
     plantingWorkers,
+    plantingWorkersByWorkPoints,
+    plantingWorkPointsPerDay,
     harvestWorkers,
+    harvestWorkersByWorkPoints,
+    harvestWorkPointsPerDay,
   };
 }
 
 export function shouldStartAutomatedCrop(
-  settings: FarmAutomationSettings,
+  settings: Pick<FarmAutomationSettings, 'enabled' | 'plantingMonths'>,
   phase: CropPhase | null,
   month: number,
 ): boolean {

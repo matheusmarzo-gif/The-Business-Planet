@@ -125,6 +125,8 @@ import {
   getDailyWorkPoints,
   getEmploymentSummary,
   getMaxDesiredWorkers,
+  getTechniqueAdjustedWage,
+  getWorkersForWorkPoints,
   getPayroll,
   type EmploymentSummaryWorkplace,
   type JobAssignment,
@@ -879,11 +881,17 @@ type ResidentialBuildingRow = {
   started_at: Date;
   completed_at: Date | null;
   wage: number;
+  wage_by_technique: boolean;
+  wage_per_technique_rate: number;
+  city_minimum_wage: number;
   work_hours_per_day: number;
   rent: number;
   occupants: number;
   wellbeing: number;
   desired_workers: number;
+  fixed_desired_workers: number;
+  desired_workers_by_work_points: boolean;
+  desired_work_points_per_day: number;
   minimum_worker_technique: number;
   work_points_done: number;
   price: number;
@@ -907,7 +915,11 @@ type ResidentialBuildingRow = {
   farm_auto_planting_enabled: boolean;
   farm_auto_planting_months: number[];
   farm_planting_workers: number;
+  farm_planting_workers_by_work_points: boolean;
+  farm_planting_work_points_per_day: number;
   farm_harvest_workers: number;
+  farm_harvest_workers_by_work_points: boolean;
+  farm_harvest_work_points_per_day: number;
   employed: number;
   average_income: number;
   average_worker_technique: number | null;
@@ -918,6 +930,13 @@ type ResidentialBuildingRow = {
 const CITY_RESIDENCE_TYPES = Object.values(RESIDENCES)
   .filter((definition) => definition.kind === 'residence')
   .map((definition) => definition.type);
+const CITY_AVERAGE_WELLBEING_SQL = (cityId: string) => `COALESCE((
+  SELECT SUM(home.occupants * home.wellbeing) / NULLIF(SUM(home.occupants), 0)
+  FROM all_buildings home
+  WHERE home.city_id = ${cityId}
+    AND home.status = 'completed'
+    AND home.building_type = ANY(ARRAY[${CITY_RESIDENCE_TYPES.map((type) => `'${type}'`).join(', ')}]::text[])
+), 0)::float8`;
 
 function getCityWellbeingById(
   residences: readonly {
@@ -970,7 +989,11 @@ const AVERAGE_WORKER_TECHNIQUE_SQL = (buildingId: string) => `(SELECT SUM(j.coun
    JOIN all_buildings home ON home.id = j.residence_id
    WHERE j.workplace_id = ${buildingId})`;
 
-const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, work_hours_per_day, minimum_worker_technique, rent, occupants, wellbeing, desired_workers, work_points_done, price, stock, stock_levels, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
+const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y, city_id, status, started_at, completed_at, wage, wage_by_technique, wage_per_technique_rate,
+  (SELECT minimum_wage FROM city_assemblies WHERE id = all_buildings.city_id) AS city_minimum_wage,
+  work_hours_per_day, minimum_worker_technique, rent, occupants, wellbeing, desired_workers,
+  fixed_desired_workers, desired_workers_by_work_points, desired_work_points_per_day,
+  work_points_done, price, stock, stock_levels, tool_stock, wood_stock, iron_stock, charcoal_stock, sugarcane_stock, selected_input_product_id,
   COALESCE((SELECT array_agg(link.warehouse_id::text ORDER BY link.warehouse_id)
             FROM building_warehouse_links link
             WHERE link.building_id = all_buildings.id), ARRAY[]::text[]) AS warehouse_ids,
@@ -978,7 +1001,9 @@ const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y
             FROM building_input_stock input
             WHERE input.building_id = all_buildings.id), '{}'::jsonb) AS input_stocks,
   efficiency_penalty,
-  farm_auto_planting_enabled, farm_auto_planting_months, farm_planting_workers, farm_harvest_workers,
+  farm_auto_planting_enabled, farm_auto_planting_months,
+  farm_planting_workers, farm_planting_workers_by_work_points, farm_planting_work_points_per_day,
+  farm_harvest_workers, farm_harvest_workers_by_work_points, farm_harvest_work_points_per_day,
   crop_phase, to_char(crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day, crop_ratio_sum, crop_days,
   crop_yield, crop_harvested,
   (SELECT COALESCE(SUM(j.count), 0)::int FROM job_assignments j
@@ -991,13 +1016,59 @@ const ALL_BUILDING_COLUMNS = `id, building_type, building_number, tile_x, tile_y
                  WHERE j.residence_id = all_buildings.id), 0),
            0)::float8 AS average_income`;
 
-function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuilding {
+function mapResidentialBuilding(
+  row: ResidentialBuildingRow,
+  cityAverageWellbeing?: number,
+): ResidentialBuilding {
+  const canCalculateDynamicSettings = cityAverageWellbeing !== undefined;
+  const technique = row.average_worker_technique ??
+    getWorkerTechnique(cityAverageWellbeing ?? 0);
   const farmAutomation = {
     enabled: row.farm_auto_planting_enabled,
     plantingMonths: row.farm_auto_planting_months,
     plantingWorkers: row.farm_planting_workers,
+    plantingWorkersByWorkPoints: row.farm_planting_workers_by_work_points,
+    plantingWorkPointsPerDay: row.farm_planting_work_points_per_day,
     harvestWorkers: row.farm_harvest_workers,
+    harvestWorkersByWorkPoints: row.farm_harvest_workers_by_work_points,
+    harvestWorkPointsPerDay: row.farm_harvest_work_points_per_day,
   };
+  const maximumWorkers = getMaxDesiredWorkers(row.building_type, row.status);
+  const farmPhaseWorkers = (phase: Crop['phase'] | null): number => {
+    if (phase === 'growing') {
+      return farmAutomation.plantingWorkersByWorkPoints
+        ? getWorkersForWorkPoints(
+            farmAutomation.plantingWorkPointsPerDay,
+            row.work_hours_per_day,
+            technique,
+            maximumWorkers,
+          )
+        : farmAutomation.plantingWorkers;
+    }
+    if (phase === 'harvesting') {
+      return farmAutomation.harvestWorkersByWorkPoints
+        ? getWorkersForWorkPoints(
+            farmAutomation.harvestWorkPointsPerDay,
+            row.work_hours_per_day,
+            technique,
+            maximumWorkers,
+          )
+        : farmAutomation.harvestWorkers;
+    }
+    return 0;
+  };
+  const desiredWorkers = !canCalculateDynamicSettings
+    ? row.desired_workers
+    : farmAutomation.enabled
+    ? farmPhaseWorkers(row.crop_phase)
+    : row.desired_workers_by_work_points
+      ? getWorkersForWorkPoints(
+          row.desired_work_points_per_day,
+          row.work_hours_per_day,
+          technique,
+          maximumWorkers,
+        )
+      : Math.min(row.fixed_desired_workers, maximumWorkers);
   return {
     id: row.id,
     ownerName: row.owner_name ?? undefined,
@@ -1009,19 +1080,24 @@ function mapResidentialBuilding(row: ResidentialBuildingRow): ResidentialBuildin
     status: row.status,
     startedAt: row.started_at.toISOString(),
     completedAt: row.completed_at?.toISOString() ?? null,
-    wage: row.wage,
+    wage: row.wage_by_technique && canCalculateDynamicSettings
+      ? getTechniqueAdjustedWage(
+          row.wage_per_technique_rate,
+          technique,
+          row.city_minimum_wage,
+        )
+      : row.wage,
+    wageByTechnique: row.wage_by_technique,
+    wagePerTechniqueRate: row.wage_per_technique_rate,
     workHoursPerDay: row.work_hours_per_day,
     minimumWorkerTechnique: row.minimum_worker_technique,
     rent: row.rent,
     occupants: row.occupants,
     wellbeing: row.wellbeing,
-    desiredWorkers: farmAutomation.enabled
-      ? row.crop_phase === 'growing'
-        ? farmAutomation.plantingWorkers
-        : row.crop_phase === 'harvesting'
-          ? farmAutomation.harvestWorkers
-          : 0
-      : row.desired_workers,
+    desiredWorkers,
+    fixedDesiredWorkers: row.fixed_desired_workers,
+    desiredWorkersByWorkPoints: row.desired_workers_by_work_points,
+    desiredWorkPointsPerDay: row.desired_work_points_per_day,
     workPointsDone: row.work_points_done,
     price: row.price,
     stock: row.stock,
@@ -4508,6 +4584,10 @@ async function runDailyEmployment(): Promise<boolean> {
                desired_workers = CASE
                  WHEN progress.completed THEN LEAST(building.desired_workers, progress.maximum_workers)
                  ELSE building.desired_workers
+               END,
+               fixed_desired_workers = CASE
+                 WHEN progress.completed THEN LEAST(building.fixed_desired_workers, progress.maximum_workers)
+                 ELSE building.fixed_desired_workers
                END
            FROM UNNEST(
              $1::uuid[], $2::double precision[], $3::boolean[], $4::integer[]
@@ -6074,14 +6154,10 @@ async function runDailyEmployment(): Promise<boolean> {
         phase: Crop['phase'] | null;
         enabled: boolean;
         months: number[];
-        plantingWorkers: number;
-        harvestWorkers: number;
       }>(
         `SELECT id, crop_phase AS phase,
                 farm_auto_planting_enabled AS enabled,
-                farm_auto_planting_months AS months,
-                farm_planting_workers AS "plantingWorkers",
-                farm_harvest_workers AS "harvestWorkers"
+                farm_auto_planting_months AS months
          FROM all_buildings
          WHERE building_type = ANY($1::text[]) AND status = 'completed' AND crop_phase IS NULL
            AND farm_auto_planting_enabled = true`,
@@ -6093,8 +6169,6 @@ async function runDailyEmployment(): Promise<boolean> {
             {
               enabled: farm.enabled,
               plantingMonths: farm.months,
-              plantingWorkers: farm.plantingWorkers,
-              harvestWorkers: farm.harvestWorkers,
             },
             farm.phase,
             currentMonth,
@@ -6115,7 +6189,34 @@ async function runDailyEmployment(): Promise<boolean> {
         `SELECT ${ALL_BUILDING_COLUMNS} FROM all_buildings`,
       );
       Object.assign(allocationCounts, getPerformanceEntityCounts(rows));
-      const buildings = rows.map(mapResidentialBuilding);
+      const rowsById = new Map(rows.map((row) => [row.id, row]));
+      const wellbeingByCity = getCityWellbeingById(rows);
+      const buildings = rows.map((row) =>
+        mapResidentialBuilding(row, wellbeingByCity.get(row.city_id) ?? 0),
+      );
+      const employmentSettings = buildings.map((building) => ({
+        id: building.id,
+        desiredWorkers: building.desiredWorkers,
+        wage: building.wage,
+      }));
+      if (employmentSettings.length > 0) {
+        const { rowCount } = await client.query(
+          `UPDATE all_buildings building
+           SET desired_workers = settings.desired_workers,
+               wage = settings.wage
+           FROM UNNEST($1::uuid[], $2::integer[], $3::numeric[])
+             AS settings(id, desired_workers, wage)
+           WHERE building.id = settings.id
+             AND (building.desired_workers IS DISTINCT FROM settings.desired_workers
+               OR building.wage IS DISTINCT FROM settings.wage)`,
+          [
+            employmentSettings.map((building) => building.id),
+            employmentSettings.map((building) => building.desiredWorkers),
+            employmentSettings.map((building) => building.wage),
+          ],
+        );
+        if (rowCount && rowCount > 0) changed = true;
+      }
       const completedResidences = buildings.filter(
         (building) =>
           building.status === 'completed' &&
@@ -6201,6 +6302,55 @@ async function runDailyEmployment(): Promise<boolean> {
             assignments.map((assignment) => assignment.count),
           ],
         );
+      }
+      const techniquesByWorkplace = new Map<string, { technique: number; count: number }[]>();
+      const residenceTechniqueById = new Map(residences.map((residence) => [
+        residence.id,
+        residence.technique,
+      ]));
+      for (const assignment of assignments) {
+        const technique = residenceTechniqueById.get(assignment.residenceId);
+        if (technique === undefined) {
+          throw new Error(`Não foi possível calcular a técnica da residência ${assignment.residenceId}.`);
+        }
+        const workers = techniquesByWorkplace.get(assignment.workplaceId) ?? [];
+        workers.push({ technique, count: assignment.count });
+        techniquesByWorkplace.set(assignment.workplaceId, workers);
+      }
+      const techniqueWageUpdates = buildings.flatMap((building) => {
+        if (!building.wageByTechnique) return [];
+        const row = rowsById.get(building.id);
+        if (!row) throw new Error(`Não foi possível carregar a construção ${building.id}.`);
+        const technique =
+          getAverageWorkerTechnique(techniquesByWorkplace.get(building.id) ?? []) ??
+          getWorkerTechnique(wellbeingByCity.get(building.cityId) ?? 0);
+        return [{
+          id: building.id,
+          wage: getTechniqueAdjustedWage(
+            building.wagePerTechniqueRate,
+            technique,
+            row.city_minimum_wage,
+          ),
+        }];
+      });
+      if (techniqueWageUpdates.length > 0) {
+        const { rowCount } = await client.query(
+          `UPDATE all_buildings building
+           SET wage = updates.wage
+           FROM UNNEST($1::uuid[], $2::numeric[]) AS updates(id, wage)
+           WHERE building.id = updates.id
+             AND building.wage IS DISTINCT FROM updates.wage`,
+          [
+            techniqueWageUpdates.map((update) => update.id),
+            techniqueWageUpdates.map((update) => update.wage),
+          ],
+        );
+        if (rowCount && rowCount > 0) changed = true;
+        const wageById = new Map(techniqueWageUpdates.map((update) => [update.id, update.wage]));
+        for (const building of buildings) {
+          const wage = wageById.get(building.id);
+          if (wage !== undefined) building.wage = wage;
+        }
       }
       await client.query('UPDATE world_state SET last_job_allocation_day = $1 WHERE id = 1', [state.day]);
       changed = true;
@@ -7100,6 +7250,7 @@ async function completeResidentialBuilding(
        SET status = 'completed',
            completed_at = clock_timestamp(),
            desired_workers = LEAST(desired_workers, $2),
+           fixed_desired_workers = LEAST(fixed_desired_workers, $2),
            price = COALESCE($3, price)
        WHERE id = $1 AND status = 'under_construction'
        RETURNING ${ALL_BUILDING_COLUMNS}`,
@@ -7214,11 +7365,13 @@ async function start() {
       building_type: ResidenceType;
     }>(
       `UPDATE all_buildings AS building
-       SET desired_workers = limits.maximum_workers
+       SET desired_workers = LEAST(building.desired_workers, limits.maximum_workers),
+           fixed_desired_workers = LEAST(building.fixed_desired_workers, limits.maximum_workers)
        FROM UNNEST($1::text[], $2::integer[]) AS limits(building_type, maximum_workers)
        WHERE building.building_type = limits.building_type
          AND building.status = 'completed'
-         AND building.desired_workers > limits.maximum_workers
+         AND (building.desired_workers > limits.maximum_workers
+           OR building.fixed_desired_workers > limits.maximum_workers)
        RETURNING building.id, building.building_type`,
       [
         Object.keys(RESIDENCES),
@@ -7735,9 +7888,14 @@ async function start() {
           tile_x: number;
           tile_y: number;
           desired_workers: number;
+          fixed_desired_workers: number;
+          desired_workers_by_work_points: boolean;
+          desired_work_points_per_day: number;
           employed: number;
           work_hours_per_day: number;
           wage: string;
+          wage_by_technique: boolean;
+          wage_per_technique_rate: string;
           average_worker_technique: number | null;
           minimum_worker_technique: number;
           price: string;
@@ -7748,9 +7906,12 @@ async function start() {
         }>(
           `SELECT building.id, building.building_type, building.status, building.building_number,
                   building.tile_x, building.tile_y, building.desired_workers,
+                  building.fixed_desired_workers, building.desired_workers_by_work_points,
+                  building.desired_work_points_per_day,
                   COALESCE((SELECT SUM(j.count)::int FROM job_assignments j
                             WHERE j.workplace_id = building.id), 0) AS employed,
-                  building.work_hours_per_day, building.wage,
+                  building.work_hours_per_day, building.wage, building.wage_by_technique,
+                  building.wage_per_technique_rate,
                   ${AVERAGE_WORKER_TECHNIQUE_SQL('building.id')} AS average_worker_technique,
                   building.minimum_worker_technique, building.price,
                   COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense,
@@ -7999,9 +8160,14 @@ async function start() {
           tile_x: number;
           tile_y: number;
           desired_workers: number;
+          fixed_desired_workers: number;
+          desired_workers_by_work_points: boolean;
+          desired_work_points_per_day: number;
           employed: number;
           work_hours_per_day: number;
           wage: string;
+          wage_by_technique: boolean;
+          wage_per_technique_rate: string;
           average_worker_technique: number | null;
           minimum_worker_technique: number;
           employee_expense: string;
@@ -8009,9 +8175,12 @@ async function start() {
         }>(
           `SELECT building.id, building.building_type, building.status, building.building_number,
                   building.tile_x, building.tile_y, building.desired_workers,
+                  building.fixed_desired_workers, building.desired_workers_by_work_points,
+                  building.desired_work_points_per_day,
                   COALESCE((SELECT SUM(j.count)::int FROM job_assignments j
                             WHERE j.workplace_id = building.id), 0) AS employed,
-                  building.work_hours_per_day, building.wage,
+                  building.work_hours_per_day, building.wage, building.wage_by_technique,
+                  building.wage_per_technique_rate,
                   ${AVERAGE_WORKER_TECHNIQUE_SQL('building.id')} AS average_worker_technique,
                   building.minimum_worker_technique,
                   COALESCE(payroll.employee_expense, 0)::text AS employee_expense,
@@ -8043,9 +8212,14 @@ async function start() {
           tile_x: number;
           tile_y: number;
           desired_workers: number;
+          fixed_desired_workers: number;
+          desired_workers_by_work_points: boolean;
+          desired_work_points_per_day: number;
           employed: number;
           work_hours_per_day: number;
           wage: string;
+          wage_by_technique: boolean;
+          wage_per_technique_rate: string;
           average_worker_technique: number | null;
           minimum_worker_technique: number;
           stock: number;
@@ -8063,13 +8237,20 @@ async function start() {
           farm_auto_planting_enabled: boolean;
           farm_auto_planting_months: number[];
           farm_planting_workers: number;
+          farm_planting_workers_by_work_points: boolean;
+          farm_planting_work_points_per_day: number;
           farm_harvest_workers: number;
+          farm_harvest_workers_by_work_points: boolean;
+          farm_harvest_work_points_per_day: number;
         }>(
           `SELECT building.id, building.building_type, building.status, building.building_number,
                   building.tile_x, building.tile_y, building.desired_workers,
+                  building.fixed_desired_workers, building.desired_workers_by_work_points,
+                  building.desired_work_points_per_day,
                   COALESCE((SELECT SUM(j.count)::int FROM job_assignments j
                             WHERE j.workplace_id = building.id), 0) AS employed,
-                  building.work_hours_per_day, building.wage,
+                  building.work_hours_per_day, building.wage, building.wage_by_technique,
+                  building.wage_per_technique_rate,
                   ${AVERAGE_WORKER_TECHNIQUE_SQL('building.id')} AS average_worker_technique,
                   building.minimum_worker_technique, building.stock,
                   COALESCE(history.work_points, 0)::text AS work_points,
@@ -8080,7 +8261,10 @@ async function start() {
                   to_char(building.crop_planted_day, 'YYYY-MM-DD') AS crop_planted_day,
                   building.crop_ratio_sum, building.crop_days, building.crop_yield, building.crop_harvested,
                   building.farm_auto_planting_enabled, building.farm_auto_planting_months,
-                  building.farm_planting_workers, building.farm_harvest_workers
+                  building.farm_planting_workers, building.farm_planting_workers_by_work_points,
+                  building.farm_planting_work_points_per_day,
+                  building.farm_harvest_workers, building.farm_harvest_workers_by_work_points,
+                  building.farm_harvest_work_points_per_day
            FROM all_buildings building
            LEFT JOIN LATERAL (
              SELECT SUM(work_points) AS work_points,
@@ -8434,8 +8618,13 @@ async function start() {
           y: row.tile_y,
           employed: row.employed,
           desiredWorkers: row.desired_workers,
+          fixedDesiredWorkers: row.fixed_desired_workers,
+          desiredWorkersByWorkPoints: row.desired_workers_by_work_points,
+          desiredWorkPointsPerDay: row.desired_work_points_per_day,
           workHoursPerDay: row.work_hours_per_day,
           wage: Number(row.wage),
+          wageByTechnique: row.wage_by_technique,
+          wagePerTechniqueRate: Number(row.wage_per_technique_rate),
           averageWorkerTechnique: row.average_worker_technique,
           minimumWorkerTechnique: row.minimum_worker_technique,
           employeeExpense: Number(row.employee_expense),
@@ -8472,8 +8661,13 @@ async function start() {
           y: row.tile_y,
           employed: row.employed,
           desiredWorkers: row.desired_workers,
+          fixedDesiredWorkers: row.fixed_desired_workers,
+          desiredWorkersByWorkPoints: row.desired_workers_by_work_points,
+          desiredWorkPointsPerDay: row.desired_work_points_per_day,
           workHoursPerDay: row.work_hours_per_day,
           wage: Number(row.wage),
+          wageByTechnique: row.wage_by_technique,
+          wagePerTechniqueRate: Number(row.wage_per_technique_rate),
           averageWorkerTechnique: row.average_worker_technique,
           minimumWorkerTechnique: row.minimum_worker_technique,
           employeeExpense: Number(row.employee_expense),
@@ -8508,8 +8702,13 @@ async function start() {
             y: row.tile_y,
             employed: row.employed,
             desiredWorkers: row.desired_workers,
+            fixedDesiredWorkers: row.fixed_desired_workers,
+            desiredWorkersByWorkPoints: row.desired_workers_by_work_points,
+            desiredWorkPointsPerDay: row.desired_work_points_per_day,
             workHoursPerDay: row.work_hours_per_day,
             wage: Number(row.wage),
+            wageByTechnique: row.wage_by_technique,
+            wagePerTechniqueRate: Number(row.wage_per_technique_rate),
             averageWorkerTechnique: row.average_worker_technique,
             minimumWorkerTechnique: row.minimum_worker_technique,
             stock: row.stock,
@@ -8529,7 +8728,11 @@ async function start() {
               enabled: row.farm_auto_planting_enabled,
               plantingMonths: row.farm_auto_planting_months,
               plantingWorkers: row.farm_planting_workers,
+              plantingWorkersByWorkPoints: row.farm_planting_workers_by_work_points,
+              plantingWorkPointsPerDay: row.farm_planting_work_points_per_day,
               harvestWorkers: row.farm_harvest_workers,
+              harvestWorkersByWorkPoints: row.farm_harvest_workers_by_work_points,
+              harvestWorkPointsPerDay: row.farm_harvest_work_points_per_day,
             },
           };
         }).sort((first, second) =>
@@ -9374,9 +9577,13 @@ async function start() {
           city_id: string | null;
           building_type: ResidenceType;
           status: string;
+          city_minimum_wage: number;
         }>(
-          `SELECT id, created_by, city_id, building_type, status
-           FROM all_buildings WHERE id = $1`,
+          `SELECT building.id, building.created_by, building.city_id,
+                  building.building_type, building.status, city.minimum_wage AS city_minimum_wage
+           FROM all_buildings building
+           JOIN city_assemblies city ON city.id = building.city_id
+           WHERE building.id = $1`,
           [request.params.id],
         );
         const target = targetRows[0];
@@ -9443,18 +9650,33 @@ async function start() {
           residenceId: assignment.residence_id,
           count: assignment.count,
         }));
-        const wages = new Map(
-          buildingRows.map((building) => [
-            building.id,
-            building.id === target.id ? workSettings.wage : building.wage,
-          ]),
-        );
+        const averageTechniques = mapAverageWorkerTechniques(assignmentRows);
         const residentialRows = buildingRows.filter((building) => {
           return (
             building.status === 'completed' &&
             getResidenceDefinition(building.building_type)?.kind === 'residence'
           );
         });
+        const targetTechnique = averageTechniques.get(target.id) ??
+          getWorkerTechnique(getAverageWellbeing(residentialRows));
+        const targetWage = workSettings.wageByTechnique
+          ? getTechniqueAdjustedWage(
+              workSettings.wagePerTechniqueRate,
+              targetTechnique,
+              target.city_minimum_wage,
+            )
+          : workSettings.wage;
+        if (!workSettings.wageByTechnique && targetWage < target.city_minimum_wage) {
+          await client.query('ROLLBACK');
+          response.status(400).json({ error: 'invalid_sale_simulation_settings' });
+          return;
+        }
+        const wages = new Map(
+          buildingRows.map((building) => [
+            building.id,
+            building.id === target.id ? targetWage : building.wage,
+          ]),
+        );
         const averageIncomes = getAverageIncomes(
           residentialRows.map((residence) => ({ id: residence.id })),
           wages,
@@ -9472,7 +9694,6 @@ async function start() {
             (consumersByResidence.get(assignment.residence_id) ?? 0) + assignment.count,
           );
         }
-        const averageTechniques = mapAverageWorkerTechniques(assignmentRows);
         const shopRows = buildingRows.filter((building) => {
           const definition = getResidenceDefinition(building.building_type);
           return (
@@ -9565,7 +9786,7 @@ async function start() {
           {
             price,
             dailyCapacity: targetShop.capacity,
-            wage: workSettings.wage,
+            wage: targetWage,
             workers: workersByWorkplace.get(target.id) ?? 0,
           },
           Math.random,
@@ -10572,10 +10793,20 @@ async function start() {
             city_id: string;
             created_by: string;
             city_minimum_wage: number;
+            city_average_wellbeing: number;
+            average_worker_technique: number | null;
             building_type: ResidenceType;
             status: ResidentialBuilding['status'];
           }>(
             `SELECT building.city_id, building.created_by, city.minimum_wage AS city_minimum_wage,
+                    COALESCE((SELECT SUM(home.occupants * home.wellbeing) /
+                                      NULLIF(SUM(home.occupants), 0)
+                              FROM all_buildings home
+                              WHERE home.city_id = building.city_id
+                                AND home.status = 'completed'
+                                AND home.building_type = ANY(ARRAY[${CITY_RESIDENCE_TYPES.map((type) => `'${type}'`).join(', ')}]::text[])),
+                             0)::float8 AS city_average_wellbeing,
+                    ${AVERAGE_WORKER_TECHNIQUE_SQL('building.id')} AS average_worker_technique,
                     building.building_type, building.status
              FROM all_buildings AS building
              JOIN city_assemblies AS city ON city.id = building.city_id
@@ -10594,9 +10825,26 @@ async function start() {
             return;
           }
           const definition = getResidenceDefinition(selected.building_type);
+          const targetTechnique = selected.average_worker_technique ??
+            getWorkerTechnique(selected.city_average_wellbeing);
+          const targetWage = settings.wageByTechnique
+            ? getTechniqueAdjustedWage(
+                settings.wagePerTechniqueRate,
+                targetTechnique,
+                selected.city_minimum_wage,
+              )
+            : settings.wage;
+          const targetWorkers = settings.desiredWorkersByWorkPoints && definition
+            ? getWorkersForWorkPoints(
+                settings.desiredWorkPointsPerDay,
+                settings.workHoursPerDay,
+                targetTechnique,
+                getMaxDesiredWorkers(selected.building_type, selected.status),
+              )
+            : settings.desiredWorkers;
           if (
             !definition ||
-            settings.wage < selected.city_minimum_wage ||
+            (!settings.wageByTechnique && targetWage < selected.city_minimum_wage) ||
             (definition.kind === 'residence' && selected.status !== 'under_construction') ||
             settings.desiredWorkers > getMaxDesiredWorkers(selected.building_type, selected.status)
           ) {
@@ -10613,10 +10861,25 @@ async function start() {
           );
           await client.query('COMMIT');
 
+          const selectedBuilding = rows.find((row) => row.id === request.params.id);
+          if (!selectedBuilding) {
+            throw new Error(`Não foi possível carregar a construção ${request.params.id}.`);
+          }
           const buildings = rows.map((row) => {
             const building = mapResidentialBuilding(row);
             return building.id === request.params.id
-              ? { ...building, ...settings }
+              ? {
+                  ...building,
+                  wage: targetWage,
+                  wageByTechnique: settings.wageByTechnique,
+                  wagePerTechniqueRate: settings.wagePerTechniqueRate,
+                  workHoursPerDay: settings.workHoursPerDay,
+                  desiredWorkers: targetWorkers,
+                  fixedDesiredWorkers: settings.desiredWorkers,
+                  desiredWorkersByWorkPoints: settings.desiredWorkersByWorkPoints,
+                  desiredWorkPointsPerDay: settings.desiredWorkPointsPerDay,
+                  minimumWorkerTechnique: settings.minimumWorkerTechnique,
+                }
               : building;
           });
           const completedResidences = buildings.filter(
@@ -10723,24 +10986,12 @@ async function start() {
       try {
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
-        const { rows: buildingRows } = await client.query<{
-          building_type: string;
-          status: ResidentialBuilding['status'];
-          created_by: string;
-          city_minimum_wage: number;
-          desired_workers: number;
-          crop_phase: Crop['phase'] | null;
-          farm_auto_planting_enabled: boolean;
-          farm_planting_workers: number;
-          farm_harvest_workers: number;
-        }>(
-          `SELECT building.building_type, building.status, building.created_by,
-                  city.minimum_wage AS city_minimum_wage, building.desired_workers,
-                  building.crop_phase, building.farm_auto_planting_enabled,
-                  building.farm_planting_workers, building.farm_harvest_workers
-           FROM all_buildings AS building
-           JOIN city_assemblies AS city ON city.id = building.city_id
-           WHERE building.id = $1 FOR UPDATE OF building`,
+        const { rows: buildingRows } = await client.query<
+          ResidentialBuildingRow & { created_by: string; city_average_wellbeing: number }
+        >(
+          `SELECT ${ALL_BUILDING_COLUMNS}, created_by,
+                  ${CITY_AVERAGE_WELLBEING_SQL('all_buildings.city_id')} AS city_average_wellbeing
+           FROM all_buildings WHERE id = $1 FOR UPDATE`,
           [request.params.id],
         );
         const building = buildingRows[0];
@@ -10754,7 +11005,16 @@ async function start() {
           response.status(403).json({ error: 'residence_not_owned' });
           return;
         }
-        if (settings.wage < building.city_minimum_wage) {
+        const technique = building.average_worker_technique ??
+          getWorkerTechnique(building.city_average_wellbeing);
+        const wage = settings.wageByTechnique
+          ? getTechniqueAdjustedWage(
+              settings.wagePerTechniqueRate,
+              technique,
+              building.city_minimum_wage,
+            )
+          : settings.wage;
+        if (!settings.wageByTechnique && wage < building.city_minimum_wage) {
           await client.query('ROLLBACK');
           response.status(400).json({ error: 'wage_below_minimum' });
           return;
@@ -10770,19 +11030,68 @@ async function start() {
           response.status(400).json({ error: 'invalid_work_settings' });
           return;
         }
+        const maximumWorkers = getMaxDesiredWorkers(building.building_type, building.status);
+        const configuredWorkers = settings.desiredWorkersByWorkPoints
+          ? getWorkersForWorkPoints(
+              settings.desiredWorkPointsPerDay,
+              settings.workHoursPerDay,
+              technique,
+              maximumWorkers,
+            )
+          : settings.desiredWorkers;
+        const currentFarmSettings = {
+          enabled: building.farm_auto_planting_enabled,
+          plantingMonths: building.farm_auto_planting_months,
+          plantingWorkers: building.farm_planting_workers,
+          plantingWorkersByWorkPoints: building.farm_planting_workers_by_work_points,
+          plantingWorkPointsPerDay: building.farm_planting_work_points_per_day,
+          harvestWorkers: building.farm_harvest_workers,
+          harvestWorkersByWorkPoints: building.farm_harvest_workers_by_work_points,
+          harvestWorkPointsPerDay: building.farm_harvest_work_points_per_day,
+        };
+        const farmPhaseWorkers =
+          building.crop_phase === 'growing'
+            ? currentFarmSettings.plantingWorkersByWorkPoints
+              ? getWorkersForWorkPoints(
+                  currentFarmSettings.plantingWorkPointsPerDay,
+                  settings.workHoursPerDay,
+                  technique,
+                  maximumWorkers,
+                )
+              : currentFarmSettings.plantingWorkers
+            : building.crop_phase === 'harvesting'
+              ? currentFarmSettings.harvestWorkersByWorkPoints
+                ? getWorkersForWorkPoints(
+                    currentFarmSettings.harvestWorkPointsPerDay,
+                    settings.workHoursPerDay,
+                    technique,
+                    maximumWorkers,
+                  )
+                : currentFarmSettings.harvestWorkers
+              : 0;
+        const targetWorkers = building.farm_auto_planting_enabled
+          ? farmPhaseWorkers
+          : configuredWorkers;
         const { rows } = await client.query<ResidentialBuildingRow>(
           `UPDATE all_buildings
              SET wage = $3, work_hours_per_day = $4, desired_workers = $5,
-                 minimum_worker_technique = $6
+                 fixed_desired_workers = $6, desired_workers_by_work_points = $7,
+                 desired_work_points_per_day = $8, wage_by_technique = $9,
+                 wage_per_technique_rate = $10, minimum_worker_technique = $11
              WHERE id = $1 AND created_by = $2
-               AND (status = 'under_construction' OR building_type <> ALL($7::text[]))
+               AND (status = 'under_construction' OR building_type <> ALL($12::text[]))
            RETURNING ${ALL_BUILDING_COLUMNS}`,
           [
             request.params.id,
             userId,
-            settings.wage,
+            wage,
             settings.workHoursPerDay,
-            building.farm_auto_planting_enabled ? building.desired_workers : settings.desiredWorkers,
+            targetWorkers,
+            settings.desiredWorkers,
+            settings.desiredWorkersByWorkPoints,
+            settings.desiredWorkPointsPerDay,
+            settings.wageByTechnique,
+            settings.wagePerTechniqueRate,
             settings.minimumWorkerTechnique,
             RESIDENCE_BUILDING_TYPES,
           ],
@@ -10792,13 +11101,6 @@ async function start() {
           throw new Error(`A construção ${request.params.id} mudou durante a atualização.`);
         }
 
-        const targetWorkers = building.farm_auto_planting_enabled
-          ? building.crop_phase === 'harvesting'
-            ? building.farm_harvest_workers
-            : building.crop_phase === 'growing'
-              ? building.farm_planting_workers
-              : 0
-          : settings.desiredWorkers;
         await limitJobAssignments(client, request.params.id, targetWorkers);
         const { rows: updated } = await client.query<ResidentialBuildingRow>(
           `SELECT ${ALL_BUILDING_COLUMNS} FROM all_buildings WHERE id = $1`,
@@ -11089,14 +11391,11 @@ async function start() {
       try {
         await client.query('BEGIN');
         await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
-        const { rows: buildingRows } = await client.query<{
-          building_type: string;
-          status: ResidentialBuilding['status'];
-          created_by: string;
-          crop_phase: Crop['phase'] | null;
-          desired_workers: number;
-        }>(
-          `SELECT building_type, status, created_by, crop_phase, desired_workers
+        const { rows: buildingRows } = await client.query<
+          ResidentialBuildingRow & { created_by: string; city_average_wellbeing: number }
+        >(
+          `SELECT ${ALL_BUILDING_COLUMNS}, created_by,
+                  ${CITY_AVERAGE_WELLBEING_SQL('all_buildings.city_id')} AS city_average_wellbeing
            FROM all_buildings WHERE id = $1 FOR UPDATE`,
           [request.params.id],
         );
@@ -11129,7 +11428,11 @@ async function start() {
            SET farm_auto_planting_enabled = $3,
                farm_auto_planting_months = $4::smallint[],
                farm_planting_workers = $5,
-               farm_harvest_workers = $6
+                farm_planting_workers_by_work_points = $6,
+                farm_planting_work_points_per_day = $7,
+                farm_harvest_workers = $8,
+                farm_harvest_workers_by_work_points = $9,
+                farm_harvest_work_points_per_day = $10
            WHERE id = $1 AND created_by = $2
            RETURNING ${ALL_BUILDING_COLUMNS}`,
           [
@@ -11138,20 +11441,55 @@ async function start() {
             settings.enabled,
             settings.plantingMonths,
             settings.plantingWorkers,
+            settings.plantingWorkersByWorkPoints,
+            settings.plantingWorkPointsPerDay,
             settings.harvestWorkers,
+            settings.harvestWorkersByWorkPoints,
+            settings.harvestWorkPointsPerDay,
           ],
         );
+        const technique = building.average_worker_technique ??
+          getWorkerTechnique(building.city_average_wellbeing);
         const targetWorkers = settings.enabled
           ? building.crop_phase === 'harvesting'
-            ? settings.harvestWorkers
+            ? settings.harvestWorkersByWorkPoints
+              ? getWorkersForWorkPoints(
+                  settings.harvestWorkPointsPerDay,
+                  building.work_hours_per_day,
+                  technique,
+                  definition.maxWorkers,
+                )
+              : settings.harvestWorkers
             : building.crop_phase === 'growing'
-              ? settings.plantingWorkers
+              ? settings.plantingWorkersByWorkPoints
+                ? getWorkersForWorkPoints(
+                    settings.plantingWorkPointsPerDay,
+                    building.work_hours_per_day,
+                    technique,
+                    definition.maxWorkers,
+                  )
+                : settings.plantingWorkers
               : 0
-          : building.desired_workers;
+          : building.desired_workers_by_work_points
+            ? getWorkersForWorkPoints(
+                building.desired_work_points_per_day,
+                building.work_hours_per_day,
+                technique,
+                definition.maxWorkers,
+              )
+            : building.fixed_desired_workers;
+        await client.query('UPDATE all_buildings SET desired_workers = $2 WHERE id = $1', [
+          request.params.id,
+          targetWorkers,
+        ]);
         await limitJobAssignments(client, request.params.id, targetWorkers);
+        const { rows: updatedRows } = await client.query<ResidentialBuildingRow>(
+          `SELECT ${ALL_BUILDING_COLUMNS} FROM all_buildings WHERE id = $1`,
+          [request.params.id],
+        );
         await client.query('COMMIT');
 
-        response.json(mapResidentialBuilding(rows[0]));
+        response.json(mapResidentialBuilding(updatedRows[0]));
         void publishCities().catch((error: unknown) => {
           console.error('A automação foi atualizada, mas a atualização do mundo falhou:', error);
         });

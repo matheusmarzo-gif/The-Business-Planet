@@ -97,15 +97,22 @@ export function planDailySpoilage(
   quantity: number,
   shelfLifeDays: number,
   random: () => number = Math.random,
+  sameDayQuantity = 0,
 ): number {
+  if (!Number.isInteger(sameDayQuantity) || sameDayQuantity < 0) {
+    throw new RangeError('A quantidade recebida no dia precisa ser um inteiro não negativo.');
+  }
   if (!Number.isInteger(quantity) || quantity <= 0) return 0;
   if (!Number.isFinite(shelfLifeDays) || shelfLifeDays <= 0) {
     throw new RangeError('A validade precisa ser um número positivo de dias.');
   }
 
-  const expectedLoss = quantity / shelfLifeDays;
+  const agingQuantity = Math.max(0, quantity - sameDayQuantity);
+  if (agingQuantity === 0) return 0;
+
+  const expectedLoss = agingQuantity / shelfLifeDays;
   const wholeLoss = Math.floor(expectedLoss);
   const fractionalLoss = expectedLoss - wholeLoss;
   const randomLoss = fractionalLoss > 0 && random() < fractionalLoss ? 1 : 0;
-  return Math.min(quantity, wholeLoss + randomLoss);
+  return Math.min(agingQuantity, wholeLoss + randomLoss);
 }

@@ -23,9 +23,10 @@ gratuito e instantâneo,
 e as obras regulares progridem por Work Points. A conta master pode concluí-las
 instantaneamente. O jogo também possui um catálogo de produtos, estoques
 persistentes e produção para as construções habilitadas; estoques perecíveis
-sofrem deterioração diária conforme a validade. Armazéns e silos armazenam e
-transportam produtos; construções produtoras e comerciais podem se ligar a mais
-de um deles.
+sofrem deterioração diária conforme a validade, calculada apenas sobre o estoque
+que já existia antes da produção e das entradas do mesmo dia. Armazéns e silos
+armazenam e transportam produtos; construções produtoras e comerciais podem se
+ligar a mais de um deles.
 População e pessoas empregadas são agregadas a partir das residências e dos
 vínculos de trabalho; a economia da cidade compara os gastos residenciais com
 a massa salarial mensal. O bem-estar individual das residências é calculado

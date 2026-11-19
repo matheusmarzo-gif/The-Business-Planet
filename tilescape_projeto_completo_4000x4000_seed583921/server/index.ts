@@ -1198,6 +1198,32 @@ async function applyDailySpoilage(client: PoolClient, day: string): Promise<bool
   let changed = false;
   const shopTypes = new Set<string>(SHOP_TYPES);
   const spoiledShopStocks: { id: string; quantity: number }[] = [];
+  const stockKey = (buildingId: string, productId: string) => `${buildingId}\u0000${productId}`;
+  const addDailyQuantity = (quantities: Map<string, number>, key: string, quantity: number) => {
+    if (quantity <= 0) return;
+    quantities.set(key, (quantities.get(key) ?? 0) + quantity);
+  };
+  const loadDailyInbound = async (buildingIds: readonly string[]) => {
+    const quantities = new Map<string, number>();
+    if (buildingIds.length === 0) return quantities;
+    const { rows } = await client.query<{
+      building_id: string;
+      product_id: string;
+      quantity: number;
+    }>(
+      `SELECT linked_id::text AS building_id, product_id, SUM(moved)::float8 AS quantity
+       FROM warehouse_transport_log
+       WHERE linked_id = ANY($1::uuid[]) AND day = $2::date
+         AND direction = 'in' AND moved > 0
+         AND product_id = ANY($3::text[])
+       GROUP BY linked_id, product_id`,
+      [buildingIds, day, perishableProducts.map((product) => product.id)],
+    );
+    for (const row of rows) {
+      quantities.set(stockKey(row.building_id, row.product_id), row.quantity);
+    }
+    return quantities;
+  };
 
   const { rows: buildingStocks } = await client.query<{
     id: string;
@@ -1211,11 +1237,41 @@ async function applyDailySpoilage(client: PoolClient, day: string): Promise<bool
      FOR UPDATE`,
     [perishableBuildingTypes],
   );
+  const buildingIds = buildingStocks.map((building) => building.id);
+  const { rows: producedRows } = buildingIds.length > 0
+    ? await client.query<{ building_id: string; quantity: number }>(
+        `SELECT building_id::text AS building_id, SUM(produced)::float8 AS quantity
+         FROM production_history
+         WHERE building_id = ANY($1::uuid[]) AND day = $2::date
+         GROUP BY building_id`,
+        [buildingIds, day],
+      )
+    : { rows: [] };
+  const sameDayProduction = new Map<string, number>();
+  const buildingsById = new Map(buildingStocks.map((building) => [building.id, building]));
+  for (const row of producedRows) {
+    const building = buildingsById.get(row.building_id);
+    const productId = building
+      ? getResidenceDefinition(building.building_type)?.stockProductId
+      : undefined;
+    if (productId) {
+      addDailyQuantity(sameDayProduction, stockKey(row.building_id, productId), row.quantity);
+    }
+  }
+  const sameDayBuildingImports = await loadDailyInbound(buildingIds);
   for (const building of buildingStocks) {
     const productId = getResidenceDefinition(building.building_type)?.stockProductId;
     const shelfLifeDays = productId ? shelfLifeByProduct.get(productId) : undefined;
     if (!productId || shelfLifeDays === undefined) continue;
-    const quantity = planDailySpoilage(building.stock, shelfLifeDays);
+    const key = stockKey(building.id, productId);
+    const sameDayQuantity =
+      (sameDayProduction.get(key) ?? 0) + (sameDayBuildingImports.get(key) ?? 0);
+    const quantity = planDailySpoilage(
+      building.stock,
+      shelfLifeDays,
+      Math.random,
+      sameDayQuantity,
+    );
     if (quantity === 0) continue;
     await client.query('UPDATE all_buildings SET stock = stock - $2 WHERE id = $1', [
       building.id,
@@ -1253,10 +1309,58 @@ async function applyDailySpoilage(client: PoolClient, day: string): Promise<bool
      FOR UPDATE`,
     [perishableProducts.map((product) => product.id)],
   );
+  const warehouseIds = [...new Set(warehouseStocks.map((stock) => stock.building_id))];
+  const sameDayWarehouseImports = await loadDailyInbound(warehouseIds);
+  if (warehouseIds.length > 0) {
+    const { rows: collectedRows } = await client.query<{
+      building_id: string;
+      product_id: string;
+      quantity: number;
+    }>(
+      `SELECT warehouse_id::text AS building_id, product_id, SUM(moved)::float8 AS quantity
+       FROM warehouse_transport_log
+       WHERE warehouse_id = ANY($1::uuid[]) AND day = $2::date
+         AND direction = 'out' AND moved > 0
+         AND product_id = ANY($3::text[])
+       GROUP BY warehouse_id, product_id`,
+      [warehouseIds, day, perishableProducts.map((product) => product.id)],
+    );
+    for (const row of collectedRows) {
+      addDailyQuantity(
+        sameDayWarehouseImports,
+        stockKey(row.building_id, row.product_id),
+        row.quantity,
+      );
+    }
+    const { rows: tradedRows } = await client.query<{
+      building_id: string;
+      product_id: string;
+      quantity: number;
+    }>(
+      `SELECT buyer_id::text AS building_id, product_id, SUM(quantity)::float8 AS quantity
+       FROM warehouse_trade_history
+       WHERE buyer_id = ANY($1::uuid[]) AND day = $2::date
+         AND product_id = ANY($3::text[])
+       GROUP BY buyer_id, product_id`,
+      [warehouseIds, day, perishableProducts.map((product) => product.id)],
+    );
+    for (const row of tradedRows) {
+      addDailyQuantity(
+        sameDayWarehouseImports,
+        stockKey(row.building_id, row.product_id),
+        row.quantity,
+      );
+    }
+  }
   for (const stock of warehouseStocks) {
     const shelfLifeDays = shelfLifeByProduct.get(stock.product_id);
     if (shelfLifeDays === undefined) continue;
-    const quantity = planDailySpoilage(stock.quantity, shelfLifeDays);
+    const quantity = planDailySpoilage(
+      stock.quantity,
+      shelfLifeDays,
+      Math.random,
+      sameDayWarehouseImports.get(stockKey(stock.building_id, stock.product_id)) ?? 0,
+    );
     if (quantity === 0) continue;
     await client.query(
       'UPDATE warehouse_stock SET quantity = quantity - $3 WHERE building_id = $1 AND product_id = $2',
@@ -1274,8 +1378,16 @@ async function applyDailySpoilage(client: PoolClient, day: string): Promise<bool
      WHERE sugarcane_stock > 0
      FOR UPDATE`,
   );
+  const sameDaySugarcaneImports = await loadDailyInbound(
+    sugarcaneStocks.map((building) => building.id),
+  );
   const spoiledSugarcane = sugarcaneStocks.flatMap((building) => {
-    const quantity = planDailySpoilage(building.sugarcane_stock, 3);
+    const quantity = planDailySpoilage(
+      building.sugarcane_stock,
+      3,
+      Math.random,
+      sameDaySugarcaneImports.get(stockKey(building.id, 'sugarcane')) ?? 0,
+    );
     return quantity > 0 ? [{ id: building.id, quantity }] : [];
   });
   if (spoiledSugarcane.length > 0) {
@@ -1299,10 +1411,18 @@ async function applyDailySpoilage(client: PoolClient, day: string): Promise<bool
      FOR UPDATE`,
     [perishableProducts.map((product) => product.id)],
   );
+  const sameDayInputImports = await loadDailyInbound(
+    [...new Set(inputStocks.map((stock) => stock.building_id))],
+  );
   const spoiledInputs = inputStocks.flatMap((stock) => {
     const shelfLifeDays = shelfLifeByProduct.get(stock.product_id);
     if (shelfLifeDays === undefined) return [];
-    const quantity = planDailySpoilage(stock.quantity, shelfLifeDays);
+    const quantity = planDailySpoilage(
+      stock.quantity,
+      shelfLifeDays,
+      Math.random,
+      sameDayInputImports.get(stockKey(stock.building_id, stock.product_id)) ?? 0,
+    );
     return quantity > 0 ? [{ ...stock, spoiled: quantity }] : [];
   });
   if (spoiledInputs.length > 0) {

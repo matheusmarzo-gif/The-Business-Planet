@@ -627,6 +627,8 @@ ALTER TABLE warehouse_transport_log
   ADD COLUMN IF NOT EXISTS error_detail TEXT;
 
 CREATE INDEX IF NOT EXISTS warehouse_transport_log_idx ON warehouse_transport_log (warehouse_id, day DESC);
+CREATE INDEX IF NOT EXISTS warehouse_transport_log_linked_day_idx
+  ON warehouse_transport_log (linked_id, day DESC);
 
 CREATE TABLE IF NOT EXISTS residence_consumption (
   building_id UUID NOT NULL REFERENCES all_buildings (id) ON DELETE CASCADE,

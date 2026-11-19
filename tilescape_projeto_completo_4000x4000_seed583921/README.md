@@ -741,6 +741,11 @@ Os novos produtos usam os seguintes dados para transporte e validade:
 | Ouro | 1 kg | 0,00006 m³ | Permanente |
 | Prata | 1 kg | 0,0001 m³ | Permanente |
 
+A deterioração diária considera somente a quantidade que já estava no estoque
+antes das entradas daquele dia. A produção e os produtos recebidos por comércio
+ou transferência ficam protegidos até o próximo dia; se essas entradas forem
+iguais ou maiores que o estoque atual, não há perda naquele dia.
+
 O preço médio de cada produto é ponderado pelas vendas do período definido em
 `config/formulas/consumo.txt` (30 dias por padrão) ou,
 na ausência de vendas, pela média dos preços anunciados na cidade. `RR` é a soma

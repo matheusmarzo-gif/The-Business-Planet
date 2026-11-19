@@ -3538,4 +3538,17 @@ describe('validade dos produtos', () => {
     assert.equal(planDailySpoilage(10, 1, () => 0.99), 10);
     assert.equal(planDailySpoilage(0, 10, () => 0), 0);
   });
+
+  it('excludes production and imports received today from spoilage', () => {
+    let randomCalls = 0;
+    const random = () => {
+      randomCalls += 1;
+      return 0.99;
+    };
+
+    assert.equal(planDailySpoilage(1100, 3, random, 200), 300);
+    assert.equal(planDailySpoilage(200, 3, random, 200), 0);
+    assert.equal(planDailySpoilage(100, 3, random, 200), 0);
+    assert.equal(randomCalls, 0);
+  });
 });

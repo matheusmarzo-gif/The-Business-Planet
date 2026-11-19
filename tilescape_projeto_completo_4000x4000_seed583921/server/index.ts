@@ -7669,6 +7669,18 @@ async function start() {
       response.status(400).json({ error: 'invalid_accounting_period' });
       return;
     }
+    const requestedCity = request.query.city;
+    const cityId =
+      requestedCity === undefined || requestedCity === 'all'
+        ? null
+        : typeof requestedCity === 'string' &&
+            /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(requestedCity)
+          ? requestedCity
+          : undefined;
+    if (cityId === undefined) {
+      response.status(400).json({ error: 'invalid_accounting_city' });
+      return;
+    }
     void (async () => {
       const { rows: clockRows } = await pool.query<{ day: string }>(
         `SELECT to_char(world_time AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day
@@ -7678,6 +7690,16 @@ async function start() {
       if (!day) {
         response.status(503).json({ error: 'world_unavailable' });
         return;
+      }
+      if (cityId !== null) {
+        const { rowCount } = await pool.query(
+          'SELECT 1 FROM city_assemblies WHERE id = $1',
+          [cityId],
+        );
+        if (!rowCount) {
+          response.status(400).json({ error: 'invalid_accounting_city' });
+          return;
+        }
       }
       const weekOffset =
         request.query.week === undefined ? 0 : parseAccountingWeekOffset(request.query.week);
@@ -7741,10 +7763,11 @@ async function start() {
             AND history.day BETWEEN $2::date - ($4::integer - 1) AND $2::date
            WHERE building.created_by = $1
              AND building.building_type = ANY($3::text[])
+             AND ($5::uuid IS NULL OR building.city_id = $5)
            GROUP BY building.id, building.building_type, building.building_number,
                     building.tile_x, building.tile_y
            ORDER BY building.building_type, building.building_number`,
-          [userId, day, SHOP_TYPES, periodDays],
+          [userId, day, SHOP_TYPES, periodDays, cityId],
         ),
         pool.query<{ employee_expense: string }>(
           `SELECT COALESCE(SUM(history.employee_expense), 0)::text AS employee_expense
@@ -7752,8 +7775,9 @@ async function start() {
            JOIN all_buildings building ON building.id = history.building_id
            WHERE building.created_by = $1
              AND building.building_type IN ('warehouse', 'silo')
-             AND history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date`,
-          [userId, day, periodDays],
+             AND history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date
+             AND ($4::uuid IS NULL OR building.city_id = $4)`,
+          [userId, day, periodDays, cityId],
         ),
         pool.query<{
           id: string;
@@ -7764,8 +7788,9 @@ async function start() {
           `SELECT id, building_number, tile_x, tile_y
            FROM all_buildings
            WHERE created_by = $1 AND building_type IN ('warehouse', 'silo')
+             AND ($2::uuid IS NULL OR city_id = $2)
            ORDER BY building_number`,
-          [userId],
+          [userId, cityId],
         ),
         pool.query<{
           product_id: string;
@@ -7775,11 +7800,19 @@ async function start() {
           sales_revenue: string;
         }>(
           `SELECT history.product_id,
-                  SUM(CASE WHEN buyer.id IS NOT NULL THEN history.quantity ELSE 0 END)::text AS bought_quantity,
-                  SUM(CASE WHEN buyer.id IS NOT NULL THEN history.quantity::bigint * history.unit_price ELSE 0 END)::text
+                  SUM(CASE WHEN buyer.id IS NOT NULL
+                               AND ($4::uuid IS NULL OR buyer.city_id = $4)
+                           THEN history.quantity ELSE 0 END)::text AS bought_quantity,
+                  SUM(CASE WHEN buyer.id IS NOT NULL
+                               AND ($4::uuid IS NULL OR buyer.city_id = $4)
+                           THEN history.quantity::bigint * history.unit_price ELSE 0 END)::text
                     AS purchase_expense,
-                  SUM(CASE WHEN seller.id IS NOT NULL THEN history.quantity ELSE 0 END)::text AS sold_quantity,
-                  SUM(CASE WHEN seller.id IS NOT NULL THEN history.quantity::bigint * history.unit_price ELSE 0 END)::text
+                  SUM(CASE WHEN seller.id IS NOT NULL
+                               AND ($4::uuid IS NULL OR seller.city_id = $4)
+                           THEN history.quantity ELSE 0 END)::text AS sold_quantity,
+                  SUM(CASE WHEN seller.id IS NOT NULL
+                               AND ($4::uuid IS NULL OR seller.city_id = $4)
+                           THEN history.quantity::bigint * history.unit_price ELSE 0 END)::text
                     AS sales_revenue
            FROM warehouse_trade_history history
            LEFT JOIN all_buildings buyer
@@ -7787,10 +7820,13 @@ async function start() {
            LEFT JOIN all_buildings seller
              ON seller.id = history.seller_id AND seller.created_by = $1
            WHERE history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date
-             AND (buyer.id IS NOT NULL OR seller.id IS NOT NULL)
+             AND (
+               (buyer.id IS NOT NULL AND ($4::uuid IS NULL OR buyer.city_id = $4))
+               OR (seller.id IS NOT NULL AND ($4::uuid IS NULL OR seller.city_id = $4))
+             )
            GROUP BY history.product_id
            ORDER BY history.product_id`,
-          [userId, day, periodDays],
+          [userId, day, periodDays, cityId],
         ),
         pool.query<{
           product_id: string;
@@ -7812,20 +7848,26 @@ async function start() {
                ON definition.building_type = building.building_type
              WHERE building.created_by = $1
                AND history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date
+               AND ($7::uuid IS NULL OR building.city_id = $7)
              GROUP BY definition.stock_product_id
            ), trades AS (
              SELECT history.product_id,
                     SUM(history.quantity) FILTER (
                       WHERE buyer.created_by = $1 AND seller.created_by <> $1
+                        AND ($7::uuid IS NULL OR buyer.city_id = $7)
                     )::text AS imported,
                     SUM(history.quantity) FILTER (
                       WHERE seller.created_by = $1 AND buyer.created_by <> $1
+                        AND ($7::uuid IS NULL OR seller.city_id = $7)
                     )::text AS exported
              FROM warehouse_trade_history history
              JOIN all_buildings buyer ON buyer.id = history.buyer_id
              JOIN all_buildings seller ON seller.id = history.seller_id
              WHERE history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date
-               AND (buyer.created_by = $1 OR seller.created_by = $1)
+               AND (
+                 (buyer.created_by = $1 AND ($7::uuid IS NULL OR buyer.city_id = $7))
+                 OR (seller.created_by = $1 AND ($7::uuid IS NULL OR seller.city_id = $7))
+               )
              GROUP BY history.product_id
            ), residential AS (
              SELECT history.product_id, SUM(history.quantity)::text AS quantity
@@ -7833,6 +7875,7 @@ async function start() {
              JOIN all_buildings building ON building.id = history.building_id
              WHERE building.created_by = $1
                AND history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date
+               AND ($7::uuid IS NULL OR building.city_id = $7)
              GROUP BY history.product_id
            ), production_inputs AS (
              SELECT history.product_id, SUM(history.quantity)::text AS quantity
@@ -7840,6 +7883,7 @@ async function start() {
              JOIN all_buildings building ON building.id = history.building_id
              WHERE building.created_by = $1
                AND history.day BETWEEN $2::date - ($3::integer - 1) AND $2::date
+               AND ($7::uuid IS NULL OR building.city_id = $7)
              GROUP BY history.product_id
            )
            SELECT product_ids.product_id,
@@ -7860,6 +7904,7 @@ async function start() {
             PRODUCT_PRODUCER_DEFINITIONS.map((definition) => definition.type),
             PRODUCT_PRODUCER_DEFINITIONS.map((definition) => definition.stockProductId ?? ''),
             PRODUCTS.map((product) => product.id),
+            cityId,
           ],
         ),
         pool.query<{
@@ -7877,9 +7922,10 @@ async function start() {
            FROM inventory_spoilage_history history
            JOIN all_buildings building ON building.id = history.building_id
            WHERE building.created_by = $1
+             AND ($5::uuid IS NULL OR building.city_id = $5)
              AND history.day BETWEEN $3::date - ($4::integer - 1) AND $3::date
            GROUP BY history.product_id, location`,
-          [userId, SHOP_TYPES, day, periodDays],
+          [userId, SHOP_TYPES, day, periodDays, cityId],
         ),
         pool.query<{ product_id: string; unit_cost: string }>(
           `SELECT product_id, unit_cost::text
@@ -7941,8 +7987,9 @@ async function start() {
            ) product_totals ON TRUE
            WHERE building.created_by = $1
              AND building.building_type = ANY($3::text[])
+             AND ($5::uuid IS NULL OR building.city_id = $5)
            ORDER BY building.building_type, building.building_number`,
-          [userId, day, RESIDENCE_BUILDING_TYPES, periodDays],
+          [userId, day, RESIDENCE_BUILDING_TYPES, periodDays, cityId],
         ),
         pool.query<{
           id: string;
@@ -7984,8 +8031,9 @@ async function start() {
            ) production ON production.building_id = building.id
            WHERE building.created_by = $1
              AND building.building_type = ANY($3::text[])
+             AND ($5::uuid IS NULL OR building.city_id = $5)
            ORDER BY building.building_type, building.building_number`,
-          [userId, day, PRODUCTION_BUILDING_TYPES, periodDays],
+          [userId, day, PRODUCTION_BUILDING_TYPES, periodDays, cityId],
         ),
         pool.query<{
           id: string;
@@ -8051,8 +8099,9 @@ async function start() {
            ) latest ON TRUE
            WHERE building.created_by = $1
              AND building.building_type = ANY($3::text[])
+             AND ($5::uuid IS NULL OR building.city_id = $5)
            ORDER BY building.building_type, building.building_number`,
-          [userId, day, FARM_BUILDING_TYPES, periodDays],
+          [userId, day, FARM_BUILDING_TYPES, periodDays, cityId],
         ),
         pool.query<{ revenue: string; expenses: string }>(
           `SELECT COALESCE(SUM(parts.revenue), 0)::text AS revenue,
@@ -8063,37 +8112,46 @@ async function start() {
              FROM commerce_history history
              JOIN all_buildings building ON building.id = history.building_id
              WHERE building.created_by = $1 AND history.day BETWEEN $2::date AND $3::date
+               AND ($4::uuid IS NULL OR building.city_id = $4)
              UNION ALL
              SELECT COALESCE(SUM(history.rent_revenue), 0), 0
              FROM residence_rent_history history
              JOIN all_buildings building ON building.id = history.building_id
              WHERE building.created_by = $1 AND history.day BETWEEN $2::date AND $3::date
+               AND ($4::uuid IS NULL OR building.city_id = $4)
              UNION ALL
              SELECT COALESCE(SUM(history.quantity::bigint * history.unit_price)
-                       FILTER (WHERE seller.id IS NOT NULL), 0),
+                         FILTER (WHERE seller.id IS NOT NULL
+                           AND ($4::uuid IS NULL OR seller.city_id = $4)), 0),
                     COALESCE(SUM(history.quantity::bigint * history.unit_price)
-                       FILTER (WHERE buyer.id IS NOT NULL), 0)
+                         FILTER (WHERE buyer.id IS NOT NULL
+                           AND ($4::uuid IS NULL OR buyer.city_id = $4)), 0)
              FROM warehouse_trade_history history
              LEFT JOIN all_buildings buyer
                ON buyer.id = history.buyer_id AND buyer.created_by = $1
              LEFT JOIN all_buildings seller
                ON seller.id = history.seller_id AND seller.created_by = $1
              WHERE history.day BETWEEN $2::date AND $3::date
-               AND (buyer.id IS NOT NULL OR seller.id IS NOT NULL)
+               AND (
+                 (buyer.id IS NOT NULL AND ($4::uuid IS NULL OR buyer.city_id = $4))
+                 OR (seller.id IS NOT NULL AND ($4::uuid IS NULL OR seller.city_id = $4))
+               )
              UNION ALL
              SELECT 0, COALESCE(SUM(history.employee_expense), 0)
              FROM building_payroll_history history
              JOIN all_buildings building ON building.id = history.building_id
              WHERE building.created_by = $1 AND history.day BETWEEN $2::date AND $3::date
+               AND ($4::uuid IS NULL OR building.city_id = $4)
            ) AS parts`,
-          [userId, weekRange.startDay, weekRange.endDay],
+          [userId, weekRange.startDay, weekRange.endDay, cityId],
         ),
         pool.query<{ employees: string }>(
           `SELECT COALESCE(SUM(assignment.count), 0)::text AS employees
            FROM job_assignments assignment
            JOIN all_buildings workplace ON workplace.id = assignment.workplace_id
-           WHERE workplace.created_by = $1`,
-          [userId],
+           WHERE workplace.created_by = $1
+             AND ($2::uuid IS NULL OR workplace.city_id = $2)`,
+          [userId, cityId],
         ),
         pool.query<{
           building_type: ResidenceType;
@@ -8107,30 +8165,36 @@ async function start() {
           `SELECT building_type, stock, tool_stock, wood_stock, iron_stock,
                   charcoal_stock, sugarcane_stock
            FROM all_buildings
-           WHERE created_by = $1`,
-          [userId],
+           WHERE created_by = $1
+             AND ($2::uuid IS NULL OR city_id = $2)`,
+          [userId, cityId],
         ),
         pool.query<{ product_id: string; quantity: string }>(
           `SELECT stock.product_id, SUM(stock.quantity)::text AS quantity
            FROM warehouse_stock stock
            JOIN all_buildings building ON building.id = stock.building_id
            WHERE building.created_by = $1
+             AND ($2::uuid IS NULL OR building.city_id = $2)
            GROUP BY stock.product_id`,
-          [userId],
+          [userId, cityId],
         ),
         pool.query<{ product_id: string; quantity: string }>(
           `SELECT stock.product_id, SUM(stock.quantity)::text AS quantity
            FROM building_input_stock stock
            JOIN all_buildings building ON building.id = stock.building_id
            WHERE building.created_by = $1
+             AND ($2::uuid IS NULL OR building.city_id = $2)
            GROUP BY stock.product_id`,
-          [userId],
+          [userId, cityId],
         ),
         pool.query<{ product_id: string; average_price: string }>(
-          `SELECT product_id, AVG(price)::text AS average_price
-           FROM warehouse_product_settings
-           WHERE mode = 'sell' AND price > 0
-           GROUP BY product_id`,
+          `SELECT settings.product_id, AVG(settings.price)::text AS average_price
+           FROM warehouse_product_settings settings
+           JOIN all_buildings building ON building.id = settings.building_id
+           WHERE settings.mode = 'sell' AND settings.price > 0
+             AND ($1::uuid IS NULL OR building.city_id = $1)
+           GROUP BY settings.product_id`,
+          [cityId],
         ),
       ]);
 
@@ -8163,8 +8227,9 @@ async function start() {
              )
                AND home.status = 'completed'
                AND home.building_type = ANY($2::text[])
+                 AND ($3::uuid IS NULL OR home.city_id = $3)
              GROUP BY home.id`,
-            [userId, RESIDENCE_BUILDING_TYPES],
+            [userId, RESIDENCE_BUILDING_TYPES, cityId],
           ),
           pool.query<{
             city_id: string;
@@ -8185,12 +8250,13 @@ async function start() {
                SELECT own.city_id FROM all_buildings own
                WHERE own.created_by = $1 AND own.building_type = ANY($2::text[])
              )
+                 AND ($3::uuid IS NULL OR workplace.city_id = $3)
                AND (
                  workplace.building_type <> ALL($2::text[])
                  OR workplace.status = 'under_construction'
                )
              GROUP BY workplace.id`,
-            [userId, RESIDENCE_BUILDING_TYPES],
+            [userId, RESIDENCE_BUILDING_TYPES, cityId],
           ),
         ]);
         const residenceCandidates: ResidenceIncomeAppealCandidate[] =

@@ -36,6 +36,7 @@ import {
   type AccountingWeekOffset,
   type AccountingSummary,
 } from '../types/accounting';
+import type { CityAssembly } from '../types/city';
 import {
   getHarvestDay,
   getHarvestYield,
@@ -47,6 +48,9 @@ import {
 
 interface AccountingPanelProps {
   summary: AccountingSummary | null;
+  cities: Pick<CityAssembly, 'id' | 'name'>[];
+  selectedCityId: string | null;
+  onCityChange: (cityId: string | null) => void;
   isLoading: boolean;
   error: string;
   periodDays: AccountingPeriodDays;
@@ -445,6 +449,9 @@ function getFarmHarvestForecast(farm: AccountingFarm): string {
 
 export default function AccountingPanel({
   summary,
+  cities,
+  selectedCityId,
+  onCityChange,
   isLoading,
   error,
   periodDays,
@@ -538,6 +545,23 @@ export default function AccountingPanel({
           : `Período: ${periodLabel} do relógio do jogo.`}{' '}
         {isLoading && 'Carregando…'}
       </p>
+      <label className="accounting-period">
+        Filtrar por cidade
+        <select
+          value={selectedCityId ?? 'all'}
+          disabled={isLoading}
+          onChange={(event) =>
+            onCityChange(event.target.value === 'all' ? null : event.target.value)
+          }
+        >
+          <option value="all">Geral (todas as cidades)</option>
+          {[...cities]
+            .sort((first, second) => first.name.localeCompare(second.name, 'pt-BR'))
+            .map((city) => (
+              <option key={city.id} value={city.id}>{city.name}</option>
+            ))}
+        </select>
+      </label>
       {activeTab !== 'summary' && (
         <label className="accounting-period">
           Período do relatório

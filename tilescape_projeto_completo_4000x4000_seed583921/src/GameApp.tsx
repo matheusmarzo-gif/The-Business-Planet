@@ -474,6 +474,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [accountingSummary, setAccountingSummary] = useState<AccountingSummary | null>(null);
   const [accountingPeriodDays, setAccountingPeriodDays] = useState<AccountingPeriodDays>(30);
   const [accountingWeekOffset, setAccountingWeekOffset] = useState<AccountingWeekOffset>(0);
+  const [accountingCityId, setAccountingCityId] = useState<string | null>(null);
   const [isRankingOpen, setIsRankingOpen] = useState(false);
   const [isRankingLoading, setIsRankingLoading] = useState(false);
   const [rankingError, setRankingError] = useState('');
@@ -958,6 +959,7 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const loadAccounting = async (
     periodDays: AccountingPeriodDays = accountingPeriodDays,
     weekOffset: AccountingWeekOffset = accountingWeekOffset,
+    cityId: string | null = accountingCityId,
   ) => {
     setIsAccountingOpen(true);
     setIsAccountingLoading(true);
@@ -966,7 +968,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
     try {
       setAccountingSummary(
         await cityRequest<AccountingSummary>(
-          `/api/accounting?days=${periodDays}&week=${weekOffset}`,
+          `/api/accounting?days=${periodDays}&week=${weekOffset}${
+            cityId ? `&city=${encodeURIComponent(cityId)}` : ''
+          }`,
         ),
       );
     } catch (error) {
@@ -2671,6 +2675,12 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
         {isAccountingOpen && (
           <AccountingPanel
             summary={accountingSummary}
+            cities={cities}
+            selectedCityId={accountingCityId}
+            onCityChange={(cityId) => {
+              setAccountingCityId(cityId);
+              void loadAccounting(accountingPeriodDays, accountingWeekOffset, cityId);
+            }}
             isLoading={isAccountingLoading}
             error={accountingError}
             periodDays={accountingPeriodDays}

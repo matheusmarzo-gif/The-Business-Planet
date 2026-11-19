@@ -1164,6 +1164,9 @@ O botão **Contábil** na barra inferior tem uma aba **Resumo** e seis abas
 detalhadas. O resumo permite consultar a semana atual ou qualquer uma das quatro
 semanas anteriores. O lucro/prejuízo inclui receitas das lojas, aluguéis e
 vendas de armazéns, menos compras de armazéns, despesas de produtos e salários.
+Todas as guias têm o filtro **Filtrar por cidade**; **Geral (todas as cidades)**
+mantém a visão completa do jogador, e selecionar uma cidade restringe os dados
+e totais daquela guia a ela.
 Também mostra o número atual de funcionários empregados e os valores estimados
 da empresa e do estoque. A empresa é avaliada pelos custos unitários estimados
 dos materiais de cada construção na aba **Produto**, com fallback para preços

@@ -545,40 +545,42 @@ export default function AccountingPanel({
           : `Período: ${periodLabel} do relógio do jogo.`}{' '}
         {isLoading && 'Carregando…'}
       </p>
-      <label className="accounting-period">
-        Filtrar por cidade
-        <select
-          value={selectedCityId ?? 'all'}
-          disabled={isLoading}
-          onChange={(event) =>
-            onCityChange(event.target.value === 'all' ? null : event.target.value)
-          }
-        >
-          <option value="all">Geral (todas as cidades)</option>
-          {[...cities]
-            .sort((first, second) => first.name.localeCompare(second.name, 'pt-BR'))
-            .map((city) => (
-              <option key={city.id} value={city.id}>{city.name}</option>
-            ))}
-        </select>
-      </label>
-      {activeTab !== 'summary' && (
+      <div className="accounting-filter-row">
+        {activeTab !== 'summary' && (
+          <label className="accounting-period">
+            Período do relatório
+            <select
+              value={periodDays}
+              disabled={isLoading}
+              onChange={(event) => {
+                const days = parseAccountingPeriodDays(event.target.value);
+                if (days !== null) onPeriodChange(days);
+              }}
+            >
+              <option value={1}>Último dia</option>
+              <option value={7}>Últimos 7 dias</option>
+              <option value={30}>Últimos 30 dias</option>
+            </select>
+          </label>
+        )}
         <label className="accounting-period">
-          Período do relatório
+          Filtrar por cidade
           <select
-            value={periodDays}
+            value={selectedCityId ?? 'all'}
             disabled={isLoading}
-            onChange={(event) => {
-              const days = parseAccountingPeriodDays(event.target.value);
-              if (days !== null) onPeriodChange(days);
-            }}
+            onChange={(event) =>
+              onCityChange(event.target.value === 'all' ? null : event.target.value)
+            }
           >
-            <option value={1}>Último dia</option>
-            <option value={7}>Últimos 7 dias</option>
-            <option value={30}>Últimos 30 dias</option>
+            <option value="all">Geral (todas as cidades)</option>
+            {[...cities]
+              .sort((first, second) => first.name.localeCompare(second.name, 'pt-BR'))
+              .map((city) => (
+                <option key={city.id} value={city.id}>{city.name}</option>
+              ))}
           </select>
         </label>
-      )}
+      </div>
       <div className="accounting-tabs" role="tablist" aria-label="Relatórios contábeis">
         <button
           type="button"

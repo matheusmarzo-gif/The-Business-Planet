@@ -269,8 +269,8 @@ vigente na cidade. Em **Produtos e estoque** do armazém, passe o mouse sobre o
 ícone de um produto para ver o peso unitário e total e o volume unitário e
 ocupado pelo estoque.
 O catálogo também inclui Areia (150 kg, 0,1 m³), Aço (800 kg, 0,1 m³),
-Roupa (25 kg, 0,1 m³), Móveis (50 kg, 0,1 m³), Utilitários (5 kg, 0,01 m³)
-e Vidro (300 kg, 0,1 m³); todos têm validade infinita.
+Roupa (25 kg, 0,1 m³), Móveis (50 kg, 0,1 m³), Utilitários (5 kg, 0,01 m³),
+Sal (1,2 kg, 0,001 m³) e Vidro (30 kg, 0,01 m³); todos têm validade infinita.
 
 A ordem dos cartões é definida por categoria: Comerciais lista primeiro as
 lojas de arroz, trigo, cevada, batata e milho, depois Peixaria, Leitaria e
@@ -767,34 +767,35 @@ necessidade`, `w = (1 − Pf/RR)^4`, `q = (0,8^w − 1) × Rf`, benefício de er
 `w = (1 − Pf/(RR + RR2))^3` e o mesmo cálculo de `q`. O benefício de erro é
 `Dᵢ × ((Rf − Pf − q)/(RR + RR2))^3` somente quando `Rf > Pf + 1` e
 `Rf > RR/6 + RR2/3`; caso contrário, é zero. O benefício ideal é
-`((Rf − 1/6)/(RR + RR2) − 1/110)^3`. Em ambas as cestas, o benefício associado
+`((Rf − 1/6)/(RR + RR2) − 1/180)^3`. Em ambas as cestas, o benefício associado
 continua sendo `(benefício de erro / benefício ideal)^4`. Para a cesta avançada,
-usa-se `w = (1 − Pf/(RR + RR2 + RR3))^2` e o mesmo `q`; o benefício de erro é
-`Dᵢ × ((Rf − Pf − q)/(RR + RR2 + RR3))^2` quando `Rf > Pf + 4` e
+usa-se `w = (1 − Pf/(RR + RR2 + RB1 + RR3))^2` e o mesmo `q`; o benefício de erro é
+`Dᵢ × ((Rf − Pf − q)/(RR + RR2 + RB1 + RR3))^2` quando `Rf > Pf + 4` e
 `Rf > RR/6 + RR2/3 + RR3/4`, caso contrário é zero. O benefício ideal é
-`((Rf − 1/6)/(RR + RR2 + RR3) − 1/180)^2`. O benefício associado permanece
+`((Rf − 1/6)/(RR + RR2 + RB1 + RR3) + 1/17)^2`. O benefício associado permanece
 `(benefício de erro / benefício ideal)^4`. `Rf` é a renda média
 por morador e `Dᵢ = √(60/(60 + distância))`. A demanda efetiva ainda depende da
 distribuição de moradores entre lojas, estoque e capacidade de venda. `RB1` é
 o custo diário por pessoa da própria cesta de bens, calculado por necessidade
 diária × preço médio municipal para roupas, móveis, utilitários e vidro.
-A cesta básica de bens usa `RR_total = RR + RR2 + RR3 + RB1`,
+A cesta básica de bens usa `RR_total = RR + RR2 + RB1`,
 `w = (1 − Pf/RR_total)^3` e `q = (0,8^w − 1) × Rf`. Seu benefício de erro é
 zero quando `Rf ≤ RR_total/2`; acima disso, é
 `Dᵢ × ((Rf − Pf − q)/RR_total)^3`. O benefício ideal é
-`(Rf/RR_total − 1/(6 × RR_total) + 1/16)^3` e o associado é
+`(Rf/RR_total − 1/(6 × RR_total) + 1/17)^3` e o associado é
 `(benefício de erro / benefício ideal)^6`.
-Para os novos tiers, seja `B` a soma cumulativa indicada: a cesta nobre usa
-`B = RR + RR2 + RR3 + RR4`; a cesta intermediária de bens usa
-`B = RR + RR2 + RR3 + RR4 + RB1 + RB2`; a cesta avançada de bens acrescenta
-`RB3`; e a cesta nobre de bens acrescenta `RB4`. Nessas quatro cestas,
+Para as cestas, `B` é cumulativo nesta ordem: básica `RR`;
+intermediária `RR + RR2`; básica de bens `RR + RR2 + RB1`; avançada
+`RR + RR2 + RB1 + RR3`; intermediária de bens
+`RR + RR2 + RB1 + RR3 + RB2`; nobre, que soma `RR4`; avançada de bens, que
+soma `RB3`; e nobre de bens, que soma `RB4`. Nessas quatro cestas de nível superior,
 `w = (1 − Pf/B)^2`, `q = (0,8^w − 1) × Rf` e o benefício de erro é
 `Dᵢ × ((Rf − Pf − q)/B)^2`. A cesta nobre usa benefício ideal
-`(Rf/B − 3/B)^2` e expoente 8 no benefício associado. RB2 usa
-`(Rf/B − 1/(6B) + 1/13)^2` e expoente 8; RB3 usa o mesmo ideal e expoente 9;
-RB4 usa `(Rf/B − 1/(6B) + 1/14)^2` e expoente 12. Se o benefício ideal for
-zero, o benefício associado é zero. A fórmula anterior de RB1 continua usando
-`RR + RR2 + RR3 + RB1`, sem RR4.
+`(Rf/B − 3/B)^2` e expoente 4 no benefício associado. RB2 usa
+`(Rf/B − 1/(6B) + 1/20)^2` e expoente 8; RB3 usa
+`(Rf/B − 1/(6B) + 1/100)^2` e expoente 5; RB4 usa
+`(Rf/B − 1/(6B) − 1/9)^2` e expoente 3. Se o benefício ideal for zero,
+o benefício associado é zero.
 As necessidades e os parâmetros dessas fórmulas, inclusive as eficiências
 usadas no benefício do trabalho e os Work Points por distância, estão nos
 arquivos de configuração indicados acima. O transporte usa
@@ -1015,8 +1016,8 @@ intermediários valem 5 pontos cada, os bens avançados 4 e os bens nobres 3,
 totalizando até 200 pontos. O painel da residência mostra o bem-estar e a
 técnica média dos trabalhadores: 10 × (1 + Bn/200) até Bn 100; 10 ×
 (1,5 + (Bn−100)/50) até 125; 10 × (2 + (Bn−125)/25) até 150; 10 ×
-(3 + (Bn−150)/15) até 165; 10 × (4 + (Bn−165)/15) até 180; 10 ×
-(5 + (Bn−180)/10) até 190; 10 × (6 + (Bn−190)/7) até 197; e 10 ×
+(3 + (Bn−150)/12) até 162; 10 × (4 + (Bn−162)/15) até 177; 10 ×
+(5 + (Bn−177)/12) até 189; 10 × (6 + (Bn−189)/8) até 197; e 10 ×
 (7 + (Bn−197)/3) até 200. A técnica máxima é 80.
 
 A loja vende somente o estoque que tiver (começa em 0; pode ser abastecida por

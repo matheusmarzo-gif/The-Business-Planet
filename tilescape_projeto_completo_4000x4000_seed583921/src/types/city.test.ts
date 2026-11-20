@@ -1151,7 +1151,7 @@ describe('shop sales', () => {
     const q = (0.8 ** w - 1) * income;
     const distanceFactor = Math.sqrt(60 / (60 + distance));
     const error = distanceFactor * ((income - pf - q) / total) ** 3;
-    const ideal = ((income - 1 / 6) / total - 1 / 110) ** 3;
+    const ideal = ((income - 1 / 6) / total - 1 / 180) ** 3;
     const calculation = getPurchaseBenefitCalculation(
       income,
       price,
@@ -1214,7 +1214,7 @@ describe('shop sales', () => {
     assert.equal(transaction.candidate.calculationBasketCost, 1.32);
   });
 
-  it('uses the goods-basket formula with RR plus RR2 plus RR3 plus RB1', () => {
+  it('uses the goods-basket formula with RR plus RR2 plus RB1', () => {
     const income = 6;
     const price = 60;
     const need = 0.01;
@@ -1223,13 +1223,13 @@ describe('shop sales', () => {
     const rr3 = 0.5;
     const rb1 = 0.25;
     const distance = 15;
-    const total = rr + rr2 + rr3 + rb1;
+    const total = rr + rr2 + rb1;
     const pf = price * need;
     const w = (1 - pf / total) ** 3;
     const q = (0.8 ** w - 1) * income;
     const distanceFactor = Math.sqrt(60 / (60 + distance));
     const error = distanceFactor * ((income - pf - q) / total) ** 3;
-    const ideal = (income / total - 1 / (6 * total) + 1 / 16) ** 3;
+    const ideal = (income / total - 1 / (6 * total) + 1 / 17) ** 3;
     const calculation = getPurchaseBenefitCalculation(
       income,
       price,
@@ -1262,7 +1262,7 @@ describe('shop sales', () => {
     );
   });
 
-  it('calculates noble and successive goods baskets with their own formulas', () => {
+  it('calculates the cumulative noble and successive goods baskets with their own formulas', () => {
     const income = 14;
     const price = 20;
     const need = 0.05;
@@ -1287,30 +1287,30 @@ describe('shop sales', () => {
     const scenarios = [
       {
         basketType: 'noble' as const,
-        total: rr + rr2 + rr3 + rr4,
-        idealBase: (income - 3) / (rr + rr2 + rr3 + rr4),
-        exponent: 8,
+        total: rr + rr2 + rb1 + rr3 + rb2 + rr4,
+        idealBase: (income - 3) / (rr + rr2 + rb1 + rr3 + rb2 + rr4),
+        exponent: 4,
       },
       {
         basketType: 'goodsIntermediate' as const,
-        total: rr + rr2 + rr3 + rr4 + rb1 + rb2,
-        idealBase: income / (rr + rr2 + rr3 + rr4 + rb1 + rb2) -
-          1 / (6 * (rr + rr2 + rr3 + rr4 + rb1 + rb2)) + 1 / 13,
+        total: rr + rr2 + rb1 + rr3 + rb2,
+        idealBase: income / (rr + rr2 + rb1 + rr3 + rb2) -
+          1 / (6 * (rr + rr2 + rb1 + rr3 + rb2)) + 1 / 20,
         exponent: 8,
       },
       {
         basketType: 'goodsAdvanced' as const,
-        total: rr + rr2 + rr3 + rr4 + rb1 + rb2 + rb3,
-        idealBase: income / (rr + rr2 + rr3 + rr4 + rb1 + rb2 + rb3) -
-          1 / (6 * (rr + rr2 + rr3 + rr4 + rb1 + rb2 + rb3)) + 1 / 13,
-        exponent: 9,
+        total: rr + rr2 + rb1 + rr3 + rb2 + rr4 + rb3,
+        idealBase: income / (rr + rr2 + rb1 + rr3 + rb2 + rr4 + rb3) -
+          1 / (6 * (rr + rr2 + rb1 + rr3 + rb2 + rr4 + rb3)) + 1 / 100,
+        exponent: 5,
       },
       {
         basketType: 'goodsNoble' as const,
-        total: rr + rr2 + rr3 + rr4 + rb1 + rb2 + rb3 + rb4,
-        idealBase: income / (rr + rr2 + rr3 + rr4 + rb1 + rb2 + rb3 + rb4) -
-          1 / (6 * (rr + rr2 + rr3 + rr4 + rb1 + rb2 + rb3 + rb4)) + 1 / 14,
-        exponent: 12,
+        total: rr + rr2 + rb1 + rr3 + rb2 + rr4 + rb3 + rb4,
+        idealBase: income / (rr + rr2 + rb1 + rr3 + rb2 + rr4 + rb3 + rb4) -
+          1 / (6 * (rr + rr2 + rb1 + rr3 + rb2 + rr4 + rb3 + rb4)) - 1 / 9,
+        exponent: 3,
       },
     ];
 
@@ -1340,21 +1340,22 @@ describe('shop sales', () => {
     }
   });
 
-  it('uses the advanced-basket formula, RR3, and its three income thresholds', () => {
+  it('uses the advanced-basket formula with RB1 before RR3 and its income thresholds', () => {
     const income = 6;
     const price = 20;
     const need = 0.025;
     const rr = 2;
     const rr2 = 1;
     const rr3 = 0.5;
+    const rb1 = 0.25;
     const distance = 15;
     const pf = price * need;
-    const total = rr + rr2 + rr3;
+    const total = rr + rr2 + rb1 + rr3;
     const w = (1 - pf / total) ** 2;
     const q = (0.8 ** w - 1) * income;
     const distanceFactor = Math.sqrt(60 / (60 + distance));
     const error = distanceFactor * ((income - pf - q) / total) ** 2;
-    const ideal = ((income - 1 / 6) / total - 1 / 180) ** 2;
+    const ideal = ((income - 1 / 6) / total + 1 / 17) ** 2;
     const calculation = getPurchaseBenefitCalculation(
       income,
       price,
@@ -1365,6 +1366,7 @@ describe('shop sales', () => {
         basketType: 'advanced',
         intermediateBasketCost: rr2,
         advancedBasketCost: rr3,
+        goodsBasketCost: rb1,
       },
     );
     assert.equal(calculation.pf, pf);
@@ -1380,12 +1382,13 @@ describe('shop sales', () => {
         basketType: 'advanced',
         intermediateBasketCost: rr2,
         advancedBasketCost: rr3,
+        goodsBasketCost: rb1,
       }).errorBenefit,
       0,
     );
   });
 
-  it('sells new goods through the shared residence-demand planner', () => {
+  it('uses the cumulative basic-goods basket total when selling goods', () => {
     const goodsShops = [
       { ...shop('clothing', 0, 10, 10, 10), productId: 'clothing', type: 'shop_clothing' as const },
       { ...shop('furniture', 0, 10, 10, 10), productId: 'furniture', type: 'shop_furniture' as const },
@@ -1417,11 +1420,11 @@ describe('shop sales', () => {
     const transaction = plan.transactionsByShop.get('clothing')?.[0];
     assert.ok(transaction);
     assert.equal(transaction.goodsBasketCost, 0.04);
-    assert.ok(Math.abs((transaction.calculationBasketCost ?? 0) - 2.505) < 1e-12);
-    assert.ok(Math.abs((transaction.candidate.calculationBasketCost ?? 0) - 2.505) < 1e-12);
+    assert.ok(Math.abs((transaction.calculationBasketCost ?? 0) - 1.36) < 1e-12);
+    assert.ok(Math.abs((transaction.candidate.calculationBasketCost ?? 0) - 1.36) < 1e-12);
   });
 
-  it('sells advanced products using RR plus RR2 plus RR3', () => {
+  it('sells advanced products using RR plus RR2 plus RB1 plus RR3', () => {
     const chocolateShop = {
       ...shop('chocolate-advanced', 0, 10, 100, 100),
       productId: 'chocolate',
@@ -1447,8 +1450,8 @@ describe('shop sales', () => {
     assert.equal(transaction.advancedBasketCost, 1.145);
     assert.equal(transaction.referenceBasketCost, 1.21);
     assert.equal(transaction.intermediateBasketCost, 0.11);
-    assert.equal(transaction.calculationBasketCost, 2.465);
-    assert.equal(transaction.candidate.calculationBasketCost, 2.465);
+    assert.equal(transaction.calculationBasketCost, 2.505);
+    assert.equal(transaction.candidate.calculationBasketCost, 2.505);
   });
 
   it('allocates integer residents by associated benefit and keeps their total exact', () => {
@@ -3531,6 +3534,7 @@ describe('recursos e ferramentaria', () => {
       'clothing',
       'furniture',
       'utilities',
+      'salt',
       'glass',
       'tincture',
       'carpet',
@@ -3553,7 +3557,8 @@ describe('recursos e ferramentaria', () => {
         [25, 0.1, null],
         [50, 0.1, null],
         [5, 0.01, null],
-        [300, 0.1, null],
+        [1.2, 0.001, null],
+        [30, 0.01, null],
         [1, 0.001, 730],
         [8, 0.15, 7300],
         [5, 0.02, 18250],

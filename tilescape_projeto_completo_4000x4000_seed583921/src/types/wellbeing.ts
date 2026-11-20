@@ -98,9 +98,9 @@ export function getWorkerTechnique(wellbeing: number): number {
   if (score <= 100) return 10 * (1 + score / 200);
   if (score <= 125) return 10 * (1.5 + (score - 100) / 50);
   if (score <= 150) return 10 * (2 + (score - 125) / 25);
-  if (score <= 165) return 10 * (3 + (score - 150) / 15);
-  if (score <= 180) return 10 * (4 + (score - 165) / 15);
-  if (score <= 190) return 10 * (5 + (score - 180) / 10);
-  if (score <= 197) return 10 * (6 + (score - 190) / 7);
+  if (score <= 162) return 10 * (3 + (score - 150) / 12);
+  if (score <= 177) return 10 * (4 + (score - 162) / 15);
+  if (score <= 189) return 10 * (5 + (score - 177) / 12);
+  if (score <= 197) return 10 * (6 + (score - 189) / 8);
   return 10 * (7 + (score - 197) / 3);
 }

@@ -265,7 +265,7 @@ export default function CommerceHistoryPanel({
                     )}
                     {transaction.basketType === 'noble' ? (
                       <p>
-                        Cesta nobre: B = RR + RR2 + RR3 + RR4; w = (1 − Pf/B)
+                        Cesta nobre: B = RR + RR2 + RB1 + RR3 + RB2 + RR4; w = (1 − Pf/B)
                         <sup>{consumptionRules.noble.wExponent}</sup>; q = (
                         {preciseDecimal.format(consumptionRules.noble.discountBase)}<sup>w</sup> − 1) × Rf;
                         benefício de erro = Dᵢ × ((Rf − Pf − q)/B)
@@ -283,21 +283,27 @@ export default function CommerceHistoryPanel({
                           : transaction.basketType === 'goodsAdvanced'
                             ? 'Cesta avançada de bens'
                             : 'Cesta nobre de bens'}
-                        : B = RR + RR2 + RR3 + RR4 + RB1
-                        {transaction.basketType !== 'goodsIntermediate' ? ' + RB2' : ''}
+                        : B = RR + RR2 + RB1 + RR3 + RB2
+                        {transaction.basketType !== 'goodsIntermediate' ? ' + RR4' : ''}
                         {transaction.basketType === 'goodsAdvanced' ? ' + RB3' : ''}
                         {transaction.basketType === 'goodsNoble' ? ' + RB3 + RB4' : ''}; w = (1 − Pf/B)
                         <sup>{consumptionRules[transaction.basketType].wExponent}</sup>; q = (
                         {preciseDecimal.format(consumptionRules[transaction.basketType].discountBase)}
                         <sup>w</sup> − 1) × Rf; benefício de erro = Dᵢ × ((Rf − Pf − q)/B)
                         <sup>{consumptionRules[transaction.basketType].errorExponent}</sup>; ideal = Rf/B −
-                        1/(6B) + {preciseDecimal.format(consumptionRules[transaction.basketType].idealConstantOffset)};
+                        1/(6B)
+                        {consumptionRules[transaction.basketType].idealConstantOffset < 0
+                          ? ' − '
+                          : ' + '}
+                        {preciseDecimal.format(
+                          Math.abs(consumptionRules[transaction.basketType].idealConstantOffset),
+                        )};
                         benefício ideal = ideal²; associado = (erro/benefício ideal)
                         <sup>{consumptionRules[transaction.basketType].associatedBenefitExponent}</sup>.
                       </p>
                     ) : transaction.basketType === 'goods' ? (
                       <p>
-                        Cesta básica de bens: RR_total = RR + RR2 + RR3 + RB1; w = (1 − Pf / RR_total)
+                        Cesta básica de bens: RR_total = RR + RR2 + RB1; w = (1 − Pf / RR_total)
                         <sup>{consumptionRules.goods.wExponent}</sup>; q = (
                         {preciseDecimal.format(consumptionRules.goods.discountBase)}<sup>w</sup> − 1) × Rf;
                         benefício de erro = 0 se Rf ≤ RR_total /
@@ -311,17 +317,17 @@ export default function CommerceHistoryPanel({
                       </p>
                     ) : transaction.basketType === 'advanced' ? (
                       <p>
-                        Cesta avançada: w = (1 − Pf / (RR + RR2 + RR3))
+                        Cesta avançada: w = (1 − Pf / (RR + RR2 + RB1 + RR3))
                         <sup>{consumptionRules.advanced.wExponent}</sup>; q = (
                         {preciseDecimal.format(consumptionRules.advanced.discountBase)}<sup>w</sup> − 1) × Rf;
-                        benefício de erro = Dᵢ × ((Rf − Pf − q) / (RR + RR2 + RR3))
+                        benefício de erro = Dᵢ × ((Rf − Pf − q) / (RR + RR2 + RB1 + RR3))
                         <sup>{consumptionRules.advanced.errorExponent}</sup> quando Rf &gt;
                         Pf + {preciseDecimal.format(consumptionRules.advanced.minimumIncomeAboveProductCost)} e
                         Rf &gt; RR/{preciseDecimal.format(consumptionRules.advanced.basicBasketThresholdDivisor)} +
                         RR2/{preciseDecimal.format(consumptionRules.advanced.intermediateBasketThresholdDivisor)} +
                         RR3/{preciseDecimal.format(consumptionRules.advanced.advancedBasketThresholdDivisor)};
                         caso contrário, zero. Benefício ideal = ((Rf −
-                        {preciseDecimal.format(consumptionRules.advanced.idealIncomeOffset)}) / (RR + RR2 + RR3) −
+                        {preciseDecimal.format(consumptionRules.advanced.idealIncomeOffset)}) / (RR + RR2 + RB1 + RR3) +
                         1/{preciseDecimal.format(consumptionRules.advanced.idealBasketDivisor)})
                         <sup>{consumptionRules.advanced.idealExponent}</sup>; associado = (erro / ideal)
                         <sup>{consumptionRules.associatedBenefitExponent}</sup>.

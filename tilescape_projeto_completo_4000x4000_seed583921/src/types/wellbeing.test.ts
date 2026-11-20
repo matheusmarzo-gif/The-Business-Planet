@@ -86,11 +86,11 @@ test('maps residence wellbeing to worker technique across every formula boundary
   assert.equal(getWorkerTechnique(100), 15);
   assert.equal(getWorkerTechnique(125), 20);
   assert.equal(getWorkerTechnique(150), 30);
-  assert.equal(getWorkerTechnique(162), 38);
-  assert.equal(getWorkerTechnique(165), 40);
-  assert.equal(getWorkerTechnique(180), 50);
-  assert.equal(getWorkerTechnique(190), 60);
+  assert.equal(getWorkerTechnique(162), 40);
+  assert.equal(getWorkerTechnique(177), 50);
+  assert.equal(getWorkerTechnique(189), 60);
   assert.equal(getWorkerTechnique(197), 70);
+  assert.ok(Math.abs(getWorkerTechnique(180) - 52.5) < 1e-12);
   assert.equal(getWorkerTechnique(-1), 10);
   assert.equal(getWorkerTechnique(200), 80);
 });

@@ -444,8 +444,9 @@ reimplemente as fórmulas separadamente no React e no servidor.
 
 - `src/types/product.ts` define os 35 produtos atualmente habilitados, com
   unidade de medida (unidade ou litro), peso em kg, espaço em m³ e validade
-  padrão em dias. Validades em anos usam 365 dias por ano; `null` representa
-  validade infinita.
+  padrão em dias. Sal tem 1,2 kg e 0,001 m³ por unidade; vidro tem 30 kg e
+  0,01 m³. Validades em anos usam 365 dias por ano; `null` representa validade
+  infinita.
 - A barra inferior abre o catálogo pesquisável; cada ficha mostra os atributos
   e usa o ícone correspondente em `public/products/`.
 - A lista contém os produtos especificados pelo usuário. Ícones adicionais sem
@@ -766,31 +767,32 @@ mapeamento e verificar todas as curvas.
   `q = (0,8^w − 1) × Rf`; o benefício de erro é
   `Dᵢ × ((Rf − Pf − q) / (RR + RR2))^3` somente se
   `Rf > Pf + 1` e `Rf > RR/6 + RR2/3`, e zero caso contrário. Seu benefício
-  ideal é `((Rf − 1/6) / (RR + RR2) − 1/110)^3`. Na cesta avançada,
-  `w = (1 − Pf / (RR + RR2 + RR3))^2`; `q` mantém a mesma fórmula. O benefício
-  de erro é `Dᵢ × ((Rf − Pf − q) / (RR + RR2 + RR3))^2` se
+  ideal é `((Rf − 1/6) / (RR + RR2) − 1/180)^3`. Na cesta avançada,
+  `w = (1 − Pf / (RR + RR2 + RB1 + RR3))^2`; `q` mantém a mesma fórmula. O benefício
+  de erro é `Dᵢ × ((Rf − Pf − q) / (RR + RR2 + RB1 + RR3))^2` se
   `Rf > Pf + 4` e `Rf > RR/6 + RR2/3 + RR3/4`, caso contrário zero; o ideal é
-  `((Rf − 1/6) / (RR + RR2 + RR3) − 1/180)^2`. Nas cestas básica,
+  `((Rf − 1/6) / (RR + RR2 + RB1 + RR3) + 1/17)^2`. Nas cestas básica,
   intermediária e avançada, `benefício_associado = (benefício_erro /
   benefício_ideal)^4`; se o ideal for zero, o associado também é zero. Na cesta
-  de bens, `RR_total = RR + RR2 + RR3 + RB1`, `w = (1 − Pf/RR_total)^3` e
+  de bens, `RR_total = RR + RR2 + RB1`, `w = (1 − Pf/RR_total)^3` e
   `q = (0,8^w − 1) × Rf`. O benefício de erro é zero se
   `Rf ≤ RR_total/2`; caso contrário, é
   `Dᵢ × ((Rf − Pf − q)/RR_total)^3`. O ideal é
-  `(Rf/RR_total − 1/(6 × RR_total) + 1/16)^3` e o associado é
+  `(Rf/RR_total − 1/(6 × RR_total) + 1/17)^3` e o associado é
   `(benefício_erro / benefício_ideal)^6`.
-  A cesta nobre contém azeite, tabaco, álcool e vinho; seu custo é `RR4` e
-  `B = RR + RR2 + RR3 + RR4`. Para ela, e para as três novas cestas de bens,
+  Os totais são cumulativos: básica `RR`; intermediária `RR + RR2`; básica de
+  bens `RR + RR2 + RB1`; avançada `RR + RR2 + RB1 + RR3`; intermediária de
+  bens soma `RB2`; nobre soma `RR4`; avançada de bens soma `RB3`; e nobre de
+  bens soma `RB4`. Para a cesta nobre e para as três cestas de bens de nível
+  superior,
   `w = (1 − Pf/B)^2`, `q = (0,8^w − 1) × Rf` e
   `benefício_erro = Dᵢ × ((Rf − Pf − q)/B)^2`, sem os limites de renda das
-  fórmulas antigas. `benefício_ideal = (Rf/B − 3/B)^2` e expoente 8 no
+  fórmulas antigas. `benefício_ideal = (Rf/B − 3/B)^2` e expoente 4 no
   associado da cesta nobre. A cesta intermediária de bens (tintura, tapete e
-  porcelana) custa `RB2`, usa `B = RR + RR2 + RR3 + RR4 + RB1 + RB2`,
-  ideal `(Rf/B − 1/(6B) + 1/13)^2` e expoente associado 8. A cesta avançada
-  de bens (artes e jóias) acrescenta `RB3` à base e usa o mesmo ideal, com
-  expoente associado 9. A cesta nobre de bens (raridades) acrescenta `RB4`,
-  usa ideal `(Rf/B − 1/(6B) + 1/14)^2` e expoente associado 12. A fórmula
-  existente de `RB1` continua com `B = RR + RR2 + RR3 + RB1`, sem `RR4`.
+  porcelana) usa ideal `(Rf/B − 1/(6B) + 1/20)^2` e expoente associado 8.
+  A cesta avançada de bens (artes e jóias) usa ideal
+  `(Rf/B − 1/(6B) + 1/100)^2` e expoente associado 5. A cesta nobre de bens
+  (raridades) usa ideal `(Rf/B − 1/(6B) − 1/9)^2` e expoente associado 3.
   Para cada produto, as residências são processadas por bem-estar decrescente;
   empates seguem ID crescente. Como estoque e capacidade remanescentes são
   atualizados a cada compra, as residências prioritárias podem consumir esses
@@ -799,10 +801,10 @@ mapeamento e verificar todas as curvas.
   na proporção do benefício associado. O método dos maiores restos garante
   alocações inteiras cuja soma é a população empregada da residência quando há
   benefício positivo; se a base cumulativa aplicável (`RR`, `RR + RR2`,
-  `RR + RR2 + RR3`, `RR + RR2 + RR3 + RB1`, `RR + RR2 + RR3 + RR4` ou as
-  somas correspondentes até `RB2`, `RB3` ou `RB4`) ou todos os benefícios forem zero, não há
+  `RR + RR2 + RB1`, `RR + RR2 + RB1 + RR3` ou as somas correspondentes até
+  `RB2`, `RR4`, `RB3` ou `RB4`) ou todos os benefícios forem zero, não há
   compra. A distância define a elegibilidade no raio de 60 tiles e também
-  reduz o benefício por `Dᵢ`.   A quantidade desejada por loja é `trabalhadores
+  reduz o benefício por `Dᵢ`. A quantidade desejada por loja é `trabalhadores
   alocados × necessidade diária por pessoa × benefício associado`, com
   arredondamento aleatório das frações, e pode exceder a necessidade diária.
   Não há redistribuição de moradores quando
@@ -828,9 +830,10 @@ mapeamento e verificar todas as curvas.
   cesta de consumo, 3; cada bem de `RB2`, 5; cada bem de `RB3`, 4; e cada bem
   de `RB4`, 3 (máximo 200). O valor é persistido em `all_buildings.wellbeing`,
   cuja constraint permite 0–200 também em bancos já existentes. A técnica
-  residencial vai de 10 a 80 e segue as faixas de Bn definidas pelo domínio;
-  os limites de técnica mínima e o SQL que calcula a média dos trabalhadores
-  usam a mesma escala.
+  residencial vai de 10 a 80; Bn 100, 125, 150, 162, 177, 189, 197 e 200
+  correspondem, respectivamente, às técnicas 15, 20, 30, 40, 50, 60, 70 e 80,
+  com interpolação linear entre eles. Os limites de técnica mínima e o SQL que
+  calcula a média dos trabalhadores usam a mesma escala.
   Para cada loja concluída, o job registra em `commerce_history` o salário dos
   funcionários, gastos efetivamente pagos com produtos, unidades vendidas e
   preço unitário de venda e custo médio ponderado do produto nos armazéns da

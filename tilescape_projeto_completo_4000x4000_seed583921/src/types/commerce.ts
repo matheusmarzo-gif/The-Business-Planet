@@ -40,6 +40,74 @@ const BASKET_TYPES: readonly BasketType[] = [
   'goodsAdvanced',
   'goodsNoble',
 ];
+type BasketCostInputs = {
+  intermediateBasketCost?: number;
+  advancedBasketCost?: number;
+  goodsBasketCost?: number;
+  nobleBasketCost?: number;
+  goodsIntermediateBasketCost?: number;
+  goodsAdvancedBasketCost?: number;
+  goodsNobleBasketCost?: number;
+};
+
+function getCumulativeBasketCosts(
+  referenceBasketCost: number,
+  inputs: BasketCostInputs,
+): Record<BasketType, number> {
+  const costs = {
+    intermediate: inputs.intermediateBasketCost ?? 0,
+    advanced: inputs.advancedBasketCost ?? 0,
+    goods: inputs.goodsBasketCost ?? 0,
+    noble: inputs.nobleBasketCost ?? 0,
+    goodsIntermediate: inputs.goodsIntermediateBasketCost ?? 0,
+    goodsAdvanced: inputs.goodsAdvancedBasketCost ?? 0,
+    goodsNoble: inputs.goodsNobleBasketCost ?? 0,
+  };
+  if (Object.values(costs).some((cost) => !Number.isFinite(cost) || cost < 0)) {
+    throw new RangeError('O custo total das cestas básicas é inválido.');
+  }
+  const cumulativeCosts: Record<BasketType, number> = {
+    basic: referenceBasketCost,
+    intermediate: referenceBasketCost + costs.intermediate,
+    goods: referenceBasketCost + costs.intermediate + costs.goods,
+    advanced:
+      referenceBasketCost + costs.intermediate + costs.goods + costs.advanced,
+    goodsIntermediate:
+      referenceBasketCost +
+      costs.intermediate +
+      costs.goods +
+      costs.advanced +
+      costs.goodsIntermediate,
+    noble:
+      referenceBasketCost +
+      costs.intermediate +
+      costs.goods +
+      costs.advanced +
+      costs.goodsIntermediate +
+      costs.noble,
+    goodsAdvanced:
+      referenceBasketCost +
+      costs.intermediate +
+      costs.goods +
+      costs.advanced +
+      costs.goodsIntermediate +
+      costs.noble +
+      costs.goodsAdvanced,
+    goodsNoble:
+      referenceBasketCost +
+      costs.intermediate +
+      costs.goods +
+      costs.advanced +
+      costs.goodsIntermediate +
+      costs.noble +
+      costs.goodsAdvanced +
+      costs.goodsNoble,
+  };
+  if (Object.values(cumulativeCosts).some((cost) => !Number.isFinite(cost))) {
+    throw new RangeError('O custo total das cestas básicas é inválido.');
+  }
+  return cumulativeCosts;
+}
 
 export function getInitialShopPrice(
   ownerAverage: number | null,
@@ -904,16 +972,7 @@ export function getPurchaseBenefitCalculation(
   basicNeedPerPerson: number,
   referenceBasketCost: number,
   distance: number,
-  options: {
-    basketType?: BasketType;
-    intermediateBasketCost?: number;
-    advancedBasketCost?: number;
-    goodsBasketCost?: number;
-    nobleBasketCost?: number;
-    goodsIntermediateBasketCost?: number;
-    goodsAdvancedBasketCost?: number;
-    goodsNobleBasketCost?: number;
-  } = {},
+  options: BasketCostInputs & { basketType?: BasketType } = {},
 ): PurchaseBenefitCalculation {
   if (
     !Number.isFinite(income) ||
@@ -933,24 +992,14 @@ export function getPurchaseBenefitCalculation(
   const pf = price * basicNeedPerPerson;
   const { radiusTiles, radicandNumerator } = GAME_RULES.consumption.distance;
   const distanceFactor = Math.sqrt(radicandNumerator / (radiusTiles + distance));
+  const cumulativeBasketCosts = getCumulativeBasketCosts(referenceBasketCost, options);
+  const basketCosts = {
+    intermediate: options.intermediateBasketCost ?? 0,
+    advanced: options.advancedBasketCost ?? 0,
+  };
   if (options.basketType === 'goods') {
     const formula = GAME_RULES.consumption.goods;
-    const intermediateBasketCost = options.intermediateBasketCost ?? 0;
-    const advancedBasketCost = options.advancedBasketCost ?? 0;
-    const goodsBasketCost = options.goodsBasketCost ?? 0;
-    const combinedBasketCost =
-      referenceBasketCost + intermediateBasketCost + advancedBasketCost + goodsBasketCost;
-    if (
-      !Number.isFinite(intermediateBasketCost) ||
-      intermediateBasketCost < 0 ||
-      !Number.isFinite(advancedBasketCost) ||
-      advancedBasketCost < 0 ||
-      !Number.isFinite(goodsBasketCost) ||
-      goodsBasketCost < 0 ||
-      !Number.isFinite(combinedBasketCost)
-    ) {
-      throw new RangeError('O custo total das cestas básicas é inválido.');
-    }
+    const combinedBasketCost = cumulativeBasketCosts.goods;
     if (income === 0 || combinedBasketCost === 0) {
       return {
         pf,
@@ -1016,46 +1065,7 @@ export function getPurchaseBenefitCalculation(
   ) {
     const basketType = options.basketType;
     const formula = GAME_RULES.consumption[basketType];
-    const intermediateBasketCost = options.intermediateBasketCost ?? 0;
-    const advancedBasketCost = options.advancedBasketCost ?? 0;
-    const goodsBasketCost = options.goodsBasketCost ?? 0;
-    const nobleBasketCost = options.nobleBasketCost ?? 0;
-    const goodsIntermediateBasketCost = options.goodsIntermediateBasketCost ?? 0;
-    const goodsAdvancedBasketCost = options.goodsAdvancedBasketCost ?? 0;
-    const goodsNobleBasketCost = options.goodsNobleBasketCost ?? 0;
-    const basketCosts = [
-      intermediateBasketCost,
-      advancedBasketCost,
-      goodsBasketCost,
-      nobleBasketCost,
-      goodsIntermediateBasketCost,
-      goodsAdvancedBasketCost,
-      goodsNobleBasketCost,
-    ];
-    if (basketCosts.some((cost) => !Number.isFinite(cost) || cost < 0)) {
-      throw new RangeError('O custo total das cestas básicas é inválido.');
-    }
-
-    let combinedBasketCost = referenceBasketCost;
-    if (basketType === 'noble') {
-      combinedBasketCost += intermediateBasketCost + advancedBasketCost + nobleBasketCost;
-    } else {
-      combinedBasketCost +=
-        intermediateBasketCost +
-        advancedBasketCost +
-        nobleBasketCost +
-        goodsBasketCost +
-        goodsIntermediateBasketCost;
-      if (basketType === 'goodsAdvanced' || basketType === 'goodsNoble') {
-        combinedBasketCost += goodsAdvancedBasketCost;
-      }
-      if (basketType === 'goodsNoble') {
-        combinedBasketCost += goodsNobleBasketCost;
-      }
-    }
-    if (!Number.isFinite(combinedBasketCost)) {
-      throw new RangeError('O custo total das cestas básicas é inválido.');
-    }
+    const combinedBasketCost = cumulativeBasketCosts[basketType];
     if (income === 0 || combinedBasketCost === 0) {
       return {
         pf,
@@ -1080,9 +1090,7 @@ export function getPurchaseBenefitCalculation(
           1 /
             (GAME_RULES.consumption.goodsIntermediate.idealBasketIncomeOffsetDivisor *
               combinedBasketCost) +
-          (basketType === 'goodsNoble'
-            ? GAME_RULES.consumption.goodsNoble.idealConstantOffset
-            : GAME_RULES.consumption.goodsIntermediate.idealConstantOffset);
+          GAME_RULES.consumption[basketType].idealConstantOffset;
     const idealBenefit = boundedPower(idealBase, formula.idealExponent);
     const errorBase = (income - pf - q) / combinedBasketCost;
     const errorBenefit = boundedDiagnosticValue(
@@ -1121,19 +1129,7 @@ export function getPurchaseBenefitCalculation(
     const formula = isAdvanced
       ? GAME_RULES.consumption.advanced
       : GAME_RULES.consumption.intermediate;
-    const intermediateBasketCost = options.intermediateBasketCost ?? 0;
-    const advancedBasketCost = options.advancedBasketCost ?? 0;
-    const combinedBasketCost =
-      referenceBasketCost + intermediateBasketCost + (isAdvanced ? advancedBasketCost : 0);
-    if (
-      !Number.isFinite(intermediateBasketCost) ||
-      intermediateBasketCost < 0 ||
-      !Number.isFinite(advancedBasketCost) ||
-      advancedBasketCost < 0 ||
-      !Number.isFinite(combinedBasketCost)
-    ) {
-      throw new RangeError('O custo da cesta intermediária é inválido.');
-    }
+    const combinedBasketCost = cumulativeBasketCosts[options.basketType];
     if (income === 0 || combinedBasketCost === 0) {
       return {
         pf,
@@ -1151,17 +1147,17 @@ export function getPurchaseBenefitCalculation(
     const w = (1 - pf / combinedBasketCost) ** formula.wExponent;
     const rawQ = Math.expm1(w * Math.log(formula.discountBase)) * income;
     const q = boundedDiagnosticValue(rawQ);
+    const idealBasketOffset = (isAdvanced ? 1 : -1) / formula.idealBasketDivisor;
     const idealBase =
-      (income - formula.idealIncomeOffset) / combinedBasketCost -
-      1 / formula.idealBasketDivisor;
+      (income - formula.idealIncomeOffset) / combinedBasketCost + idealBasketOffset;
     const idealBenefit = boundedPower(idealBase, formula.idealExponent);
     const advancedThreshold =
       isAdvanced
-        ? advancedBasketCost / GAME_RULES.consumption.advanced.advancedBasketThresholdDivisor
+        ? basketCosts.advanced / GAME_RULES.consumption.advanced.advancedBasketThresholdDivisor
         : 0;
     const threshold =
       referenceBasketCost / formula.basicBasketThresholdDivisor +
-      intermediateBasketCost / formula.intermediateBasketThresholdDivisor +
+      basketCosts.intermediate / formula.intermediateBasketThresholdDivisor +
       advancedThreshold;
     const eligible =
       income > pf + formula.minimumIncomeAboveProductCost && income > threshold;
@@ -1423,46 +1419,15 @@ export function planShopSalesDetailed(
                   : (INTERMEDIATE_BASKET_PRODUCT_IDS as readonly string[]).includes(productId)
                     ? 'intermediate'
                     : 'basic';
-      const calculationBasketCostByType: Record<BasketType, number> = {
-        basic: referenceBasketCost,
-        intermediate: referenceBasketCost + intermediateBasketCost,
-        advanced: referenceBasketCost + intermediateBasketCost + advancedBasketCost,
-        goods:
-          referenceBasketCost +
-          intermediateBasketCost +
-          advancedBasketCost +
-          goodsBasketCost,
-        noble:
-          referenceBasketCost +
-          intermediateBasketCost +
-          advancedBasketCost +
-          nobleBasketCost,
-        goodsIntermediate:
-          referenceBasketCost +
-          intermediateBasketCost +
-          advancedBasketCost +
-          nobleBasketCost +
-          goodsBasketCost +
-          goodsIntermediateBasketCost,
-        goodsAdvanced:
-          referenceBasketCost +
-          intermediateBasketCost +
-          advancedBasketCost +
-          nobleBasketCost +
-          goodsBasketCost +
-          goodsIntermediateBasketCost +
-          goodsAdvancedBasketCost,
-        goodsNoble:
-          referenceBasketCost +
-          intermediateBasketCost +
-          advancedBasketCost +
-          nobleBasketCost +
-          goodsBasketCost +
-          goodsIntermediateBasketCost +
-          goodsAdvancedBasketCost +
-          goodsNobleBasketCost,
-      };
-      const calculationBasketCost = calculationBasketCostByType[basketType];
+      const calculationBasketCost = getCumulativeBasketCosts(referenceBasketCost, {
+        intermediateBasketCost,
+        advancedBasketCost,
+        goodsBasketCost,
+        nobleBasketCost,
+        goodsIntermediateBasketCost,
+        goodsAdvancedBasketCost,
+        goodsNobleBasketCost,
+      })[basketType];
       const productAveragePrice =
         averagePrices.get(getCityProductKey(residence.cityId, productId)) ?? 0;
       const candidates = nearby.map((shop) => {

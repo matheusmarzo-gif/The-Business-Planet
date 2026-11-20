@@ -56,7 +56,7 @@ export const PRODUCTS: ProductDefinition[] = [
   product('wood', 'Madeira', 'madeira', 'raw_material', 'unit', 50, 0.1, null),
   product('stone', 'Pedra', 'pedra', 'raw_material', 'unit', 160, 0.1, null),
   product('iron', 'Ferro', 'ferro', 'raw_material', 'unit', 350, 0.1, null),
-  product('salt', 'Sal', 'sal', 'raw_material', 'unit', 12, 0.01, null),
+  product('salt', 'Sal', 'sal', 'raw_material', 'unit', 1.2, 0.001, null),
   product('fish', 'Peixe', 'peixe', 'raw_material', 'unit', 5, 0.01, 3),
   product('tools', 'Ferramentas', 'ferramentas', 'processed', 'unit', 5, 0.01, null),
   product('sugar', 'Açúcar', 'acucar', 'processed', 'unit', 9, 0.01, 3650),
@@ -81,7 +81,7 @@ export const PRODUCTS: ProductDefinition[] = [
   product('clothing', 'Roupa', 'roupa', 'processed', 'unit', 25, 0.1, null),
   product('furniture', 'Móveis', 'moveis', 'processed', 'unit', 50, 0.1, null),
   product('utilities', 'Utilitários', 'utilitarios', 'processed', 'unit', 5, 0.01, null),
-  product('glass', 'Vidro', 'vidro', 'processed', 'unit', 300, 0.1, null),
+  product('glass', 'Vidro', 'vidro', 'processed', 'unit', 30, 0.01, null),
 ];
 
 export function formatShelfLife(days: number | null): string {

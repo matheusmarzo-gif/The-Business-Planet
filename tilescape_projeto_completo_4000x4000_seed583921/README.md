@@ -1166,7 +1166,9 @@ urbana. As construções e transações habilitadas são descritas nas seções 
 
 ## Comandos do Master
 
-A conta Master vê o botão **Master** na barra superior. O painel permite mudar a velocidade do mundo (1:15, 1:30, 1:60 ou 1:240; dias mais rápidos aceleram folha, Work Points e vendas), adicionar C$ à própria conta (de C$ 0,01 a C$ 1.000.000.000 por vez) e ver os jogadores online conectados.
+A conta Master vê o botão **Master** na barra superior. O painel permite mudar a velocidade do mundo (1:15, 1:30, 1:60 ou 1:240; dias mais rápidos aceleram folha, Work Points e vendas), adicionar C$ à própria conta (de C$ 0,01 a C$ 1.000.000.000 por vez) e ver os jogadores online conectados. O botão **Resetar servidor**, também na barra superior, pede confirmação e apaga o progresso de jogo de todos: cidades, estradas, construções e históricos. O relógio volta ao início do mundo, todos os saldos passam a C$ 75.000 e as contas/perfis de login são mantidos.
+
+Jogadores que não são Master têm o botão **Resetar conta** na barra superior. Após confirmar, somente os dados de jogo daquela conta — construções, estradas, históricos e progresso — são apagados, e o saldo volta a C$ 75.000. A conta e o perfil de login permanecem. A operação não pode ser desfeita.
 
 ## Histórico de produção
 

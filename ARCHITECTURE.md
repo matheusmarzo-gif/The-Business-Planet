@@ -189,7 +189,7 @@ Os comandos de npm devem ser executados nessa pasta.
 | --- | --- |
 | `src/main.tsx` | Monta o React, envolve o jogo com autenticação e carrega o CSS. |
 | `src/auth/` | Neon Auth, recuperação de senha, confirmação de e-mail e restauração de sessão. |
-| `src/GameApp.tsx` | Tela ativa do mundo, interface, estado de interação e chamadas da API. |
+| `src/GameApp.tsx` | Tela ativa do mundo, interface, estado de interação, comandos de reset na barra superior e chamadas da API. |
 | `src/game/GameMap.tsx` | Renderização PixiJS, câmera, seleção de tiles, prévias e interação com cidades, estradas e residências. Usa camadas separadas para terreno, estradas, construções e etiquetas; construções fora do viewport não são anexadas à camada visível, sprites são reutilizados por ID e texturas são cacheadas por asset. |
 | `src/game/worldClient.ts` | Autentica o WebSocket, valida mensagens recebidas e atualiza o estado compartilhado, incluindo estradas e construções da cidade atual. |
 | `src/components/BuildingSummaryPanel.tsx` | Exibe os dados públicos básicos de uma construção que pertence a outro jogador. |
@@ -1160,6 +1160,8 @@ As rotas do mundo, exceto health check, exigem JWT válido do Neon Auth.
 | `GET /api/master/online-players` | Master | Lista `{ players: [{ id, name, email, connections }] }` a partir da presença no Redis (`userId|uuid`) e de `neon_auth."user"`. |
 | `POST /api/master/time-scale` | Master | `{ timeScale }` validado por `isValidTimeScale` (`src/types/worldClock.ts`: 15, 30, 60, 240); avança o relógio com a velocidade antiga, grava `world_state.time_scale` e republica o snapshot. |
 | `POST /api/master/grant-money` | Master | `{ amount }` (C$ 0,01 a C$ 1.000.000.000, com até duas casas decimais, `parseMasterGrant`) creditado na carteira do próprio Master; retorna `{ balance }`. |
+| `POST /api/master/reset` | Master | Exige `{ confirmReset: true }`; limpa os dados persistentes do mundo, reinicia o relógio, redefine as carteiras de todas as contas para C$ 75.000 e publica o novo estado. As contas/perfis de login permanecem. |
+| `POST /api/account/reset` | Jogador não-Master | Exige `{ confirmReset: true }`; apaga construções, estradas, históricos e progresso do jogador, redefine sua carteira para C$ 75.000 e publica as alterações. A API recusa a conta Master. |
 | `POST /api/cities` | Master | Valida e cria Assembleia/cidade. |
 | `PATCH /api/cities/:id` | Master | Altera o nome de uma cidade. |
 | `PUT /api/cities/:id/zones` | Master | Valida e substitui as regiões urbanas/rurais da cidade. |
@@ -1198,6 +1200,15 @@ de sucesso.
   na primeira chamada a `GET /api/wallet`; o saldo aparece na barra superior
   como `C$ …` e é reconsultado a cada 30 s. Débitos e créditos são aplicados no
   servidor e na mesma transação do processamento diário.
+- O reset do mundo preserva as contas e os perfis de login no Neon Auth, mas
+  limpa cidades, estradas, construções, contadores, históricos e dados de
+  classificação do jogo; redefine todas as carteiras para `RESET_BALANCE`
+  (C$ 75.000) e o relógio para 1100-01-01 06:00 UTC, escala 1:15. O reset
+  individual de jogador remove suas construções, estradas e históricos e
+  redefine apenas sua carteira, sem apagar a conta de autenticação. Ambos usam
+  uma transação PostgreSQL sob o advisory lock global de estado do mundo; após
+  o commit, publicam as alterações por Redis/WebSocket. Não há atributo de
+  etapa de jogador no modelo atual; o progresso de jogo é o estado removido.
 - Valores monetários usam precisão de centavos (`NUMERIC(...,2)` no PostgreSQL);
   preços, salários, aluguéis, pagamentos, históricos e carteiras aceitam no
   máximo duas casas decimais. O parser do driver converte esses campos em

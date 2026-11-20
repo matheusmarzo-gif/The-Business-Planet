@@ -90,7 +90,7 @@ import {
   type WorldDelta,
   type WorldEntities,
 } from '../src/types/worldSync.js';
-import { STARTING_BALANCE } from '../src/types/wallet.js';
+import { RESET_BALANCE, STARTING_BALANCE } from '../src/types/wallet.js';
 import { roundCurrency } from '../src/types/currency.js';
 import {
   calculateLocalDemandSummary,
@@ -7344,6 +7344,123 @@ async function synchronizeBuildingFootprintMetrics(): Promise<void> {
   }
 }
 
+async function resetWorldState(): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const { rows: playerRows } = await authPool.query<{ id: string }>(
+      'SELECT id::text AS id FROM neon_auth."user"',
+    );
+    const playerIds = playerRows.map((player) => player.id);
+    await client.query(
+      `TRUNCATE TABLE city_assemblies, all_buildings, player_wallets,
+                      player_building_counters, player_warehouse_claims,
+                      player_rank_metrics, player_investment_history,
+                      leaderboard_history_metadata, product_cost_history,
+                      player_product_costs
+       RESTART IDENTITY CASCADE`,
+    );
+    if (playerIds.length > 0) {
+      await client.query(
+        `INSERT INTO player_wallets (user_id, balance)
+         SELECT profile.user_id, $2
+         FROM UNNEST($1::text[]) AS profile(user_id)`,
+        [playerIds, RESET_BALANCE],
+      );
+    }
+    const { rowCount } = await client.query(
+      `UPDATE world_state
+       SET world_time = TIMESTAMPTZ '1100-01-01 06:00:00+00',
+           last_real_at = clock_timestamp(),
+           last_residence_relocation_day = NULL,
+           last_population_change_day = NULL,
+           last_immigration_day = NULL,
+           last_job_allocation_day = NULL,
+           last_payroll_day = NULL,
+           last_warehouse_trade_slot = NULL,
+           last_spoilage_day = NULL,
+           last_full_world_sync_day = NULL,
+           time_scale = 15
+       WHERE id = 1`,
+    );
+    if (rowCount !== 1) throw new Error('O relógio global não está inicializado.');
+    await client.query(
+      `INSERT INTO leaderboard_history_metadata (id, investment_tracking_from_day)
+       VALUES (1, DATE '1100-01-01')`,
+    );
+    await client.query('COMMIT');
+    return playerIds.length;
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter o reset global do mundo:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function resetPlayerState(userId: string): Promise<{
+  buildingsRemoved: number;
+  roadsRemoved: number;
+  roadUpdates: CityRoadUpdate[];
+}> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [583921303]);
+    const { rowCount: buildingsRemoved } = await client.query(
+      'DELETE FROM all_buildings WHERE created_by = $1',
+      [userId],
+    );
+    const { rows: removedRoads } = await client.query<{
+      city_id: string;
+      tile_x: number;
+      tile_y: number;
+    }>(
+      `DELETE FROM road_tiles
+       WHERE created_by = $1
+       RETURNING city_id, tile_x, tile_y`,
+      [userId],
+    );
+    const changesByCity = new Map<
+      string,
+      { x: number; y: number; operation: 'remove' }[]
+    >();
+    for (const road of removedRoads) {
+      const changes = changesByCity.get(road.city_id) ?? [];
+      changes.push({ x: road.tile_x, y: road.tile_y, operation: 'remove' });
+      changesByCity.set(road.city_id, changes);
+    }
+    const roadUpdates = await recordRoadTileChanges(client, changesByCity);
+    await client.query('DELETE FROM player_building_counters WHERE user_id = $1', [userId]);
+    await client.query('DELETE FROM player_warehouse_claims WHERE user_id = $1', [userId]);
+    await client.query('DELETE FROM player_rank_metrics WHERE user_id = $1', [userId]);
+    await client.query('DELETE FROM player_investment_history WHERE user_id = $1', [userId]);
+    await client.query('DELETE FROM product_cost_history WHERE user_id = $1', [userId]);
+    await client.query('DELETE FROM player_product_costs WHERE user_id = $1', [userId]);
+    await client.query(
+      `INSERT INTO player_wallets (user_id, balance) VALUES ($1, $2)
+       ON CONFLICT (user_id) DO UPDATE SET balance = EXCLUDED.balance`,
+      [userId, RESET_BALANCE],
+    );
+    await client.query('COMMIT');
+    return {
+      buildingsRemoved: buildingsRemoved ?? 0,
+      roadsRemoved: removedRoads.length,
+      roadUpdates,
+    };
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError: unknown) => {
+      console.error('Não foi possível reverter o reset da conta:', rollbackError);
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function start() {
   const auth = getAuthConfig();
   const requireAuth = requireAuthentication(auth);
@@ -12282,6 +12399,74 @@ async function start() {
         console.error('Não foi possível adicionar dinheiro:', error);
         response.status(503).json({ error: 'wallet_unavailable' });
       });
+  });
+  app.post('/api/master/reset', requireAuth, requireMasterAuth, (request, response) => {
+    if (
+      typeof request.body !== 'object' ||
+      request.body === null ||
+      request.body.confirmReset !== true
+    ) {
+      response.status(400).json({ error: 'reset_confirmation_required' });
+      return;
+    }
+    void (async () => {
+      try {
+        const playersReset = await resetWorldState();
+        try {
+          await publishCities(true);
+          await publishSnapshot();
+        } catch (error) {
+          console.error('O mundo foi resetado, mas não foi possível sincronizar os clientes:', error);
+          response.status(503).json({ error: 'reset_applied_sync_failed' });
+          return;
+        }
+        response.json({ playersReset, balance: RESET_BALANCE });
+      } catch (error) {
+        console.error('Não foi possível resetar o mundo:', error);
+        response.status(503).json({ error: 'server_reset_unavailable' });
+      }
+    })();
+  });
+  app.post('/api/account/reset', requireAuth, (request, response) => {
+    const userId = authenticatedUserIds.get(request);
+    if (!userId) {
+      response.status(401).json({ error: 'unauthorized' });
+      return;
+    }
+    if (
+      typeof request.body !== 'object' ||
+      request.body === null ||
+      request.body.confirmReset !== true
+    ) {
+      response.status(400).json({ error: 'reset_confirmation_required' });
+      return;
+    }
+    void (async () => {
+      try {
+        if (await isMasterUser(userId)) {
+          response.status(403).json({ error: 'master_cannot_reset_account' });
+          return;
+        }
+        const result = await resetPlayerState(userId);
+        try {
+          await publishCities();
+          await publishRoadUpdates(result.roadUpdates);
+          await publishSnapshot();
+        } catch (error) {
+          console.error('A conta foi resetada, mas não foi possível sincronizar o mundo:', error);
+          response.status(503).json({ error: 'reset_applied_sync_failed' });
+          return;
+        }
+        response.json({
+          balance: RESET_BALANCE,
+          buildingsRemoved: result.buildingsRemoved,
+          roadsRemoved: result.roadsRemoved,
+        });
+      } catch (error) {
+        console.error('Não foi possível resetar a conta do jogador:', error);
+        response.status(503).json({ error: 'account_reset_unavailable' });
+      }
+    })();
   });
   app.get('/api/world', requireAuth, (_request, response) => {
     void getSnapshot()

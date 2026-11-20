@@ -460,6 +460,10 @@ button { color: inherit; }
   .topbar { gap: 6px; padding: 0 8px; }
   .brand-copy { display: none; }
   .topbar-status { gap: 7px; }
+  .reset-button { padding: 5px 6px; font-size: 9px; }
+  .reset-button-label { display: none; }
+  .reset-button-short-label { display: inline; }
+  .reset-feedback { display: none; }
   .connection-pill { display: none; }
   .player-count>span:last-child { display: none; }
 }
@@ -469,6 +473,10 @@ button { color: inherit; }
 .master-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .master-button { padding: 7px 12px; border: 1px solid rgba(219,201,158,.3); border-radius: 6px; color: #ead9a6; background: transparent; cursor: pointer; font-size: 12px; }
 .master-button:hover:not(:disabled) { background: rgba(255,255,255,.08); }
+.reset-button { border-color: rgba(229,115,100,.55); color: #f0b3aa; white-space: nowrap; }
+.reset-button:hover:not(:disabled) { background: rgba(180,65,56,.18); }
+.reset-button-short-label { display: none; }
+.reset-feedback { max-width: 220px; color: #9fd3a0; font-size: 10px; }
 .master-button.active { background: rgba(226,197,127,.2); }
 .master-button:disabled { opacity: .55; cursor: default; }
 .master-input { width: 150px; padding: 7px 9px; border: 1px solid rgba(219,201,158,.3); border-radius: 6px; color: #eee7d6; background: rgba(0,0,0,.25); font-size: 12px; }

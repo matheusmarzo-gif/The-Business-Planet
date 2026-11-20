@@ -78,7 +78,7 @@ import {
 } from './types/residence';
 import type { RoadPlacementError, RoadPosition, RoadTile } from './types/road';
 import { TileInfo } from './types/map';
-import { formatMoney } from './types/wallet';
+import { formatMoney, RESET_BALANCE } from './types/wallet';
 import type {
   StockCapacityKey,
   StockCapacityUpgradeQuote,
@@ -192,6 +192,16 @@ async function cityRequest<T>(path: string, init?: RequestInit): Promise<T> {
           error = 'O trajeto enviado não é válido.';
         } else if (body.error === 'master_required') {
           error = 'Somente a conta master pode gerenciar estruturas da prefeitura.';
+        } else if (body.error === 'master_cannot_reset_account') {
+          error = 'A conta Master deve usar a opção de resetar o servidor.';
+        } else if (body.error === 'reset_confirmation_required') {
+          error = 'Confirme o reset antes de continuar.';
+        } else if (body.error === 'server_reset_unavailable') {
+          error = 'Não foi possível resetar o servidor. Nenhum dado foi alterado.';
+        } else if (body.error === 'account_reset_unavailable') {
+          error = 'Não foi possível resetar sua conta. Nenhum dado foi alterado.';
+        } else if (body.error === 'reset_applied_sync_failed') {
+          error = 'O reset foi aplicado, mas a atualização do mundo falhou. Recarregue a página.';
         } else if (body.error === 'city_not_owned') {
           error = 'Você só pode demolir construções que criou.';
         } else if (body.error === 'city_not_found') {
@@ -504,6 +514,9 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
   const [isMasterBusy, setIsMasterBusy] = useState(false);
   const [masterError, setMasterError] = useState('');
   const [masterMessage, setMasterMessage] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
 
   const refreshOnlinePlayers = () => {
     setIsLoadingPlayers(true);
@@ -544,6 +557,37 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
       setBalance(wallet.balance);
       return `${formatMoney(amount)} adicionados à sua conta.`;
     });
+
+  const resetGame = () => {
+    const confirmation = user.isMaster
+      ? 'Você deseja realmente resetar? Isso apagará o mundo, todas as construções, estradas e históricos, redefinirá o relógio e colocará o saldo de todos os jogadores em C$ 75.000. As contas e os perfis de login serão mantidos.'
+      : 'Você deseja realmente resetar? Isso apagará todas as suas construções, estradas e históricos, e redefinirá seu saldo para C$ 75.000. Sua conta e seu perfil de login serão mantidos.';
+    if (!window.confirm(confirmation)) return;
+
+    setIsResetting(true);
+    setResetError('');
+    setResetMessage('');
+    void cityRequest<{ balance: number }>(
+      user.isMaster ? '/api/master/reset' : '/api/account/reset',
+      {
+        method: 'POST',
+        body: JSON.stringify({ confirmReset: true }),
+      },
+    )
+      .then(({ balance: nextBalance }) => {
+        setBalance(nextBalance);
+        setSelectedResidenceId(null);
+        setResetMessage(
+          user.isMaster
+            ? `Servidor resetado. Todos os jogadores receberam ${formatMoney(RESET_BALANCE)}.`
+            : `Conta resetada. Seu saldo agora é ${formatMoney(RESET_BALANCE)}.`,
+        );
+      })
+      .catch((error: unknown) => {
+        setResetError(error instanceof Error ? error.message : 'Não foi possível concluir o reset.');
+      })
+      .finally(() => setIsResetting(false));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -2490,6 +2534,26 @@ export default function GameApp({ user, onSignOut, signOutError }: GameAppProps)
               Master
             </button>
           )}
+          <button
+            type="button"
+            className="master-button reset-button"
+            disabled={isResetting}
+            onClick={resetGame}
+            title={user.isMaster ? 'Apagar os dados de jogo de todos os jogadores' : 'Apagar o progresso da sua conta'}
+          >
+            {isResetting ? (
+              'Resetando…'
+            ) : (
+              <>
+                <span className="reset-button-label">
+                  {user.isMaster ? 'Resetar servidor' : 'Resetar conta'}
+                </span>
+                <span className="reset-button-short-label">Resetar</span>
+              </>
+            )}
+          </button>
+          {resetError && <span className="account-error" role="alert">{resetError}</span>}
+          {resetMessage && <span className="reset-feedback" role="status">{resetMessage}</span>}
           {signOutError && <span className="account-error" role="alert">{signOutError}</span>}
           <div className="account-menu">
             <span title={user.email}>{user.name || user.email}</span>

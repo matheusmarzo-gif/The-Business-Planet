@@ -9,9 +9,9 @@
   "height": 5,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 2000, "stone": 1200, "iron": 800, "steel": 300 },
-  "workPoints": 10000000,
-  "maxWorkers": 40,
+  "cost": { "wood": 1200, "stone": 400 },
+  "workPoints": 1100000,
+  "maxWorkers": 20,
   "stockProduct": "Vidro",
   "stockProductId": "glass",
   "stockCapacity": 320,
@@ -20,8 +20,8 @@
   "inputCapacities": { "sand": 400, "charcoal": 800 },
   "production": {
     "mode": "batch",
-    "workPointsPerUnit": 400,
-    "batchSize": 8,
-    "batchInputs": { "sand": 10, "charcoal": 20 }
+    "workPointsPerUnit": 2000,
+    "batchSize": 4,
+    "batchInputs": { "sand": 1, "charcoal": 5 }
   }
 }

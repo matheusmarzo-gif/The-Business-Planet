@@ -9,14 +9,14 @@
   "height": 4,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 60, "stone": 30 },
-  "workPoints": 240000,
+  "cost": { "wood": 1000, "stone": 600, "iron": 400 },
+  "workPoints": 500000,
   "maxWorkers": 30,
   "stockProduct": "Areia",
   "stockProductId": "sand",
   "stockCapacity": 10,
   "production": {
     "mode": "accumulate",
-    "workPointsPerUnit": 600
+    "workPointsPerUnit": 100
   }
 }

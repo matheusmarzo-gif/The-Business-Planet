@@ -360,6 +360,8 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
         'batchStockAmount',
         'batchInputs',
         'batchInputRates',
+        'bonusUnitsPerBatch',
+        'bonusUnitProbability',
       ],
     );
     if (!['accumulate', 'chance', 'batch'].includes(String(value.production.mode))) {
@@ -386,6 +388,7 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
       'batchCharcoal',
       'batchTools',
       'batchStockAmount',
+      'bonusUnitsPerBatch',
     ]) {
       if (
         field in value.production &&
@@ -394,6 +397,17 @@ function validateBuilding(value: JsonRecord, buildingId: string): void {
           value.production[field] < 0)
       ) {
         fail(path, `production.${field} precisa ser um número não negativo.`);
+      }
+      for (const field of ['bonusUnitProbability']) {
+        if (
+          field in value.production &&
+          (typeof value.production[field] !== 'number' ||
+            !Number.isFinite(value.production[field]) ||
+            value.production[field] < 0 ||
+            value.production[field] > 1)
+        ) {
+          fail(path, `production.${field} precisa ser uma probabilidade entre 0 e 1.`);
+        }
       }
     }
     if (

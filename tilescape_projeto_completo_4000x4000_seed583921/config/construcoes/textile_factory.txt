@@ -9,9 +9,9 @@
   "height": 5,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 1000, "stone": 600, "iron": 400, "steel": 100 },
-  "workPoints": 10000000,
-  "maxWorkers": 40,
+  "cost": { "wood": 1800, "stone": 600 },
+  "workPoints": 1200000,
+  "maxWorkers": 20,
   "stockProduct": "Roupa",
   "stockProductId": "clothing",
   "stockCapacity": 80,
@@ -20,8 +20,8 @@
   "inputCapacities": { "thread": 40, "charcoal": 80 },
   "production": {
     "mode": "batch",
-    "workPointsPerUnit": 400,
-    "batchSize": 2,
+    "workPointsPerUnit": 1000,
+    "batchSize": 6,
     "batchInputs": { "thread": 1, "charcoal": 2 }
   }
 }

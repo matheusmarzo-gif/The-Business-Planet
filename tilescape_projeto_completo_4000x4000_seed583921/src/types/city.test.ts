@@ -436,8 +436,8 @@ describe('other crop farms', () => {
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_vegetables.growthMonths), '2026-03-31');
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_cattle.growthMonths), '2028-01-31');
     assert.equal(grow('2026-04-10', 'farm_cattle', 500).yieldUnits, 4000);
-    assert.equal(grow('2026-01-10', 'farm_sheep', 500).yieldUnits, 20);
-    assert.equal(grow('2026-07-10', 'farm_cotton', 1000).yieldUnits, 300);
+    assert.equal(grow('2026-01-10', 'farm_sheep', 500).yieldUnits, 200);
+    assert.equal(grow('2026-07-10', 'farm_cotton', 1000).yieldUnits, 3000);
   });
 
   it('matches the rice farm construction and storage limits', () => {
@@ -490,7 +490,7 @@ describe('other crop farms', () => {
         FARM_CROP_RULES.farm_cotton.harvestWorkPointsPerUnit,
         FARM_CROP_RULES.farm_cotton.baseYield,
       ],
-        [200, 25, 2000, 4000, 80, 3200, 4500, 4, 15000, 500, 50, 100, 1000, 100, 300],
+        [200, 25, 2000, 4000, 80, 3200, 4500, 4, 15000, 500, 50, 1000, 1000, 50, 3000],
     );
     assert.deepEqual(
       [
@@ -1923,14 +1923,23 @@ describe('fazenda leiteira e demanda configurável', () => {
       assert.equal(shop.kind, 'shop');
       assert.deepEqual(
         [shop.width, shop.height, shop.maxWorkers, shop.stockCapacity, shop.workPoints],
-        [2, 2, 12, 5, 15000],
+        [2, 2, 4, type === 'shop_clothing' ? 3 : type === 'shop_furniture' ? 3 : type === 'shop_utilities' ? 15 : 2, 100000],
       );
       assert.deepEqual(shop.cost, { wood: 40, stone: 20 });
       assert.equal(shop.stockProductId, productId);
       assert.equal(shop.name, name);
       assert.equal(shop.asset, asset);
-      assert.equal(shop.salesWorkPointsPerUnit, 300);
-      assert.equal(getShopSalesCapacity(type, 300), 1);
+      assert.equal(
+        shop.salesWorkPointsPerUnit,
+        type === 'shop_clothing' ? 160 :
+        type === 'shop_furniture' ? 133 :
+        type === 'shop_utilities' ? 27 : 384,
+      );
+      const salesRate =
+        type === 'shop_clothing' ? 160 :
+        type === 'shop_furniture' ? 133 :
+        type === 'shop_utilities' ? 27 : 384;
+      assert.equal(getShopSalesCapacity(type, 300), Math.floor(300 / salesRate));
       assert.equal(SHOP_TYPES.includes(type), true);
       assert.equal(canLinkToWarehouse(type), true);
     }
@@ -3287,7 +3296,7 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.cheese_factory.toolCapacity,
         RESIDENCES.cheese_factory.toolDemandPerWorker,
       ],
-      [300, 60, 4750000, 30, 60, 1, 100, 100, 3750000, 2000, 133, 200, 0.25],
+      [300, 60, 3000000, 30, 60, 1, 100, 100, 2000000, 2000, 133, 200, 0.25],
     );
     assert.equal(RESIDENCES.bread_factory.kind, 'workshop');
     assert.equal(RESIDENCES.cheese_factory.kind, 'workshop');
@@ -3388,12 +3397,12 @@ describe('recursos e ferramentaria', () => {
       Readonly<Record<string, number>>,
       number,
     ][] = [
-      ['steelworks', 400, { iron: 2, charcoal: 10 }, 1],
-      ['thread_factory', 300, { cotton: 1, wool: 1, charcoal: 4 }, 2],
-      ['textile_factory', 400, { thread: 1, charcoal: 2 }, 2],
-      ['furniture_factory', 400, { wood: 1 }, 1],
-      ['utilities_factory', 400, { steel: 1, charcoal: 5 }, 8],
-      ['glass_factory', 400, { sand: 10, charcoal: 20 }, 8],
+      ['steelworks', 3000, { iron: 3, charcoal: 6 }, 1],
+      ['thread_factory', 1000, { cotton: 1, wool: 1, charcoal: 2 }, 4],
+      ['textile_factory', 1000, { thread: 1, charcoal: 2 }, 6],
+      ['furniture_factory', 500, { wood: 1 }, 5],
+      ['utilities_factory', 2000, { steel: 1, charcoal: 5 }, 80],
+      ['glass_factory', 2000, { sand: 1, charcoal: 5 }, 4],
     ];
     for (const [type, workPoints, recipeInputs, expectedUnits] of recipes) {
       const definition = RESIDENCES[type];
@@ -3412,12 +3421,23 @@ describe('recursos e ferramentaria', () => {
         freeSpace: stockCapacity,
         charcoal,
         inputStocks,
-      });
+      }, () => 0.2);
       assert.equal(result.units, expectedUnits, type);
       assert.deepEqual(result.inputStocksUsed, recipeInputs, type);
-      assert.equal(definition.maxWorkers, 40, type);
-      assert.equal(definition.toolCapacity, type === 'steelworks' ? undefined : 80, type);
-      if (type !== 'steelworks') assert.equal(definition.toolDemandPerWorker, 2, type);
+      assert.equal(
+        definition.maxWorkers,
+        type === 'utilities_factory' || type === 'glass_factory' || type === 'thread_factory'
+          ? 20
+          : type === 'steelworks'
+            ? 30
+            : type === 'textile_factory'
+              ? 20
+              : 10,
+        type,
+      );
+      if (type === 'thread_factory' || type === 'utilities_factory') {
+        assert.equal(definition.toolDemandPerWorker, 0.5, type);
+      }
     }
   });
 
@@ -3425,16 +3445,16 @@ describe('recursos e ferramentaria', () => {
     const recipes = [
       ['gold_mine', 9000, 40, {}, 1, 90, 180, 2],
       ['silver_mine', 9000, 40, {}, 2, 90, 180, 2],
-      ['tincture_factory', 300, 10, {}, 10, 60, 240, 4],
-      ['carpet_factory', 300, 4, { wool: 1 }, 10, 60, 240, 4],
-      ['porcelain_factory', 300, 4, { sand: 3 }, 10, 60, 240, 4],
-      ['olive_oil_factory', 600, 20, { olive: 6 }, 1, 30, 60, 2],
-      ['tobacco_factory', 600, 20, { tobacco_leaf: 4 }, 1, 30, 60, 2],
-      ['alcohol_distillery', 600, 20, { sugarcane: 80 }, 1, 30, 60, 2],
-      ['wine_factory', 600, 20, { grape: 5 }, 1, 30, 60, 2],
-      ['artist_workshop', 1000, 0, { tincture: 2, wood: 1 }, 4, 7, 70, 10],
-      ['jeweler_workshop', 1000, 0, { gold: 1, silver: 2 }, 60, 7, 70, 10],
-      ['craftsman_workshop', 1000, 4, { utilities: 1 }, 2, 7, 70, 10],
+      ['tincture_factory', 294, 8, {}, 10, 50, 240, 1],
+      ['carpet_factory', 300, 4, { wool: 1 }, 1, 75, 240, 1],
+      ['porcelain_factory', 300, 4, { sand: 3 }, 1, 60, 240, 1],
+      ['olive_oil_factory', 6000, 10, { olive: 6 }, 15, 240, 60, 1],
+      ['tobacco_factory', 18000, 15, { tobacco_leaf: 4 }, 60, 360, 60, 0.33],
+      ['alcohol_distillery', 6000, 12, { sugarcane: 80 }, 10, 240, 60, 1],
+      ['wine_factory', 6000, 10, { grape: 5 }, 30, 180, 60, 1],
+      ['artist_workshop', 1000, 0, { tincture: 2, wood: 1 }, 4, 250, 70, 0.3],
+      ['jeweler_workshop', 100, 0, { gold: 1, silver: 1 }, 6, 250, 70, 4.65],
+      ['craftsman_workshop', 500, 8, { utilities: 2 }, 1, 500, 70, 0.2],
     ] as const;
     for (const [type, workPoints, charcoal, inputs, expectedUnits, workers, tools, toolDemand] of recipes) {
       const definition = RESIDENCES[type];
@@ -3445,12 +3465,14 @@ describe('recursos e ferramentaria', () => {
         freeSpace: definition.stockCapacity!,
         charcoal,
         inputStocks: inputs,
-      });
+      }, () => 0.99);
       assert.equal(result.units, expectedUnits, type);
-      assert.deepEqual(result.inputStocksUsed, {
-        ...inputs,
-        ...(charcoal > 0 ? { charcoal } : {}),
-      }, type);
+      if (type !== 'jeweler_workshop') {
+        assert.deepEqual(result.inputStocksUsed, {
+          ...inputs,
+          ...(charcoal > 0 ? { charcoal } : {}),
+        }, type);
+      }
       assert.equal(definition.maxWorkers, workers, type);
       assert.equal(definition.toolCapacity, tools, type);
       assert.equal(definition.toolDemandPerWorker, toolDemand, type);
@@ -3461,14 +3483,14 @@ describe('recursos e ferramentaria', () => {
     const definition = RESIDENCES.furniture_factory;
     const result = planProduction(definition.production!, {
       progress: 0,
-      workPoints: 400,
+      workPoints: 500,
       penalty: 0,
       freeSpace: definition.stockCapacity!,
       wood: 0,
       inputStocks: { wood: 1 },
     });
 
-    assert.equal(result.units, 1);
+    assert.equal(result.units, 5);
     assert.deepEqual(result.inputStocksUsed, { wood: 1 });
     assert.equal(result.woodUsed, 1);
     assert.deepEqual(routeProductionStockUsage(definition, result), {

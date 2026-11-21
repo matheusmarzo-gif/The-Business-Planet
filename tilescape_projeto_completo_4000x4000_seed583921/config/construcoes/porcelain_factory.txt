@@ -9,20 +9,22 @@
   "height": 5,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 1000, "stone": 500, "iron": 500, "steel": 500 },
-  "workPoints": 21000000,
+  "cost": { "wood": 12000, "stone": 2000, "iron": 1000, "steel": 4000 },
+  "workPoints": 7000000,
   "maxWorkers": 60,
   "stockProduct": "Porcelana",
   "stockProductId": "porcelain",
   "stockCapacity": 1000,
   "toolCapacity": 240,
-  "toolDemandPerWorker": 4,
+  "toolDemandPerWorker": 1,
   "charcoalCapacity": 400,
   "inputCapacities": { "sand": 300 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 300,
-    "batchSize": 10,
-    "batchInputs": { "sand": 3, "charcoal": 4 }
+    "batchSize": 1,
+    "batchInputs": { "sand": 3, "charcoal": 4 },
+    "bonusUnitsPerBatch": 1,
+    "bonusUnitProbability": 0.25
   }
 }

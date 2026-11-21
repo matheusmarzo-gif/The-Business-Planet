@@ -97,6 +97,8 @@ export interface ProductionRule {
   batchStockAmount?: number;
   batchInputs?: Record<string, number>;
   batchInputRates?: Record<string, number>;
+  bonusUnitsPerBatch?: number;
+  bonusUnitProbability?: number;
 }
 export type ResidentialBuildingStatus = 'under_construction' | 'completed';
 

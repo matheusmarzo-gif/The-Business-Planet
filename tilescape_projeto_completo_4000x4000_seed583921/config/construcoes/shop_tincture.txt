@@ -9,11 +9,11 @@
   "height": 2,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 40, "stone": 40, "iron": 40, "steel": 40 },
-  "workPoints": 260000,
-  "maxWorkers": 16,
+  "cost": { "wood": 200, "stone": 100, "steel": 50 },
+  "workPoints": 150000,
+  "maxWorkers": 8,
   "stockProduct": "Tintura",
   "stockProductId": "tincture",
-  "stockCapacity": 40,
-  "salesWorkPointsPerUnit": 120
+  "stockCapacity": 13,
+  "salesWorkPointsPerUnit": 64
 }

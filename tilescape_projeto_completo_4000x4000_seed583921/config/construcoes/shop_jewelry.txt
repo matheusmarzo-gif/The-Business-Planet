@@ -9,11 +9,11 @@
   "height": 2,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 60, "stone": 60, "iron": 60, "steel": 40 },
-  "workPoints": 350000,
+  "cost": { "wood": 1200, "stone": 600, "steel": 300 },
+  "workPoints": 900000,
   "maxWorkers": 16,
   "stockProduct": "Jóias",
   "stockProductId": "jewelry",
-  "stockCapacity": 20,
-  "salesWorkPointsPerUnit": 600
+  "stockCapacity": 8,
+  "salesWorkPointsPerUnit": 204
 }

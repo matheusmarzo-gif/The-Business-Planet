@@ -180,7 +180,12 @@ export function planProduction(
         expectedUse,
       );
     }
-    const units = Math.min(free, roundExpected(cycles * batchSize));
+    const baseUnits = roundExpected(cycles * batchSize);
+    const bonusUnits =
+      rule.bonusUnitsPerBatch && rule.bonusUnitProbability
+        ? roundExpected(cycles * rule.bonusUnitsPerBatch * rule.bonusUnitProbability)
+        : 0;
+    const units = Math.min(free, baseUnits + bonusUnits);
     const blockedByCapacityOrInputs = cycles + 1e-9 < total / rule.workPointsPerUnit;
     return {
       units,

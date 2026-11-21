@@ -9,20 +9,20 @@
   "height": 5,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 100, "stone": 50, "iron": 50, "steel": 50 },
-  "workPoints": 3000000,
-  "maxWorkers": 30,
+  "cost": { "wood": 75000, "stone": 15000, "iron": 7500, "steel": 20000 },
+  "workPoints": 50000000,
+  "maxWorkers": 240,
   "stockProduct": "Azeite",
   "stockProductId": "olive_oil",
-  "stockCapacity": 10,
+  "stockCapacity": 15,
   "toolCapacity": 60,
-  "toolDemandPerWorker": 2,
+  "toolDemandPerWorker": 1,
   "charcoalCapacity": 200,
   "inputCapacities": { "olive": 60 },
   "production": {
     "mode": "batch",
-    "workPointsPerUnit": 600,
-    "batchSize": 1,
-    "batchInputs": { "olive": 6, "charcoal": 20 }
+    "workPointsPerUnit": 6000,
+    "batchSize": 15,
+    "batchInputs": { "olive": 6, "charcoal": 10 }
   }
 }

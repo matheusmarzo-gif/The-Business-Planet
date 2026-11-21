@@ -3,6 +3,11 @@
 Primeira etapa do jogo de simulação medieval: mapa mundial compartilhado,
 navegável no navegador, relógio contínuo e presença online.
 
+O catálogo de construções inclui receitas industriais com custos de construção,
+capacidades de trabalhadores, estoques e insumos atualizados. Consumos
+fracionários de aço, ouro e prata usam probabilidade por lote. Porcelana e
+jóias também podem produzir uma unidade bônus probabilística.
+
 Para um guia passo a passo de execução no Docker, publicação do PC pelo
 Cloudflare Tunnel e migração segura dos dados, consulte
 [TUTORIAL_DOCKER_PC.txt](./TUTORIAL_DOCKER_PC.txt). O guia também explica a

@@ -18,6 +18,10 @@ venda são definidos nos arquivos de `config/construcoes/` e validados pelo
 gerador de configuração compartilhada. Na Ferramentaria, produção fracionária
 é proporcional aos Work Points disponíveis; o consumo fracionário de ferro e
 carvão é arredondado probabilisticamente para cada insumo.
+Receitas com consumo fracionário podem usar `batchInputRates`; insumos como
+aço, ouro e prata são consumidos por chance independente em cada lote parcial.
+Receitas com saída bônus podem definir uma unidade bônus probabilística por
+lote, usada pela Porcelana e pela Joalheria.
 
 O mapa base é determinístico: não é persistido tile a tile. Cidades, estradas
 e residências são sobrepostas ao terreno gerado. Atualmente, a Prefeitura

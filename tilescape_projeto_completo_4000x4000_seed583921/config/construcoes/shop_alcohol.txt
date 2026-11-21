@@ -9,11 +9,11 @@
   "height": 2,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 40, "stone": 40, "iron": 40, "steel": 40 },
-  "workPoints": 260000,
-  "maxWorkers": 12,
+  "cost": { "wood": 300, "stone": 150, "steel": 75 },
+  "workPoints": 250000,
+  "maxWorkers": 8,
   "stockProduct": "Álcool",
   "stockProductId": "alcohol",
-  "stockCapacity": 20,
-  "salesWorkPointsPerUnit": 420
+  "stockCapacity": 4,
+  "salesWorkPointsPerUnit": 325
 }

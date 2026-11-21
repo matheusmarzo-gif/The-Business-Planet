@@ -9,19 +9,19 @@
   "height": 5,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 2000, "stone": 1200, "iron": 800, "steel": 300 },
-  "workPoints": 10000000,
-  "maxWorkers": 40,
+  "cost": { "wood": 1800, "stone": 600 },
+  "workPoints": 1600000,
+  "maxWorkers": 20,
   "stockProduct": "Utilitários",
   "stockProductId": "utilities",
   "stockCapacity": 320,
   "toolCapacity": 80,
-  "toolDemandPerWorker": 2,
+  "toolDemandPerWorker": 0.5,
   "inputCapacities": { "steel": 40, "charcoal": 200 },
   "production": {
     "mode": "batch",
-    "workPointsPerUnit": 400,
-    "batchSize": 8,
-    "batchInputs": { "steel": 1, "charcoal": 5 }
+    "workPointsPerUnit": 2000,
+    "batchSize": 80,
+    "batchInputRates": { "steel": 0.25, "charcoal": 5 }
   }
 }

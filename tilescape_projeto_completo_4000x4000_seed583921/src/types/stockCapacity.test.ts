@@ -28,6 +28,7 @@ test('rejects invalid levels and prices construction labor at one city salary pe
     new Map([
       ['wood', 2],
       ['stone', 3],
+      ['iron', 4],
     ]),
     10,
   );
@@ -35,9 +36,10 @@ test('rejects invalid levels and prices construction labor at one city salary pe
     expectedCost,
     definition.cost.wood * 2 +
       definition.cost.stone * 3 +
+      definition.cost.iron! * 4 +
       (definition.workPoints / 100) * 10,
   );
-  assert.equal(getExpectedConstructionCost(definition, new Map([['wood', 2]]), 10), null);
+  assert.equal(getExpectedConstructionCost(definition, new Map([['wood', 2], ['stone', 3]]), 10), null);
 });
 
 test('accepts zero unit-cost estimates for construction materials', () => {
@@ -48,6 +50,7 @@ test('accepts zero unit-cost estimates for construction materials', () => {
       new Map([
         ['wood', 0],
         ['stone', 0],
+        ['iron', 0],
       ]),
       10,
     ),

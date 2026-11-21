@@ -9,20 +9,20 @@
   "height": 5,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 100, "stone": 50, "iron": 50, "steel": 50 },
-  "workPoints": 3000000,
-  "maxWorkers": 30,
+  "cost": { "wood": 65000, "stone": 13000, "iron": 6500, "steel": 18000 },
+  "workPoints": 45000000,
+  "maxWorkers": 360,
   "stockProduct": "Tabaco",
   "stockProductId": "tobacco",
-  "stockCapacity": 10,
+  "stockCapacity": 60,
   "toolCapacity": 60,
-  "toolDemandPerWorker": 2,
+  "toolDemandPerWorker": 0.33,
   "charcoalCapacity": 200,
   "inputCapacities": { "tobacco_leaf": 40 },
   "production": {
     "mode": "batch",
-    "workPointsPerUnit": 600,
-    "batchSize": 1,
-    "batchInputs": { "tobacco_leaf": 4, "charcoal": 20 }
+    "workPointsPerUnit": 18000,
+    "batchSize": 60,
+    "batchInputs": { "tobacco_leaf": 4, "charcoal": 15 }
   }
 }

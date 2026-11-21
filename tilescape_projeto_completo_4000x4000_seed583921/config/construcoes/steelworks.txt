@@ -9,17 +9,17 @@
   "height": 5,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 1000, "stone": 600, "iron": 400 },
-  "workPoints": 20000000,
-  "maxWorkers": 40,
+  "cost": { "wood": 2000, "stone": 1200, "iron": 800 },
+  "workPoints": 2000000,
+  "maxWorkers": 30,
   "stockProduct": "Aço",
   "stockProductId": "steel",
   "stockCapacity": 30,
   "inputCapacities": { "iron": 60, "charcoal": 300 },
   "production": {
     "mode": "batch",
-    "workPointsPerUnit": 400,
+    "workPointsPerUnit": 3000,
     "batchSize": 1,
-    "batchInputs": { "iron": 2, "charcoal": 10 }
+    "batchInputs": { "iron": 3, "charcoal": 6 }
   }
 }

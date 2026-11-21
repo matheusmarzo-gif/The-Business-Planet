@@ -9,20 +9,20 @@
   "height": 5,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 1000, "stone": 500, "iron": 500, "steel": 500 },
-  "workPoints": 21000000,
-  "maxWorkers": 60,
+  "cost": { "wood": 15000, "stone": 3000, "iron": 1500, "steel": 4000 },
+  "workPoints": 9500000,
+  "maxWorkers": 75,
   "stockProduct": "Tapete",
   "stockProductId": "carpet",
   "stockCapacity": 1000,
   "toolCapacity": 240,
-  "toolDemandPerWorker": 4,
+  "toolDemandPerWorker": 1,
   "charcoalCapacity": 400,
   "inputCapacities": { "wool": 100 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 300,
-    "batchSize": 10,
+    "batchSize": 1,
     "batchInputs": { "wool": 1, "charcoal": 4 }
   }
 }

@@ -18,8 +18,8 @@
     "maxWorkers":  40,
     "stockProduct":  "Sal",
     "stockProductId":  "salt",
-    "stockCapacity":  100,
-    "toolCapacity":  5,
+    "stockCapacity":  40,
+    "toolCapacity":  20,
     "toolDemandPerWorker":  0.5,
     "production":  {
                        "mode":  "chance",

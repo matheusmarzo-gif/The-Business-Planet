@@ -14,10 +14,10 @@
   "maxWorkers": 20,
   "stockProduct": "Utilitários",
   "stockProductId": "utilities",
-  "stockCapacity": 320,
-  "toolCapacity": 80,
+  "stockCapacity": 80,
+  "toolCapacity": 10,
   "toolDemandPerWorker": 0.5,
-  "inputCapacities": { "steel": 40, "charcoal": 200 },
+  "inputCapacities": { "steel": 1, "charcoal": 5 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 2000,

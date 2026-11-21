@@ -14,10 +14,10 @@
   "maxWorkers": 250,
   "stockProduct": "Jóias",
   "stockProductId": "jewelry",
-  "stockCapacity": 300,
+  "stockCapacity": 100,
   "toolCapacity": 70,
   "toolDemandPerWorker": 4.65,
-  "inputCapacities": { "gold": 5, "silver": 10 },
+  "inputCapacities": { "gold": 2, "silver": 3 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 100,

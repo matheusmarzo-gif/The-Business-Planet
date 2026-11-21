@@ -552,46 +552,47 @@ mais que o necessário.
 O **Moinho** fica na categoria Indústrias; a **Fábrica de Pães** e a
 **Fábrica de Queijo** ficam em Construções Artesanais. O Moinho (3 × 3, 30
 funcionários) custa 1.500 madeiras, 300 pedras, 200 ferros e 200 aços, exige
-1.500.000 Work Points e guarda até 100 farinhas. Seu dono escolhe no
+1.500.000 Work Points e guarda até 50 farinhas. Seu dono escolhe no
 painel lateral da construção concluída se o insumo será trigo, cevada ou milho;
-somente a matéria-prima escolhida é recebida do armazém ligado, até 20 unidades.
+somente a matéria-prima escolhida é recebida do armazém ligado, até 10 unidades.
 Trocar a seleção descarta o
 estoque restante da matéria-prima anterior. Cada unidade de grão e 300 Work
 Points produz 5 farinhas. A Fábrica de Pães (3 × 3, 60 funcionários) custa 4.500
-madeiras, 1.000 pedras, 500 ferros e 750 aços, exige 4.750.000 Work Points e guarda 30 farinhas e 300 pães;
+madeiras, 1.000 pedras, 500 ferros e 750 aços, exige 4.750.000 Work Points e guarda 60 farinhas e 60 pães;
 cada farinha e 100 Work Points produz 1 pão. Ela guarda até 60 Ferramentas e a
 demanda é 1 Ferramenta por funcionário/dia, com a penalidade por falta.
 A Fábrica de Queijo (3 × 3, 100 funcionários) custa 4.500 madeiras, 1.000
-pedras, 500 ferros e 750 aços, exige 3.750.000 Work Points e guarda 2.000 litros
-de leite, 133 unidades de sal e 100 queijos; 15 litros de leite, 1 unidade de sal
-e 665 Work Points produzem 1 queijo. Ela guarda até 200
+pedras, 500 ferros e 750 aços, exige 3.750.000 Work Points e guarda 225 litros
+de leite, 15 unidades de sal e 15 queijos; 15 litros de leite, 1 unidade de sal
+e 665 Work Points produzem 1 queijo. Ela guarda até 25
 Ferramentas e demanda 0,25 Ferramenta por funcionário/dia, com a penalidade
 por falta. Os três edifícios recebem seus insumos pelo armazém ligado e enviam a
 produção ao armazém. A **Fábrica de Chocolate** (4 × 4, 60 funcionários) custa
-4.500 madeiras, 1.000 pedras, 500 ferros e 750 aços, exige 7.750.000 Work Points e guarda 50 chocolates, 5
-cacaus, 130 litros de leite, 10 açúcares, 100 carvões e 200 Ferramentas. A cada
+4.500 madeiras, 1.000 pedras, 500 ferros e 750 aços, exige 7.750.000 Work Points e guarda 4 chocolates, 1
+cacau, 26 litros de leite, 2 açúcares, 20 carvões e 60 Ferramentas. A cada
 6.000 Work Points, 1 cacau, 20 carvões, 2 açúcares e 26 litros de leite produzem
 4 chocolates. A penalidade de ferramentas consome 1 Ferramenta por trabalhador
 por dia.
 
 As **Fazendas de Ovelha e de Algodão** ocupam 4 × 4, empregam até 10 pessoas,
 custam 60 madeiras/20 pedras e exigem 130.000 Work Points. A primeira guarda
-100 lãs; a segunda, 300 algodões. Ambas completam um ciclo em 12 meses e
+1.000 lãs; a segunda, 3.000 algodões. Ambas completam um ciclo em 12 meses e
 oferecem as mesmas opções de automatização de plantio e colheita das outras
-fazendas. A fazenda de ovelha produz até 100 lãs, com 500 Work Points diários e
+fazendas. A fazenda de ovelha produz até 1.000 lãs, com 500 Work Points diários e
 50 por unidade colhida; a eficiência de plantio é 20%, 100%, 80% e 100% por
-trimestre. A de algodão produz até 300 unidades, com 1.000 Work Points diários
-e 100 por unidade colhida; sua eficiência trimestral é 40%, 80%, 100% e 60%.
+trimestre. A de algodão produz até 3.000 unidades, com 1.000 Work Points diários
+e 50 por unidade colhida; sua eficiência trimestral é 40%, 80%, 100% e 60%.
 
 A **Cava de Areia** (4 × 4, 30 funcionários) é um recurso rural que custa
-60 madeiras/30 pedras, exige 240.000 Work Points, guarda 10 areias e produz
+60 madeiras/30 pedras, exige 240.000 Work Points, guarda 30 areias e produz
 1 unidade a cada 600 Work Points. A **Usina de Aço** (5 × 5, 40 funcionários)
 custa 1.000 madeiras, 600 pedras e 400 ferros, exige 20.000.000 Work Points,
-guarda 30 aços e recebe até 60 ferros e 300 carvões. Cada 400 Work Points,
+guarda 1 aço e recebe até 3 ferros e 14 carvões. Cada 400 Work Points,
 2 ferros e 10 carvões produzem 1 aço.
 
-As novas indústrias ocupam 5 × 5, empregam até 40 pessoas e exigem Ferramentas
-(estoque máximo 80; demanda de 2 por funcionário/dia, com penalidade por falta).
+As novas indústrias ocupam 5 × 5, empregam até 40 pessoas e recebem insumos e
+ferramentas do armazém ligado. O estoque máximo de Ferramentas é 10 na Fiação,
+40 na Têxtil, 20 na Fábrica de Móveis, 10 na de Utilitários e 10 na de Vidros.
 A **Fábrica de Fiação** custa 800 madeiras, 500 pedras, 300 ferros e 100 aços,
 exige 7.000.000 Work Points e, a cada 300 Work Points, 1 algodão, 1 lã e 4
 carvões produzem 2 linhas. A **Fábrica Têxtil** custa 1.000 madeiras, 600
@@ -602,21 +603,27 @@ produzem 1 móvel. A **Fábrica de Utilitários** custa 2.000 madeiras, 1.200
 pedras, 800 ferros e 300 aços; cada 400 Work Points, 1 aço e 5 carvões
 produzem 8 utilitários. A **Fábrica de Vidros** tem o mesmo custo e Work Points;
 cada 400 Work Points, 10 areias e 20 carvões produzem 8 vidros. As fábricas
-recebem insumos e ferramentas do armazém ligado e enviam a produção para ele.
+enviam a produção ao armazém ligado. Os estoques máximos de produto são 8
+linhas, 12 roupas, 10 móveis, 80 utilitários e 4 vidros. Os limites de insumos
+são 2 algodões, 2 lãs e 4 carvões na Fiação; 2 linhas e 4 carvões na Têxtil;
+2 madeiras na de Móveis; 1 aço e 5 carvões na de Utilitários; 5 areias e 4
+carvões na de Vidros.
 
 As novas fábricas industriais ocupam 5 × 5. As de tintura, tapetes e porcelana
 empregam 60 pessoas, custam 1.000 madeiras, 500 pedras, 500 ferros e 500 aços e
 exigem 21.000.000 Work Points. Cada lote usa 300 Work Points: 10 carvões
 produzem 10 tinturas; 1 lã e 4 carvões produzem 10 tapetes; 3 areias e 4
-carvões produzem 10 porcelanas. Cada uma guarda até 1.000 produtos e 240
-Ferramentas; a penalidade de ferramentas consome 4 por funcionário/dia. As
+carvões produzem 10 porcelanas. Os estoques máximos são 170 tinturas, 25 tapetes
+e 25 porcelanas, e os limites de Ferramentas são 50, 75 e 60, respectivamente.
+Os limites de carvão são 126, 100 e 80; os de lã e areia são 25 e 60.
+A penalidade de ferramentas consome 4 por funcionário/dia. As
 fábricas de azeite, tabaco, álcool e vinho empregam 30 pessoas, custam 100
 madeiras, 50 pedras, 50 ferros e 50 aços e exigem 3.000.000 Work Points. Cada
 lote usa 600 Work Points e 20 carvões: 6 azeitonas produzem azeite, 4 fumos
-produzem tabaco, 80 canas produzem álcool e 5 uvas produzem vinho. Cada uma
-guarda até 10 unidades do produto, 60 Ferramentas e 200 carvões; também exige
-2 Ferramentas por funcionário/dia. Seus outros estoques máximos de insumos são
-60 azeitonas, 40 fumos, 800 canas ou 50 uvas, conforme a fábrica.
+produzem tabaco, 80 canas produzem álcool e 5 uvas produzem vinho. Os estoques
+máximos dos produtos são 60 azeites, 120 tabacos, 40 álcoois e 90 vinhos; os de
+Ferramentas são 240, 120, 240 e 180, e os de carvão são 40, 30, 48 e 30,
+respectivamente. Os limites de azeitonas, fumo, cana e uva são 24, 8, 320 e 15.
 
 ### Comércio
 
@@ -697,7 +704,7 @@ alocados à construção; sem trabalhadores, exibe “—”.
 ### Pesqueiro e Peixaria
 
 Na categoria **Construções Artesanais**, o **Pesqueiro** (2 × 2 tiles, até 4
-funcionários, estoque máximo de 300 peixes e 10 Ferramentas) custa 50 madeiras e
+funcionários, estoque máximo de 6 peixes e 2 Ferramentas) custa 50 madeiras e
 20 pedras e exige 40.000 Work Points. Deve ficar em área urbana, ao lado de uma
 estrada e com pelo menos um tile sobre a água (o resto pode ser terra). Produz
 diariamente (00:00) 1 peixe a cada 100 Work Points. Consome Ferramentas: 0,5 por
@@ -821,9 +828,9 @@ Na categoria **Recursos** (área rural, ao lado de estrada):
 | Madeireira | 2 × 2 | 10 | 30 madeiras, 5 Ferramentas | 110 madeira, 40 pedra | 70.000 | 1 madeira / 1000 WP |
 | Pedreira | 2 × 2 | 10 | 10 pedras, 5 Ferramentas | 60 madeira, 20 pedra | 120.000 | 1 pedra / 3000 WP |
 | Mina de Ferro | 3 × 3 | 10 | 5 ferro, 5 Ferramentas | 60 madeira, 20 pedra | 120.000 | 1 ferro / 3000 WP |
-| Mina de Ouro | 3 × 3 | 90 | 10 ouros, 180 Ferramentas, 40 carvões | 300 madeira, 300 pedra, 100 aço | 2.900.000 | 1 ouro / 9000 WP + 40 carvões |
-| Mina de Prata | 3 × 3 | 90 | 20 pratas, 180 Ferramentas, 40 carvões | 300 madeira, 300 pedra, 100 aço | 2.900.000 | 2 pratas / 9000 WP + 40 carvões |
-| Coleta de Sal | 2 × 2 | 40 | 100 sal, 5 Ferramentas | 1.500 madeira, 300 pedra, 200 ferro | 500.000 | 1 sal / 100 WP efetivos; fração é chance diária |
+| Mina de Ouro | 3 × 3 | 90 | 1 ouro, 180 Ferramentas, 40 carvões | 300 madeira, 300 pedra, 100 aço | 2.900.000 | 1 ouro / 9000 WP + 40 carvões |
+| Mina de Prata | 3 × 3 | 90 | 2 pratas, 180 Ferramentas, 40 carvões | 300 madeira, 300 pedra, 100 aço | 2.900.000 | 2 pratas / 9000 WP + 40 carvões |
+| Coleta de Sal | 2 × 2 | 40 | 40 sal, 20 Ferramentas | 1.500 madeira, 300 pedra, 200 ferro | 500.000 | 1 sal / 100 WP efetivos; fração é chance diária |
 
 Abaixo do mínimo de WP, a fração vira probabilidade de produzir 1 unidade. A
 demanda de Ferramentas é 0,5 por funcionário/dia (0,15 na Mina) com a mesma
@@ -834,7 +841,7 @@ aceita. As minas de ouro e prata consomem 2 Ferramentas por funcionário/dia; o
 limite de 40 carvões em cada mina permite manter ao menos uma receita completa.
 
 Na categoria **Artesanais** (área urbana, ao lado de estrada), a **Ferramentaria**
-(2 × 2, 5 funcionários, estoque máx. 100 Ferramentas, 30 carvões e 5 ferro)
+(2 × 2, 5 funcionários, estoque máx. 50 Ferramentas, 15 carvões e 3 ferro)
 custa 300 madeiras e 120 pedras e exige 140.000 Work Points. Cada 1.000 WP,
 1 ferro e 5 carvões produzem 100 Ferramentas. Com menos de 1.000 WP, a produção
 é proporcional (por exemplo, 500 WP produzem 50 Ferramentas); o consumo
@@ -843,7 +850,7 @@ independente. Carvão e ferro chegam pelo armazém ligado.
 
 Na mesma categoria **Artesanais**, a **Casa de Engenho** (3 × 3, até 30
 funcionários) custa 1.000 madeiras, 600 pedras e 400 ferros e exige 1.000.000
-Work Points. Armazena até 200 unidades de açúcar, 400 de cana, 30 de carvão e 5
+Work Points. Armazena até 20 unidades de açúcar, 30 de cana, 10 de carvão e 3
 Ferramentas. Cada lote de 600 Work Points efetivos, 2 carvões e 6 canas produz
 4 açúcares. A demanda de Ferramentas é 0,05 por funcionário/dia, com a mesma
 penalidade de eficiência do
@@ -851,7 +858,7 @@ Pesqueiro. Cana, carvão e Ferramentas são recebidos pelo armazém ligado; a ca
 armazenada na construção também está sujeita à validade de 3 dias.
 
 A **Carvoaria** (3 × 3, até 4 funcionários) custa 300 madeiras e 120 pedras e
-exige 90.000 Work Points. Armazena até 100 carvões, 40 Ferramentas e 30 madeiras
+exige 90.000 Work Points. Armazena até 10 carvões, 2 Ferramentas e 30 madeiras
 (limite de madeira adotado como nas outras oficinas). Cada 200 Work Points
 efetivos e 1 madeira produzem 5 carvões. Ferramentas e madeira são recebidas
 pelo armazém ligado; a demanda de Ferramentas é 0,5 por funcionário/dia e
@@ -860,14 +867,14 @@ validade infinita.
 
 As novas oficinas artesanais ocupam 2 × 2 tiles e empregam até 7 pessoas. A
 **Oficina do Artista** custa 200 madeiras e 100 de cada um dos demais materiais
-(pedra, ferro e aço), exige 4.200.000 Work Points e guarda 20 artes, 10 tinturas,
-5 madeiras e 70 Ferramentas; cada 1.000 Work Points, 2 tinturas e 1 madeira
+(pedra, ferro e aço), exige 4.200.000 Work Points e guarda 100 artes, 50 tinturas,
+25 madeiras e 85 Ferramentas; cada 1.000 Work Points, 2 tinturas e 1 madeira
 produzem 4 artes. A **Oficina do Joalheiro** custa 1.000 madeiras, 500 pedras,
-500 ferros e 500 aços, exige 21.000.000 Work Points e guarda 300 jóias, 5 ouros,
-10 pratas e 70 Ferramentas; cada 1.000 Work Points, 1 ouro e 2 pratas produzem
+500 ferros e 500 aços, exige 21.000.000 Work Points e guarda 100 jóias, 2 ouros,
+3 pratas e 70 Ferramentas; cada 1.000 Work Points, 1 ouro e 2 pratas produzem
 60 jóias. A **Oficina do Artesão** custa 200 madeiras e 100 de cada pedra, ferro
-e aço, exige 4.200.000 Work Points e guarda 10 raridades, 5 utilitários, 20
-carvões e 70 Ferramentas; cada 1.000 Work Points, 1 utilitário e 4 carvões
+e aço, exige 4.200.000 Work Points e guarda 100 raridades, 50 utilitários, 200
+carvões e 50 Ferramentas; cada 1.000 Work Points, 1 utilitário e 4 carvões
 produzem 2 raridades. As três oficinas exigem 10 Ferramentas por funcionário/dia.
 
 ### Fazendas
@@ -914,10 +921,10 @@ Points indicados e a produção é limitada ao estoque livre. A carne vermelha t
 validade de 30 dias. A Fazenda de Cana e a Fazenda de Especiarias ocupam 3 × 3
 e empregam até 10 e 50 funcionários, respectivamente. Cana custa 60 madeiras e
 20 pedras, com 55.000 Work Points; especiarias custa 700 madeiras e 200 pedras,
-com 800.000 Work Points. Seus estoques máximos são 2.000 canas e 400
+com 800.000 Work Points. Seus estoques máximos são 2.000 canas e 3.200
 especiarias; o excedente da colheita aguarda no campo até haver espaço livre.
 A Fazenda de Vegetais também ocupa 3 × 3, emprega até 50 funcionários, custa
-600 madeiras e 200 pedras, exige 400.000 Work Points e guarda até 100 vegetais.
+600 madeiras e 200 pedras, exige 400.000 Work Points e guarda até 15.000 vegetais.
 A Fazenda de Frutas ocupa 4 × 4, custa 1.000 madeiras, 600 pedras e 400 ferros,
 e exige 1.000.000 Work Points; a Fazenda de Cacau também ocupa 4 × 4, custa
 700 madeiras e 200 pedras e exige 700.000 Work Points.

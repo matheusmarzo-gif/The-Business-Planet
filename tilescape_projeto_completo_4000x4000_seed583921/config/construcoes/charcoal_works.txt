@@ -17,8 +17,8 @@
     "maxWorkers":  4,
     "stockProduct":  "Carvão",
     "stockProductId":  "charcoal",
-    "stockCapacity":  100,
-    "toolCapacity":  40,
+    "stockCapacity":  10,
+    "toolCapacity":  2,
     "toolDemandPerWorker":  0.5,
     "woodCapacity":  30,
     "production":  {

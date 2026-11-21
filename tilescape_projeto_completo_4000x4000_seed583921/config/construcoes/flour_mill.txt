@@ -14,8 +14,8 @@
   "maxWorkers": 30,
   "stockProduct": "Farinha",
   "stockProductId": "flour",
-  "stockCapacity": 100,
-  "inputCapacities": { "wheat": 20, "barley": 20, "corn": 20 },
+  "stockCapacity": 50,
+  "inputCapacities": { "wheat": 10, "barley": 10, "corn": 10 },
   "selectableInputProductIds": ["wheat", "barley", "corn"],
   "defaultInputProductId": "wheat",
   "production": {

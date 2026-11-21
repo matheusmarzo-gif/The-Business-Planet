@@ -1948,7 +1948,7 @@ describe('fazenda leiteira e demanda configurável', () => {
   it('defines the vegetable farm crop cycle and construction limits', () => {
     const farm = RESIDENCES.farm_vegetables;
     assert.deepEqual([farm.width, farm.height, farm.maxWorkers, farm.stockCapacity, farm.workPoints], [
-      3, 3, 50, 100, 400000,
+      3, 3, 50, 15000, 400000,
     ]);
     assert.deepEqual(farm.cost, { wood: 600, stone: 200 });
     assert.equal(farm.stockProductId, 'vegetables');
@@ -3021,8 +3021,8 @@ describe('fishery', () => {
         'not_adjacent_to_road',
       );
       assert.equal(RESIDENCES.salt_gatherer.production?.workPointsPerUnit, 100);
-      assert.equal(RESIDENCES.salt_gatherer.stockCapacity, 100);
-      assert.equal(RESIDENCES.salt_gatherer.toolCapacity, 5);
+      assert.equal(RESIDENCES.salt_gatherer.stockCapacity, 40);
+      assert.equal(RESIDENCES.salt_gatherer.toolCapacity, 20);
       assert.deepEqual(
         [
           RESIDENCES.salt_gatherer.width,
@@ -3090,11 +3090,11 @@ describe('fishery', () => {
   it('supplies tools and collects fish through a linked warehouse', () => {
     const transfers = planTransfers(
       { stock: new Map([['tools', 20]]), minimumStock: new Map(), maximumStock: new Map([['fish', 100]]), capacityM3: 50, workPoints: 1e6 },
-      [{ buildingId: 'f', type: 'fishery', stock: 30, toolStock: 4 }],
+      [{ buildingId: 'f', type: 'fishery', stock: 6, toolStock: 0 }],
     );
     assert.deepEqual(transfers, [
-      { buildingId: 'f', productId: 'fish', quantity: 30, direction: 'out' },
-      { buildingId: 'f', productId: 'tools', quantity: 6, direction: 'in' },
+      { buildingId: 'f', productId: 'fish', quantity: 6, direction: 'out' },
+      { buildingId: 'f', productId: 'tools', quantity: 2, direction: 'in' },
     ]);
   });
 
@@ -3175,7 +3175,7 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.farm_spices.stockCapacity,
         RESIDENCES.farm_spices.workPoints,
       ],
-      [3, 10, 2000, 55000, 3, 50, 400, 800000],
+      [3, 10, 2000, 55000, 3, 50, 3200, 800000],
     );
     assert.deepEqual(RESIDENCES.farm_cane.cost, { wood: 60, stone: 20 });
     assert.deepEqual(RESIDENCES.farm_spices.cost, { wood: 700, stone: 200 });
@@ -3184,8 +3184,9 @@ describe('recursos e ferramentaria', () => {
     assert.equal(RESIDENCES.salt_gatherer.maxWorkers, 40);
     assert.equal(RESIDENCES.salt_gatherer.toolDemandPerWorker, 0.5);
     assert.equal(RESIDENCES.toolmaker.woodCapacity, undefined);
-    assert.equal(RESIDENCES.toolmaker.charcoalCapacity, 30);
-    assert.equal(RESIDENCES.sugar_mill.charcoalCapacity, 30);
+    assert.equal(RESIDENCES.toolmaker.charcoalCapacity, 15);
+    assert.equal(RESIDENCES.toolmaker.ironCapacity, 3);
+    assert.equal(RESIDENCES.sugar_mill.charcoalCapacity, 10);
     assert.equal(RESIDENCES.sugar_mill.maxWorkers, 30);
     assert.equal(RESIDENCES.sugar_mill.toolDemandPerWorker, 0.05);
     assert.deepEqual(
@@ -3198,7 +3199,7 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.charcoal_works.woodCapacity,
         RESIDENCES.charcoal_works.workPoints,
       ],
-      [3, 3, 4, 100, 40, 30, 90000],
+      [3, 3, 4, 10, 2, 30, 90000],
     );
     assert.deepEqual(RESIDENCES.charcoal_works.cost, { wood: 300, stone: 120 });
     assert.equal(RESIDENCES.charcoal_works.toolDemandPerWorker, 0.5);
@@ -3220,7 +3221,7 @@ describe('recursos e ferramentaria', () => {
     );
     assert.deepEqual(
       transfers.map((t) => [t.productId, t.quantity, t.direction]),
-      [['iron', 3, 'in'], ['charcoal', 20, 'in']],
+      [['iron', 2, 'in'], ['charcoal', 5, 'in']],
     );
   });
 
@@ -3231,8 +3232,8 @@ describe('recursos e ferramentaria', () => {
           ['wheat', 20],
           ['barley', 20],
           ['flour', 30],
-          ['milk', 2000],
-          ['salt', 133],
+          ['milk', 225],
+          ['salt', 15],
         ]),
         minimumStock: new Map(),
         maximumStock: new Map(),
@@ -3247,15 +3248,15 @@ describe('recursos e ferramentaria', () => {
           selectedInputProductId: 'barley',
           inputStocks: {},
         },
-        { buildingId: 'bread-factory', type: 'bread_factory', stock: 0, inputStocks: { flour: 29 } },
-        { buildingId: 'cheese-factory', type: 'cheese_factory', stock: 0, inputStocks: { milk: 1990, salt: 130 } },
+        { buildingId: 'bread-factory', type: 'bread_factory', stock: 0, inputStocks: { flour: 30 } },
+        { buildingId: 'cheese-factory', type: 'cheese_factory', stock: 0, inputStocks: { milk: 200, salt: 12 } },
       ],
     );
     assert.deepEqual(transfers, [
-      { buildingId: 'bread-factory', productId: 'flour', quantity: 1, direction: 'in' },
-      { buildingId: 'cheese-factory', productId: 'milk', quantity: 10, direction: 'in' },
+      { buildingId: 'bread-factory', productId: 'flour', quantity: 30, direction: 'in' },
+      { buildingId: 'cheese-factory', productId: 'milk', quantity: 25, direction: 'in' },
       { buildingId: 'cheese-factory', productId: 'salt', quantity: 3, direction: 'in' },
-      { buildingId: 'mill', productId: 'barley', quantity: 20, direction: 'in' },
+      { buildingId: 'mill', productId: 'barley', quantity: 10, direction: 'in' },
     ]);
   });
 
@@ -3273,9 +3274,9 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.flour_mill.stockCapacity,
         RESIDENCES.flour_mill.workPoints,
       ],
-      [3, 3, 30, 100, 1500000],
+      [3, 3, 30, 50, 1500000],
     );
-    assert.deepEqual(RESIDENCES.flour_mill.inputCapacities, { wheat: 20, barley: 20, corn: 20 });
+    assert.deepEqual(RESIDENCES.flour_mill.inputCapacities, { wheat: 10, barley: 10, corn: 10 });
     assert.equal(RESIDENCES.flour_mill.defaultInputProductId, 'wheat');
     assert.equal(parseInputProductSelection('flour_mill', { productId: 'corn' }), 'corn');
     assert.equal(parseInputProductSelection('flour_mill', { productId: 'rice' }), null);
@@ -3296,7 +3297,7 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.cheese_factory.toolCapacity,
         RESIDENCES.cheese_factory.toolDemandPerWorker,
       ],
-      [300, 60, 3000000, 30, 60, 1, 100, 100, 2000000, 2000, 133, 200, 0.25],
+      [60, 60, 3000000, 60, 60, 1, 15, 100, 2000000, 225, 15, 25, 0.25],
     );
     assert.equal(RESIDENCES.bread_factory.kind, 'workshop');
     assert.equal(RESIDENCES.cheese_factory.kind, 'workshop');
@@ -3337,7 +3338,7 @@ describe('recursos e ferramentaria', () => {
     assert.equal(canLinkToWarehouse('bread_factory'), true);
     assert.deepEqual(
       [RESIDENCES.farm_fruit.stockCapacity, RESIDENCES.farm_cocoa.stockCapacity],
-      [1000, 400],
+      [8000, 400],
     );
     assert.deepEqual(
       [FARM_CROP_RULES.farm_fruit, FARM_CROP_RULES.farm_cocoa].map((rule) => [
@@ -3445,16 +3446,16 @@ describe('recursos e ferramentaria', () => {
     const recipes = [
       ['gold_mine', 9000, 40, {}, 1, 90, 180, 2],
       ['silver_mine', 9000, 40, {}, 2, 90, 180, 2],
-      ['tincture_factory', 294, 8, {}, 10, 50, 240, 1],
-      ['carpet_factory', 300, 4, { wool: 1 }, 1, 75, 240, 1],
-      ['porcelain_factory', 300, 4, { sand: 3 }, 1, 60, 240, 1],
-      ['olive_oil_factory', 6000, 10, { olive: 6 }, 15, 240, 60, 1],
-      ['tobacco_factory', 18000, 15, { tobacco_leaf: 4 }, 60, 360, 60, 0.33],
-      ['alcohol_distillery', 6000, 12, { sugarcane: 80 }, 10, 240, 60, 1],
-      ['wine_factory', 6000, 10, { grape: 5 }, 30, 180, 60, 1],
-      ['artist_workshop', 1000, 0, { tincture: 2, wood: 1 }, 4, 250, 70, 0.3],
+      ['tincture_factory', 294, 8, {}, 10, 50, 50, 1],
+      ['carpet_factory', 300, 4, { wool: 1 }, 1, 75, 75, 1],
+      ['porcelain_factory', 300, 4, { sand: 3 }, 1, 60, 60, 1],
+      ['olive_oil_factory', 6000, 10, { olive: 6 }, 15, 240, 240, 1],
+      ['tobacco_factory', 18000, 15, { tobacco_leaf: 4 }, 60, 360, 120, 0.33],
+      ['alcohol_distillery', 6000, 12, { sugarcane: 80 }, 10, 240, 240, 1],
+      ['wine_factory', 6000, 10, { grape: 5 }, 30, 180, 180, 1],
+      ['artist_workshop', 1000, 0, { tincture: 2, wood: 1 }, 4, 250, 85, 0.3],
       ['jeweler_workshop', 100, 0, { gold: 1, silver: 1 }, 6, 250, 70, 4.65],
-      ['craftsman_workshop', 500, 8, { utilities: 2 }, 1, 500, 70, 0.2],
+      ['craftsman_workshop', 500, 8, { utilities: 2 }, 1, 500, 50, 0.2],
     ] as const;
     for (const [type, workPoints, charcoal, inputs, expectedUnits, workers, tools, toolDemand] of recipes) {
       const definition = RESIDENCES[type];
@@ -3477,6 +3478,131 @@ describe('recursos e ferramentaria', () => {
       assert.equal(definition.toolCapacity, tools, type);
       assert.equal(definition.toolDemandPerWorker, toolDemand, type);
     }
+  });
+
+  it('uses the requested maximum stocks for farms, resources, and factories', () => {
+    const definitions = [
+      RESIDENCES.fishery,
+      RESIDENCES.toolmaker,
+      RESIDENCES.charcoal_works,
+      RESIDENCES.sugar_mill,
+      RESIDENCES.salt_gatherer,
+      RESIDENCES.farm_vegetables,
+      RESIDENCES.farm_spices,
+      RESIDENCES.farm_sheep,
+      RESIDENCES.farm_cotton,
+      RESIDENCES.flour_mill,
+      RESIDENCES.bread_factory,
+      RESIDENCES.cheese_factory,
+      RESIDENCES.chocolate_factory,
+      RESIDENCES.sand_pit,
+      RESIDENCES.steelworks,
+      RESIDENCES.thread_factory,
+      RESIDENCES.textile_factory,
+      RESIDENCES.furniture_factory,
+      RESIDENCES.utilities_factory,
+      RESIDENCES.glass_factory,
+      RESIDENCES.tincture_factory,
+      RESIDENCES.carpet_factory,
+      RESIDENCES.porcelain_factory,
+      RESIDENCES.artist_workshop,
+      RESIDENCES.jeweler_workshop,
+      RESIDENCES.craftsman_workshop,
+      RESIDENCES.gold_mine,
+      RESIDENCES.silver_mine,
+      RESIDENCES.olive_oil_factory,
+      RESIDENCES.tobacco_factory,
+      RESIDENCES.alcohol_distillery,
+      RESIDENCES.wine_factory,
+    ];
+    assert.deepEqual(
+      definitions.map((definition) => [
+        definition.type,
+        definition.stockCapacity,
+        definition.toolCapacity,
+        definition.charcoalCapacity,
+        definition.ironCapacity,
+        definition.sugarcaneCapacity,
+      ]),
+      [
+        ['fishery', 6, 2, undefined, undefined, undefined],
+        ['toolmaker', 50, undefined, 15, 3, undefined],
+        ['charcoal_works', 10, 2, undefined, undefined, undefined],
+        ['sugar_mill', 20, 3, 10, undefined, 30],
+        ['salt_gatherer', 40, 20, undefined, undefined, undefined],
+        ['farm_vegetables', 15000, undefined, undefined, undefined, undefined],
+        ['farm_spices', 3200, undefined, undefined, undefined, undefined],
+        ['farm_sheep', 1000, undefined, undefined, undefined, undefined],
+        ['farm_cotton', 3000, undefined, undefined, undefined, undefined],
+        ['flour_mill', 50, undefined, undefined, undefined, undefined],
+        ['bread_factory', 60, 60, undefined, undefined, undefined],
+        ['cheese_factory', 15, 25, undefined, undefined, undefined],
+        ['chocolate_factory', 4, 60, 20, undefined, undefined],
+        ['sand_pit', 30, undefined, undefined, undefined, undefined],
+        ['steelworks', 1, undefined, undefined, undefined, undefined],
+        ['thread_factory', 8, 10, undefined, undefined, undefined],
+        ['textile_factory', 12, 40, undefined, undefined, undefined],
+        ['furniture_factory', 10, 20, undefined, undefined, undefined],
+        ['utilities_factory', 80, 10, undefined, undefined, undefined],
+        ['glass_factory', 4, 10, undefined, undefined, undefined],
+        ['tincture_factory', 170, 50, 126, undefined, undefined],
+        ['carpet_factory', 25, 75, 100, undefined, undefined],
+        ['porcelain_factory', 25, 60, 80, undefined, undefined],
+        ['artist_workshop', 100, 85, undefined, undefined, undefined],
+        ['jeweler_workshop', 100, 70, undefined, undefined, undefined],
+        ['craftsman_workshop', 100, 50, 200, undefined, undefined],
+        ['gold_mine', 1, 180, 40, undefined, undefined],
+        ['silver_mine', 2, 180, 40, undefined, undefined],
+        ['olive_oil_factory', 60, 240, 40, undefined, undefined],
+        ['tobacco_factory', 120, 120, 30, undefined, undefined],
+        ['alcohol_distillery', 40, 240, 48, undefined, undefined],
+        ['wine_factory', 90, 180, 30, undefined, undefined],
+      ],
+    );
+    assert.deepEqual(
+      [
+        RESIDENCES.flour_mill.inputCapacities,
+        RESIDENCES.bread_factory.inputCapacities,
+        RESIDENCES.cheese_factory.inputCapacities,
+        RESIDENCES.chocolate_factory.inputCapacities,
+        RESIDENCES.steelworks.inputCapacities,
+        RESIDENCES.thread_factory.inputCapacities,
+        RESIDENCES.textile_factory.inputCapacities,
+        RESIDENCES.furniture_factory.inputCapacities,
+        RESIDENCES.utilities_factory.inputCapacities,
+        RESIDENCES.glass_factory.inputCapacities,
+        RESIDENCES.carpet_factory.inputCapacities,
+        RESIDENCES.porcelain_factory.inputCapacities,
+        RESIDENCES.artist_workshop.inputCapacities,
+        RESIDENCES.jeweler_workshop.inputCapacities,
+        RESIDENCES.craftsman_workshop.inputCapacities,
+        RESIDENCES.olive_oil_factory.inputCapacities,
+        RESIDENCES.tobacco_factory.inputCapacities,
+        RESIDENCES.alcohol_distillery.inputCapacities,
+        RESIDENCES.wine_factory.inputCapacities,
+      ],
+      [
+        { wheat: 10, barley: 10, corn: 10 },
+        { flour: 60 },
+        { milk: 225, salt: 15 },
+        { cocoa: 1, milk: 26, sugar: 2 },
+        { iron: 3, charcoal: 14 },
+        { cotton: 2, wool: 2, charcoal: 4 },
+        { thread: 2, charcoal: 4 },
+        { wood: 2 },
+        { steel: 1, charcoal: 5 },
+        { sand: 5, charcoal: 4 },
+        { wool: 25 },
+        { sand: 60 },
+        { tincture: 50, wood: 25 },
+        { gold: 2, silver: 3 },
+        { utilities: 50 },
+        { olive: 24 },
+        { tobacco_leaf: 8 },
+        { sugarcane: 320 },
+        { grape: 15 },
+      ],
+    );
   });
 
   it('routes furniture factory wood consumption to generic input stock only', () => {
@@ -3535,7 +3661,7 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.sugar_mill.toolCapacity,
         RESIDENCES.sugar_mill.workPoints,
       ],
-      [3, 3, 30, 200, 400, 5, 1000000],
+      [3, 3, 30, 20, 30, 3, 1000000],
     );
     assert.equal(
       planProduction(rule, { ...input, workPoints: 600, penalty: 50 }).units,
@@ -3555,8 +3681,8 @@ describe('recursos e ferramentaria', () => {
       [{ buildingId: 'sugar-mill', type: 'sugar_mill', stock: 0, sugarcaneStock: 0, charcoalStock: 0 }],
     );
     assert.deepEqual(transfers, [
-      { buildingId: 'sugar-mill', productId: 'charcoal', quantity: 30, direction: 'in' },
-      { buildingId: 'sugar-mill', productId: 'sugarcane', quantity: 400, direction: 'in' },
+      { buildingId: 'sugar-mill', productId: 'charcoal', quantity: 10, direction: 'in' },
+      { buildingId: 'sugar-mill', productId: 'sugarcane', quantity: 30, direction: 'in' },
     ]);
   });
 
@@ -3595,7 +3721,7 @@ describe('recursos e ferramentaria', () => {
     );
     assert.deepEqual(
       transfers.map(({ productId, quantity, direction }) => [productId, quantity, direction]),
-      [['tools', 10, 'in'], ['wood', 30, 'in']],
+      [['tools', 2, 'in'], ['wood', 30, 'in']],
     );
   });
 

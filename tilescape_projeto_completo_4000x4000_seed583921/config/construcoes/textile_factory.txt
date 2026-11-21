@@ -14,10 +14,10 @@
   "maxWorkers": 20,
   "stockProduct": "Roupa",
   "stockProductId": "clothing",
-  "stockCapacity": 80,
-  "toolCapacity": 80,
+  "stockCapacity": 12,
+  "toolCapacity": 40,
   "toolDemandPerWorker": 2,
-  "inputCapacities": { "thread": 40, "charcoal": 80 },
+  "inputCapacities": { "thread": 2, "charcoal": 4 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 1000,

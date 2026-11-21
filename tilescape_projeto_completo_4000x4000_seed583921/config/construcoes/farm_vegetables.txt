@@ -17,7 +17,7 @@
     "maxWorkers":  50,
     "stockProduct":  "Vegetais",
     "stockProductId":  "vegetables",
-    "stockCapacity":  100,
+    "stockCapacity":  15000,
     "cropRule":  {
                      "growthMonths":  2,
                      "dailyWorkPoints":  4500,

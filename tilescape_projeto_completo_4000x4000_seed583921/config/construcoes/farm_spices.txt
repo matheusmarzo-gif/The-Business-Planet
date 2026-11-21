@@ -17,7 +17,7 @@
     "maxWorkers":  50,
     "stockProduct":  "Especiarias",
     "stockProductId":  "spices",
-    "stockCapacity":  400,
+    "stockCapacity":  3200,
     "cropRule":  {
                      "growthMonths":  6,
                      "dailyWorkPoints":  4000,

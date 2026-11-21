@@ -14,10 +14,10 @@
   "maxWorkers": 50,
   "stockProduct": "Tintura",
   "stockProductId": "tincture",
-  "stockCapacity": 1000,
-  "toolCapacity": 240,
+  "stockCapacity": 170,
+  "toolCapacity": 50,
   "toolDemandPerWorker": 1,
-  "charcoalCapacity": 1000,
+  "charcoalCapacity": 126,
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 294,

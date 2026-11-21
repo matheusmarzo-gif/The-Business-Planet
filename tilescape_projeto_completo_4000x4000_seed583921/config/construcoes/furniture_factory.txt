@@ -14,10 +14,10 @@
   "maxWorkers": 10,
   "stockProduct": "Móveis",
   "stockProductId": "furniture",
-  "stockCapacity": 80,
-  "toolCapacity": 80,
+  "stockCapacity": 10,
+  "toolCapacity": 20,
   "toolDemandPerWorker": 2,
-  "inputCapacities": { "wood": 40 },
+  "inputCapacities": { "wood": 2 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 500,

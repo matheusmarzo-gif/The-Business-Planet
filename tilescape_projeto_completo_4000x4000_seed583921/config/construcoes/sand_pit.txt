@@ -14,7 +14,7 @@
   "maxWorkers": 30,
   "stockProduct": "Areia",
   "stockProductId": "sand",
-  "stockCapacity": 10,
+  "stockCapacity": 30,
   "production": {
     "mode": "accumulate",
     "workPointsPerUnit": 100

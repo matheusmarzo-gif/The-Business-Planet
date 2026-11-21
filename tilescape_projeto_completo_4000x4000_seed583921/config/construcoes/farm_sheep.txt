@@ -14,7 +14,7 @@
   "maxWorkers": 10,
   "stockProduct": "Lã",
   "stockProductId": "wool",
-  "stockCapacity": 100,
+  "stockCapacity": 1000,
   "cropRule": {
     "growthMonths": 12,
     "dailyWorkPoints": 500,

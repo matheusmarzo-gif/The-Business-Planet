@@ -14,7 +14,7 @@
   "maxWorkers": 90,
   "stockProduct": "Ouro",
   "stockProductId": "gold",
-  "stockCapacity": 10,
+  "stockCapacity": 1,
   "toolCapacity": 180,
   "toolDemandPerWorker": 2,
   "charcoalCapacity": 40,

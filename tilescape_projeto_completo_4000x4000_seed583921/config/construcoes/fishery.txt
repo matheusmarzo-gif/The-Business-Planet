@@ -17,8 +17,8 @@
     "maxWorkers":  4,
     "stockProduct":  "Peixe",
     "stockProductId":  "fish",
-    "stockCapacity":  300,
-    "toolCapacity":  10,
+    "stockCapacity":  6,
+    "toolCapacity":  2,
     "toolDemandPerWorker":  0.5,
     "production":  {
                        "mode":  "accumulate",

@@ -14,8 +14,8 @@
   "maxWorkers": 30,
   "stockProduct": "Aço",
   "stockProductId": "steel",
-  "stockCapacity": 30,
-  "inputCapacities": { "iron": 60, "charcoal": 300 },
+  "stockCapacity": 1,
+  "inputCapacities": { "iron": 3, "charcoal": 14 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 3000,

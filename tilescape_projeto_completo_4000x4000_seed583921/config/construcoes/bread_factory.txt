@@ -14,10 +14,10 @@
   "maxWorkers": 60,
   "stockProduct": "Pães",
   "stockProductId": "bread",
-  "stockCapacity": 300,
+  "stockCapacity": 60,
   "toolCapacity": 60,
   "toolDemandPerWorker": 1,
-  "inputCapacities": { "flour": 30 },
+  "inputCapacities": { "flour": 60 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 100,

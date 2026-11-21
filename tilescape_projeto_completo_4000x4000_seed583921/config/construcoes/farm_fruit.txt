@@ -14,7 +14,7 @@
   "maxWorkers": 50,
   "stockProduct": "Fruta",
   "stockProductId": "fruit",
-  "stockCapacity": 1000,
+  "stockCapacity": 8000,
   "cropRule": {
     "growthMonths": 12,
     "dailyWorkPoints": 5000,

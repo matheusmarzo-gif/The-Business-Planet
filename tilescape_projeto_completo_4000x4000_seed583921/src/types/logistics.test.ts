@@ -248,15 +248,15 @@ test('furniture factory receives wood through its generic input stock', () => {
 
   assert.deepEqual(result.transfers, [
     { buildingId: 'furniture-factory', productId: 'tools', quantity: 10, direction: 'in' },
-    { buildingId: 'furniture-factory', productId: 'wood', quantity: 10, direction: 'in' },
+    { buildingId: 'furniture-factory', productId: 'wood', quantity: 2, direction: 'in' },
   ]);
   assert.ok(result.attempts.some(
-    (attempt) => attempt.productId === 'wood' && attempt.wanted === 40 && attempt.moved === 10,
+    (attempt) => attempt.productId === 'wood' && attempt.wanted === 2 && attempt.moved === 2,
   ));
   const woodTransfer = result.transfers.find((transfer) => transfer.productId === 'wood');
   assert.ok(woodTransfer);
   applyTransferToLinkedBuilding(factory, woodTransfer);
-  assert.equal(factory.inputStocks.wood, 10);
+  assert.equal(factory.inputStocks.wood, 2);
   assert.equal(factory.woodStock, 5);
 });
 

@@ -14,7 +14,7 @@
   "maxWorkers": 10,
   "stockProduct": "Algodão",
   "stockProductId": "cotton",
-  "stockCapacity": 300,
+  "stockCapacity": 3000,
   "cropRule": {
     "growthMonths": 12,
     "dailyWorkPoints": 1000,

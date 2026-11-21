@@ -14,10 +14,10 @@
   "maxWorkers": 20,
   "stockProduct": "Vidro",
   "stockProductId": "glass",
-  "stockCapacity": 320,
-  "toolCapacity": 80,
+  "stockCapacity": 4,
+  "toolCapacity": 10,
   "toolDemandPerWorker": 2,
-  "inputCapacities": { "sand": 400, "charcoal": 800 },
+  "inputCapacities": { "sand": 5, "charcoal": 4 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 2000,

@@ -17,9 +17,9 @@
     "maxWorkers":  5,
     "stockProduct":  "Ferramentas",
     "stockProductId":  "tools",
-    "stockCapacity":  100,
-    "ironCapacity":  5,
-    "charcoalCapacity":  30,
+    "stockCapacity":  50,
+    "ironCapacity":  3,
+    "charcoalCapacity":  15,
     "production":  {
                        "mode":  "batch",
                        "workPointsPerUnit":  1000,

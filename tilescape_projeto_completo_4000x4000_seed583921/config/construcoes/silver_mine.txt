@@ -14,7 +14,7 @@
   "maxWorkers": 90,
   "stockProduct": "Prata",
   "stockProductId": "silver",
-  "stockCapacity": 20,
+  "stockCapacity": 2,
   "toolCapacity": 180,
   "toolDemandPerWorker": 2,
   "charcoalCapacity": 40,

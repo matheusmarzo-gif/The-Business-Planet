@@ -14,10 +14,10 @@
   "maxWorkers": 100,
   "stockProduct": "Queijo",
   "stockProductId": "cheese",
-  "stockCapacity": 100,
-  "toolCapacity": 200,
+  "stockCapacity": 15,
+  "toolCapacity": 25,
   "toolDemandPerWorker": 0.25,
-  "inputCapacities": { "milk": 2000, "salt": 133 },
+  "inputCapacities": { "milk": 225, "salt": 15 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 665,

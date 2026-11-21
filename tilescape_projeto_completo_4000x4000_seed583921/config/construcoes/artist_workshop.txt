@@ -14,10 +14,10 @@
   "maxWorkers": 250,
   "stockProduct": "Artes",
   "stockProductId": "artwork",
-  "stockCapacity": 20,
-  "toolCapacity": 70,
+  "stockCapacity": 100,
+  "toolCapacity": 85,
   "toolDemandPerWorker": 0.3,
-  "inputCapacities": { "tincture": 10, "wood": 5 },
+  "inputCapacities": { "tincture": 50, "wood": 25 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 1000,

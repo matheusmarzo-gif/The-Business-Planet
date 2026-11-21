@@ -14,10 +14,10 @@
   "maxWorkers": 20,
   "stockProduct": "Linha",
   "stockProductId": "thread",
-  "stockCapacity": 80,
-  "toolCapacity": 80,
+  "stockCapacity": 8,
+  "toolCapacity": 10,
   "toolDemandPerWorker": 0.5,
-  "inputCapacities": { "cotton": 40, "wool": 40, "charcoal": 160 },
+  "inputCapacities": { "cotton": 2, "wool": 2, "charcoal": 4 },
   "production": {
     "mode": "batch",
     "workPointsPerUnit": 1000,

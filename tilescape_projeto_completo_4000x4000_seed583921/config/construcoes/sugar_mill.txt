@@ -10,12 +10,12 @@
     "capacity":  0,
     "localAppeal":  0,
     "cost":  {
-                 "wood":  100,
-                 "stone":  40,
-                 "iron": 40
+                 "wood":  1000,
+                 "stone":  600,
+                 "iron": 400
              },
-    "workPoints":  60000,
-    "maxWorkers":  60,
+    "workPoints":  1000000,
+    "maxWorkers":  30,
     "stockProduct":  "Açúcar",
     "stockProductId":  "sugar",
     "stockCapacity":  200,
@@ -26,8 +26,8 @@
     "production":  {
                        "mode":  "batch",
                        "workPointsPerUnit":  600,
-                       "batchSize":  1,
-                       "batchCharcoal":  3,
+                       "batchSize":  4,
+                       "batchCharcoal":  2,
                        "batchStockProductId":  "sugarcane",
                        "batchStockAmount":  6
                    }

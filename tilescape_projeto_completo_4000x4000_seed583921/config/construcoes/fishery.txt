@@ -11,15 +11,15 @@
     "localAppeal":  0,
     "cost":  {
                  "wood":  50,
-                 "stone":  15
+                 "stone":  20
              },
-    "workPoints":  25000,
-    "maxWorkers":  40,
+    "workPoints":  40000,
+    "maxWorkers":  4,
     "stockProduct":  "Peixe",
     "stockProductId":  "fish",
     "stockCapacity":  300,
     "toolCapacity":  10,
-    "toolDemandPerWorker":  0.05,
+    "toolDemandPerWorker":  0.5,
     "production":  {
                        "mode":  "accumulate",
                        "workPointsPerUnit":  100

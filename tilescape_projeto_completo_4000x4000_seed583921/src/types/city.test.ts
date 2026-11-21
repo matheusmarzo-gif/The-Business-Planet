@@ -231,14 +231,14 @@ describe('wallet', () => {
     const rule = RESIDENCES.chocolate_factory.production!;
     const input = {
       progress: 0,
-      workPoints: 4000,
+      workPoints: 6000,
       penalty: 0,
       freeSpace: 50,
       tools: 200,
       inputStocks: { cocoa: 1, charcoal: 20, sugar: 2, milk: 26 },
     };
     const result = planProduction(rule, input, () => 0.2);
-    assert.equal(result.units, 10);
+    assert.equal(result.units, 4);
     assert.equal(result.charcoalUsed, 20);
     assert.equal(result.toolsUsed, 0);
     assert.deepEqual(result.inputStocksUsed, { cocoa: 1, charcoal: 20, sugar: 2, milk: 26 });
@@ -249,7 +249,7 @@ describe('wallet', () => {
         () => 0.2,
         RESIDENCES.chocolate_factory.toolDemandPerWorker,
       ),
-      40,
+      60,
     );
   });
 
@@ -428,11 +428,11 @@ describe('other crop farms', () => {
     assert.equal(grow('2026-10-10', 'farm_wheat', 1000).yieldUnits, 1500);
     assert.equal(grow('2026-07-10', 'farm_barley', 1000).yieldUnits, 1500);
     assert.equal(grow('2026-10-10', 'farm_corn', 1000).yieldUnits, 150);
-    assert.equal(grow('2026-01-10', 'farm_cane', 100).yieldUnits, 1800);
-    assert.equal(grow('2026-01-10', 'farm_spices', 5000).yieldUnits, 800);
-    assert.equal(grow('2026-01-10', 'farm_vegetables', 5000).yieldUnits, 300);
-    assert.equal(grow('2026-07-10', 'farm_vegetables', 5000).yieldUnits, 1500);
-    assert.equal(grow('2026-01-10', 'farm_vegetables', 2500).yieldUnits, 150);
+    assert.equal(grow('2026-01-10', 'farm_cane', 100).yieldUnits, 900);
+    assert.equal(grow('2026-01-10', 'farm_spices', 5000).yieldUnits, 3200);
+    assert.equal(grow('2026-01-10', 'farm_vegetables', 5000).yieldUnits, 3000);
+    assert.equal(grow('2026-07-10', 'farm_vegetables', 5000).yieldUnits, 15000);
+    assert.equal(grow('2026-01-10', 'farm_vegetables', 2500).yieldUnits, 1666);
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_vegetables.growthMonths), '2026-03-31');
     assert.equal(getHarvestDay('2026-01-31', FARM_CROP_RULES.farm_cattle.growthMonths), '2028-01-31');
     assert.equal(grow('2026-04-10', 'farm_cattle', 500).yieldUnits, 4000);
@@ -451,13 +451,13 @@ describe('other crop farms', () => {
       const farm = RESIDENCES[farmType];
       assert.equal(farm.width, 4);
       assert.equal(farm.height, 4);
-      assert.deepEqual(farm.cost, { wood: 100, stone: 40 });
+      assert.deepEqual(farm.cost, { wood: 60, stone: 20 });
       assert.equal(farm.stockCapacity, 300);
       assert.equal(farm.maxWorkers, 30);
-      assert.equal(farm.workPoints, 30000);
+      assert.equal(farm.workPoints, 60000);
     }
-    assert.deepEqual(RESIDENCES.farm_cattle.cost, { wood: 250, stone: 75 });
-    assert.equal(RESIDENCES.farm_cattle.workPoints, 125000);
+    assert.deepEqual(RESIDENCES.farm_cattle.cost, { wood: 50, stone: 20 });
+    assert.equal(RESIDENCES.farm_cattle.workPoints, 40000);
   });
 
   it('uses the configured daily and per-unit Work Point requirements', () => {
@@ -490,7 +490,7 @@ describe('other crop farms', () => {
         FARM_CROP_RULES.farm_cotton.harvestWorkPointsPerUnit,
         FARM_CROP_RULES.farm_cotton.baseYield,
       ],
-        [100, 25, 2000, 5000, 10, 800, 5000, 10, 1500, 500, 50, 100, 1000, 100, 300],
+        [200, 25, 2000, 4000, 80, 3200, 4500, 4, 15000, 500, 50, 100, 1000, 100, 300],
     );
     assert.deepEqual(
       [
@@ -509,7 +509,7 @@ describe('other crop farms', () => {
         100,
         FARM_CROP_RULES.farm_vegetables,
       ),
-      { units: 8, done: false },
+      { units: 20, done: false },
     );
   });
 });
@@ -792,15 +792,15 @@ describe('shop sales', () => {
   });
 
   it('computes store benefit with the basic-basket formula and zero guards', () => {
-    assert.equal(getShopSalesCapacity('shop_rice', 24), 0);
-    assert.equal(getShopSalesCapacity('shop_rice', 25), 1);
+    assert.equal(getShopSalesCapacity('shop_rice', 19), 0);
+    assert.equal(getShopSalesCapacity('shop_rice', 20), 1);
     const newShopTypes = ['shop_potato', 'shop_corn', 'shop_barley', 'shop_wheat', 'shop_butcher'] as const;
     assert.deepEqual(newShopTypes.map((type) => getShopSalesCapacity(type, 25)), [1, 1, 1, 1, 1]);
-    assert.equal(getShopSalesCapacity('shop_fish', 50), 1);
-    assert.equal(getShopSalesCapacity('shop_milk', 1), 1);
-    assert.equal(getShopSalesCapacity('shop_milk', 0.9), 0);
-    assert.equal(getShopSalesCapacity('shop_bread', 3), 1);
-    assert.equal(getShopSalesCapacity('shop_cheese', 26), 1);
+    assert.equal(getShopSalesCapacity('shop_fish', 40), 1);
+    assert.equal(getShopSalesCapacity('shop_milk', 0.6), 1);
+    assert.equal(getShopSalesCapacity('shop_milk', 0.5), 0);
+    assert.equal(getShopSalesCapacity('shop_bread', 78), 1);
+    assert.equal(getShopSalesCapacity('shop_cheese', 246), 1);
     assert.equal(parsePrice({ price: 0 }), null);
     assert.equal(parsePrice({ price: 12 }), 12);
     assert.equal(parsePrice({ price: 0.01 }), 0.01);
@@ -1604,10 +1604,10 @@ describe('fazenda leiteira e demanda configurável', () => {
     const dairy = RESIDENCES.farm_dairy;
     assert.deepEqual(
       [dairy.width, dairy.height, dairy.maxWorkers, dairy.stockCapacity, dairy.workPoints],
-      [3, 3, 10, 400, 25000],
+      [3, 3, 10, 400, 40000],
     );
-    assert.deepEqual(dairy.cost, { wood: 50, stone: 15 });
-    assert.equal(dairy.workPoints, 25000);
+    assert.deepEqual(dairy.cost, { wood: 80, stone: 30 });
+    assert.equal(dairy.workPoints, 40000);
     assert.equal(dairy.asset, '/buildings/farms/fazenda_leiteira.jxl');
     assert.deepEqual(
       planProduction(
@@ -1802,8 +1802,12 @@ describe('fazenda leiteira e demanda configurável', () => {
       [dairyShop.width, dairyShop.height, dairyShop.maxWorkers, dairyShop.workPoints],
       [fishShop.width, fishShop.height, 1, fishShop.workPoints],
     );
-    assert.equal(dairyShop.stockCapacity, 120);
-    assert.deepEqual(dairyShop.cost, { wood: 10, stone: 5 });
+    assert.equal(dairyShop.stockCapacity, 165);
+    assert.deepEqual(dairyShop.cost, { wood: 20, stone: 10 });
+    assert.equal(dairyShop.salesWorkPointsPerUnit, 0.6);
+    assert.deepEqual([dairyShop.workPoints, fishShop.workPoints], [10000, 10000]);
+    assert.deepEqual(fishShop.cost, { wood: 20, stone: 10 });
+    assert.equal(fishShop.salesWorkPointsPerUnit, 40);
     assert.equal(dairyShop.stockProductId, 'milk');
     assert.equal(dairyShop.asset, '/buildings/commerce/loja_leite.jxl');
     assert.equal(canLinkToWarehouse('farm_dairy'), true);
@@ -1813,7 +1817,7 @@ describe('fazenda leiteira e demanda configurável', () => {
         {
           stock: new Map(),
           minimumStock: new Map(),
-          maximumStock: new Map([['milk', 120]]),
+          maximumStock: new Map([['milk', 165]]),
           capacityM3: 50,
           workPoints: 100000,
         },
@@ -1852,6 +1856,9 @@ describe('fazenda leiteira e demanda configurável', () => {
         [riceShop.width, riceShop.height, riceShop.maxWorkers, riceShop.stockCapacity, riceShop.workPoints],
       );
       assert.deepEqual(shop.cost, riceShop.cost);
+      assert.equal(shop.workPoints, 10000);
+      assert.equal(shop.salesWorkPointsPerUnit, 20);
+      assert.deepEqual(shop.cost, { wood: 20, stone: 10 });
       assert.equal(shop.stockProductId, productId);
       assert.equal(shop.name, name);
       assert.equal(shop.asset, asset);
@@ -1860,26 +1867,27 @@ describe('fazenda leiteira e demanda configurável', () => {
     const butcher = RESIDENCES.shop_butcher;
     assert.deepEqual(
       [butcher.maxWorkers, butcher.stockCapacity, butcher.workPoints, butcher.cost],
-      [1, 5, 5000, { wood: 15, stone: 10 }],
+      [1, 5, 10000, { wood: 20, stone: 10 }],
     );
+    assert.equal(butcher.salesWorkPointsPerUnit, 25);
     assert.equal(butcher.stockProductId, 'red_meat');
   });
 
   it('defines sugar, vegetable, salt, and spice shops with their own capacities and work rates', () => {
     const expectedShops = [
-      ['shop_sugar', 'sugar', 'Loja de Açúcar', '/buildings/commerce/loja_acucar.jxl', 5, 125],
-      ['shop_vegetables', 'vegetables', 'Loja de Vegetais', '/buildings/commerce/loja_vegetais.jxl', 25, 20],
-      ['shop_salt', 'salt', 'Loja de Sal', '/buildings/commerce/loja_sal.jxl', 25, 20],
-      ['shop_spices', 'spices', 'Loja de Especiarias', '/buildings/commerce/loja_especiarias.jxl', 5, 125],
+      ['shop_sugar', 'sugar', 'Loja de Açúcar', '/buildings/commerce/loja_acucar.jxl', 7, 61],
+      ['shop_vegetables', 'vegetables', 'Loja de Vegetais', '/buildings/commerce/loja_vegetais.jxl', 100, 4],
+      ['shop_salt', 'salt', 'Loja de Sal', '/buildings/commerce/loja_sal.jxl', 20, 22],
+      ['shop_spices', 'spices', 'Loja de Especiarias', '/buildings/commerce/loja_especiarias.jxl', 8, 53],
     ] as const;
     for (const [type, productId, name, asset, stockCapacity, workPointsPerUnit] of expectedShops) {
       const shop = RESIDENCES[type];
       assert.equal(shop.kind, 'shop');
       assert.deepEqual(
         [shop.width, shop.height, shop.maxWorkers, shop.stockCapacity, shop.workPoints],
-        [2, 2, 4, stockCapacity, 70000],
+        [2, 2, 4, stockCapacity, 120000],
       );
-      assert.deepEqual(shop.cost, { wood: 60, stone: 40 });
+      assert.deepEqual(shop.cost, { wood: 120, stone: 40 });
       assert.equal(shop.stockProductId, productId);
       assert.equal(shop.name, name);
       assert.equal(shop.asset, asset);
@@ -1931,9 +1939,9 @@ describe('fazenda leiteira e demanda configurável', () => {
   it('defines the vegetable farm crop cycle and construction limits', () => {
     const farm = RESIDENCES.farm_vegetables;
     assert.deepEqual([farm.width, farm.height, farm.maxWorkers, farm.stockCapacity, farm.workPoints], [
-      3, 3, 50, 100, 110000,
+      3, 3, 50, 100, 400000,
     ]);
-    assert.deepEqual(farm.cost, { wood: 100, stone: 40, iron: 40 });
+    assert.deepEqual(farm.cost, { wood: 600, stone: 200 });
     assert.equal(farm.stockProductId, 'vegetables');
     assert.deepEqual(farm.cropRule, FARM_CROP_RULES.farm_vegetables);
     assert.equal(canLinkToWarehouse('farm_vegetables'), true);
@@ -3003,7 +3011,7 @@ describe('fishery', () => {
         getResidencePlacementError('salt_gatherer', position, [city], [], [], landByRiver, map),
         'not_adjacent_to_road',
       );
-      assert.equal(RESIDENCES.salt_gatherer.production?.workPointsPerUnit, 400);
+      assert.equal(RESIDENCES.salt_gatherer.production?.workPointsPerUnit, 100);
       assert.equal(RESIDENCES.salt_gatherer.stockCapacity, 100);
       assert.equal(RESIDENCES.salt_gatherer.toolCapacity, 5);
       assert.deepEqual(
@@ -3013,8 +3021,9 @@ describe('fishery', () => {
           RESIDENCES.salt_gatherer.maxWorkers,
           RESIDENCES.salt_gatherer.workPoints,
         ],
-        [2, 2, 40, 10000],
+        [2, 2, 40, 500000],
       );
+      assert.equal(RESIDENCES.salt_gatherer.toolDemandPerWorker, 0.5);
     });
   });
 
@@ -3038,6 +3047,10 @@ describe('fishery', () => {
   });
 
   it('produces one fish per 100 Work Points, reduced by the penalty and limited by space', () => {
+    assert.deepEqual(RESIDENCES.fishery.cost, { wood: 50, stone: 20 });
+    assert.equal(RESIDENCES.fishery.workPoints, 40000);
+    assert.equal(RESIDENCES.fishery.maxWorkers, 4);
+    assert.equal(RESIDENCES.fishery.toolDemandPerWorker, 0.5);
     assert.deepEqual(planFishing({ progress: 0, workPoints: 1000, penalty: 0, freeSpace: 300 }), {
       fish: 10,
       progress: 0,
@@ -3100,15 +3113,48 @@ describe('recursos e ferramentaria', () => {
     const rule = RESIDENCES.toolmaker.production!;
     const base = { progress: 0, workPoints: 1000, penalty: 0, freeSpace: 100 };
     assert.equal(planProduction(rule, { ...base, charcoal: 5, iron: 0 }).units, 0);
-    assert.equal(planProduction(rule, { ...base, charcoal: 4, iron: 1 }).units, 0);
-    const ok = planProduction(rule, { ...base, charcoal: 5, iron: 1 });
+    const partial = planProduction(rule, { ...base, charcoal: 4, iron: 1 }, () => 0.99);
+    assert.deepEqual([partial.units, partial.charcoalUsed, partial.ironUsed], [80, 4, 0]);
+    const ok = planProduction(rule, { ...base, charcoal: 5, iron: 1 }, () => 0.2);
     assert.deepEqual([ok.units, ok.charcoalUsed, ok.ironUsed], [100, 5, 1]);
+  });
+
+  it('scales toolmaker output proportionally and rounds partial input use probabilistically', () => {
+    const rule = RESIDENCES.toolmaker.production!;
+    const input = {
+      progress: 0,
+      workPoints: 500,
+      penalty: 0,
+      freeSpace: 100,
+      charcoal: 5,
+      iron: 1,
+    };
+    const consumesRoundedUp = planProduction(rule, input, () => 0.2);
+    assert.deepEqual(
+      [consumesRoundedUp.units, consumesRoundedUp.charcoalUsed, consumesRoundedUp.ironUsed],
+      [50, 3, 1],
+    );
+    assert.deepEqual(routeProductionStockUsage(RESIDENCES.toolmaker, consumesRoundedUp), {
+      woodUsed: 0,
+      ironUsed: 1,
+      charcoalUsed: 3,
+      inputStocksUsed: {},
+    });
+    const consumesRoundedDown = planProduction(rule, input, () => 0.8);
+    assert.deepEqual(
+      [consumesRoundedDown.units, consumesRoundedDown.charcoalUsed, consumesRoundedDown.ironUsed],
+      [50, 2, 0],
+    );
   });
 
   it('defines the new buildings', () => {
     assert.equal(RESIDENCES.iron_mine.toolDemandPerWorker, 0.15);
     assert.equal(RESIDENCES.lumber_mill.toolDemandPerWorker, 0.05);
     assert.equal(RESIDENCES.iron_mine.width, 3);
+    assert.deepEqual(
+      [RESIDENCES.toolmaker.maxWorkers, RESIDENCES.iron_mine.maxWorkers, RESIDENCES.quarry.maxWorkers],
+      [5, 10, 10],
+    );
     assert.deepEqual(
       [
         RESIDENCES.farm_cane.width,
@@ -3120,18 +3166,18 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.farm_spices.stockCapacity,
         RESIDENCES.farm_spices.workPoints,
       ],
-      [3, 10, 2000, 10000, 3, 50, 400, 320000],
+      [3, 10, 2000, 55000, 3, 50, 400, 800000],
     );
-    assert.deepEqual(RESIDENCES.farm_cane.cost, { wood: 100, stone: 40, iron: 40 });
-    assert.deepEqual(RESIDENCES.farm_spices.cost, { wood: 200, stone: 80, iron: 80 });
-    assert.deepEqual(RESIDENCES.salt_gatherer.cost, { wood: 100, stone: 40, iron: 40 });
-    assert.deepEqual(RESIDENCES.sugar_mill.cost, { wood: 100, stone: 40, iron: 40 });
+    assert.deepEqual(RESIDENCES.farm_cane.cost, { wood: 60, stone: 20 });
+    assert.deepEqual(RESIDENCES.farm_spices.cost, { wood: 700, stone: 200 });
+    assert.deepEqual(RESIDENCES.salt_gatherer.cost, { wood: 1500, stone: 300, iron: 200 });
+    assert.deepEqual(RESIDENCES.sugar_mill.cost, { wood: 1000, stone: 600, iron: 400 });
     assert.equal(RESIDENCES.salt_gatherer.maxWorkers, 40);
-    assert.equal(RESIDENCES.salt_gatherer.toolDemandPerWorker, 0.05);
+    assert.equal(RESIDENCES.salt_gatherer.toolDemandPerWorker, 0.5);
     assert.equal(RESIDENCES.toolmaker.woodCapacity, undefined);
     assert.equal(RESIDENCES.toolmaker.charcoalCapacity, 30);
     assert.equal(RESIDENCES.sugar_mill.charcoalCapacity, 30);
-    assert.equal(RESIDENCES.sugar_mill.maxWorkers, 60);
+    assert.equal(RESIDENCES.sugar_mill.maxWorkers, 30);
     assert.equal(RESIDENCES.sugar_mill.toolDemandPerWorker, 0.05);
     assert.deepEqual(
       [
@@ -3143,19 +3189,19 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.charcoal_works.woodCapacity,
         RESIDENCES.charcoal_works.workPoints,
       ],
-      [3, 3, 20, 100, 40, 30, 120000],
+      [3, 3, 4, 100, 40, 30, 90000],
     );
-    assert.deepEqual(RESIDENCES.charcoal_works.cost, { wood: 60, stone: 20 });
+    assert.deepEqual(RESIDENCES.charcoal_works.cost, { wood: 300, stone: 120 });
     assert.equal(RESIDENCES.charcoal_works.toolDemandPerWorker, 0.5);
   });
 
-  it('uses chance production for salt below and above 400 effective Work Points', () => {
+  it('uses chance production for salt below and above 100 effective Work Points', () => {
     const rule = RESIDENCES.salt_gatherer.production!;
     const input = { progress: 0, penalty: 0, freeSpace: 100 };
-    assert.equal(planProduction(rule, { ...input, workPoints: 200 }, () => 0.49).units, 1);
-    assert.equal(planProduction(rule, { ...input, workPoints: 200 }, () => 0.5).units, 0);
-    assert.equal(planProduction(rule, { ...input, workPoints: 800 }, () => 0.99).units, 2);
-    assert.equal(planProduction(rule, { ...input, workPoints: 200, penalty: 50 }, () => 0.3).units, 0);
+    assert.equal(planProduction(rule, { ...input, workPoints: 50 }, () => 0.49).units, 1);
+    assert.equal(planProduction(rule, { ...input, workPoints: 50 }, () => 0.5).units, 0);
+    assert.equal(planProduction(rule, { ...input, workPoints: 250 }, () => 0.99).units, 2);
+    assert.equal(planProduction(rule, { ...input, workPoints: 100, penalty: 50 }, () => 0.3).units, 1);
   });
 
   it('supplies charcoal and iron to a toolmaker through a warehouse', () => {
@@ -3218,7 +3264,7 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.flour_mill.stockCapacity,
         RESIDENCES.flour_mill.workPoints,
       ],
-      [3, 3, 60, 100, 110000],
+      [3, 3, 30, 100, 1500000],
     );
     assert.deepEqual(RESIDENCES.flour_mill.inputCapacities, { wheat: 20, barley: 20, corn: 20 });
     assert.equal(RESIDENCES.flour_mill.defaultInputProductId, 'wheat');
@@ -3241,7 +3287,7 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.cheese_factory.toolCapacity,
         RESIDENCES.cheese_factory.toolDemandPerWorker,
       ],
-      [300, 60, 480000, 30, 60, 0.25, 100, 200, 960000, 2000, 133, 200, 0.25],
+      [300, 60, 4750000, 30, 60, 1, 100, 100, 3750000, 2000, 133, 200, 0.25],
     );
     assert.equal(RESIDENCES.bread_factory.kind, 'workshop');
     assert.equal(RESIDENCES.cheese_factory.kind, 'workshop');
@@ -3268,8 +3314,12 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.shop_fruit.maxWorkers,
         RESIDENCES.shop_fruit.salesWorkPointsPerUnit,
       ],
-      [350, 8, 3, 35, 8, 26, 20, 8, 54, 6, 8, 160],
+      [10, 8, 78, 4, 8, 246, 1, 8, 1185, 12, 8, 69],
     );
+    assert.deepEqual(RESIDENCES.shop_bread.cost, { wood: 200, stone: 50 });
+    assert.deepEqual(RESIDENCES.shop_cheese.cost, { wood: 100, stone: 40 });
+    assert.deepEqual(RESIDENCES.shop_fruit.cost, { wood: 120, stone: 40 });
+    assert.deepEqual(RESIDENCES.shop_chocolate.cost, { wood: 120, stone: 40 });
     assert.equal(SHOP_TYPES.includes('shop_bread'), true);
     assert.equal(SHOP_TYPES.includes('shop_cheese'), true);
     assert.equal(SHOP_TYPES.includes('shop_chocolate'), true);
@@ -3289,7 +3339,7 @@ describe('recursos e ferramentaria', () => {
         [...rule.plantingEfficiencyByQuarter],
       ]),
       [
-        [12, 5000, 20, 1000, [1, 0.8, 0.6, 0.4]],
+        [12, 5000, 20, 8000, [1, 0.8, 0.6, 0.4]],
         [12, 2000, 62, 400, [1, 0.9, 0.7, 0.5]],
       ],
     );
@@ -3298,7 +3348,7 @@ describe('recursos e ferramentaria', () => {
   it('uses input stocks and work points for flour, bread, and cheese production batches', () => {
     const recipes = [
       ['flour_mill', 300, 1, 100, 5, 1],
-      ['bread_factory', 200, 1, 300, 10, 1],
+      ['bread_factory', 100, 1, 300, 1, 1],
     ] as const;
     for (const [type, workPoints, input, capacity, output, consumed] of recipes) {
       const rule = RESIDENCES[type].production!;
@@ -3313,7 +3363,7 @@ describe('recursos e ferramentaria', () => {
     }
     const cheese = planProduction(RESIDENCES.cheese_factory.production!, {
         progress: 0,
-        workPoints: 200,
+        workPoints: 665,
         penalty: 0,
         freeSpace: 100,
         inputStocks: { milk: 15, salt: 1 },
@@ -3322,7 +3372,7 @@ describe('recursos e ferramentaria', () => {
     assert.equal(
       planProduction(RESIDENCES.cheese_factory.production!, {
         progress: 0,
-        workPoints: 200,
+        workPoints: 665,
         penalty: 0,
         freeSpace: 100,
         inputStocks: { milk: 15 },
@@ -3436,19 +3486,19 @@ describe('recursos e ferramentaria', () => {
       workPoints: 600,
       penalty: 0,
       freeSpace: 200,
-      charcoal: 3,
+      charcoal: 2,
       batchStock: 6,
     };
     const result = planProduction(rule, input);
     assert.deepEqual(
       [result.units, result.charcoalUsed, result.batchStockUsed],
-      [1, 3, 6],
+      [4, 2, 6],
     );
     assert.equal(
       planProduction(rule, { ...input, batchStock: 5 }).units,
       0,
     );
-    assert.equal(planProduction(rule, { ...input, charcoal: 2 }).units, 0);
+    assert.equal(planProduction(rule, { ...input, charcoal: 1 }).units, 0);
     assert.equal(
       planProduction(rule, { ...input, freeSpace: 0 }).units,
       0,
@@ -3463,7 +3513,7 @@ describe('recursos e ferramentaria', () => {
         RESIDENCES.sugar_mill.toolCapacity,
         RESIDENCES.sugar_mill.workPoints,
       ],
-      [3, 3, 60, 200, 400, 5, 60000],
+      [3, 3, 30, 200, 400, 5, 1000000],
     );
     assert.equal(
       planProduction(rule, { ...input, workPoints: 600, penalty: 50 }).units,

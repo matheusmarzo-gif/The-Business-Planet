@@ -14,7 +14,7 @@
                  "stone":  20
              },
     "workPoints":  120000,
-    "maxWorkers":  30,
+    "maxWorkers":  10,
     "stockProduct":  "Ferro",
     "stockProductId":  "iron",
     "stockCapacity":  5,

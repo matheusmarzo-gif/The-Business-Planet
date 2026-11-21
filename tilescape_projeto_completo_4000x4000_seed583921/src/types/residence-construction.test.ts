@@ -222,30 +222,30 @@ test('orders construction menus and applies the requested costs', () => {
     house_high2: { wood: 900, stone: 750, iron: 50, steel: 50, workPoints: 225000 },
     house_high3: { wood: 4500, stone: 3000, iron: 600, steel: 250, workPoints: 4000000 },
     silo: { wood: 300, stone: 60, workPoints: 20000 },
-    farm_rice: { wood: 100, stone: 40, workPoints: 30000 },
-    farm_wheat: { wood: 100, stone: 40, workPoints: 30000 },
-    farm_barley: { wood: 100, stone: 40, workPoints: 30000 },
-    farm_potato: { wood: 100, stone: 40, workPoints: 30000 },
-    farm_corn: { wood: 100, stone: 40, workPoints: 30000 },
-    farm_cattle: { wood: 250, stone: 75, workPoints: 125000 },
-    fishery: { wood: 50, stone: 15, workPoints: 25000 },
-    farm_dairy: { wood: 50, stone: 15, workPoints: 25000 },
-    lumber_mill: { wood: 20, stone: 5, workPoints: 35000 },
+    farm_rice: { wood: 60, stone: 20, workPoints: 60000 },
+    farm_wheat: { wood: 60, stone: 20, workPoints: 60000 },
+    farm_barley: { wood: 60, stone: 20, workPoints: 60000 },
+    farm_potato: { wood: 60, stone: 20, workPoints: 60000 },
+    farm_corn: { wood: 60, stone: 20, workPoints: 60000 },
+    farm_cattle: { wood: 50, stone: 20, workPoints: 40000 },
+    fishery: { wood: 50, stone: 20, workPoints: 40000 },
+    farm_dairy: { wood: 80, stone: 30, workPoints: 40000 },
+    lumber_mill: { wood: 110, stone: 40, workPoints: 70000 },
     iron_mine: { wood: 60, stone: 20, workPoints: 120000 },
     quarry: { wood: 60, stone: 20, workPoints: 120000 },
-    toolmaker: { wood: 60, stone: 20, workPoints: 120000 },
-    charcoal_works: { wood: 60, stone: 20, workPoints: 120000 },
-    farm_cane: { wood: 100, stone: 40, iron: 40, workPoints: 10000 },
-    sugar_mill: { wood: 100, stone: 40, iron: 40, workPoints: 60000 },
-    farm_vegetables: { wood: 100, stone: 40, iron: 40, workPoints: 110000 },
-    farm_spices: { wood: 200, stone: 80, iron: 80, workPoints: 320000 },
-    salt_gatherer: { wood: 100, stone: 40, iron: 40, workPoints: 10000 },
-    flour_mill: { wood: 100, stone: 40, iron: 40, workPoints: 110000 },
-    bread_factory: { wood: 180, stone: 120, iron: 60, workPoints: 480000 },
-    farm_cocoa: { wood: 180, stone: 120, iron: 60, workPoints: 480000 },
-    chocolate_factory: { wood: 180, stone: 120, iron: 60, workPoints: 480000 },
-    cheese_factory: { wood: 360, stone: 240, iron: 120, workPoints: 960000 },
-    farm_fruit: { wood: 360, stone: 240, iron: 120, workPoints: 960000 },
+    toolmaker: { wood: 300, stone: 120, workPoints: 140000 },
+    charcoal_works: { wood: 300, stone: 120, workPoints: 90000 },
+    farm_cane: { wood: 60, stone: 20, workPoints: 55000 },
+    sugar_mill: { wood: 1000, stone: 600, iron: 400, workPoints: 1000000 },
+    farm_vegetables: { wood: 600, stone: 200, workPoints: 400000 },
+    farm_spices: { wood: 700, stone: 200, workPoints: 800000 },
+    salt_gatherer: { wood: 1500, stone: 300, iron: 200, workPoints: 500000 },
+    flour_mill: { wood: 1500, stone: 300, iron: 200, steel: 200, workPoints: 1500000 },
+    bread_factory: { wood: 4500, stone: 1000, iron: 500, steel: 750, workPoints: 4750000 },
+    farm_cocoa: { wood: 700, stone: 200, workPoints: 700000 },
+    chocolate_factory: { wood: 4500, stone: 1000, iron: 500, steel: 750, workPoints: 7750000 },
+    cheese_factory: { wood: 4500, stone: 1000, iron: 500, steel: 750, workPoints: 3750000 },
+    farm_fruit: { wood: 1000, stone: 600, iron: 400, workPoints: 1000000 },
     sand_pit: { wood: 60, stone: 30, workPoints: 240000 },
     steelworks: { wood: 1000, stone: 600, iron: 400, workPoints: 20000000 },
     farm_sheep: { wood: 60, stone: 20, workPoints: 130000 },
@@ -355,21 +355,21 @@ test('plans construction costs across nearby warehouses without allowing partial
   assert.deepEqual(
     planConstructionMaterialWithdrawals(
       [
-        { buildingId: 'near', productId: 'wood', quantity: 10 },
-        { buildingId: 'near', productId: 'stone', quantity: 5 },
+        { buildingId: 'near', productId: 'wood', quantity: 20 },
+        { buildingId: 'near', productId: 'stone', quantity: 10 },
       ],
       cost,
     ),
     [
-      { buildingId: 'near', productId: 'wood', quantity: 10 },
-      { buildingId: 'near', productId: 'stone', quantity: 5 },
+      { buildingId: 'near', productId: 'wood', quantity: 20 },
+      { buildingId: 'near', productId: 'stone', quantity: 10 },
     ],
   );
   assert.equal(
     planConstructionMaterialWithdrawals(
       [
-        { buildingId: 'near', productId: 'wood', quantity: 10 },
-        { buildingId: 'near', productId: 'stone', quantity: 4 },
+        { buildingId: 'near', productId: 'wood', quantity: 20 },
+        { buildingId: 'near', productId: 'stone', quantity: 9 },
       ],
       cost,
     ),
@@ -378,27 +378,29 @@ test('plans construction costs across nearby warehouses without allowing partial
 });
 
 test('requires iron and steel as well as wood and stone for construction costs that specify them', () => {
-  const cost = RESIDENCES.shop_bread.cost;
+  const cost = RESIDENCES.cheese_factory.cost;
   assert.deepEqual(
     planConstructionMaterialWithdrawals(
       [
-        { buildingId: 'warehouse', productId: 'wood', quantity: 180 },
-        { buildingId: 'warehouse', productId: 'stone', quantity: 120 },
-        { buildingId: 'warehouse', productId: 'iron', quantity: 60 },
+        { buildingId: 'warehouse', productId: 'wood', quantity: 4500 },
+        { buildingId: 'warehouse', productId: 'stone', quantity: 1000 },
+        { buildingId: 'warehouse', productId: 'iron', quantity: 500 },
+        { buildingId: 'warehouse', productId: 'steel', quantity: 750 },
       ],
       cost,
     ),
     [
-      { buildingId: 'warehouse', productId: 'wood', quantity: 180 },
-      { buildingId: 'warehouse', productId: 'stone', quantity: 120 },
-      { buildingId: 'warehouse', productId: 'iron', quantity: 60 },
+      { buildingId: 'warehouse', productId: 'wood', quantity: 4500 },
+      { buildingId: 'warehouse', productId: 'stone', quantity: 1000 },
+      { buildingId: 'warehouse', productId: 'iron', quantity: 500 },
+      { buildingId: 'warehouse', productId: 'steel', quantity: 750 },
     ],
   );
   assert.equal(
     planConstructionMaterialWithdrawals(
       [
-        { buildingId: 'warehouse', productId: 'wood', quantity: 180 },
-        { buildingId: 'warehouse', productId: 'stone', quantity: 120 },
+        { buildingId: 'warehouse', productId: 'wood', quantity: 4500 },
+        { buildingId: 'warehouse', productId: 'stone', quantity: 1000 },
       ],
       cost,
     ),

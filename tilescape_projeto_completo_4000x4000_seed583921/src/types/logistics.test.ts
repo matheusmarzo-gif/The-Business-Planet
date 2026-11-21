@@ -164,9 +164,9 @@ test('multiple linked warehouses do not overfill a shop in the same transport ru
   for (const transfer of first) applyTransferToLinkedBuilding(shop, transfer);
 
   const second = planTransfersDetailed(warehouse(100), [shop]).transfers;
-  assert.equal(second[0]?.quantity, 70);
+  assert.equal(second[0]?.quantity, 100);
   for (const transfer of second) applyTransferToLinkedBuilding(shop, transfer);
-  assert.equal(shop.stock, 120);
+  assert.equal(shop.stock, 150);
 });
 
 test('collector and supplier phases can run independently without changing default planning', () => {
@@ -218,7 +218,7 @@ test('upgraded stock capacity is used when automatically replenishing a linked s
   assert.deepEqual(transfers, [{
     buildingId: 'milk-shop',
     productId: 'milk',
-    quantity: 240,
+    quantity: 300,
     direction: 'in',
   }]);
 });

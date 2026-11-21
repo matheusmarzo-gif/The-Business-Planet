@@ -9,9 +9,9 @@
   "height": 3,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 360, "stone": 240, "iron": 120 },
-  "workPoints": 960000,
-  "maxWorkers": 200,
+  "cost": { "wood": 4500, "stone": 1000, "iron": 500, "steel": 750 },
+  "workPoints": 3750000,
+  "maxWorkers": 100,
   "stockProduct": "Queijo",
   "stockProductId": "cheese",
   "stockCapacity": 100,
@@ -20,7 +20,7 @@
   "inputCapacities": { "milk": 2000, "salt": 133 },
   "production": {
     "mode": "batch",
-    "workPointsPerUnit": 200,
+    "workPointsPerUnit": 665,
     "batchInputs": { "milk": 15, "salt": 1 }
   }
 }

@@ -150,37 +150,29 @@ export function planProduction(
       free / batchSize,
     );
     const requiredInputs = rule.batchInputs ?? {};
-    const cycles = Object.entries(requiredInputs).reduce((availableCycles, [productId, amount]) => {
-      if (amount <= 0) return availableCycles;
-      const availableStock =
-        input.inputStocks?.[productId] ??
-        (productId === 'charcoal'
+    const getInputStock = (productId: string) =>
+      input.inputStocks?.[productId] ??
+      (productId === 'iron'
+        ? input.iron ?? 0
+        : productId === 'charcoal'
           ? input.charcoal ?? 0
           : productId === 'tools'
             ? input.tools ?? 0
             : 0);
+    const cycles = Object.entries(requiredInputs).reduce((availableCycles, [productId, amount]) => {
+      if (amount <= 0) return availableCycles;
+      const availableStock = getInputStock(productId);
       return Math.min(availableCycles, availableStock / amount);
     }, requestedCycles);
     const inputStocksUsed: Record<string, number> = {};
     for (const [productId, amount] of Object.entries(requiredInputs)) {
       inputStocksUsed[productId] = Math.min(
-        input.inputStocks?.[productId] ??
-          (productId === 'charcoal'
-            ? input.charcoal ?? 0
-            : productId === 'tools'
-              ? input.tools ?? 0
-              : 0),
+        getInputStock(productId),
         roundExpected(cycles * amount),
       );
     }
     for (const [productId, rate] of Object.entries(rule.batchInputRates ?? {})) {
-      const availableStock =
-        input.inputStocks?.[productId] ??
-        (productId === 'charcoal'
-          ? input.charcoal ?? 0
-          : productId === 'tools'
-            ? input.tools ?? 0
-            : 0);
+      const availableStock = getInputStock(productId);
       const expectedUse = roundExpected(cycles * rate);
       const currentUse = inputStocksUsed[productId] ?? 0;
       inputStocksUsed[productId] = currentUse + Math.min(

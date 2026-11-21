@@ -13,6 +13,12 @@ em tempo real. O servidor Node.js/Express fornece a API e o WebSocket; Neon
 PostgreSQL guarda o estado persistente; Redis coordena presença e distribui
 atualizações entre instâncias.
 
+Os parâmetros de custos, capacidades, estoques, receitas de produção e taxas de
+venda são definidos nos arquivos de `config/construcoes/` e validados pelo
+gerador de configuração compartilhada. Na Ferramentaria, produção fracionária
+é proporcional aos Work Points disponíveis; o consumo fracionário de ferro e
+carvão é arredondado probabilisticamente para cada insumo.
+
 O mapa base é determinístico: não é persistido tile a tile. Cidades, estradas
 e residências são sobrepostas ao terreno gerado. Atualmente, a Prefeitura
 oferece Estrada de Terra a todos e Assembleia somente à conta master. A conta

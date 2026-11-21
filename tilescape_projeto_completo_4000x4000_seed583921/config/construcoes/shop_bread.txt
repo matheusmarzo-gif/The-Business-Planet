@@ -9,11 +9,11 @@
   "height": 2,
   "capacity": 0,
   "localAppeal": 0,
-  "cost": { "wood": 180, "stone": 120, "iron": 60 },
-  "workPoints": 480000,
+  "cost": { "wood": 200, "stone": 50 },
+  "workPoints": 100000,
   "maxWorkers": 8,
   "stockProduct": "Pães",
   "stockProductId": "bread",
-  "stockCapacity": 350,
-  "salesWorkPointsPerUnit": 3
+  "stockCapacity": 10,
+  "salesWorkPointsPerUnit": 78
 }
